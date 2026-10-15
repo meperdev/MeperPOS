@@ -61,13 +61,20 @@ interface CacheStore {
  * way to exercise its handlers without a browser.
  */
 function createScope(
-  options: { failAddFor?: string[]; failPut?: boolean } = {},
+  options: {
+    failAddFor?: string[];
+    failPut?: boolean;
+    failOpen?: boolean;
+    failMatch?: boolean;
+  } = {},
 ) {
   const listeners = new Map<string, Handler[]>();
   const stores = new Map<string, CacheStore>();
   const deleted: string[] = [];
   const failAddFor = new Set(options.failAddFor ?? []);
   const failPut = options.failPut === true;
+  const failOpen = options.failOpen === true;
+  const failMatch = options.failMatch === true;
 
   function storeFor(name: string): CacheStore {
     const existing = stores.get(name);
@@ -86,20 +93,28 @@ function createScope(
         if (failPut) throw new Error("storage refused");
         entries.set(keyOf(request), value);
       }),
-      match: vi.fn(async (request: unknown) => entries.get(keyOf(request))),
+      match: vi.fn(async (request: unknown) => {
+        if (failMatch) throw new Error("storage unavailable");
+        return entries.get(keyOf(request));
+      }),
     };
     stores.set(name, store);
     return store;
   }
 
   const caches = {
-    open: vi.fn(async (name: string) => storeFor(name)),
+    open: vi.fn(async (name: string) => {
+      // Storage can be unavailable before anything is even opened.
+      if (failOpen) throw new Error("storage unavailable");
+      return storeFor(name);
+    }),
     keys: vi.fn(async () => [...stores.keys()]),
     delete: vi.fn(async (name: string) => {
       deleted.push(name);
       return stores.delete(name);
     }),
     match: vi.fn(async (request: unknown) => {
+      if (failMatch) throw new Error("storage unavailable");
       for (const store of stores.values()) {
         const hit = store.entries.get(keyOf(request));
         if (hit) return hit;
@@ -419,6 +434,70 @@ describe("service worker caching strategies", () => {
     const response = await probe.response();
 
     expect(response?.status).toBe(200);
+  });
+
+  it("serves the network page when storage cannot even be opened", async () => {
+    const scope = createScope({ failOpen: true });
+
+    const probe = scope.pageFetch(navigation());
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    // Opening storage is not part of serving a request. If it fails, the
+    // request still has a perfectly good network answer.
+    expect(response?.status).toBe(200);
+    expect(response?.body).toBe(`${ORIGIN}/pos`);
+  });
+
+  it("serves a hashed chunk when storage cannot even be opened", async () => {
+    const scope = createScope({ failOpen: true });
+    const url = `${ORIGIN}/_next/static/chunks/main-app-abc.js`;
+
+    const probe = scope.pageFetch(asset(url));
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    expect(response?.status).toBe(200);
+    expect(response?.body).toBe(url);
+  });
+
+  it("falls through to the network when the cache read itself fails", async () => {
+    const scope = createScope({ failMatch: true });
+    // An immutable asset, because that is the one strategy that reads the cache
+    // before it ever touches the network.
+    const url = `${ORIGIN}/_next/static/chunks/main-app-abc.js`;
+
+    const probe = scope.pageFetch(asset(url));
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    expect(response?.status).toBe(200);
+    expect(response?.body).toBe(url);
+  });
+
+  it("reports a network error, rather than rejecting, when offline without storage", async () => {
+    const scope = createScope({ failOpen: true });
+    scope.fetchMock.mockRejectedValue(new Error("offline"));
+
+    const probe = scope.pageFetch(navigation());
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    expect(response?.status).toBe(0);
+  });
+
+  it("installs and activates even when storage is unavailable", async () => {
+    const scope = createScope({ failOpen: true });
+
+    const install = scope.lifecycle();
+    scope.dispatch("install", install.event);
+    await expect(install.settled()).resolves.toBeDefined();
+    expect(scope.self.skipWaiting).toHaveBeenCalledTimes(1);
+
+    const activate = scope.lifecycle();
+    scope.dispatch("activate", activate.event);
+    await expect(activate.settled()).resolves.toBeDefined();
+    expect(scope.self.clients.claim).toHaveBeenCalledTimes(1);
   });
 
   it("does not remember a redirect it followed", async () => {

@@ -49,9 +49,6 @@ export const SW_PAGES_CACHE = `meperpos-pages-${SW_CACHE_VERSION}`;
 /** Served by `src/app/offline/page.tsx` and precached on install. */
 export const PWA_OFFLINE_URL = "/offline";
 
-/** Name of the `src/app/apple-icon.png` file without its extension. */
-export const APP_ICON_APPLE = "apple-icon";
-
 export type PwaIconPurpose = "any" | "maskable";
 
 export interface PwaIcon {

@@ -20,10 +20,12 @@
  * Safety rules, in order of importance:
  *   1. Same-origin GET only. The API is deployed on another origin and is
  *      skipped twice over — by origin and by the /api/ prefix.
- *   2. Navigations are network-first, so a deploy can never be outlived by a
- *      shell this worker cached yesterday.
- *   3. A cache write never decides a request's fate. Storage that is full or
- *      refused costs the offline copy, never the response.
+ *   2. Navigations are network-first, so an online device always gets whatever
+ *      is deployed. A shell this worker cached earlier is served only while the
+ *      network is unreachable, which is exactly when a stale shell beats no app.
+ *   3. Storage never decides a request's fate. Opening, reading and writing are
+ *      all best effort: when storage is full, refused or unavailable, the
+ *      request falls through to the network instead of failing.
  *   4. Cache names carry a version. Bumping CACHE_VERSION is the supported way
  *      to invalidate everything. The matching constants live in
  *      `src/lib/pwa.ts`, and `src/lib/sw-behavior.test.ts` drives the handlers
@@ -67,14 +69,18 @@ const CACHE_ALLOWLIST = [STATIC_CACHE, PAGES_CACHE];
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const cache = await caches.open(STATIC_CACHE);
+      const cache = await openCache(STATIC_CACHE);
 
-      // Added one at a time on purpose: `addAll` rejects as a whole, and a
-      // rejected install leaves the worker stuck in "installing" forever, which
-      // would silently disable offline support instead of degrading.
-      await Promise.all(
-        PRECACHE_URLS.map((url) => cache.add(url).catch(() => undefined)),
-      );
+      // Added one at a time on purpose: `addAll` rejects as a whole, so a single
+      // unreachable URL would fail the entire worker and cost offline support
+      // outright rather than just that one entry. A storage that cannot even be
+      // opened skips precaching entirely and still activates, because a worker
+      // that serves only from the network is worth more than no worker at all.
+      if (cache) {
+        await Promise.all(
+          PRECACHE_URLS.map((url) => cache.add(url).catch(() => undefined)),
+        );
+      }
 
       await self.skipWaiting();
     })(),
@@ -85,13 +91,19 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       // Versioned names are the only invalidation mechanism, so any cache that
-      // is not part of the current pair is a superseded one.
-      const names = await caches.keys();
-      await Promise.all(
-        names
-          .filter((name) => !CACHE_ALLOWLIST.includes(name))
-          .map((name) => caches.delete(name)),
-      );
+      // is not part of the current pair is a superseded one. Failing to clean up
+      // is not worth failing activation over: a superseded cache is inert, while
+      // a worker that never activates costs offline support entirely.
+      try {
+        const names = await caches.keys();
+        await Promise.all(
+          names
+            .filter((name) => !CACHE_ALLOWLIST.includes(name))
+            .map((name) => caches.delete(name).catch(() => undefined)),
+        );
+      } catch {
+        // Superseded caches stay behind; the current pair is still usable.
+      }
 
       await self.clients.claim();
     })(),
@@ -110,10 +122,46 @@ function isStableAsset(pathname) {
 }
 
 /**
+ * Opens a cache, or reports that storage is unavailable.
+ *
+ * Every strategy treats "no cache" as "no offline copy" and falls through to
+ * the network. Storage is an optimisation here: it must never be able to fail a
+ * request that the network would have answered.
+ */
+async function openCache(name) {
+  try {
+    return await caches.open(name);
+  } catch {
+    return null;
+  }
+}
+
+/** Reads from a cache that may not exist, and may itself refuse. */
+async function readCached(cache, request) {
+  if (!cache) return undefined;
+  try {
+    return await cache.match(request);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Searches every cache for the precached offline shell. */
+async function findOfflinePage() {
+  try {
+    return await caches.match(OFFLINE_URL);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Stores a response for later, and never reports failure.
  *
- * Two reasons to skip: a followed redirect cached under the requested URL would
- * serve the wrong page offline, and a non-2xx response is not worth keeping.
+ * Two reasons to skip: a non-2xx response is not worth keeping, and a followed
+ * redirect cached under the requested URL would serve the wrong page offline.
+ * The cost of refusing redirects is that a canonicalising redirect warms
+ * neither URL, so that one navigation has no offline copy.
  *
  * The write is awaited rather than detached, so it still completes inside the
  * lifetime of the intercepted request when the worker is stopped straight
@@ -121,13 +169,13 @@ function isStableAsset(pathname) {
  * private tab must never turn a healthy response into a failed request.
  */
 async function remember(cache, request, response) {
-  if (!response || !response.ok || response.redirected) return;
+  if (!cache || !response || !response.ok || response.redirected) return;
   await cache.put(request, response.clone()).catch(() => undefined);
 }
 
 async function fromCacheFirst(request) {
-  const cache = await caches.open(STATIC_CACHE);
-  const cached = await cache.match(request);
+  const cache = await openCache(STATIC_CACHE);
+  const cached = await readCached(cache, request);
   if (cached) return cached;
 
   const response = await fetch(request);
@@ -136,8 +184,8 @@ async function fromCacheFirst(request) {
 }
 
 async function fromCacheWhileRevalidating(request) {
-  const cache = await caches.open(STATIC_CACHE);
-  const cached = await cache.match(request);
+  const cache = await openCache(STATIC_CACHE);
+  const cached = await readCached(cache, request);
 
   const network = fetch(request).then(async (response) => {
     await remember(cache, request, response);
@@ -155,7 +203,7 @@ async function fromCacheWhileRevalidating(request) {
 }
 
 async function forNavigation(request) {
-  const cache = await caches.open(PAGES_CACHE);
+  const cache = await openCache(PAGES_CACHE);
 
   try {
     // Network first, so a deploy is picked up as soon as the device is online.
@@ -163,10 +211,10 @@ async function forNavigation(request) {
     await remember(cache, request, response);
     return response;
   } catch {
-    const cached = await cache.match(request);
+    const cached = await readCached(cache, request);
     if (cached) return cached;
 
-    const offline = await caches.match(OFFLINE_URL);
+    const offline = await findOfflinePage();
     if (offline) return offline;
 
     // Nothing was ever cached: let the browser show its own error page.

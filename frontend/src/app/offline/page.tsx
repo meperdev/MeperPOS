@@ -7,8 +7,11 @@ import { APP_NAME } from "@/lib/constants";
 /**
  * Precache target of the service worker (`PWA_OFFLINE_URL`). It is shown when a
  * navigation cannot reach the network and the requested page was never cached.
- * Deliberately dependency-free: it has to render from the service worker's
- * cache alone, with no request of its own.
+ *
+ * It fetches nothing of its own — no API call, no data — so it still renders
+ * from the precached document and the root layout's chunks while the network is
+ * down. It is not asset-free and cannot be: it needs its JavaScript like any
+ * other route.
  */
 export default function OfflinePage() {
   return (

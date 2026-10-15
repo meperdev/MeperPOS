@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, render, renderHook, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import type { ReactNode } from "react";
 
 import {
@@ -239,6 +240,32 @@ describe("install prompt on iOS", () => {
     expect(result.current.canPromptInstall).toBe(false);
     expect(result.current.needsManualInstall).toBe(true);
     expect(result.current.isAvailable).toBe(true);
+  });
+
+  it("prerenders no platform-specific install UI, because the server cannot know the platform", () => {
+    stubEnvironment({ userAgent: IOS_UA });
+
+    // The server pass is where a user-agent read during render would leak
+    // «this is iOS» into HTML that the client then disagrees with.
+    const prerendered = renderToString(
+      <InstallPromptProvider>
+        <InstallAppCard />
+      </InstallPromptProvider>,
+    );
+
+    expect(prerendered).not.toContain("Añadir a pantalla de inicio");
+
+    // The same tree on the client does offer it, which is the point: the value
+    // arrives after hydration rather than during it.
+    render(
+      <InstallPromptProvider>
+        <InstallAppCard />
+      </InstallPromptProvider>,
+    );
+
+    expect(
+      screen.getByText(/Añadir a pantalla de inicio/i),
+    ).toBeInTheDocument();
   });
 
   it("detects iPadOS, which reports a desktop Mac user agent", () => {

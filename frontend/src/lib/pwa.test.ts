@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import manifestRoute from "@/app/manifest";
 import {
-  APP_ICON_APPLE,
   PWA_BACKGROUND_COLOR,
   PWA_ICONS,
   PWA_OFFLINE_URL,
@@ -79,8 +78,9 @@ describe("web app manifest", () => {
 
 describe("iOS install metadata", () => {
   it("ships a 180px Apple touch icon", () => {
+    // `apple-icon.png` is a Next.js file convention, not app configuration.
     expect(
-      pngSize(path.resolve(process.cwd(), "src/app", `${APP_ICON_APPLE}.png`)),
+      pngSize(path.resolve(process.cwd(), "src/app/apple-icon.png")),
     ).toEqual({ width: 180, height: 180 });
   });
 

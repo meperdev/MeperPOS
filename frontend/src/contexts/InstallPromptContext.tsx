@@ -15,8 +15,10 @@ import {
   isConsumedEvent,
   isIosDevice,
   isStandaloneDisplay,
+  serverIsNotIos,
   serverIsStandalone,
   subscribeToDisplayMode,
+  subscribeToNothing,
   type BeforeInstallPromptEvent,
   type InstallOutcome,
   type InstallPromptState,
@@ -44,6 +46,18 @@ export function InstallPromptProvider({ children }: { children: ReactNode }) {
     subscribeToDisplayMode,
     isStandaloneDisplay,
     serverIsStandalone,
+  );
+
+  /**
+   * Read through `useSyncExternalStore` for the server snapshot, not for
+   * updates: the platform cannot change, but the prerendered HTML and an iOS
+   * client's first render still have to agree on it. A direct `isIosDevice()`
+   * call here would put the manual-install recipe into the server pass.
+   */
+  const isIos = useSyncExternalStore(
+    subscribeToNothing,
+    isIosDevice,
+    serverIsNotIos,
   );
 
   useEffect(() => {
@@ -90,7 +104,7 @@ export function InstallPromptProvider({ children }: { children: ReactNode }) {
    * reset in `promptInstall` already covers this path once it flushes.
    */
   const canPromptInstall = promptEvent !== null && !isInstalled;
-  const needsManualInstall = !isInstalled && !canPromptInstall && isIosDevice();
+  const needsManualInstall = !isInstalled && !canPromptInstall && isIos;
 
   return (
     <InstallPromptContext.Provider

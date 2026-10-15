@@ -40,7 +40,8 @@ export function isStandaloneDisplay(): boolean {
 
   // WebKit does not implement the display-mode media query for this case; it
   // exposes this non-standard flag instead.
-  const legacyFlag = (window.navigator as { standalone?: boolean }).standalone;
+  const legacyFlag = (window.navigator as { standalone?: boolean } | undefined)
+    ?.standalone;
   if (legacyFlag === true) return true;
 
   if (typeof window.matchMedia !== "function") return false;
@@ -90,6 +91,29 @@ export function subscribeToDisplayMode(onChange: () => void): () => void {
 /** Prerendering has no `window`: nothing is installed during that pass. */
 export function serverIsStandalone(): boolean {
   return false;
+}
+
+/**
+ * Prerendering has no `navigator`, so the platform is unknowable on the server.
+ *
+ * Reading a user agent during render is what desynchronises hydration: the
+ * prerendered HTML would say "not iOS" while an iOS client's very first render
+ * says otherwise. This snapshot, paired with `useSyncExternalStore`, keeps the
+ * two passes in agreement and lets the real value arrive afterwards.
+ */
+export function serverIsNotIos(): boolean {
+  return false;
+}
+
+/**
+ * A subscription for a value that cannot change while the app is running.
+ *
+ * The platform is fixed for the lifetime of the page, so there is nothing to
+ * listen to; `useSyncExternalStore` is used here purely for its server-snapshot
+ * contract, not for updates.
+ */
+export function subscribeToNothing(): () => void {
+  return () => undefined;
 }
 
 /**
