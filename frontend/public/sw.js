@@ -33,8 +33,9 @@
  *      copies of these literals drift apart.
  *
  * Emergency rollback, if this file ever misbehaves in production: replace its
- * contents with the self-unregistering worker below, deploy, and every
- * installed client drops the worker and its caches on the next load.
+ * contents with the self-unregistering worker below and deploy. A client that
+ * then loads the app fetches the new script, unregisters and clears its caches;
+ * a client that never loads it again keeps the old worker until it does.
  *
  *   self.addEventListener("install", () => self.skipWaiting());
  *   self.addEventListener("activate", (event) =>
@@ -71,15 +72,14 @@ self.addEventListener("install", (event) => {
     (async () => {
       const cache = await openCache(STATIC_CACHE);
 
-      // Added one at a time on purpose: `addAll` rejects as a whole, so a single
-      // unreachable URL would fail the entire worker and cost offline support
-      // outright rather than just that one entry. A storage that cannot even be
-      // opened skips precaching entirely and still activates, because a worker
-      // that serves only from the network is worth more than no worker at all.
+      // Fetched and stored one at a time on purpose. `addAll` rejects as a
+      // whole, so one unreachable URL would fail the entire worker and cost
+      // offline support outright rather than just that entry. Going through
+      // `precache` also applies the redirect refusal that `cache.add` cannot.
+      // Storage that cannot even be opened skips precaching and still activates:
+      // a worker that serves only from the network beats no worker at all.
       if (cache) {
-        await Promise.all(
-          PRECACHE_URLS.map((url) => cache.add(url).catch(() => undefined)),
-        );
+        await Promise.all(PRECACHE_URLS.map((url) => precache(cache, url)));
       }
 
       await self.skipWaiting();
@@ -92,8 +92,10 @@ self.addEventListener("activate", (event) => {
     (async () => {
       // Versioned names are the only invalidation mechanism, so any cache that
       // is not part of the current pair is a superseded one. Failing to clean up
-      // is not worth failing activation over: a superseded cache is inert, while
-      // a worker that never activates costs offline support entirely.
+      // is not worth failing activation over — a worker that never activates
+      // costs offline support entirely — but it does leave that cache on disk.
+      // It stays unreadable, because every lookup below is scoped to a name from
+      // this version and none of them searches all caches.
       try {
         const names = await caches.keys();
         await Promise.all(
@@ -146,13 +148,18 @@ async function readCached(cache, request) {
   }
 }
 
-/** Searches every cache for the precached offline shell. */
+/**
+ * Reads the precached offline shell from the current static cache alone.
+ *
+ * `caches.match(...)` without a cache name searches every cache, which would let
+ * a superseded cache left behind by a failed cleanup win this lookup and serve a
+ * shell from an earlier deploy. Scoping the read to `STATIC_CACHE` is what makes
+ * a superseded cache genuinely unreachable, and so what makes a version bump a
+ * real invalidation rather than a best effort.
+ */
 async function findOfflinePage() {
-  try {
-    return await caches.match(OFFLINE_URL);
-  } catch {
-    return undefined;
-  }
+  const cache = await openCache(STATIC_CACHE);
+  return readCached(cache, OFFLINE_URL);
 }
 
 /**
@@ -163,14 +170,27 @@ async function findOfflinePage() {
  * The cost of refusing redirects is that a canonicalising redirect warms
  * neither URL, so that one navigation has no offline copy.
  *
- * The write is awaited rather than detached, so it still completes inside the
- * lifetime of the intercepted request when the worker is stopped straight
- * afterwards — but the rejection is swallowed, because a full quota or a
- * private tab must never turn a healthy response into a failed request.
+ * The write is completed before the response is delivered, so it is never
+ * abandoned when the worker is stopped after the request — but the rejection is
+ * swallowed, because a full quota, a private tab, or a body that cannot be
+ * cloned must never turn a healthy response into a failed request.
  */
 async function remember(cache, request, response) {
   if (!cache || !response || !response.ok || response.redirected) return;
-  await cache.put(request, response.clone()).catch(() => undefined);
+  try {
+    await cache.put(request, response.clone());
+  } catch {
+    // No offline copy, and nothing else lost.
+  }
+}
+
+/** Fetches one precache URL and stores it, tolerating either step failing. */
+async function precache(cache, url) {
+  try {
+    await remember(cache, url, await fetch(url));
+  } catch {
+    // One unreachable URL must not fail the whole worker.
+  }
 }
 
 async function fromCacheFirst(request) {
@@ -183,7 +203,7 @@ async function fromCacheFirst(request) {
   return response;
 }
 
-async function fromCacheWhileRevalidating(request) {
+async function fromCacheWhileRevalidating(request, event) {
   const cache = await openCache(STATIC_CACHE);
   const cached = await readCached(cache, request);
 
@@ -193,9 +213,10 @@ async function fromCacheWhileRevalidating(request) {
   });
 
   if (cached) {
-    // The cached copy wins; a failed background refresh must not surface as an
-    // unhandled rejection just because nobody is awaiting it.
-    network.catch(() => undefined);
+    // Returning the cached copy ends this request's lifetime, so the refresh is
+    // registered separately: a detached promise would be abandoned when the
+    // worker is stopped, and the cached asset would never update.
+    event.waitUntil(network.catch(() => undefined));
     return cached;
   }
 
@@ -247,6 +268,6 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isStableAsset(url.pathname)) {
-    event.respondWith(fromCacheWhileRevalidating(request));
+    event.respondWith(fromCacheWhileRevalidating(request, event));
   }
 });

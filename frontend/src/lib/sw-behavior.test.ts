@@ -132,9 +132,19 @@ function createScope(
     clients: { claim: vi.fn(async () => undefined) },
   };
 
-  const fetchMock = vi.fn(async (request: { url: string }) =>
-    fakeResponse(request.url),
-  );
+  // Faithful to fetch, which accepts either a string or a Request and always
+  // exposes an absolute url on the response.
+  const resolveUrl = (request: string | { url: string }) =>
+    typeof request === "string" ? new URL(request, ORIGIN).href : request.url;
+
+  const fetchMock = vi.fn(async (request: string | { url: string }) => {
+    const url = resolveUrl(request);
+    // `failAddFor` models a URL that cannot be fetched during installation.
+    if (failAddFor.has(url)) {
+      throw new Error(`unreachable: ${url}`);
+    }
+    return fakeResponse(url);
+  });
 
   const Response = { error: () => fakeResponse("", 0) };
 
@@ -161,14 +171,19 @@ function createScope(
 
   const pageFetch = (request: Record<string, unknown>) => {
     let responded: Promise<FakeResponse> | undefined;
+    const waited: Promise<unknown>[] = [];
     return {
       event: {
         request: { method: "GET", mode: "no-cors", ...request },
         respondWith: (promise: Promise<FakeResponse>) => {
           responded = promise;
         },
+        waitUntil: (promise: Promise<unknown>) => {
+          waited.push(promise.catch(() => undefined));
+        },
       },
       response: () => responded,
+      waited: () => waited,
     };
   };
 
@@ -179,6 +194,7 @@ function createScope(
     fetchMock,
     lifecycle,
     pageFetch,
+    resolveUrl,
     self,
     stores,
     storeFor,
@@ -502,8 +518,8 @@ describe("service worker caching strategies", () => {
 
   it("does not remember a redirect it followed", async () => {
     const scope = createScope();
-    scope.fetchMock.mockImplementation(async (request: { url: string }) =>
-      fakeResponse(request.url, 200, true),
+    scope.fetchMock.mockImplementation(async (request: string | { url: string }) =>
+      fakeResponse(scope.resolveUrl(request), 200, true),
     );
 
     const probe = scope.pageFetch(navigation());
@@ -545,7 +561,55 @@ describe("service worker caching strategies", () => {
     scope.dispatch("fetch", probe.event);
     const response = await probe.response();
 
-    expect(response?.body).toBe(PWA_OFFLINE_URL);
+    expect(response?.body).toBe(`${ORIGIN}${PWA_OFFLINE_URL}`);
+  });
+
+  it("never serves the offline shell out of a superseded cache", async () => {
+    const scope = createScope();
+    // A cache from an earlier version that survived a failed cleanup. Its
+    // /offline must be unreachable, not merely outranked.
+    scope.storeFor("meperpos-static-v0").entries.set(
+      PWA_OFFLINE_URL,
+      fakeResponse(PWA_OFFLINE_URL),
+    );
+    scope.fetchMock.mockRejectedValue(new Error("offline"));
+
+    const probe = scope.pageFetch(navigation(`${ORIGIN}/reports`));
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    expect(response?.status).toBe(0);
+  });
+
+  it("keeps the worker alive while a cached asset revalidates", async () => {
+    const scope = createScope();
+    const url = `${ORIGIN}/icons/icon-192.png`;
+
+    const first = scope.pageFetch(asset(url));
+    scope.dispatch("fetch", first.event);
+    await first.response();
+
+    const second = scope.pageFetch(asset(url));
+    scope.dispatch("fetch", second.event);
+    await second.response();
+
+    // Returning the cached copy ends the request's lifetime, so the refresh has
+    // to be registered separately or the worker is stopped mid-write and the
+    // asset never updates.
+    expect(second.waited().length).toBe(1);
+  });
+
+  it("does not cache a redirect during precaching either", async () => {
+    const scope = createScope();
+    scope.fetchMock.mockImplementation(async (request: string | { url: string }) =>
+      fakeResponse(scope.resolveUrl(request), 200, true),
+    );
+
+    const install = scope.lifecycle();
+    scope.dispatch("install", install.event);
+    await install.settled();
+
+    expect(scope.storeFor(SW_STATIC_CACHE).entries.size).toBe(0);
   });
 
   it("reports a network error when nothing at all is cached", async () => {
