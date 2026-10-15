@@ -5,16 +5,26 @@
  * of the browser's network-error page, and so a drop in connectivity does not
  * look like a crash.
  *
- * What this worker deliberately is NOT: a data cache. It never stores or serves
- * API responses, so no product, customer or money data ever reaches Cache
- * Storage. That is a hard boundary, not an optimisation.
+ * What this worker deliberately is NOT: a product-data cache. It never stores
+ * or serves an API response. It only ever stores same-origin GETs that matched
+ * a navigation or a static asset, it refuses any follow of a redirect, and it
+ * skips a response that was not successful.
+ *
+ * What it does store for a navigation is the rendered HTML shell. Every route
+ * in this app is a client component, so those shells carry no server-rendered
+ * data and Cache Storage never sees a product, customer or money value. That is
+ * an assumption about the app, not a property of this file: if a route is ever
+ * rendered on the server with data, this guarantee stops holding and this
+ * comment has to change with it.
  *
  * Safety rules, in order of importance:
  *   1. Same-origin GET only. The API is deployed on another origin and is
  *      skipped twice over — by origin and by the /api/ prefix.
  *   2. Navigations are network-first, so a deploy can never be outlived by a
  *      shell this worker cached yesterday.
- *   3. Cache names carry a version. Bumping CACHE_VERSION is the supported way
+ *   3. A cache write never decides a request's fate. Storage that is full or
+ *      refused costs the offline copy, never the response.
+ *   4. Cache names carry a version. Bumping CACHE_VERSION is the supported way
  *      to invalidate everything. The matching constants live in
  *      `src/lib/pwa.ts`, and `src/lib/sw-behavior.test.ts` drives the handlers
  *      below with stub caches while `src/lib/pwa.test.ts` fails if the two
@@ -99,13 +109,29 @@ function isStableAsset(pathname) {
   );
 }
 
+/**
+ * Stores a response for later, and never reports failure.
+ *
+ * Two reasons to skip: a followed redirect cached under the requested URL would
+ * serve the wrong page offline, and a non-2xx response is not worth keeping.
+ *
+ * The write is awaited rather than detached, so it still completes inside the
+ * lifetime of the intercepted request when the worker is stopped straight
+ * afterwards — but the rejection is swallowed, because a full quota or a
+ * private tab must never turn a healthy response into a failed request.
+ */
+async function remember(cache, request, response) {
+  if (!response || !response.ok || response.redirected) return;
+  await cache.put(request, response.clone()).catch(() => undefined);
+}
+
 async function fromCacheFirst(request) {
   const cache = await caches.open(STATIC_CACHE);
   const cached = await cache.match(request);
   if (cached) return cached;
 
   const response = await fetch(request);
-  if (response && response.ok) await cache.put(request, response.clone());
+  await remember(cache, request, response);
   return response;
 }
 
@@ -114,7 +140,7 @@ async function fromCacheWhileRevalidating(request) {
   const cached = await cache.match(request);
 
   const network = fetch(request).then(async (response) => {
-    if (response && response.ok) await cache.put(request, response.clone());
+    await remember(cache, request, response);
     return response;
   });
 
@@ -134,7 +160,7 @@ async function forNavigation(request) {
   try {
     // Network first, so a deploy is picked up as soon as the device is online.
     const response = await fetch(request);
-    if (response && response.ok) await cache.put(request, response.clone());
+    await remember(cache, request, response);
     return response;
   } catch {
     const cached = await cache.match(request);

@@ -21,17 +21,23 @@ interface FakeResponse {
   status: number;
   body: string;
   url: string;
+  redirected: boolean;
   clone(): FakeResponse;
 }
 
-function fakeResponse(url: string, status = 200): FakeResponse {
+function fakeResponse(
+  url: string,
+  status = 200,
+  redirected = false,
+): FakeResponse {
   return {
     ok: status >= 200 && status < 300,
     status,
     body: url,
     url,
+    redirected,
     clone() {
-      return fakeResponse(url, status);
+      return fakeResponse(url, status, redirected);
     },
   };
 }
@@ -54,11 +60,14 @@ interface CacheStore {
  * The worker is only shipped as a plain script, so evaluating it is the only
  * way to exercise its handlers without a browser.
  */
-function createScope(options: { failAddFor?: string[] } = {}) {
+function createScope(
+  options: { failAddFor?: string[]; failPut?: boolean } = {},
+) {
   const listeners = new Map<string, Handler[]>();
   const stores = new Map<string, CacheStore>();
   const deleted: string[] = [];
   const failAddFor = new Set(options.failAddFor ?? []);
+  const failPut = options.failPut === true;
 
   function storeFor(name: string): CacheStore {
     const existing = stores.get(name);
@@ -73,6 +82,8 @@ function createScope(options: { failAddFor?: string[] } = {}) {
         entries.set(key, fakeResponse(key));
       }),
       put: vi.fn(async (request: unknown, value: FakeResponse) => {
+        // Storage can refuse: a full quota, or a private tab.
+        if (failPut) throw new Error("storage refused");
         entries.set(keyOf(request), value);
       }),
       match: vi.fn(async (request: unknown) => entries.get(keyOf(request))),
@@ -315,6 +326,59 @@ describe("service worker caching strategies", () => {
     expect(scope.storeFor(SW_PAGES_CACHE).entries.has(`${ORIGIN}/pos`)).toBe(
       true,
     );
+  });
+
+  it("serves the network page even when the cache refuses the write", async () => {
+    const scope = createScope({ failPut: true });
+
+    const probe = scope.pageFetch(navigation());
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    // A refusing cache must degrade to "no offline copy", never to a failed
+    // request: the operator would otherwise see the offline page on a perfectly
+    // healthy connection.
+    expect(response?.status).toBe(200);
+    expect(response?.body).toBe(`${ORIGIN}/pos`);
+  });
+
+  it("serves a hashed chunk even when the cache refuses the write", async () => {
+    const scope = createScope({ failPut: true });
+    const url = `${ORIGIN}/_next/static/chunks/main-app-abc.js`;
+
+    const probe = scope.pageFetch(asset(url));
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    expect(response?.status).toBe(200);
+    expect(response?.body).toBe(url);
+  });
+
+  it("serves a stable asset even when the cache refuses the write", async () => {
+    const scope = createScope({ failPut: true });
+    const url = `${ORIGIN}/icons/icon-192.png`;
+
+    const probe = scope.pageFetch(asset(url));
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    expect(response?.status).toBe(200);
+  });
+
+  it("does not remember a redirect it followed", async () => {
+    const scope = createScope();
+    scope.fetchMock.mockImplementation(async (request: { url: string }) =>
+      fakeResponse(request.url, 200, true),
+    );
+
+    const probe = scope.pageFetch(navigation());
+    scope.dispatch("fetch", probe.event);
+    const response = await probe.response();
+
+    expect(response?.status).toBe(200);
+    // Caching the followed target under the requested URL would serve the wrong
+    // page out of offline storage.
+    expect(scope.storeFor(SW_PAGES_CACHE).entries.size).toBe(0);
   });
 
   it("falls back to the remembered page when the network is gone", async () => {
