@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { SidebarProvider } from "@/contexts/SidebarContext";
-import { APP_NAME, APP_DESCRIPTION } from "@/lib/constants";
+import { buildPwaMetadata, buildPwaViewport } from "@/lib/pwa";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -21,21 +21,9 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["400", "500", "700"],
 });
 
-export const metadata: Metadata = {
-  title: APP_NAME,
-  description: `${APP_NAME} — ${APP_DESCRIPTION}`,
-};
+export const metadata: Metadata = buildPwaMetadata();
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 5,
-  viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#FAF8FF" },
-    { media: "(prefers-color-scheme: dark)", color: "#111114" },
-  ],
-};
+export const viewport: Viewport = buildPwaViewport();
 
 export default function RootLayout({
   children,

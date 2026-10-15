@@ -1,0 +1,131 @@
+import type { Metadata, MetadataRoute, Viewport } from "next";
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/constants";
+
+/**
+ * Single source of truth for the Progressive Web App surface.
+ *
+ * The manifest route, the root layout metadata and the tests all read these
+ * values, so the theme color the browser paints while the app boots can never
+ * drift from the color the manifest promises, and the icon list can never
+ * describe a file the build does not ship.
+ */
+
+/** Matches the `--background` token of the light theme in `globals.css`. */
+export const PWA_THEME_COLOR_LIGHT = "#FAF8FF";
+
+/** Matches the `--background` token of the dark theme in `globals.css`. */
+export const PWA_THEME_COLOR_DARK = "#111114";
+
+/**
+ * Both light and dark boot to the light splash: the installed app paints this
+ * color before the first React render, and the theme class is applied after
+ * hydration, so a dark splash would flash against a light-themed first frame.
+ */
+export const PWA_BACKGROUND_COLOR = PWA_THEME_COLOR_LIGHT;
+
+/**
+ * `/dashboard` and not `/`: every route is a client component, so an installed
+ * app lands on the dashboard and `DashboardLayout` bounces an unauthenticated
+ * launch to `/login` on its own.
+ */
+export const PWA_START_URL = "/dashboard";
+
+export const PWA_SCOPE = "/";
+
+export const PWA_DISPLAY = "standalone";
+
+/** Name of the `src/app/apple-icon.png` file without its extension. */
+export const APP_ICON_APPLE = "apple-icon";
+
+export type PwaIconPurpose = "any" | "maskable";
+
+export interface PwaIcon {
+  src: string;
+  sizes: string;
+  type: string;
+  purpose: PwaIconPurpose;
+}
+
+/**
+ * Two shapes per size, because Android treats them differently: `any` icons are
+ * drawn as-is, while `maskable` icons are cropped to the launcher's shape and
+ * therefore keep the mark inside the safe zone of a filled square.
+ */
+export const PWA_ICONS: PwaIcon[] = [
+  {
+    src: "/icons/icon-192.png",
+    sizes: "192x192",
+    type: "image/png",
+    purpose: "any",
+  },
+  {
+    src: "/icons/icon-512.png",
+    sizes: "512x512",
+    type: "image/png",
+    purpose: "any",
+  },
+  {
+    src: "/icons/icon-maskable-192.png",
+    sizes: "192x192",
+    type: "image/png",
+    purpose: "maskable",
+  },
+  {
+    src: "/icons/icon-maskable-512.png",
+    sizes: "512x512",
+    type: "image/png",
+    purpose: "maskable",
+  },
+];
+
+export function buildManifest(): MetadataRoute.Manifest {
+  return {
+    id: PWA_SCOPE,
+    name: APP_NAME,
+    short_name: APP_NAME,
+    description: APP_DESCRIPTION,
+    lang: "es-CO",
+    start_url: PWA_START_URL,
+    scope: PWA_SCOPE,
+    display: PWA_DISPLAY,
+    orientation: "any",
+    background_color: PWA_BACKGROUND_COLOR,
+    theme_color: PWA_THEME_COLOR_LIGHT,
+    icons: PWA_ICONS,
+  };
+}
+
+export function buildPwaMetadata(): Metadata {
+  return {
+    title: APP_NAME,
+    description: `${APP_NAME} — ${APP_DESCRIPTION}`,
+    /**
+     * WebKit ignores the manifest's `display` field for the address bar and
+     * reads these tags instead. Without them iOS opens the installed app inside
+     * Safari chrome.
+     */
+    appleWebApp: {
+      capable: true,
+      title: APP_NAME,
+      /**
+       * `default`, not `black-translucent`: this app has a light theme and a
+       * transparent status bar would put dark text over dark content.
+       */
+      statusBarStyle: "default",
+    },
+  };
+}
+
+export function buildPwaViewport(): Viewport {
+  return {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 5,
+    /** Lets the layout reach the notch and home indicator areas on iOS. */
+    viewportFit: "cover",
+    themeColor: [
+      { media: "(prefers-color-scheme: light)", color: PWA_THEME_COLOR_LIGHT },
+      { media: "(prefers-color-scheme: dark)", color: PWA_THEME_COLOR_DARK },
+    ],
+  };
+}
