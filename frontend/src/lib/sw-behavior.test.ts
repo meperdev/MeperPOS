@@ -62,7 +62,8 @@ interface CacheStore {
  */
 function createScope(
   options: {
-    failAddFor?: string[];
+    /** URLs, absolute, that cannot be fetched during installation. */
+    unreachable?: string[];
     failPut?: boolean;
     failOpen?: boolean;
     failMatch?: boolean;
@@ -71,7 +72,7 @@ function createScope(
   const listeners = new Map<string, Handler[]>();
   const stores = new Map<string, CacheStore>();
   const deleted: string[] = [];
-  const failAddFor = new Set(options.failAddFor ?? []);
+  const unreachable = new Set(options.unreachable ?? []);
   const failPut = options.failPut === true;
   const failOpen = options.failOpen === true;
   const failMatch = options.failMatch === true;
@@ -84,9 +85,7 @@ function createScope(
     const store: CacheStore = {
       entries,
       add: vi.fn(async (request: unknown) => {
-        const key = keyOf(request);
-        if (failAddFor.has(key)) throw new Error(`unreachable: ${key}`);
-        entries.set(key, fakeResponse(key));
+        entries.set(keyOf(request), fakeResponse(keyOf(request)));
       }),
       put: vi.fn(async (request: unknown, value: FakeResponse) => {
         // Storage can refuse: a full quota, or a private tab.
@@ -139,8 +138,7 @@ function createScope(
 
   const fetchMock = vi.fn(async (request: string | { url: string }) => {
     const url = resolveUrl(request);
-    // `failAddFor` models a URL that cannot be fetched during installation.
-    if (failAddFor.has(url)) {
+    if (unreachable.has(url)) {
       throw new Error(`unreachable: ${url}`);
     }
     return fakeResponse(url);
@@ -226,13 +224,18 @@ describe("service worker install", () => {
   });
 
   it("still installs when a precached URL is unreachable", async () => {
-    const scope = createScope({ failAddFor: [PWA_OFFLINE_URL] });
+    // Absolute, because that is the form `fetch` normalises to and the form the
+    // harness compares against: a relative entry here would never match and the
+    // test would pass without exercising an unreachable URL at all.
+    const scope = createScope({
+      unreachable: [`${ORIGIN}${PWA_OFFLINE_URL}`],
+    });
     const lifecycle = scope.lifecycle();
 
     scope.dispatch("install", lifecycle.event);
 
-    // A rejected install would leave the worker stuck in "installing" forever
-    // and silently delete the app's offline capability.
+    // A rejected install fails the whole worker, which costs offline support
+    // outright instead of only the entry that could not be fetched.
     await expect(lifecycle.settled()).resolves.toBeDefined();
     expect(scope.self.skipWaiting).toHaveBeenCalledTimes(1);
   });

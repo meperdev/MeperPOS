@@ -170,8 +170,9 @@ async function findOfflinePage() {
  * The cost of refusing redirects is that a canonicalising redirect warms
  * neither URL, so that one navigation has no offline copy.
  *
- * The write is completed before the response is delivered, so it is never
- * abandoned when the worker is stopped after the request — but the rejection is
+ * The write is never abandoned: the strategies that await it deliver the
+ * response afterwards, and the background revalidation registers the promise
+ * with `event.waitUntil` instead of detaching it. Its rejection is always
  * swallowed, because a full quota, a private tab, or a body that cannot be
  * cloned must never turn a healthy response into a failed request.
  */
