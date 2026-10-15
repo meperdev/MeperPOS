@@ -227,27 +227,66 @@ describe("service worker activate", () => {
 });
 
 describe("service worker fetch routing", () => {
-  it("ignores every request it must not touch", () => {
+  /**
+   * Each case below is constructed so that exactly ONE rule can exclude it.
+   * A table of overlapping examples keeps passing after a guard is deleted,
+   * which makes it worse than no test: it reads as proof of a boundary it never
+   * touched.
+   */
+  it("ignores a non-GET request on an otherwise cacheable path", () => {
     const scope = createScope();
 
-    const cases: Record<string, unknown>[] = [
-      { method: "POST", mode: "cors", url: `${ORIGIN}/api/sales` },
-      { method: "DELETE", mode: "cors", url: `${ORIGIN}/api/products/1` },
-      // The API is deployed on another origin.
-      { method: "GET", mode: "cors", url: "https://api.meperpos.test/api/sales" },
-      // Same-origin API traffic, if the proxy decision ever lands.
-      { method: "GET", mode: "cors", url: `${ORIGIN}/api/sales` },
-      // React Server Component payloads for client-side navigation.
-      { method: "GET", mode: "cors", url: `${ORIGIN}/dashboard?_rsc=abc` },
-      { method: "GET", mode: "cors", url: `${ORIGIN}/pos` },
-    ];
+    // Same origin, immutable prefix: only the method rule stands in the way.
+    const probe = scope.pageFetch({
+      method: "POST",
+      mode: "cors",
+      url: `${ORIGIN}/_next/static/chunks/main-app-abc.js`,
+    });
+    scope.dispatch("fetch", probe.event);
 
-    for (const request of cases) {
-      const probe = scope.pageFetch(request);
-      scope.dispatch("fetch", probe.event);
-      expect(probe.response()).toBeUndefined();
-    }
+    expect(probe.response()).toBeUndefined();
+    expect(scope.fetchMock).not.toHaveBeenCalled();
+  });
 
+  it("ignores a cross-origin request on an otherwise cacheable path", () => {
+    const scope = createScope();
+
+    // Only the origin rule stands in the way.
+    const probe = scope.pageFetch(
+      asset("https://api.meperpos.test/_next/static/chunks/main-app-abc.js"),
+    );
+    scope.dispatch("fetch", probe.event);
+
+    expect(probe.response()).toBeUndefined();
+    expect(scope.fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores an API navigation, which is otherwise a navigation", () => {
+    const scope = createScope();
+
+    // Navigate mode means the /api/ rule is the only thing keeping this out of
+    // the page cache. That rule is what protects tenant data if the app is ever
+    // served behind one host with the API.
+    const probe = scope.pageFetch({
+      method: "GET",
+      mode: "navigate",
+      url: `${ORIGIN}/api/sales`,
+    });
+    scope.dispatch("fetch", probe.event);
+
+    expect(probe.response()).toBeUndefined();
+    expect(scope.fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a request no strategy claims", () => {
+    const scope = createScope();
+
+    // React Server Component payloads for client-side navigation: same-origin
+    // GETs that are neither a navigation nor a cacheable asset.
+    const probe = scope.pageFetch(asset(`${ORIGIN}/dashboard?_rsc=abc`));
+    scope.dispatch("fetch", probe.event);
+
+    expect(probe.response()).toBeUndefined();
     expect(scope.fetchMock).not.toHaveBeenCalled();
   });
 
@@ -268,11 +307,28 @@ describe("service worker fetch routing", () => {
     }
   });
 
-  it("never stores an API response", async () => {
+  it("never lets an API response reach Cache Storage", async () => {
     const scope = createScope();
-    const probe = scope.pageFetch(navigation(`${ORIGIN}/pos`));
-    scope.dispatch("fetch", probe.event);
-    await probe.response();
+    // A response that would look perfectly cacheable if the guard were missing.
+    scope.fetchMock.mockResolvedValue(fakeResponse(`${ORIGIN}/api/sales`));
+
+    const apiRequests: Record<string, unknown>[] = [
+      asset(`${ORIGIN}/api/sales`),
+      { method: "GET", mode: "navigate", url: `${ORIGIN}/api/sales` },
+      { method: "POST", mode: "cors", url: `${ORIGIN}/api/sales` },
+      { method: "DELETE", mode: "cors", url: `${ORIGIN}/api/products/1` },
+      { method: "GET", mode: "cors", url: "https://api.meperpos.test/api/sales" },
+    ];
+
+    for (const request of apiRequests) {
+      const probe = scope.pageFetch(request);
+      scope.dispatch("fetch", probe.event);
+      expect(probe.response()).toBeUndefined();
+    }
+
+    // The guarantee is stronger than "does not store it": the worker never even
+    // issues the request, so there is no API response to store.
+    expect(scope.fetchMock).not.toHaveBeenCalled();
 
     const cachedKeys = [
       ...scope.storeFor(SW_PAGES_CACHE).entries.keys(),
