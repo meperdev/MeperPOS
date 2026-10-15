@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Download, Share } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SettingsCard } from "./SettingsCard";
-import { useInstallPrompt } from "@/hooks/useInstallPrompt";
+import { useInstallPrompt } from "@/contexts/InstallPromptContext";
 import { APP_NAME } from "@/lib/constants";
 
 /**

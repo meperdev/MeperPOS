@@ -1,6 +1,9 @@
-"use client";
-
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+/**
+ * Detection and typing for the PWA install surface.
+ *
+ * Kept separate from the provider so the platform predicates stay pure and can
+ * be reasoned about without React.
+ */
 
 export type InstallOutcome = "accepted" | "dismissed" | "unavailable";
 
@@ -16,7 +19,7 @@ export interface BeforeInstallPromptEvent extends Event {
 export interface InstallPromptState {
   /** The app is already running as an installed app, or was just installed. */
   isInstalled: boolean;
-  /** The browser offered its own install prompt and it can be replayed. */
+  /** The browser offered its own install prompt and it can still be replayed. */
   canPromptInstall: boolean;
   /** The platform has no install prompt, so the user needs the manual recipe. */
   needsManualInstall: boolean;
@@ -66,7 +69,7 @@ export function isIosDevice(): boolean {
  * It is a module-level function so its identity is stable across renders and
  * React does not resubscribe on every one.
  */
-function subscribeToDisplayMode(onChange: () => void): () => void {
+export function subscribeToDisplayMode(onChange: () => void): () => void {
   if (typeof window === "undefined") return () => undefined;
 
   const mediaQueries =
@@ -85,71 +88,28 @@ function subscribeToDisplayMode(onChange: () => void): () => void {
 }
 
 /** Prerendering has no `window`: nothing is installed during that pass. */
-function serverIsStandalone(): boolean {
+export function serverIsStandalone(): boolean {
   return false;
 }
 
 /**
- * Tells the caller whether this device can install the app, and how.
+ * Compares a captured event with the one already consumed.
  *
- * The two platforms could not be more different: Chromium fires
- * `beforeinstallprompt` and owns the install UI, while WebKit has no such event
- * and no programmatic install at all, so the only thing the app can do there is
- * explain the Share sheet to the user.
+ * `beforeinstallprompt` is single-use, and React state is not a synchronous
+ * latch, so two calls inside the same tick would otherwise both get through.
  */
-export function useInstallPrompt(): InstallPromptState {
-  const [promptEvent, setPromptEvent] =
-    useState<BeforeInstallPromptEvent | null>(null);
-  const [installConfirmed, setInstallConfirmed] = useState(false);
-
-  const isStandalone = useSyncExternalStore(
-    subscribeToDisplayMode,
-    isStandaloneDisplay,
-    serverIsStandalone,
-  );
-
-  useEffect(() => {
-    const handlePrompt = (event: Event) => {
-      // Suppressing the browser's mini-infobar is what lets the app offer the
-      // install in its own place, with its own wording.
-      event.preventDefault();
-      setPromptEvent(event as BeforeInstallPromptEvent);
-    };
-
-    // On Android the app installs into the launcher while this tab stays an
-    // ordinary browser tab, so the display mode never changes and this event is
-    // the only signal that installation happened.
-    const handleInstalled = () => setInstallConfirmed(true);
-
-    window.addEventListener("beforeinstallprompt", handlePrompt);
-    window.addEventListener("appinstalled", handleInstalled);
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handlePrompt);
-      window.removeEventListener("appinstalled", handleInstalled);
-    };
-  }, []);
-
-  const promptInstall = useCallback(async (): Promise<InstallOutcome> => {
-    if (!promptEvent) return "unavailable";
-
-    // The event is single-use whichever way the user answers, so it is dropped
-    // before awaiting and can never be replayed.
-    setPromptEvent(null);
-    await promptEvent.prompt();
-    const { outcome } = await promptEvent.userChoice;
-    return outcome;
-  }, [promptEvent]);
-
-  const isInstalled = isStandalone || installConfirmed;
-  const canPromptInstall = promptEvent !== null && !isInstalled;
-  const needsManualInstall = !isInstalled && !canPromptInstall && isIosDevice();
-
-  return {
-    isInstalled,
-    canPromptInstall,
-    needsManualInstall,
-    isAvailable: canPromptInstall || needsManualInstall,
-    promptInstall,
-  };
+export function isConsumedEvent(
+  consumed: BeforeInstallPromptEvent | null,
+  candidate: BeforeInstallPromptEvent | null,
+): boolean {
+  return candidate !== null && consumed === candidate;
 }
+
+/** The shape returned when no provider is mounted. */
+export const UNAVAILABLE_INSTALL_STATE: InstallPromptState = {
+  isInstalled: false,
+  canPromptInstall: false,
+  needsManualInstall: false,
+  isAvailable: false,
+  promptInstall: async () => "unavailable",
+};

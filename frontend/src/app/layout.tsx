@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { SidebarProvider } from "@/contexts/SidebarContext";
+import { InstallPromptProvider } from "@/contexts/InstallPromptContext";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { buildPwaMetadata, buildPwaViewport } from "@/lib/pwa";
 
@@ -40,7 +41,9 @@ export default function RootLayout({
           <ThemeProvider>
             <ToastProvider>
               <AuthProvider>
-                <SidebarProvider>{children}</SidebarProvider>
+                <SidebarProvider>
+                  <InstallPromptProvider>{children}</InstallPromptProvider>
+                </SidebarProvider>
               </AuthProvider>
             </ToastProvider>
           </ThemeProvider>
