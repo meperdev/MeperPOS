@@ -32,6 +32,11 @@ Risk tier: high. A service worker is delivery/runtime surface for every installe
 - [x] **T8** — Emit the vendor-prefixed `apple-mobile-web-app-capable` tag. Fixes **finding 2**. Commit `bf8919c`.
 - [x] **T9** — Never let a cache write decide a request's fate, refuse a followed redirect, and stop overclaiming in the worker header. Fixes **finding 5** and finding 3. Commit `d3f1ae8`.
 - [x] **T10** — Isolate each service worker guard in its own test. Fixes **finding 4**. Commit `a53d12c`.
+- [x] **V2** — Independent verification of `fb1f525` (`gentle-ai-verify`, read-only). Verdict: **do not approve yet**. Three findings, all accepted. It confirmed the four round-1 fixes were real and that no new regression came from them, and qualified the hydration hazard as latent rather than demonstrated.
+- [x] **T12** — Make iOS detection hydration-safe. Fixes V2 finding 2. Commit `1d50af4`.
+- [x] **T13** — Make storage access, not just the write, non-fatal. Fixes V2 **finding 1**, which asked for the code to change rather than the claim. Commit `1d50af4`.
+- [x] **T15** — Correct three comments that claimed more than the code enforced (V2 finding 3), and record the redirect tradeoff.
+- [x] **T16** — Remove `APP_ICON_APPLE`, a production export that existed only for a test.
 - [ ] **T6** — Blocked on a user decision: same-origin `/api` proxy for WebKit cookie persistence.
 
 ## Verification
@@ -41,12 +46,14 @@ All commands run from `frontend/`.
 | Check | Command | Result |
 | --- | --- | --- |
 | Focused suites | `npx vitest run <each touched test>` | GREEN at each task; RED observed first where behaviour was new |
-| Full suite | `npx vitest run` | 87 files, 733 tests, exit 0 (721 before remediation) |
+| Full suite | `npx vitest run` | 87 files, 739 tests, exit 0 (677 before PWA work; 721 after T5; 733 after T10) |
 | Types | `npx tsc --noEmit` | exit 0, 0 diagnostics |
 | Lint (non-mutating) | `npx eslint <touched files>` | exit 0, 0 errors, 0 warnings |
-| Production build | `npm run build` | exit 0, 34/34 static pages; `/manifest.webmanifest`, `/offline` and `/settings/general` prerendered |
-| Emitted HTML | `grep` on `.next/server/app/*.html` | both `mobile-web-app-capable` and `apple-mobile-web-app-capable` present on `/dashboard` and `/login` |
-| Guard mutation | delete one routing guard, rerun `sw-behavior.test.ts` | method guard → 1 test fails; origin guard → 1 test fails; `/api/` guard → 2 tests fail; baseline 20/20. The worker was restored from the committed revision afterwards. |
+| Production build | `npm run build` | exit 0, 34/34 static pages |
+| Emitted HTML | `grep` on `.next/server/app/*.html` | both `mobile-web-app-capable` and `apple-mobile-web-app-capable` present in all 20 top-level pages |
+| Guard mutation (T10) | delete one routing guard, rerun `sw-behavior.test.ts` | method → 1 failure, origin → 1 failure, `/api/` → 2 failures; baseline 20/20; worker restored |
+| Hydration mutation (T12) | restore the render-path user-agent read, rerun | the prerender test fails and nothing else does; baseline 17/17; file restored |
+| Storage RED (T13) | `failOpen`/`failMatch` in the worker harness | 5 failures before the fix (4, plus one vacuous test of my own that the stricter fixture exposed), 25/25 after |
 
 Not verified, and not claimed: any real browser install, any device behaviour, iOS or Android. No browser, emulator or device was exercised. Instrumented audits (Lighthouse installability, WebKit inspection) were not run. The `/api` proxy that WebKit login persistence depends on is not implemented (T6).
 
@@ -68,3 +75,7 @@ Not verified, and not claimed: any real browser install, any device behaviour, i
 - **L13** — T7 secondary fix: `eslint` rejected reading the consumed-event ref during render (`react-hooks/refs`). That was correct, so `canPromptInstall` derives from state alone and the ref is read only inside the callback, which is the only place the synchronous single-use guarantee is needed.
 - **L14** — T8 verification was done against the built artifact, not the metadata object: after `npm run build`, both capability tags are present in `.next/server/app/dashboard.html` and `.next/server/app/login.html`. The unit test pins the legacy tag so a Next upgrade cannot silently drop it again.
 - **L15** — T9 RED was four failures (`failPut` on all three strategies plus the followed redirect), with the 13 pre-existing worker tests still green. T10 was verified by mutation rather than assertion: deleting the method guard fails exactly 1 test, the origin guard exactly 1, and the `/api/` guard exactly 2, against a 20/20 baseline. `sw.js` was restored from `/tmp/sw.control` and `git diff --stat` confirmed it matched the committed revision. Before T10, deleting any of those guards left the suite fully green.
+- **L16** — Round 2 verdict (V2) on `fb1f525`: **do not approve yet**, three findings, all accepted. (1) Storage refusal could still break healthy requests, because only `cache.put` was guarded while `caches.open`/`cache.match` ran before the network, and navigation opened its cache outside its `try`; the verifier explicitly said to change the code, not the claim. (2) `needsManualInstall` read the user agent during render, so the prerendered HTML and an iOS client's first render would disagree; the verifier qualified this as a latent provider defect, not a demonstrated regression, and noted the hazard predated the remediation. (3) Three comments claimed more than the code enforced. It also confirmed all four round-1 fixes were real and introduced no new regression.
+- **L17** — T13 RED was 4 failures on the first run, but one of my new tests passed and that was wrong: the `failMatch` case used a navigation, and `forNavigation` never reads the cache on a successful fetch, so the test exercised nothing. Retargeted at an immutable asset, which is the one strategy that reads before fetching, and it then failed as it should. Final RED was 5 failures, GREEN 25/25. That is the same class of vacuous test finding 4 was about, caught inside my own remediation.
+- **L18** — T12's test asserts the property that matters and is discriminating without fabricating a server environment: `renderToString` must not contain the manual-install recipe on an iOS user agent, while the same tree rendered on the client must. Mutation-confirmed: restoring `isIosDevice()` in the render path fails exactly that test and nothing else, against a 17/17 baseline; the file was restored and `grep` confirmed the committed line.
+- **L19** — Final local verification after the round-2 remediation: 87 files / 739 tests exit 0, `tsc --noEmit` 0 diagnostics, `eslint` on all nine touched files exit 0, `npm run build` exit 0 with 34/34 static pages, and both capability tags present in all 20 generated top-level HTML files. Nothing was pushed and no pull request was opened; the twelve commits live on `feat/pwa-support` only.
