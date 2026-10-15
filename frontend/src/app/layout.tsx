@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { SidebarProvider } from "@/contexts/SidebarContext";
+import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { buildPwaMetadata, buildPwaViewport } from "@/lib/pwa";
 
 const geist = Geist({
@@ -45,6 +46,7 @@ export default function RootLayout({
           </ThemeProvider>
         </QueryProvider>
         <Analytics />
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

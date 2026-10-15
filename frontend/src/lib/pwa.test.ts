@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -7,10 +7,14 @@ import {
   APP_ICON_APPLE,
   PWA_BACKGROUND_COLOR,
   PWA_ICONS,
+  PWA_OFFLINE_URL,
   PWA_SCOPE,
   PWA_START_URL,
   PWA_THEME_COLOR_DARK,
   PWA_THEME_COLOR_LIGHT,
+  SW_CACHE_VERSION,
+  SW_PAGES_CACHE,
+  SW_STATIC_CACHE,
   buildPwaMetadata,
   buildPwaViewport,
 } from "@/lib/pwa";
@@ -111,5 +115,55 @@ describe("theme color single source of truth", () => {
 
     expect(layout).not.toMatch(/#[0-9a-fA-F]{6}/);
     expect(layout).toContain('from "@/lib/pwa"');
+  });
+});
+
+describe("service worker contract", () => {
+  const swSource = readFileSync(
+    path.resolve(process.cwd(), "public/sw.js"),
+    "utf8",
+  );
+
+  it("derives both cache names from the shared version constant", () => {
+    expect(swSource).toContain(`const CACHE_VERSION = "${SW_CACHE_VERSION}";`);
+    expect(swSource).toContain("meperpos-static-${CACHE_VERSION}");
+    expect(swSource).toContain("meperpos-pages-${CACHE_VERSION}");
+  });
+
+  it("hardcodes no cache name outside the version constant", () => {
+    // A literal like `meperpos-static-v1` would silently survive a version
+    // bump and keep serving the superseded cache forever.
+    expect(swSource).not.toMatch(/meperpos-(static|pages)-v\d/);
+  });
+
+  it("matches the cache names the browser will actually see", () => {
+    expect(SW_STATIC_CACHE).toBe(`meperpos-static-${SW_CACHE_VERSION}`);
+    expect(SW_PAGES_CACHE).toBe(`meperpos-pages-${SW_CACHE_VERSION}`);
+  });
+
+  it("precaches URLs the build really serves", () => {
+    expect(swSource).toContain(`"${PWA_OFFLINE_URL}"`);
+    expect(swSource).toContain('const MANIFEST_URL = "/manifest.webmanifest";');
+
+    // Precache failures are swallowed on purpose, so a URL that 404s would
+    // disable the offline fallback with no visible symptom.
+    expect(
+      existsSync(
+        path.resolve(
+          process.cwd(),
+          "src/app",
+          PWA_OFFLINE_URL.slice(1),
+          "page.tsx",
+        ),
+      ),
+    ).toBe(true);
+    expect(existsSync(path.resolve(process.cwd(), "src/app/manifest.ts"))).toBe(
+      true,
+    );
+  });
+
+  it("keeps the /api guard that protects tenant data", () => {
+    expect(swSource).toContain('url.pathname.startsWith("/api/")');
+    expect(swSource).toContain("url.origin !== self.location.origin");
   });
 });

@@ -34,6 +34,21 @@ export const PWA_SCOPE = "/";
 
 export const PWA_DISPLAY = "standalone";
 
+/**
+ * Service worker contract. `public/sw.js` is shipped as a plain script and
+ * cannot import from here, so it repeats these literals; the matching test
+ * reads that file and fails the moment the two drift apart.
+ */
+export const SW_PATH = "/sw.js";
+
+export const SW_CACHE_VERSION = "v1";
+
+export const SW_STATIC_CACHE = `meperpos-static-${SW_CACHE_VERSION}`;
+export const SW_PAGES_CACHE = `meperpos-pages-${SW_CACHE_VERSION}`;
+
+/** Served by `src/app/offline/page.tsx` and precached on install. */
+export const PWA_OFFLINE_URL = "/offline";
+
 /** Name of the `src/app/apple-icon.png` file without its extension. */
 export const APP_ICON_APPLE = "apple-icon";
 
