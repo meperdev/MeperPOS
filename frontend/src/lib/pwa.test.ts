@@ -94,6 +94,15 @@ describe("iOS install metadata", () => {
     });
   });
 
+  it("emits the vendor-prefixed capability tag WebKit reads, not only the standard one", () => {
+    // `appleWebApp.capable` becomes `mobile-web-app-capable`. Next emits no
+    // `apple-mobile-web-app-capable`, so the legacy tag has to be declared
+    // explicitly or iOS has nothing to read.
+    expect(buildPwaMetadata().other).toMatchObject({
+      "apple-mobile-web-app-capable": "yes",
+    });
+  });
+
   it("keeps the dynamic island and home indicator free through viewportFit cover", () => {
     expect(buildPwaViewport().viewportFit).toBe("cover");
   });

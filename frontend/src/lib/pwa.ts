@@ -128,6 +128,17 @@ export function buildPwaMetadata(): Metadata {
        */
       statusBarStyle: "default",
     },
+    /**
+     * Next maps `appleWebApp.capable` to the standard `mobile-web-app-capable`
+     * and emits no vendor-prefixed equivalent (see
+     * `node_modules/next/dist/lib/metadata/generate/basic.js`), so the tag WebKit
+     * has actually honoured since iOS 1 is declared here. Both are sent: neither
+     * replaces the other, and this one is the difference between an installed
+     * app and a Safari tab with an icon.
+     */
+    other: {
+      "apple-mobile-web-app-capable": "yes",
+    },
   };
 }
 
