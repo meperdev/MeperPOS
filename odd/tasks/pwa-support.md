@@ -43,7 +43,23 @@ Risk tier: high. A service worker is delivery/runtime surface for every installe
 - [x] **T19** — Precache through the same redirect-refusing helper instead of `cache.add`. Fixes V3 finding 3. Commit `6bfc4c9`.
 - [x] **V4** — Independent verification of `8c16a2b` (`gentle-ai-verify`, read-only). Verdict: the three round-3 findings are **closed**, **no production defect found**, and the service worker is approvable as-is. Two remnants: one vacuous test fixture it classified as the same class as finding 4, and one inaccurate docstring.
 - [x] **T20** — Repair the vacuous precache fixture and the `remember` docstring. Commit `003967b`.
-- [ ] **T6** — Blocked on a user decision: same-origin `/api` proxy for WebKit cookie persistence.
+- [x] **T6** — Same-origin `/api` proxy for WebKit cookie persistence. **Authorized by the owner** and implemented. `next.config.ts` registers `rewrites()` from `apiProxyRewrites(BACKEND_ORIGIN)`, and `assertProxyConfigured` fails the build when the client base is relative but no origin is configured. `src/lib/api-proxy.ts` + `src/lib/api-proxy.test.ts`. Commit `a6e0f56`.
+- [x] **T21** — Gitignore `.codegraph/` and `.pi/`, the two untracked tooling directories that also blocked the native assessor.
+
+### Deployment variables (owner action)
+
+Vercel → Project → Settings → Environment Variables, then **redeploy**: both are read at build time, so changing them without a new deployment does nothing.
+
+| Variable | Value | Why |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_URL` | `/api` | Inlined into the client bundle. Relative, so the browser calls this origin. |
+| `BACKEND_ORIGIN` | `https://meperpos-api.up.railway.app` | Read by `next.config.ts` to build the rewrite destination. Not a `NEXT_PUBLIC_` value, so it never reaches the browser. |
+
+Setting only one of the two fails the build on purpose. Local development is unaffected: `.env.local` keeps an absolute URL, so no rewrite is registered.
+
+**Prerequisite before production traffic moves through the proxy.** `backend/src/app.module.ts` registers a global `ThrottlerGuard` at 100 requests per 60 s, and `auth.controller.ts` also reads the client IP. Behind the Vercel proxy the backend sees the proxy's address rather than the operator's, so throttling buckets and any IP captured in auth/logs stop identifying a real client. The backend needs `app.set("trust proxy", 1)` (or an equivalent) so it reads `X-Forwarded-For`, and that is a separate backend change on its own branch.
+
+**Unverified after deployment.** `ImageUpload` accepts files up to 5 MB, above Vercel's 4.5 MB Serverless Function payload limit. External rewrites are handled by the routing layer rather than a function, so the limit should not apply — but this has not been exercised, and one real logo upload through the proxy is the cheapest way to confirm it.
 
 ### Native review status
 
@@ -67,6 +83,7 @@ All commands run from `frontend/`.
 | Round-3 RED | superseded cache, detached revalidation, redirected precache | 3 failures before the fix, 28/28 after |
 | Round-4 fixture mutation | remove `precache` tolerance, rerun the install test | 1 failed, 27 skipped; restored → 28/28 |
 | Final state | `npx vitest run`, `tsc`, `eslint`, `build` | 87 files / 742 tests, 0 diagnostics, 0 errors, build 0; commit `003967b` |
+| Proxy guard | `npx vitest run src/lib/api-proxy.test.ts` | 11/11, covering both halves of the configuration and both half-configured failures |
 
 Not verified, and not claimed: any real browser install, any device behaviour, iOS or Android. No browser, emulator or device was exercised. Instrumented audits (Lighthouse installability, WebKit inspection) were not run. The `/api` proxy that WebKit login persistence depends on is not implemented (T6).
 
@@ -98,3 +115,5 @@ Not verified, and not claimed: any real browser install, any device behaviour, i
 - **L23** — Round 4 verdict (V4) on `8c16a2b`: the three round-3 findings are **closed** and **no production defect was found**; the service worker was called approvable as-is. It confirmed by spec citation that the late `event.waitUntil` inside the revalidation path is legal, because `respondWith` had already added a pending promise to the event and so keeps it active; that the promise passed is `catch`-guarded and cannot become an unhandled rejection; and that cache-key parity holds between the old `cache.add(url)` and the new `cache.put(url, ...)`, so no key divergence was introduced. It also found that only the internal `_global-error.html` lacks the capability tags, which is a Next error document rather than a route.
 - **L24** — The one real finding of round 4 was mine, and it was the second occurrence of the same mistake: the unreachable-precache fixture passed the relative `"/offline"` while the harness compares against the absolute URL that `fetch` normalises to, so the comparison never matched and the test passed without exercising anything. That property — one unreachable precache URL must not fail install — is exactly what the round-3 precache tolerance rests on, so it had silently stopped being verified. Fixed with an absolute URL, and the dead `failAddFor` check inside the stub `cache.add` was removed rather than left as code that can never run; the option is now named `unreachable`, for what it models. Mutation-proven: removing `precache`'s tolerance fails exactly that test (1 failed, 27 skipped); restoring it returns 28/28.
 - **L25** — Native review: RDD reads `on (decided by global)`, so `gentle_review` `assess` was invoked over the last work unit with `baseRef: HEAD~1, committedOnly: true`. It returned `risk: unassessable`, reason `empty-output`, with the native assessor asking for an explicit declaration of the repository's untracked paths. Those are `.codegraph/` and `.pi/`, pre-existing tooling directories that are not gitignored and are not part of this branch. Nothing was mutated to work around it: the plan's requirement of a separate independent verifier is already satisfied by four verification rounds, and resolving that declaration is a repository-policy decision for the owner rather than part of this change.
+- **L26** — Owner decisions taken at close, all recorded before the session ended: apply the same-origin `/api` rewrite and guide the Vercel variables (T6, authorized); gitignore `.codegraph/` and `.pi/` (T21); do **not** open a pull request yet, because more work is expected first. T6 was implemented with a build-time guard rather than as a bare rewrite, because a relative client base with no proxy does not degrade — it ships an app that loads and then fails every request. `apiProxyRewrites` returns nothing when no origin is set, so local development and direct mode are untouched.
+- **L27** — Two consequences of T6 were found by inspection before writing it, and both are recorded rather than fixed here. First, the global `ThrottlerGuard` (100 requests per 60 s) and the client IP captured in `auth.controller.ts` stop identifying a real operator once the backend sits behind the Vercel proxy; the backend needs `app.set("trust proxy", 1)` on its own branch. Second, uploads allow 5 MB while Vercel's Serverless Function payload limit is 4.5 MB; external rewrites run at the routing layer rather than in a function, so it should not apply, but it has not been exercised and is listed as a post-deploy check instead of an assumption. `frontend/.env.example` could not be updated: the safety policy blocks reading that path, it was not worked around, and the variables are documented here and in the handoff instead.
