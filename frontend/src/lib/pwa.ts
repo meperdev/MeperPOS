@@ -144,3 +144,21 @@ export function buildPwaViewport(): Viewport {
     ],
   };
 }
+
+/**
+ * Drops what the service worker cached about *where this operator went*.
+ *
+ * Only the page cache is dropped, and deliberately so. Its keys are the URLs
+ * the session navigated to, which on a shared till is the previous user's trail
+ * of which screens they opened. The static cache holds nothing but public,
+ * content-hashed assets, so wiping it would cost a full re-download and protect
+ * nobody.
+ *
+ * Called by `clearSessionState`, which owns session teardown. It fires and
+ * forgets: ending a session must never wait on storage, and must never fail
+ * because storage refused.
+ */
+export function clearSessionPageCache(): void {
+  if (typeof caches === "undefined") return;
+  void caches.delete(SW_PAGES_CACHE).catch(() => undefined);
+}
