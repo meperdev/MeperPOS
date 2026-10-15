@@ -37,6 +37,10 @@ Risk tier: high. A service worker is delivery/runtime surface for every installe
 - [x] **T13** — Make storage access, not just the write, non-fatal. Fixes V2 **finding 1**, which asked for the code to change rather than the claim. Commit `1d50af4`.
 - [x] **T15** — Correct three comments that claimed more than the code enforced (V2 finding 3), and record the redirect tradeoff.
 - [x] **T16** — Remove `APP_ICON_APPLE`, a production export that existed only for a test.
+- [x] **V3** — Independent verification of `4750753` (`gentle-ai-verify`, read-only). Verdict: **not approvable yet**. Three findings, all accepted. It confirmed both round-2 fixes were real, that `openCache` returning null never skips the network, and that removing `APP_ICON_APPLE` broke nothing.
+- [x] **T17** — Scope the offline fallback read to the current cache. Fixes V3 **finding 1**, a defective interaction introduced by T13's tolerant activation. Commit `6bfc4c9`.
+- [x] **T18** — Extend the worker lifetime across background revalidation with `event.waitUntil`. Fixes V3 finding 2. Commit `6bfc4c9`.
+- [x] **T19** — Precache through the same redirect-refusing helper instead of `cache.add`. Fixes V3 finding 3. Commit `6bfc4c9`.
 - [ ] **T6** — Blocked on a user decision: same-origin `/api` proxy for WebKit cookie persistence.
 
 ## Verification
@@ -46,7 +50,7 @@ All commands run from `frontend/`.
 | Check | Command | Result |
 | --- | --- | --- |
 | Focused suites | `npx vitest run <each touched test>` | GREEN at each task; RED observed first where behaviour was new |
-| Full suite | `npx vitest run` | 87 files, 739 tests, exit 0 (677 before PWA work; 721 after T5; 733 after T10) |
+| Full suite | `npx vitest run` | 87 files, 742 tests, exit 0 (677 before PWA work; 721 after T5; 733 after T10; 739 after round-2 fixes) |
 | Types | `npx tsc --noEmit` | exit 0, 0 diagnostics |
 | Lint (non-mutating) | `npx eslint <touched files>` | exit 0, 0 errors, 0 warnings |
 | Production build | `npm run build` | exit 0, 34/34 static pages |
@@ -54,6 +58,7 @@ All commands run from `frontend/`.
 | Guard mutation (T10) | delete one routing guard, rerun `sw-behavior.test.ts` | method → 1 failure, origin → 1 failure, `/api/` → 2 failures; baseline 20/20; worker restored |
 | Hydration mutation (T12) | restore the render-path user-agent read, rerun | the prerender test fails and nothing else does; baseline 17/17; file restored |
 | Storage RED (T13) | `failOpen`/`failMatch` in the worker harness | 5 failures before the fix (4, plus one vacuous test of my own that the stricter fixture exposed), 25/25 after |
+| Round-3 RED | superseded cache, detached revalidation, redirected precache | 3 failures before the fix, 28/28 after |
 
 Not verified, and not claimed: any real browser install, any device behaviour, iOS or Android. No browser, emulator or device was exercised. Instrumented audits (Lighthouse installability, WebKit inspection) were not run. The `/api` proxy that WebKit login persistence depends on is not implemented (T6).
 
@@ -79,3 +84,6 @@ Not verified, and not claimed: any real browser install, any device behaviour, i
 - **L17** — T13 RED was 4 failures on the first run, but one of my new tests passed and that was wrong: the `failMatch` case used a navigation, and `forNavigation` never reads the cache on a successful fetch, so the test exercised nothing. Retargeted at an immutable asset, which is the one strategy that reads before fetching, and it then failed as it should. Final RED was 5 failures, GREEN 25/25. That is the same class of vacuous test finding 4 was about, caught inside my own remediation.
 - **L18** — T12's test asserts the property that matters and is discriminating without fabricating a server environment: `renderToString` must not contain the manual-install recipe on an iOS user agent, while the same tree rendered on the client must. Mutation-confirmed: restoring `isIosDevice()` in the render path fails exactly that test and nothing else, against a 17/17 baseline; the file was restored and `grep` confirmed the committed line.
 - **L19** — Final local verification after the round-2 remediation: 87 files / 739 tests exit 0, `tsc --noEmit` 0 diagnostics, `eslint` on all nine touched files exit 0, `npm run build` exit 0 with 34/34 static pages, and both capability tags present in all 20 generated top-level HTML files. Nothing was pushed and no pull request was opened; the twelve commits live on `feat/pwa-support` only.
+- **L20** — Round 3 verdict (V3) on `4750753`: **not approvable yet**, three findings, all accepted. (1) Medium, and the most useful of the round: tolerant activation made a superseded cache readable again, because `caches.match()` without a cache name searches every cache, so an older cache left behind by a failed cleanup could win the offline fallback lookup and serve a shell from a previous deploy. That also falsified the version-bump invalidation claim and the "a superseded cache is inert" comment, and it was an interaction T13 introduced. (2) Low: revalidation registered no lifetime extension, so the background refresh was abandoned when the worker stopped and the cached asset never updated; the docstring claimed a guarantee the code did not provide. (3) Low: the header claimed the worker refuses followed redirects, but precaching used `cache.add`, which cannot inspect the response. V3 also confirmed both round-2 fixes were real, that `openCache` returning null never causes a strategy to skip the network, and that removing `APP_ICON_APPLE` broke nothing.
+- **L21** — T17-T19 evidence. RED: 3 failures, 25 passing. GREEN: 28/28, full suite 742/742. Two mistakes of my own surfaced during this round and are recorded because both were the kind that would otherwise reach a reviewer. First, switching precache to `fetch` exposed that the test harness read `request.url` off a bare string; the harness now normalises the way `fetch` does, and one assertion was corrected from a relative to an absolute URL rather than loosened. Second, `eslint` rejected a `map` used for side effects with no return, and the fix was to extract a named `precache` helper rather than to add a bare `return`.
+- **L22** — Final local verification after the round-3 remediation: 87 files / 742 tests exit 0, `tsc --noEmit` 0 diagnostics, `eslint` on `public/sw.js` and the worker suite exit 0, `npm run build` exit 0. Commit `6bfc4c9`.
