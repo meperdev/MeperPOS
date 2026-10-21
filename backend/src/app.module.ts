@@ -29,6 +29,7 @@ import { CookieCsrfGuard } from './common/guards/cookie-csrf.guard';
 import { CashRegistersModule } from './cash-registers/cash-registers.module';
 import { BillingModule } from './billing/billing.module';
 import { ExpensesModule } from './expenses/expenses.module';
+import { LoansModule } from './loans/loans.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { ExpensesModule } from './expenses/expenses.module';
     CashRegistersModule,
     BillingModule,
     ExpensesModule,
+    LoansModule,
   ],
   controllers: [AppController],
   providers: [
