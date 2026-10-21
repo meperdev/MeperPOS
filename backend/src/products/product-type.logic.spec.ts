@@ -1,5 +1,7 @@
 import { MovementType, ProductType } from '@prisma/client';
 import {
+  availableStock,
+  type AvailabilitySubject,
   isLowStock,
   normalizeStock,
   resolveInitialStockMovement,
@@ -51,6 +53,68 @@ describe('product-type.logic — the single stock-decision authority', () => {
     });
   });
 
+  describe('availableStock', () => {
+    const row: AvailabilitySubject = {
+      type: ProductType.PRODUCT,
+      tracksStock: true,
+      stock: 10,
+      reservedStock: 3,
+    };
+
+    it.each([
+      { reservedStock: 3, expected: 7 },
+      { reservedStock: 0, expected: 10 },
+      { reservedStock: 10, expected: 0 },
+      { stock: 0, reservedStock: 0, expected: 0 },
+      { type: ProductType.SERVICE, tracksStock: false, expected: null },
+      { type: ProductType.SERVICE, tracksStock: true, expected: null },
+      { tracksStock: false, expected: null },
+    ])(
+      'derives availability without changing physical stock: %j',
+      ({ expected, ...controls }) => {
+        const input = { ...row, ...controls };
+        const original = { ...input };
+        expect(availableStock(input)).toBe(expected);
+        expect(input).toEqual(original);
+      },
+    );
+
+    it.each([
+      { stock: -1 },
+      { stock: 1.5 },
+      { stock: NaN },
+      { stock: Infinity },
+      { reservedStock: -1 },
+      { reservedStock: 1.5 },
+      { reservedStock: NaN },
+      { reservedStock: Infinity },
+      { reservedStock: 11 },
+      { type: 'UNKNOWN' },
+      { type: null },
+      { tracksStock: null },
+      { tracksStock: 'true' },
+    ])('rejects corrupt real fields without clamping: %j', (controls) => {
+      const input = { ...row, ...controls } as AvailabilitySubject;
+      expect(() => availableStock(input)).toThrow(
+        'Invalid product availability inputs',
+      );
+    });
+
+    it.each(['type', 'tracksStock', 'stock', 'reservedStock'] as const)(
+      'rejects missing %s even for untracked rows',
+      (field) => {
+        const input: Partial<AvailabilitySubject> = {
+          ...row,
+          tracksStock: false,
+        };
+        delete input[field];
+        expect(() => availableStock(input as AvailabilitySubject)).toThrow(
+          'Invalid product availability inputs',
+        );
+      },
+    );
+  });
+
   describe('normalizeStock', () => {
     it('keeps a tracked product stock untouched', () => {
       expect(normalizeStock(product(), 42)).toBe(42);
@@ -70,6 +134,14 @@ describe('product-type.logic — the single stock-decision authority', () => {
   });
 
   describe('resolveInitialStockMovement', () => {
+    it('exposes only PURCHASE or null to opening movement writers', () => {
+      const movement: {
+        type: typeof MovementType.PURCHASE;
+        quantity: number;
+      } | null = resolveInitialStockMovement(product(), 10);
+      expect(movement).toEqual({ type: MovementType.PURCHASE, quantity: 10 });
+    });
+
     it('records the opening PURCHASE movement for a tracked product', () => {
       expect(resolveInitialStockMovement(product(), 10)).toEqual({
         type: MovementType.PURCHASE,
@@ -114,6 +186,14 @@ describe('product-type.logic — the single stock-decision authority', () => {
   });
 
   describe('resolveStockDeltaMovement', () => {
+    it('exposes only manual adjustment types or null to stock editors', () => {
+      const movement:
+        | typeof MovementType.ADJUSTMENT_IN
+        | typeof MovementType.ADJUSTMENT_OUT
+        | null = resolveStockDeltaMovement(product(), 5, 10);
+      expect(movement).toBe(MovementType.ADJUSTMENT_IN);
+    });
+
     it('records an ADJUSTMENT_IN when tracked stock rises', () => {
       expect(resolveStockDeltaMovement(product(), 5, 10)).toBe(
         MovementType.ADJUSTMENT_IN,
