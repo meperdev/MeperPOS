@@ -3,6 +3,7 @@ import {
   type BackfillProduct,
   type ServiceTarget,
   planServicesBackfill,
+  buildServiceConversionStockGuard,
 } from './services-backfill.plan';
 
 /**
@@ -10,6 +11,46 @@ import {
  * is isolated in this pure planner and pinned here. The CLI only executes the plan
  * it is given.
  */
+describe('service conversion stock guard', () => {
+  const live = { stock: 10, reservedStock: 0, version: 7 };
+
+  it('pins the actual conversion predicate to tenant, stock, version and zero reservations', () => {
+    expect(buildServiceConversionStockGuard('prod-1', 'org-1', live)).toEqual({
+      id: 'prod-1',
+      organizationId: 'org-1',
+      stock: 10,
+      version: 7,
+      reservedStock: 0,
+    });
+  });
+
+  it.each([1, 10, -1, undefined])(
+    'refuses a nonzero or missing counter (%s)',
+    (reservedStock) => {
+      expect(() =>
+        buildServiceConversionStockGuard('prod-1', 'org-1', {
+          ...live,
+          reservedStock: reservedStock as number,
+        }),
+      ).toThrow('tiene reservas o un contador inválido');
+    },
+  );
+
+  it.each(['stock', 'version', 'reservedStock', 'organizationId'] as const)(
+    'a changed %s no longer matches the pinned predicate',
+    (field) => {
+      const guard = buildServiceConversionStockGuard('prod-1', 'org-1', live);
+      const changed = {
+        ...guard,
+        [field]: field === 'organizationId' ? 'org-2' : 99,
+      };
+      expect(
+        Object.entries(guard).every(([key, value]) => changed[key] === value),
+      ).toBe(false);
+    },
+  );
+});
+
 describe('planServicesBackfill', () => {
   const targets: ServiceTarget[] = [
     { name: 'MANO DE OBRA', sku: 'SERV' },
