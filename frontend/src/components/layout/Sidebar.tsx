@@ -29,6 +29,7 @@ import {
   Building2,
   PanelLeftClose,
   PanelLeftOpen,
+  HandCoins,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -67,6 +68,12 @@ const navItems: NavItem[] = [
     label: "Clientes",
     href: "/customers",
     icon: <Users className="w-4 h-4" />,
+    roles: ["ADMIN", "CASHIER"],
+  },
+  {
+    label: "Préstamos",
+    href: "/loans",
+    icon: <HandCoins className="w-4 h-4" />,
     roles: ["ADMIN", "CASHIER"],
   },
   {
@@ -511,7 +518,7 @@ export function Sidebar() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between border-t border-border/60 pt-3">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center bg-muted/80 rounded-lg p-0.5 border border-border/40">
                   <button
                     type="button"

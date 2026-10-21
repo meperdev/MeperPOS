@@ -38,6 +38,7 @@ import type { Supplier } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
+import { hasAnyRole } from "@/lib/auth";
 
 const BANK_STYLES: Record<string, { label: string; badge: string }> = {
   Bancolombia: {
@@ -105,7 +106,7 @@ function SupplierAvatar({ name }: { name: string }) {
 export default function SuppliersPage() {
   const toast = useToast();
   const { user } = useAuth();
-  const canManage = user?.role === "ADMIN" || user?.role === "INVENTORY_USER";
+  const canManage = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");

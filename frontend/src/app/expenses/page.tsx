@@ -38,6 +38,7 @@ import {
   Download,
 } from "lucide-react";
 import { chipStyles } from "@/lib/chipStyles";
+import { hasAnyRole } from "@/lib/auth";
 import type { Expense, ExpenseStatus } from "@/types";
 import { ExpenseTaxonomyModal } from "@/components/expenses/ExpenseTaxonomyModal";
 
@@ -236,7 +237,7 @@ export default function ExpensesPage() {
             <Button type="button" onClick={openCreate} className="shrink-0">
               <Plus className="w-4 h-4" /> Nuevo gasto
             </Button>
-            {user?.role === "ADMIN" && <Button type="button" variant="secondary" onClick={() => setTaxonomyOpen(true)} className="shrink-0">Gestionar categorías</Button>}
+            {hasAnyRole(user?.role, ["ADMIN"]) && <Button type="button" variant="secondary" onClick={() => setTaxonomyOpen(true)} className="shrink-0">Gestionar categorías</Button>}
           </div>
         </div>
 

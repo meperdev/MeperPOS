@@ -20,6 +20,7 @@ const routeRoleMap: Array<{ prefix: string; roles: UserRole[] }> = [
   { prefix: "/sales", roles: ["ADMIN", "CASHIER"] },
   { prefix: "/expenses", roles: ["ADMIN"] },
   { prefix: "/customers", roles: ["ADMIN", "CASHIER"] },
+  { prefix: "/loans", roles: ["ADMIN", "CASHIER"] },
   { prefix: "/reports", roles: ["ADMIN"] },
   { prefix: "/users", roles: ["ADMIN"] },
   { prefix: "/tasks", roles: ["ADMIN", "CASHIER", "INVENTORY_USER"] },
@@ -87,7 +88,7 @@ export const DashboardLayout = memo(function DashboardLayout({
       <Sidebar />
       <main
         className={cn(
-          "px-4 pb-6 pt-16 lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
+          "px-4 pb-6 pt-20 lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
           isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
         )}
       >

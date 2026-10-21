@@ -38,14 +38,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { cn, resolveTaxFields, toFiniteNumber } from "@/lib/utils";
 import { isService } from "@/lib/product-type";
+import { hasAnyRole } from "@/lib/auth";
 
 function InventoryContent() {
   const searchParams = useSearchParams();
   const urlLowStock = searchParams?.get("filter") === "lowStock";
   const toast = useToast();
   const { user } = useAuth();
-  const canManageInventory =
-    user?.role === "ADMIN" || user?.role === "INVENTORY_USER";
+  const canManageInventory = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<
@@ -634,7 +634,7 @@ function InventoryContent() {
               </div>
             )}
             <div
-              className="grid auto-rows-fr grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 lg:gap-4.5"
+              className="grid auto-rows-fr grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 lg:gap-4.5"
               aria-busy={isFetching}
             >
               {displayProducts.map((product) => (

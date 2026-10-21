@@ -22,6 +22,8 @@ const {
   toastErrorMock: vi.fn(),
 }));
 
+const { authState } = vi.hoisted(() => ({ authState: { role: "ADMIN" } }));
+
 vi.mock("@/components/layout/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -65,7 +67,7 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
     user: {
       id: "admin-1",
-      role: "ADMIN",
+      role: authState.role,
       name: "Admin",
       email: "admin@example.com",
     },
@@ -89,6 +91,7 @@ import SuppliersPage from "./page";
 describe("Suppliers page modal — customer-supplier-info-fields (T19)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.role = "ADMIN";
     createSupplierMutateAsyncMock.mockResolvedValue({} as never);
     updateSupplierMutateAsyncMock.mockResolvedValue({} as never);
   });
@@ -181,5 +184,48 @@ describe("Suppliers page modal — customer-supplier-info-fields (T19)", () => {
     render(<SuppliersPage />);
     expect(screen.getByText("Bancolombia")).toBeTruthy();
     expect(screen.getByText("Corriente: 0111111111")).toBeTruthy();
+  });
+});
+
+describe("Suppliers page — create action is gated by the role hierarchy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authState.role = "ADMIN";
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows Nuevo Proveedor for OWNER", () => {
+    authState.role = "OWNER";
+
+    render(<SuppliersPage />);
+
+    expect(screen.getByRole("button", { name: /nuevo proveedor/i })).toBeTruthy();
+  });
+
+  it("shows Nuevo Proveedor for SUPER_ADMIN", () => {
+    authState.role = "SUPER_ADMIN";
+
+    render(<SuppliersPage />);
+
+    expect(screen.getByRole("button", { name: /nuevo proveedor/i })).toBeTruthy();
+  });
+
+  it("hides Nuevo Proveedor for CASHIER", () => {
+    authState.role = "CASHIER";
+
+    render(<SuppliersPage />);
+
+    expect(screen.queryByRole("button", { name: /nuevo proveedor/i })).toBeNull();
+  });
+
+  it("hides Nuevo Proveedor for MEMBER", () => {
+    authState.role = "MEMBER";
+
+    render(<SuppliersPage />);
+
+    expect(screen.queryByRole("button", { name: /nuevo proveedor/i })).toBeNull();
   });
 });

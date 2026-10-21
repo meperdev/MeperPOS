@@ -30,6 +30,7 @@ import {
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
+import { hasAnyRole } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function PurchaseOrderDetailPage() {
@@ -38,7 +39,7 @@ export default function PurchaseOrderDetailPage() {
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const toast = useToast();
   const { user } = useAuth();
-  const canManage = user?.role === "ADMIN" || user?.role === "INVENTORY_USER";
+  const canManage = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
 
   const { data: order, isLoading, error } = usePurchaseOrder(id ?? "");
   const confirmOrder = useConfirmPurchaseOrder();

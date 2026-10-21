@@ -33,6 +33,7 @@ import type { Customer } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
+import { hasAnyRole } from "@/lib/auth";
 
 const segmentConfig: Record<string, { variant: "success" | "warning" | "default" | "danger"; label: string; color: string }> = {
   VIP:       { variant: "success", label: "VIP",       color: "#10b981" },
@@ -56,8 +57,8 @@ export default function CustomersPage() {
   const toast = useToast();
   const router = useRouter();
   const { user } = useAuth();
-  const canCreate = user?.role === "ADMIN" || user?.role === "CASHIER";
-  const canEdit = user?.role === "ADMIN";
+  const canCreate = hasAnyRole(user?.role, ["ADMIN", "CASHIER"]);
+  const canEdit = hasAnyRole(user?.role, ["ADMIN"]);
   const [search, setSearch] = useState("");
   const [segment, setSegment] = useState("");
   const [page, setPage] = useState(1);

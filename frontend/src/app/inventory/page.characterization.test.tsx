@@ -12,6 +12,8 @@ import type { ReactNode } from "react";
  * page.pagination.test.tsx.
  */
 
+const { authState } = vi.hoisted(() => ({ authState: { role: "ADMIN" } }));
+
 const useProductsMock = vi.fn();
 let productsResponse: {
   data: {
@@ -52,7 +54,7 @@ vi.mock("@/hooks/useCategories", () => ({
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
-    user: { id: "admin-1", role: "ADMIN", name: "Admin", email: "a@b.co" },
+    user: { id: "admin-1", role: authState.role, name: "Admin", email: "a@b.co" },
   }),
 }));
 
@@ -170,6 +172,7 @@ function setResponse(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authState.role = "ADMIN";
   setResponse([]);
   useProductsMock.mockImplementation(() => productsResponse);
 });
@@ -336,5 +339,39 @@ describe("Inventory page — characterization (current behavior)", () => {
     expect(
       screen.getByRole("button", { name: /^Stock Bajo ?1$/ }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("Inventory page — create action is gated by the role hierarchy", () => {
+  it("shows Nuevo Producto for OWNER", () => {
+    authState.role = "OWNER";
+
+    render(<InventoryPage />);
+
+    expect(screen.getByRole("button", { name: /nuevo producto/i })).toBeInTheDocument();
+  });
+
+  it("shows Nuevo Producto for SUPER_ADMIN", () => {
+    authState.role = "SUPER_ADMIN";
+
+    render(<InventoryPage />);
+
+    expect(screen.getByRole("button", { name: /nuevo producto/i })).toBeInTheDocument();
+  });
+
+  it("hides Nuevo Producto for CASHIER", () => {
+    authState.role = "CASHIER";
+
+    render(<InventoryPage />);
+
+    expect(screen.queryByRole("button", { name: /nuevo producto/i })).not.toBeInTheDocument();
+  });
+
+  it("hides Nuevo Producto for MEMBER", () => {
+    authState.role = "MEMBER";
+
+    render(<InventoryPage />);
+
+    expect(screen.queryByRole("button", { name: /nuevo producto/i })).not.toBeInTheDocument();
   });
 });
