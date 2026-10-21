@@ -198,7 +198,7 @@ function snapshot(operation: InventoryLoanOperation): Snapshot {
       !item.id ||
       typeof item.productId !== 'string' ||
       !item.productId ||
-      products.has(item.productId) ||
+      products.has(item.productId.toLowerCase()) ||
       !Number.isInteger(item.quantity) ||
       (item.quantity as number) < 1 ||
       (item.quantity as number) > 2147483647 ||
@@ -209,7 +209,7 @@ function snapshot(operation: InventoryLoanOperation): Snapshot {
       item.outstanding !== 0
     )
       throw invalid();
-    products.add(item.productId);
+    products.add(item.productId.toLowerCase());
   }
   return result as Snapshot;
 }

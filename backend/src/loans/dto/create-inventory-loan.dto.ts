@@ -16,6 +16,11 @@ import {
 import { CounterpartyType } from './create-loan.dto';
 
 export class InventoryLoanItemDto {
+  // Canonicalize before validation: a case variant of the same UUID would
+  // otherwise slip past the duplicate-product guard in the service.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsUUID()
   productId: string;
 

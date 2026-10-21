@@ -236,6 +236,23 @@ describe('Strict inventory loan DTOs', () => {
       ).rejects.toThrow();
     },
   );
+  it('canonicalizes product ids so a case variant cannot repeat a line', async () => {
+    const productId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const parsed = await validate(
+      {
+        ...create,
+        items: [
+          { productId, quantity: 1 },
+          { productId: productId.toUpperCase(), quantity: 1 },
+        ],
+      },
+      CreateInventoryLoanDto,
+    );
+    expect(parsed.items.map((item) => item.productId)).toEqual([
+      productId,
+      productId,
+    ]);
+  });
   it.each(Object.values(InventoryLoanStatus))(
     'accepts status %s',
     async (status) => {
