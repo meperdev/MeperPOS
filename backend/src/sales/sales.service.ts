@@ -16,9 +16,8 @@ import {
 } from '../common/utils/bogota-date';
 import { CacheService } from '../common/services/cache.service';
 import { SettingsService } from '../settings/settings.service';
-import { resolveEffectiveTaxRate } from '../common/utils/tax.util';
 import { computeSkipTake } from '../common/utils/pagination';
-import { computeEffectiveSalePrice } from '../products/products.service';
+import { canOverrideSalePrice, resolveSaleItemPricing } from './sale-pricing';
 import { tracksStock } from '../products/product-type.logic';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { SequenceService } from '../common/sequences/sequence.service';
@@ -59,13 +58,7 @@ export class SalesService {
    * Missing principals are denied; this permission does not change role inheritance.
    */
   private canOverridePrice(user: RequestUser | undefined): boolean {
-    if (!user) return false;
-    if (user.isSuperAdmin || user.role === 'SUPER_ADMIN') return true;
-    return (
-      user.role === OrgRole.ADMIN ||
-      user.role === OrgRole.OWNER ||
-      user.role === OrgRole.CASHIER
-    );
+    return canOverrideSalePrice(user);
   }
 
   /**
@@ -125,7 +118,9 @@ export class SalesService {
     user?: RequestUser,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const { customerId, items, discountAmount = 0, payments } = createSaleDto;
 
@@ -181,80 +176,16 @@ export class SalesService {
         throw new BadRequestException(`Product ${product.name} is not active`);
       }
 
-      // The server owns the price. `computeEffectiveSalePrice` is the single
-      // source of truth (promotion-aware); a client-supplied `unitPrice` is
-      // never a default to fall back to, it is a request to override it — and
-      // overriding is a manager-only, audited act.
-      const serverUnitPrice = Number(
-        computeEffectiveSalePrice(product) ?? product.salePrice,
+      // Overrides authorize an audited POS price, not a catalog price edit.
+      const { pricedItem, taxAmount, override } = resolveSaleItemPricing(
+        product,
+        item,
+        this.canOverridePrice(user),
       );
-      const requestedUnitPrice =
-        item.unitPrice === undefined || item.unitPrice === null
-          ? null
-          : Number(item.unitPrice);
-
-      // Defensive: the DTO's @Min(0) already rejects negatives, but the service
-      // is also reachable from paths that skip the ValidationPipe, and a
-      // negative price would flip the sale into money owed rather than paid.
-      if (requestedUnitPrice !== null && requestedUnitPrice < 0) {
-        throw new BadRequestException(
-          `Unit price for product ${product.name} cannot be negative`,
-        );
-      }
-
-      // 0.01 tolerance absorbs float noise between a client that round-trips
-      // the server price and the DECIMAL(10,2) value it was derived from.
-      const isOverride =
-        requestedUnitPrice !== null &&
-        Math.abs(requestedUnitPrice - serverUnitPrice) > 0.01;
-
-      if (isOverride && !this.canOverridePrice(user)) {
-        throw new ForbiddenException(
-          `Only an ADMIN, OWNER, SUPER_ADMIN or CASHIER may override the unit price of ${product.name}`,
-        );
-      }
-
-      const unitPrice = isOverride ? requestedUnitPrice : serverUnitPrice;
-
-      if (isOverride) {
-        priceOverrides.push({
-          productId: product.id,
-          productName: product.name,
-          quantity: item.quantity,
-          serverUnitPrice,
-          overriddenUnitPrice: unitPrice,
-        });
-      }
-
-      const grossSubtotal = unitPrice * item.quantity;
-      const itemDiscount = Math.max(0, item.discountAmount || 0);
-
-      if (itemDiscount > grossSubtotal) {
-        throw new BadRequestException(
-          `Item discount for product ${product.name} cannot exceed item subtotal`,
-        );
-      }
-
-      const itemSubtotal = grossSubtotal - itemDiscount;
-      const effectiveTaxRate = resolveEffectiveTaxRate(product, product.category);
-      const itemTax = itemSubtotal * (effectiveTaxRate / 100);
-      const itemTotal = itemSubtotal + itemTax;
-
-      subtotal += itemSubtotal;
-      totalTax += itemTax;
-
-      saleItems.push({
-        productId: product.id,
-        productType: product.type,
-        productTracksStock: product.tracksStock,
-        quantity: item.quantity,
-        unitPrice,
-        costPriceSnapshot: product.costPrice,
-        taxRate: effectiveTaxRate,
-        discountAmount: itemDiscount,
-        subtotal: itemSubtotal,
-        total: itemTotal,
-      });
+      if (override) priceOverrides.push(override);
+      subtotal += pricedItem.subtotal;
+      totalTax += taxAmount;
+      saleItems.push(pricedItem);
     }
 
     const total = subtotal + totalTax - discountAmount;
@@ -341,14 +272,37 @@ export class SalesService {
                 tracksStock: saleItem.productTracksStock,
               })
             ) {
+              // Read inside the transaction, including repeated lines for the
+              // same product: each decrement advances its version.
+              const observed = await tx.product.findFirst({
+                where: { id: saleItem.productId, organizationId },
+                select: { stock: true, reservedStock: true, version: true },
+              });
+              if (
+                !observed ||
+                !Number.isInteger(observed.version) ||
+                !Number.isInteger(observed.reservedStock) ||
+                observed.reservedStock < 0 ||
+                observed.stock - observed.reservedStock < saleItem.quantity
+              ) {
+                throw new ConflictException(
+                  `Insufficient stock for product ${saleItem.productId}`,
+                );
+              }
               const updatedProduct = await tx.product.updateMany({
                 where: {
                   id: saleItem.productId,
+                  organizationId,
                   active: true,
-                  stock: { gte: saleItem.quantity },
+                  type: ProductType.PRODUCT,
+                  tracksStock: true,
+                  version: observed.version,
+                  reservedStock: observed.reservedStock,
+                  stock: { gte: observed.reservedStock + saleItem.quantity },
                 },
                 data: {
                   stock: { decrement: saleItem.quantity },
+                  version: { increment: 1 },
                 },
               });
 
@@ -530,7 +484,11 @@ export class SalesService {
     };
   }
 
-  async findOne(id: string, organizationId: string | undefined, user?: RequestUser) {
+  async findOne(
+    id: string,
+    organizationId: string | undefined,
+    user?: RequestUser,
+  ) {
     const sale = await this.prisma.sale.findFirst({
       where: { id, ...(organizationId ? { organizationId } : {}) },
       include: {
@@ -596,7 +554,9 @@ export class SalesService {
     user?: RequestUser,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const existingSale = await this.prisma.sale.findFirst({
       where: { id, organizationId },
@@ -616,8 +576,37 @@ export class SalesService {
       throw new BadRequestException('Only completed sales can be updated');
     }
 
+    if (
+      updateSaleDto.status === 'CANCELLED' ||
+      updateSaleDto.status === 'RETURNED_PARTIAL'
+    ) {
+      const intent = await this.prisma.posLoanSaleIntent.findFirst({
+        where: { finalSaleId: existingSale.id, organizationId },
+        select: { id: true },
+      });
+      if (intent) {
+        throw new ConflictException(
+          'No se puede cancelar ni devolver una venta vinculada a financiación',
+        );
+      }
+    }
+
     if (updateSaleDto.status === 'CANCELLED') {
       await this.prisma.$transaction(async (tx) => {
+        // Sale has no version column. Claim its expected state before effects;
+        // a concurrent loser cannot restore inventory a second time.
+        const claimed = await tx.sale.updateMany({
+          where: { id, organizationId, status: 'COMPLETED' },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt: new Date(),
+            cancelledById: userId,
+            cancelReason: updateSaleDto.cancelReason ?? null,
+          },
+        });
+        if (claimed.count === 0) {
+          throw new BadRequestException('Only completed sales can be updated');
+        }
         for (const item of existingSale.items) {
           const product = await tx.product.findFirst({
             where: {
@@ -627,13 +616,36 @@ export class SalesService {
           });
 
           if (product && tracksStock(product)) {
+            if (
+              !Number.isInteger(product.version) ||
+              !Number.isInteger(product.reservedStock) ||
+              product.reservedStock < 0 ||
+              product.reservedStock > product.stock
+            ) {
+              throw new ConflictException(
+                `Stock changed for product ${item.productId}`,
+              );
+            }
             const previousStock = product.stock;
             const newStock = previousStock + item.quantity;
 
-            await tx.product.update({
-              where: { id: item.productId },
-              data: { stock: newStock },
+            const restored = await tx.product.updateMany({
+              where: {
+                id: item.productId,
+                organizationId,
+                version: product.version,
+                reservedStock: product.reservedStock,
+              },
+              data: {
+                stock: { increment: item.quantity },
+                version: { increment: 1 },
+              },
             });
+            if (restored.count === 0) {
+              throw new ConflictException(
+                `Stock changed for product ${item.productId}`,
+              );
+            }
 
             await tx.inventoryMovement.create({
               data: {
@@ -650,16 +662,6 @@ export class SalesService {
             });
           }
         }
-
-        await tx.sale.update({
-          where: { id },
-          data: {
-            status: 'CANCELLED',
-            cancelledAt: new Date(),
-            cancelledById: userId,
-            cancelReason: updateSaleDto.cancelReason ?? null,
-          },
-        });
       });
 
       return this.findOne(id, organizationId);
@@ -681,9 +683,15 @@ export class SalesService {
    * as COMPLETED). This method is preserved for future use when open-sale
    * workflows are implemented.
    */
-  async forceClose(id: string, organizationId: string | undefined, reason?: string) {
+  async forceClose(
+    id: string,
+    organizationId: string | undefined,
+    reason?: string,
+  ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const organization = await this.prisma.organization.findUnique({
       where: { id: organizationId },
