@@ -278,9 +278,13 @@ export default function POSPage() {
   const createSale = useCreateSale();
   const createPosLoan = useCreatePosLoan();
   const [posLoan, setPosLoan] = useState<PosLoanInitiation | null>(null);
-  // Pinned across a failed attempt so a retry reuses the same idempotency key;
-  // cleared on success so the next financing starts a fresh initiation.
-  const posLoanRequestKeyRef = useRef<string | null>(null);
+  // An attempt is pinned to the exact payload it was minted for: a retry of the
+  // same request reuses its key, while any change to the cart, customer or
+  // discount mints a new one. Cleared on success so the next financing starts
+  // a fresh initiation.
+  const posLoanAttemptRef = useRef<{ key: string; signature: string } | null>(
+    null,
+  );
   const quickSearchProduct = useQuickSearchProduct();
 
   // SalesService explicitly permits CASHIER as well as managers. Keep this
@@ -701,21 +705,47 @@ export default function POSPage() {
   };
 
   /**
+   * Identity of the current financing payload. The pinned request key only
+   * survives an identical retry; a different cart, customer or discount is a
+   * different request and must not reuse another attempt's key.
+   */
+  const financeSignature = () =>
+    JSON.stringify({
+      customerId: selectedCustomer,
+      discountAmount,
+      items: cart.map((item) => [
+        item.productId,
+        item.quantity,
+        cartItemPriceOverride(item) ? item.unitPrice : null,
+        item.discountAmount,
+      ]),
+    });
+  // The live payload identity: an in-flight response is compared against the
+  // current payload, never against the closure that started the request.
+  const financeSignatureRef = useRef("");
+  financeSignatureRef.current = financeSignature();
+
+  /**
    * Initiate a financed POS sale for the current cart. The server returns the
    * agreed customer total, which is what the UI surfaces — never the
    * client-computed cart total. A failed attempt leaves the cart, customer and
-   * discount untouched and retries with the same pinned requestKey.
+   * discount untouched and retries with the same pinned requestKey, and the
+   * success only clears the payload it financed: a cart the cashier started
+   * while the request was in flight stays untouched.
    */
   const handleFinanceSale = async () => {
     if (cart.length === 0 || !selectedCustomer) return;
-    if (!posLoanRequestKeyRef.current) {
-      posLoanRequestKeyRef.current = crypto.randomUUID();
-    }
+    const signature = financeSignatureRef.current;
+    const attempt =
+      posLoanAttemptRef.current?.signature === signature
+        ? posLoanAttemptRef.current
+        : { key: crypto.randomUUID(), signature };
+    posLoanAttemptRef.current = attempt;
     try {
       const result = await createPosLoan.mutateAsync({
         customerId: selectedCustomer,
         reason: "Venta financiada",
-        requestKey: posLoanRequestKeyRef.current,
+        requestKey: attempt.key,
         discountAmount,
         items: cart.map((item) => ({
           productId: item.productId,
@@ -728,10 +758,12 @@ export default function POSPage() {
         })),
       });
       setPosLoan(result);
-      posLoanRequestKeyRef.current = null;
-      setCart([]);
-      setDiscountAmount(0);
-      setSelectedCustomer("");
+      if (posLoanAttemptRef.current === attempt) posLoanAttemptRef.current = null;
+      if (financeSignatureRef.current === signature) {
+        setCart([]);
+        setDiscountAmount(0);
+        setSelectedCustomer("");
+      }
     } catch (error) {
       toast.error(
         getApiErrorMessage(error, "Error al iniciar la venta financiada"),

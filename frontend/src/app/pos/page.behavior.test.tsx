@@ -1874,4 +1874,67 @@ describe("POS cart financing (pos-loan-initiation)", () => {
     expect(screen.getByRole("button", { name: /sin cliente/i })).toBeTruthy();
     expect(screen.queryByText("Descuento")).toBeNull();
   });
+
+  it("mints a new request key when the payload changes after a failed attempt", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    const extra = makeProduct("p2", "Producto Extra", { salePrice: 10000 });
+    createPosLoanMutateMock
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(initiation());
+    seedPausedCart(product, 5000);
+    renderWithProducts([product, extra]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    // The cashier edits the cart before retrying: the failed key no longer
+    // describes the request, so it must not be reused for the new payload.
+    await userEvent.click(screen.getByRole("button", { name: "Producto Extra" }));
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(2));
+
+    const keys = createPosLoanMutateMock.mock.calls.map(
+      (call) => (call[0] as { requestKey: string }).requestKey,
+    );
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it("keeps a sale started while the initiation is in flight when the late success resolves", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    const extra = makeProduct("p2", "Producto Extra", { salePrice: 10000 });
+    let resolveInitiation: (value: ReturnType<typeof initiation>) => void = () => {};
+    createPosLoanMutateMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveInitiation = resolve;
+      }),
+    );
+    seedPausedCart(product, 5000);
+    renderWithProducts([product, extra]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    // The cashier dismisses the dialog and starts another sale while pending.
+    await dismissFinance();
+    await userEvent.click(screen.getByRole("button", { name: "Producto Extra" }));
+    await waitFor(() =>
+      expect(screen.getAllByTestId("line-unit-price")).toHaveLength(2),
+    );
+
+    // The late success belongs to the financed cart, not to this new one.
+    resolveInitiation(initiation());
+    await waitFor(() =>
+      expect(screen.getAllByTestId("line-unit-price")).toHaveLength(2),
+    );
+    expect(screen.getByRole("button", { name: /ana perez/i })).toBeTruthy();
+    expect(screen.queryByText("Carrito vacío")).toBeNull();
+  });
 });
