@@ -705,37 +705,38 @@ export default function POSPage() {
   };
 
   /**
-   * Identity of the current financing payload. The pinned request key only
-   * survives an identical retry; a different cart, customer or discount is a
-   * different request and must not reuse another attempt's key.
+   * The financing request for the current cart. One builder feeds both the
+   * request and its identity, so a payload change can never leave the pinned
+   * request key describing a different request.
    */
-  const financeSignature = () =>
-    JSON.stringify({
-      customerId: selectedCustomer,
-      discountAmount,
-      items: cart.map((item) => [
-        item.productId,
-        item.quantity,
-        cartItemPriceOverride(item) ? item.unitPrice : null,
-        item.discountAmount,
-      ]),
-    });
+  const buildFinanceRequest = () => ({
+    customerId: selectedCustomer,
+    reason: "Venta financiada",
+    discountAmount,
+    items: cart.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      // Sent only for a real override, exactly like the checkout path.
+      ...(cartItemPriceOverride(item) ? { unitPrice: item.unitPrice } : {}),
+      discountAmount: item.discountAmount,
+    })),
+  });
   // The live payload identity: an in-flight response is compared against the
   // current payload, never against the closure that started the request.
   const financeSignatureRef = useRef("");
-  financeSignatureRef.current = financeSignature();
+  financeSignatureRef.current = JSON.stringify(buildFinanceRequest());
 
   /**
    * Initiate a financed POS sale for the current cart. The server returns the
    * agreed customer total, which is what the UI surfaces — never the
    * client-computed cart total. A failed attempt leaves the cart, customer and
-   * discount untouched and retries with the same pinned requestKey, and the
-   * success only clears the payload it financed: a cart the cashier started
-   * while the request was in flight stays untouched.
+   * discount untouched and retries with the same pinned requestKey. A success
+   * only claims and clears the payload it financed.
    */
   const handleFinanceSale = async () => {
     if (cart.length === 0 || !selectedCustomer) return;
-    const signature = financeSignatureRef.current;
+    const request = buildFinanceRequest();
+    const signature = JSON.stringify(request);
     const attempt =
       posLoanAttemptRef.current?.signature === signature
         ? posLoanAttemptRef.current
@@ -743,27 +744,24 @@ export default function POSPage() {
     posLoanAttemptRef.current = attempt;
     try {
       const result = await createPosLoan.mutateAsync({
-        customerId: selectedCustomer,
-        reason: "Venta financiada",
+        ...request,
         requestKey: attempt.key,
-        discountAmount,
-        items: cart.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          // Sent only for a real override, exactly like the checkout path.
-          ...(cartItemPriceOverride(item)
-            ? { unitPrice: item.unitPrice }
-            : {}),
-          discountAmount: item.discountAmount,
-        })),
       });
-      setPosLoan(result);
       if (posLoanAttemptRef.current === attempt) posLoanAttemptRef.current = null;
-      if (financeSignatureRef.current === signature) {
-        setCart([]);
-        setDiscountAmount(0);
-        setSelectedCustomer("");
+      if (financeSignatureRef.current !== signature) {
+        // The financed payload is no longer the sale on screen: report the
+        // financing instead of claiming its amount for a different cart.
+        toast.success(
+          `Venta financiada iniciada por ${formatCurrency(
+            Number(result.agreedCustomerTotal),
+          )}`,
+        );
+        return;
       }
+      setPosLoan(result);
+      setCart([]);
+      setDiscountAmount(0);
+      setSelectedCustomer("");
     } catch (error) {
       toast.error(
         getApiErrorMessage(error, "Error al iniciar la venta financiada"),
@@ -1268,7 +1266,11 @@ export default function POSPage() {
                   className="flex-1 h-11 text-sm font-bold"
                   size="lg"
                   onClick={() => setShowFinanceConfirm(true)}
-                  disabled={cart.length === 0 || !selectedCustomer}
+                  disabled={
+                    cart.length === 0 ||
+                    !selectedCustomer ||
+                    createPosLoan.isPending
+                  }
                   loading={createPosLoan.isPending}
                 >
                   <HandCoins className="w-4 h-4 mr-2" />
@@ -1278,7 +1280,7 @@ export default function POSPage() {
                   className="flex-1 h-11 text-sm font-bold shadow-md shadow-primary/20"
                   size="lg"
                   onClick={openPaymentModal}
-                  disabled={cart.length === 0}
+                  disabled={cart.length === 0 || createPosLoan.isPending}
                   loading={createSale.isPending}
                 >
                   <ShoppingCart className="w-4 h-4 mr-2" />
@@ -1695,7 +1697,12 @@ export default function POSPage() {
 
       <ConfirmDialog
         isOpen={showFinanceConfirm}
-        onClose={() => setShowFinanceConfirm(false)}
+        onClose={() => {
+          // A pending initiation must not be abandoned: the request is already
+          // on its way and the debt may exist without the cart that started it.
+          if (createPosLoan.isPending) return;
+          setShowFinanceConfirm(false);
+        }}
         onConfirm={handleFinanceSale}
         title="Confirmar venta financiada"
         message={`Se iniciará una venta financiada a nombre de ${

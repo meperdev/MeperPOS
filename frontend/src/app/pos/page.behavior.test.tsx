@@ -273,12 +273,27 @@ vi.mock("@/hooks/useSales", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useLoans", () => ({
-  useCreatePosLoan: () => ({
-    mutateAsync: createPosLoanMutateMock,
-    isPending: false,
-  }),
-}));
+// The real hook exposes the mutation's pending state through React state, so the
+// mock must do the same: a frozen `isPending: false` hides the in-flight guards.
+vi.mock("@/hooks/useLoans", async () => {
+  const { useState } = await import("react");
+  return {
+    useCreatePosLoan: () => {
+      const [pending, setPending] = useState(false);
+      return {
+        isPending: pending,
+        mutateAsync: async (payload: unknown) => {
+          setPending(true);
+          try {
+            return await createPosLoanMutateMock(payload);
+          } finally {
+            setPending(false);
+          }
+        },
+      };
+    },
+  };
+});
 
 vi.mock("@/hooks/usePausedSales", () => ({
   usePausedSales: () => ({
@@ -1904,7 +1919,34 @@ describe("POS cart financing (pos-loan-initiation)", () => {
     expect(keys[1]).not.toBe(keys[0]);
   });
 
-  it("keeps a sale started while the initiation is in flight when the late success resolves", async () => {
+  it("keeps the confirmation open and the normal checkout closed while the initiation is pending", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    let resolveInitiation: (value: ReturnType<typeof initiation>) => void = () => {};
+    createPosLoanMutateMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveInitiation = resolve;
+      }),
+    );
+    seedPausedCart(product, 5000);
+    renderWithProducts([product]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    // The backdrop does not abandon a pending debt: the confirmation stays.
+    await dismissFinance();
+    expect(screen.getByRole("button", { name: "Financiar venta" })).toBeTruthy();
+    // The ordinary checkout cannot start a second sale for the same cart.
+    expect(screen.getByRole("button", { name: /finalizar venta/i })).toBeDisabled();
+
+    resolveInitiation(initiation());
+    await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
+  });
+
+  it("does not claim a superseded late success for the sale on screen", async () => {
     const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
     const extra = makeProduct("p2", "Producto Extra", { salePrice: 10000 });
     let resolveInitiation: (value: ReturnType<typeof initiation>) => void = () => {};
@@ -1922,19 +1964,19 @@ describe("POS cart financing (pos-loan-initiation)", () => {
     await confirmFinance();
     await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
 
-    // The cashier dismisses the dialog and starts another sale while pending.
-    await dismissFinance();
+    // The payload changes while the request is in flight.
     await userEvent.click(screen.getByRole("button", { name: "Producto Extra" }));
     await waitFor(() =>
       expect(screen.getAllByTestId("line-unit-price")).toHaveLength(2),
     );
 
-    // The late success belongs to the financed cart, not to this new one.
     resolveInitiation(initiation());
+    // The handler ran: the action is usable again once the request settles.
     await waitFor(() =>
-      expect(screen.getAllByTestId("line-unit-price")).toHaveLength(2),
+      expect(screen.getByRole("button", { name: /^financiar$/i })).not.toBeDisabled(),
     );
-    expect(screen.getByRole("button", { name: /ana perez/i })).toBeTruthy();
+    // The financed total is not claimed for the cart that is now on screen.
+    expect(screen.queryByText("Venta financiada iniciada")).toBeNull();
     expect(screen.queryByText("Carrito vacío")).toBeNull();
   });
 });
