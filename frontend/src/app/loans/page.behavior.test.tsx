@@ -344,6 +344,32 @@ describe("Loans page", () => {
     expect(row.getByText("COP 50")).toBeTruthy();
   });
 
+  it("mints a new collection key when the amount is corrected after a rejected attempt", async () => {
+    const user = userEvent.setup();
+    collectMock
+      .mockRejectedValueOnce(new Error("rejected"))
+      .mockResolvedValueOnce({});
+
+    render(<LoansPage />);
+    await user.click(screen.getByText("Ana Perez"));
+    await user.type(screen.getByLabelText("Monto del abono"), "25");
+    const submit = screen.getByRole("button", { name: "Registrar abono" });
+
+    await user.click(submit);
+    await waitFor(() => expect(collectMock).toHaveBeenCalledTimes(1));
+
+    // The rejection was deterministic: the cashier corrects the amount, which
+    // is a different request and must not reuse the rejected key.
+    await user.clear(screen.getByLabelText("Monto del abono"));
+    await user.type(screen.getByLabelText("Monto del abono"), "40");
+    await user.click(submit);
+    await waitFor(() => expect(collectMock).toHaveBeenCalledTimes(2));
+
+    const [first, second] = collectMock.mock.calls.map((call) => call[0]);
+    expect(second).toMatchObject({ id: "loan-1", amount: 40 });
+    expect(second.requestKey).not.toBe(first.requestKey);
+  });
+
   it("pins one request key per collection attempt and rotates it after success", async () => {
     const user = userEvent.setup();
     collectMock

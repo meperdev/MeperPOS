@@ -79,12 +79,16 @@ function counterpartyName(loan: Loan): string {
 }
 
 /**
- * A loan the projection marks as POS financing is the only one that can be
- * completed, and only once its balance is fully paid. An ordinary loan carries
- * no `posFinancing`, so this action never appears for it.
+ * A loan the projection marks as POS financing can only be completed while it is
+ * still open and once its balance is fully paid. An ordinary loan carries no
+ * `posFinancing`, and a closed one has nothing left to complete.
  */
 function canCompletePosLoan(loan: Loan): boolean {
-  return Boolean(loan.posFinancing) && toFiniteNumber(loan.balance) === 0;
+  return (
+    loan.status === "OPEN" &&
+    Boolean(loan.posFinancing) &&
+    toFiniteNumber(loan.balance) === 0
+  );
 }
 
 /** One labelled fact inside the detail modal. */
@@ -189,8 +193,15 @@ export default function LoansPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [amount, setAmount] = useState<number | undefined>(undefined);
   const [method, setMethod] = useState<CollectLoanInput["method"]>("CASH");
-  const collectKeyRef = useRef<string | null>(null);
-  const completeKeyRef = useRef<string | null>(null);
+  // An attempt is pinned to the exact payload it was minted for: a retry of an
+  // uncertain failure reuses its key, while a corrected amount, method or loan
+  // mints a new one.
+  const collectAttemptRef = useRef<{ key: string; signature: string } | null>(
+    null,
+  );
+  const completeAttemptRef = useRef<{ key: string; signature: string } | null>(
+    null,
+  );
 
   const loansQuery = useLoans({ page, limit: PAGE_SIZE });
   const loanQuery = useLoan(selectedId ?? "");
@@ -208,19 +219,20 @@ export default function LoansPage() {
       toast.error("Ingrese un monto válido");
       return;
     }
-    // One key per attempt: reused verbatim after an uncertain failure and
-    // released only once the server confirms the collection.
-    if (!collectKeyRef.current) {
-      collectKeyRef.current = crypto.randomUUID();
-    }
+    const signature = `${selectedId}|${amount}|${method}`;
+    const attempt =
+      collectAttemptRef.current?.signature === signature
+        ? collectAttemptRef.current
+        : { key: crypto.randomUUID(), signature };
+    collectAttemptRef.current = attempt;
     try {
       await collectLoan.mutateAsync({
         id: selectedId,
         amount,
         method,
-        requestKey: collectKeyRef.current,
+        requestKey: attempt.key,
       });
-      collectKeyRef.current = null;
+      if (collectAttemptRef.current === attempt) collectAttemptRef.current = null;
       setAmount(undefined);
       toast.success("Abono registrado");
     } catch (error) {
@@ -230,17 +242,20 @@ export default function LoansPage() {
 
   const handleComplete = async () => {
     if (!selectedId || !loan || !canCompletePosLoan(loan)) return;
-    if (!completeKeyRef.current) {
-      completeKeyRef.current = crypto.randomUUID();
-    }
+    const signature = selectedId;
+    const attempt =
+      completeAttemptRef.current?.signature === signature
+        ? completeAttemptRef.current
+        : { key: crypto.randomUUID(), signature };
+    completeAttemptRef.current = attempt;
     try {
       // The frozen quote already lives on the server: only the idempotency key
       // travels, never items, totals or a sale id.
       await completePosLoan.mutateAsync({
         id: selectedId,
-        requestKey: completeKeyRef.current,
+        requestKey: attempt.key,
       });
-      completeKeyRef.current = null;
+      if (completeAttemptRef.current === attempt) completeAttemptRef.current = null;
       toast.success("Venta financiada completada");
     } catch (error) {
       toast.error(getApiErrorMessage(error, "No se pudo completar la venta"));
@@ -439,6 +454,28 @@ export default function LoansPage() {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Historial
               </h3>
+              {historyQuery.isLoading ? (
+                <p
+                  data-testid="loan-history-loading"
+                  className="mt-2 text-xs text-muted-foreground"
+                >
+                  Cargando historial...
+                </p>
+              ) : historyQuery.isError ? (
+                <div
+                  data-testid="loan-history-error"
+                  className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                >
+                  <span>No se pudo cargar el historial.</span>
+                  <button
+                    type="button"
+                    className="font-semibold text-primary underline"
+                    onClick={() => void historyQuery.refetch()}
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              ) : (
               <ul className="mt-2 space-y-2">
                 {history.map((event) => (
                   <li
@@ -462,6 +499,7 @@ export default function LoansPage() {
                   </li>
                 ))}
               </ul>
+              )}
             </section>
 
             {loan.status === "OPEN" && (
