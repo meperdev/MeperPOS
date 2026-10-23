@@ -17,6 +17,7 @@ import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { Plus, Eye, ClipboardList, X } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { chipStyles } from "@/lib/chipStyles";
+import { hasAnyRole } from "@/lib/auth";
 import type { PurchaseOrderStatus } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -32,7 +33,7 @@ const statusOptions: Array<{ value: "" | PurchaseOrderStatus; label: string }> =
 export default function PurchaseOrdersPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const canManage = user?.role === "ADMIN" || user?.role === "INVENTORY_USER";
+  const canManage = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
 
   const [q, setQ] = useState("");
   const [supplierId, setSupplierId] = useState("");

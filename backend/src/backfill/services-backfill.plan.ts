@@ -1,4 +1,24 @@
-import { ProductType } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
+
+/** Live conversion CAS: reservations cannot be erased by a stock-zero write. */
+export function buildServiceConversionStockGuard(
+  productId: string,
+  organizationId: string,
+  live: { stock: number; version: number; reservedStock: number },
+) {
+  if (live.reservedStock !== 0) {
+    throw new Error(
+      `Producto ${productId} tiene reservas o un contador inválido; no se escribió nada.`,
+    );
+  }
+  return {
+    id: productId,
+    organizationId,
+    stock: live.stock,
+    version: live.version,
+    reservedStock: 0,
+  } satisfies Prisma.ProductWhereInput;
+}
 
 /**
  * Pure planner for the services backfill (work unit 7).

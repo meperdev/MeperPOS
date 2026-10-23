@@ -46,6 +46,11 @@ model Organization {
   suppliers          Supplier[]
   tasks              Task[]
   taskEvents         TaskEvent[]
+  moneyLoans         MoneyLoan[]
+  moneyLoanEvents    MoneyLoanEvent[]
+  inventoryLoans     InventoryLoan[]
+  posLoanSaleIntents PosLoanSaleIntent[]
+  posLoanSaleReservations PosLoanSaleReservation[]
 
   @@index([status, trialEndsAt])
 }
@@ -70,6 +75,13 @@ model User {
   tasksAssigned      Task[]              @relation("TaskAssignedTo")
   tasksCreated       Task[]              @relation("TaskCreatedBy")
   taskEvents         TaskEvent[]         @relation("TaskEventCreatedBy")
+  posLoanSaleIntentsInitiated PosLoanSaleIntent[] @relation("PosLoanSaleInitiatedBy")
+  posLoanSaleReservationsFinalized PosLoanSaleReservation[] @relation("PosLoanSaleReservationFinalizedBy")
+  moneyLoansCreated  MoneyLoan[]         @relation("MoneyLoanCreatedBy")
+  moneyLoansEmployee MoneyLoan[]         @relation("MoneyLoanEmployee")
+  moneyLoanEvents    MoneyLoanEvent[]    @relation("MoneyLoanEventCreatedBy")
+  inventoryLoansCreated InventoryLoan[] @relation("InventoryLoanCreatedBy")
+  inventoryLoanEvents InventoryLoanEvent[] @relation("InventoryLoanEventCreatedBy")
 }
 
 model OrganizationUser {
@@ -80,6 +92,8 @@ model OrganizationUser {
   joinedAt       DateTime     @default(now())
   invitedById    String?
   isPrimaryOwner Boolean      @default(false)
+  inventoryLoansEmployee InventoryLoan[] @relation("InventoryLoanEmployee")
+  inventoryLoanOperations InventoryLoanOperation[]
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -160,6 +174,7 @@ model Product {
   taxRate             Decimal             @default(0) @db.Decimal(5, 2)
   taxable             Boolean             @default(false)
   stock               Int                 @default(0)
+  reservedStock       Int                 @default(0)
   minStock            Int                 @default(0)
   type                ProductType         @default(PRODUCT)
   tracksStock         Boolean             @default(true)
@@ -179,7 +194,10 @@ model Product {
   preferredSupplier   Supplier?           @relation("PreferredSupplier", fields: [preferredSupplierId], references: [id])
   purchaseItems       PurchaseOrderItem[]
   saleItems           SaleItem[]
+  inventoryLoanItems  InventoryLoanItem[]
+  posLoanSaleReservations PosLoanSaleReservation[]
 
+  @@unique([id, organizationId])
   @@unique([organizationId, sku])
   @@unique([organizationId, barcode])
   @@index([organizationId, active])
@@ -204,6 +222,8 @@ model InventoryMovement {
   product        Product      @relation(fields: [productId], references: [id])
   sale           Sale?        @relation(fields: [saleId], references: [id])
   user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  inventoryLoanEventId String? @unique
+  inventoryLoanEvent InventoryLoanEvent? @relation(fields: [inventoryLoanEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([organizationId, productId, createdAt])
 }
@@ -225,7 +245,11 @@ model Customer {
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sales          Sale[]
+  moneyLoans     MoneyLoan[]
+  inventoryLoans InventoryLoan[]
+  posLoanSaleIntents PosLoanSaleIntent[]
 
+  @@unique([id, organizationId])
   @@unique([organizationId, documentNumber])
   @@index([organizationId, active])
   @@index([organizationId, segment])
@@ -255,7 +279,9 @@ model Sale {
   organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user               User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   items              SaleItem[]
+  posLoanSaleIntent  PosLoanSaleIntent?
 
+  @@unique([id, organizationId, customerId])
   @@unique([organizationId, saleNumber])
   @@index([organizationId, createdAt, status])
   @@index([organizationId, userId])
@@ -352,6 +378,8 @@ model Supplier {
   updatedAt      DateTime        @updatedAt
   organizationId String
   expenses       Expense[]
+  moneyLoans     MoneyLoan[]
+  inventoryLoans InventoryLoan[]
   preferredBy    Product[]       @relation("PreferredSupplier")
   purchaseOrders PurchaseOrder[]
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -359,6 +387,7 @@ model Supplier {
   @@unique([organizationId, documentNumber])
   @@index([organizationId, active])
   @@index([organizationId, name])
+  @@unique([id, organizationId])
 }
 
 model PurchaseOrder {
@@ -407,6 +436,236 @@ model PurchaseOrderItem {
 
   @@index([organizationId, purchaseOrderId])
   @@index([organizationId, productId])
+}
+
+// Monetary MONEY/SERVICE tracking only; collections never create sale Payments.
+enum MonetaryLoanType {
+  MONEY
+  SERVICE
+}
+
+model MoneyLoan {
+  type           MonetaryLoanType @default(MONEY)
+  id             String       @id @default(uuid())
+  organizationId String
+  amount         Decimal      @db.Decimal(10, 2)
+  status         MoneyLoanStatus @default(OPEN)
+  version        Int          @default(0)
+  issuedAt       DateTime     @db.Date
+  dueAt          DateTime?    @db.Date
+  reason         String       @db.VarChar(500)
+  customerId     String?
+  supplierId     String?
+  employeeId     String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer       Customer?    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  employee       User?        @relation("MoneyLoanEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  createdBy      User         @relation("MoneyLoanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  events         MoneyLoanEvent[]
+  posLoanSaleIntent PosLoanSaleIntent?
+
+  @@unique([id, organizationId])
+  @@unique([id, organizationId, customerId])
+  @@index([organizationId, createdAt, id])
+}
+
+// Intent presence is reserved for the future dedicated POS initiation path.
+model PosLoanSaleIntent {
+  id             String       @id @default(uuid())
+  organizationId String
+  loanId         String       @unique
+  customerId     String
+  createdAt      DateTime     @default(now())
+  finalSaleId    String?      @unique
+  quoteSnapshot  Json?
+  agreedCustomerTotal Decimal? @db.Decimal(10, 2)
+  initiationRequestKey String? @db.VarChar(100)
+  initiationRequestHash String? @db.VarChar(64)
+  initiatedById  String?
+  initiationResult Json?
+  initiatedBy    User?        @relation("PosLoanSaleInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reservations   PosLoanSaleReservation[]
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  customer       Customer     @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  loan           MoneyLoan    @relation(fields: [loanId, organizationId, customerId], references: [id, organizationId, customerId], onDelete: Restrict, onUpdate: Restrict)
+  finalSale      Sale?        @relation(fields: [finalSaleId, organizationId, customerId], references: [id, organizationId, customerId], onDelete: Restrict, onUpdate: Restrict)
+
+  // Composite keys declare the one-to-one relation tuples to Prisma.
+  @@unique([loanId, organizationId, customerId])
+  @@unique([finalSaleId, organizationId, customerId])
+  @@unique([organizationId, initiationRequestKey])
+  @@unique([id, organizationId])
+}
+
+// SQL freezes ownership and validates insert eligibility and terminal claims.
+enum PosLoanSaleReservationState {
+  HELD
+  CONSUMED
+  RELEASED
+}
+
+model PosLoanSaleReservation {
+  id             String       @id @default(uuid())
+  intentId       String
+  organizationId String
+  productId      String
+  quantity       Int
+  state          PosLoanSaleReservationState @default(HELD)
+  createdAt      DateTime     @default(now())
+  finalizedAt    DateTime?
+  finalizedById  String?
+  intent         PosLoanSaleIntent @relation(fields: [intentId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  product        Product      @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  finalizedBy    User?        @relation("PosLoanSaleReservationFinalizedBy", fields: [finalizedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([intentId, productId])
+}
+
+enum MoneyLoanStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum MoneyLoanEventType {
+  CREATED
+  COLLECTED
+  REVERSED
+  CLOSED
+  CANCELLED
+}
+
+// Append-only enforcement and loan input checks are in the SQL migration.
+model MoneyLoanEvent {
+  id             String             @id @default(uuid())
+  loanId         String
+  organizationId String
+  type           MoneyLoanEventType
+  amount         Decimal?           @db.Decimal(10, 2)
+  method         PaymentMethod?
+  reversesId     String?            @unique
+  requestKey     String?            @db.VarChar(100)
+  requestPayload String?
+  result         Json?
+  reverses       MoneyLoanEvent?    @relation("MoneyLoanReversal", fields: [reversesId, loanId, organizationId], references: [id, loanId, organizationId], onDelete: Restrict)
+  reversals      MoneyLoanEvent[]   @relation("MoneyLoanReversal")
+  reason         String             @db.VarChar(500)
+  createdById    String
+  createdAt      DateTime           @default(now())
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  loan           MoneyLoan          @relation(fields: [loanId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdBy      User               @relation("MoneyLoanEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([id, loanId, organizationId])
+  @@unique([organizationId, loanId, requestKey])
+  @@index([organizationId, loanId, createdAt, id])
+}
+
+// Unexposed physical-loan foundation. SQL owns checks and immutable evidence.
+enum InventoryLoanStatus {
+  OPEN
+  CANCELLED
+  CLOSED
+}
+
+enum InventoryLoanEventType {
+  CREATED
+  DELIVERED
+  RETURNED
+  CANCELLED
+  CLOSED
+}
+
+model InventoryLoan {
+  id             String              @id @default(uuid())
+  organizationId String
+  status         InventoryLoanStatus @default(OPEN)
+  version        Int                 @default(0)
+  customerId     String?
+  supplierId     String?
+  employeeId     String?
+  createdById    String
+  createdAt      DateTime            @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  customer       Customer? @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  supplier       Supplier? @relation(fields: [supplierId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  employee       OrganizationUser? @relation("InventoryLoanEmployee", fields: [employeeId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User @relation("InventoryLoanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  items          InventoryLoanItem[]
+  events         InventoryLoanEvent[]
+  operations     InventoryLoanOperation[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, createdAt, id])
+}
+
+model InventoryLoanItem {
+  id                String   @id @default(uuid())
+  loanId            String
+  organizationId    String
+  productId         String
+  quantity          Int
+  deliveredQuantity Int      @default(0)
+  returnedQuantity  Int      @default(0)
+  cancelledQuantity Int      @default(0)
+  createdAt         DateTime @default(now())
+  loan              InventoryLoan @relation(fields: [loanId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  product           Product @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  events            InventoryLoanEvent[]
+
+  @@unique([id, loanId, organizationId])
+  @@index([organizationId, loanId])
+  @@index([organizationId, productId])
+}
+
+// Completed immutable replay evidence; no pending operation state.
+enum InventoryLoanOperationType {
+  CREATE
+  DELIVER
+  RETURN
+  CANCEL
+  CLOSE
+}
+
+model InventoryLoanOperation {
+  id             String                     @id @default(uuid())
+  organizationId String
+  loanId         String
+  actorId        String
+  type           InventoryLoanOperationType
+  requestKey     String
+  requestPayload Json
+  resultSnapshot Json
+  createdAt      DateTime                   @default(now())
+  loan           InventoryLoan @relation(fields: [loanId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  actor          OrganizationUser @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  events         InventoryLoanEvent[]
+
+  @@unique([organizationId, requestKey])
+  @@unique([id, loanId, organizationId, actorId], map: "InventoryLoanOperation_event_target_key")
+}
+
+model InventoryLoanEvent {
+  id             String                 @id @default(uuid())
+  loanId         String
+  organizationId String
+  itemId         String?
+  operationId    String?
+  type           InventoryLoanEventType
+  quantity       Int?
+  createdById    String
+  createdAt      DateTime               @default(now())
+  loan           InventoryLoan @relation(fields: [loanId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  item           InventoryLoanItem? @relation(fields: [itemId, loanId, organizationId], references: [id, loanId, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User @relation("InventoryLoanEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  operation      InventoryLoanOperation? @relation(fields: [operationId, loanId, organizationId, createdById], references: [id, loanId, organizationId, actorId], onDelete: Restrict, onUpdate: Restrict, map: "InventoryLoanEvent_operation_fkey")
+  movement       InventoryMovement?
+
+  @@index([organizationId, loanId, createdAt, id])
 }
 
 model AuditLog {
@@ -555,6 +814,8 @@ enum MovementType {
   ADJUSTMENT_OUT
   DAMAGE
   RETURN
+  LOAN_DELIVERY
+  LOAN_RETURN
 }
 
 enum CustomerSegment {

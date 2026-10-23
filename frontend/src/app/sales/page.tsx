@@ -34,13 +34,14 @@ import type { Sale } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
+import { hasAnyRole } from "@/lib/auth";
 
 function SalesPageContent() {
   const { user: currentUser } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
-  const isAdmin = currentUser?.role === "ADMIN";
+  const isAdmin = hasAnyRole(currentUser?.role, ["ADMIN"]);
   const [search, setSearch] = useState("");
   const [status] = useState("");
   const [page, setPage] = useState(1);

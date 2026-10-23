@@ -13,6 +13,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useProducts, useQuickSearchProduct } from "@/hooks/useProducts";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useCreateSale } from "@/hooks/useSales";
+import { useCreatePosLoan } from "@/hooks/useLoans";
 import { usePausedSales } from "@/hooks/usePausedSales";
 import { printReceipt, printThermalReceipt } from "@/hooks/useReceipt";
 import { useSettings } from "@/hooks/useSettings";
@@ -46,10 +47,11 @@ import {
   Play,
   User,
   Wrench,
+  HandCoins,
 } from "lucide-react";
 import { cn, formatCurrency, safeGetItem, safeSetItem } from "@/lib/utils";
 import { effectiveStock } from "@/lib/product-type";
-import type { CartItem, Product, Sale } from "@/types";
+import type { CartItem, PosLoanInitiation, Product, Sale } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAnyRole } from "@/lib/auth";
@@ -218,6 +220,9 @@ export default function POSPage() {
     null,
   );
   const [showDeletePausedModal, setShowDeletePausedModal] = useState(false);
+  // Financing is the only action here that creates a real debt, so it waits for
+  // an explicit confirmation before the initiation request is built or sent.
+  const [showFinanceConfirm, setShowFinanceConfirm] = useState(false);
   const [scanFeedback, setScanFeedback] = useState<ScanFeedback>(
     DEFAULT_SCAN_FEEDBACK,
   );
@@ -271,6 +276,25 @@ export default function POSPage() {
   const { pausedSales, pauseSale, resumeSale, deletePausedSale } =
     usePausedSales();
   const createSale = useCreateSale();
+  const createPosLoan = useCreatePosLoan();
+  const [posLoan, setPosLoan] = useState<PosLoanInitiation | null>(null);
+  // An attempt is pinned to the exact payload it was minted for: a retry of the
+  // same request reuses its key, while any change to the cart, customer or
+  // discount mints a new one. Cleared on success so the next financing starts
+  // a fresh initiation.
+  const [financing, setFinancing] = useState(false);
+  // Set synchronously around the request so the locks never depend on a
+  // query's pending flag flushing before the response resolves.
+  const financingRef = useRef(false);
+  const cartLocked = financing || createPosLoan.isPending;
+  // A financing in flight owns the payload it will report back: while it is
+  // pending nothing may edit the cart, the customer or the discount, or the
+  // financed lines could be sold or financed a second time.
+  const cartLockedRef = useRef(cartLocked);
+  cartLockedRef.current = cartLocked;
+  const posLoanAttemptRef = useRef<{ key: string; signature: string } | null>(
+    null,
+  );
   const quickSearchProduct = useQuickSearchProduct();
 
   // SalesService explicitly permits CASHIER as well as managers. Keep this
@@ -345,6 +369,7 @@ export default function POSPage() {
   const visibleProducts = products;
 
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
+    if (cartLockedRef.current) return;
     if (effectiveStock(product) <= 0) return;
 
     setCart((prev) => {
@@ -388,11 +413,13 @@ export default function POSPage() {
   }, []);
 
   const removeFromCart = useCallback((productId: string) => {
+    if (cartLockedRef.current) return;
     setCart((prev) => prev.filter((item) => item.productId !== productId));
   }, []);
 
   const updateQuantity = useCallback(
     (productId: string, quantity: number) => {
+      if (cartLockedRef.current) return;
       if (quantity <= 0) {
         removeFromCart(productId);
         return;
@@ -420,6 +447,7 @@ export default function POSPage() {
   /** Apply a fixed-amount discount (clears any percentage tracking) */
   const updateItemDiscount = useCallback(
     (productId: string, discountAmount: number) => {
+      if (cartLockedRef.current) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -444,6 +472,7 @@ export default function POSPage() {
   /** Apply a percentage discount that scales with quantity changes */
   const updateItemDiscountPercent = useCallback(
     (productId: string, percent: number) => {
+      if (cartLockedRef.current) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -472,6 +501,7 @@ export default function POSPage() {
   /** Override a cart line's unit price, preserving any existing discount */
   const updateItemPrice = useCallback(
     (productId: string, price: number) => {
+      if (cartLockedRef.current) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -640,6 +670,7 @@ export default function POSPage() {
   }, []);
 
   const handleCheckout = async () => {
+    if (cartLockedRef.current) return;
     if (cart.length === 0) return;
     const totalPaid = paymentMethods.reduce(
       (sum, method) => sum + method.amount,
@@ -687,6 +718,78 @@ export default function POSPage() {
       setShowReceiptModal(true);
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Error al realizar la venta"));
+    }
+  };
+
+  /**
+   * The financing request for the current cart. One builder feeds both the
+   * request and its identity, so a payload change can never leave the pinned
+   * request key describing a different request.
+   */
+  const buildFinanceRequest = () => ({
+    customerId: selectedCustomer,
+    reason: "Venta financiada",
+    discountAmount,
+    items: cart.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      // Sent only for a real override, exactly like the checkout path.
+      ...(cartItemPriceOverride(item) ? { unitPrice: item.unitPrice } : {}),
+      discountAmount: item.discountAmount,
+    })),
+  });
+  // The live payload identity: an in-flight response is compared against the
+  // current payload, never against the closure that started the request.
+  const financeSignatureRef = useRef("");
+  financeSignatureRef.current = JSON.stringify(buildFinanceRequest());
+
+  /**
+   * Initiate a financed POS sale for the current cart. The server returns the
+   * agreed customer total, which is what the UI surfaces — never the
+   * client-computed cart total. A failed attempt leaves the cart, customer and
+   * discount untouched and retries with the same pinned requestKey. A success
+   * only claims and clears the payload it financed.
+   */
+  const handleFinanceSale = async () => {
+    // Single flight: a second confirmation must not start another initiation.
+    if (financingRef.current || cartLockedRef.current) return;
+    if (cart.length === 0 || !selectedCustomer) return;
+    financingRef.current = true;
+    setFinancing(true);
+    const request = buildFinanceRequest();
+    const signature = JSON.stringify(request);
+    const attempt =
+      posLoanAttemptRef.current?.signature === signature
+        ? posLoanAttemptRef.current
+        : { key: crypto.randomUUID(), signature };
+    posLoanAttemptRef.current = attempt;
+    try {
+      const result = await createPosLoan.mutateAsync({
+        ...request,
+        requestKey: attempt.key,
+      });
+      if (posLoanAttemptRef.current === attempt) posLoanAttemptRef.current = null;
+      if (financeSignatureRef.current !== signature) {
+        // The financed payload is no longer the sale on screen: report the
+        // financing instead of claiming its amount for a different cart.
+        toast.success(
+          `Venta financiada iniciada por ${formatCurrency(
+            Number(result.agreedCustomerTotal),
+          )}`,
+        );
+        return;
+      }
+      setPosLoan(result);
+      setCart([]);
+      setDiscountAmount(0);
+      setSelectedCustomer("");
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(error, "Error al iniciar la venta financiada"),
+      );
+    } finally {
+      financingRef.current = false;
+      setFinancing(false);
     }
   };
 
@@ -741,6 +844,7 @@ export default function POSPage() {
   };
 
   const handleResumeSale = async (saleId: string) => {
+    if (cartLockedRef.current) return;
     try {
       const resumedSale = resumeSale(saleId);
       // Re-derive each line's price from the product's CURRENT state so a
@@ -1180,17 +1284,43 @@ export default function POSPage() {
                 onMethodChange={setSelectedPaymentMethod}
               />
 
-              {/* Checkout Button */}
-              <Button
-                className="w-full h-11 text-sm font-bold shadow-md shadow-primary/20"
-                size="lg"
-                onClick={openPaymentModal}
-                disabled={cart.length === 0}
-                loading={createSale.isPending}
-              >
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                Finalizar Venta
-              </Button>
+              {/* Financed sale / Checkout */}
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  className="flex-1 h-11 text-sm font-bold"
+                  size="lg"
+                  onClick={() => setShowFinanceConfirm(true)}
+                  disabled={
+                    cart.length === 0 || !selectedCustomer || cartLocked
+                  }
+                  loading={createPosLoan.isPending}
+                >
+                  <HandCoins className="w-4 h-4 mr-2" />
+                  Financiar
+                </Button>
+                <Button
+                  className="flex-1 h-11 text-sm font-bold shadow-md shadow-primary/20"
+                  size="lg"
+                  onClick={openPaymentModal}
+                  disabled={cart.length === 0 || cartLocked}
+                  loading={createSale.isPending}
+                >
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Finalizar Venta
+                </Button>
+              </div>
+
+              {posLoan && (
+                <div className="rounded-2xl border border-primary/40 bg-primary/10 p-2.5">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Venta financiada iniciada
+                  </p>
+                  <p className="stat-number text-lg font-bold text-primary">
+                    {formatCurrency(Number(posLoan.agreedCustomerTotal))}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1262,6 +1392,7 @@ export default function POSPage() {
             <div
               className={`p-3 rounded-2xl cursor-pointer transition-colors border ${selectedCustomer === "" ? "bg-primary/20 border-primary/40 text-foreground" : "bg-background/40 border-primary/20 hover:bg-primary/10 hover:border-primary/30"}`}
               onClick={() => {
+                if (cartLockedRef.current) return;
                 setSelectedCustomer("");
                 setShowCustomerModal(false);
                 if (openedFromMobileCart) {
@@ -1282,6 +1413,7 @@ export default function POSPage() {
                 key={customer.id}
                 className={`p-3 rounded-2xl cursor-pointer transition-colors border ${selectedCustomer === customer.id ? "bg-primary/20 border-primary/40" : "bg-background/40 border-primary/20 hover:bg-primary/10 hover:border-primary/30"}`}
                 onClick={() => {
+                  if (cartLockedRef.current) return;
                   setSelectedCustomer(customer.id);
                   setShowCustomerModal(false);
                   if (openedFromMobileCart) {
@@ -1587,6 +1719,22 @@ export default function POSPage() {
           )}
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={showFinanceConfirm}
+        onClose={() => {
+          // A pending initiation must not be abandoned: the request is already
+          // on its way and the debt may exist without the cart that started it.
+          if (financingRef.current) return;
+          setShowFinanceConfirm(false);
+        }}
+        onConfirm={handleFinanceSale}
+        title="Confirmar venta financiada"
+        message={`Se iniciará una venta financiada a nombre de ${
+          selectedCustomerName ?? "el cliente seleccionado"
+        }. Monto a financiar: ${formatCurrency(total)} (calculado en el POS; el total final lo confirma el servidor).`}
+        confirmText="Financiar venta"
+      />
 
       <ConfirmDialog
         isOpen={showDeletePausedModal}

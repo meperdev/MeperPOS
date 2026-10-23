@@ -4,10 +4,12 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, ProductType, PromotionType } from '@prisma/client';
+import { Prisma, Product, ProductType, PromotionType } from '@prisma/client';
 import { isUUID } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  availableStock,
+  type AvailabilitySubject,
   isLowStock,
   normalizeStock,
   resolveInitialStockMovement,
@@ -37,7 +39,9 @@ export interface PromoPricingProduct {
  * Computed in `number` (never float-chained Decimals) and rounded half-up to
  * two decimals, consistent with the DECIMAL(10,2) columns.
  */
-export function computeEffectiveSalePrice(product: PromoPricingProduct): number | null {
+export function computeEffectiveSalePrice(
+  product: PromoPricingProduct,
+): number | null {
   const { salePrice, promotionType, promotionValue } = product;
 
   if (!promotionType || promotionValue == null) {
@@ -117,6 +121,47 @@ function assertValidPromotion(
   }
 }
 
+// Missing/corrupt counters must not be interpreted as zero or silently repaired.
+function assertReservationCompatible(
+  existing: StockSubject & {
+    stock: number;
+    reservedStock: number;
+    active: boolean;
+  },
+  next: StockSubject & { stock: number; active: boolean },
+): void {
+  const reserved = existing.reservedStock;
+  if (
+    !Number.isInteger(reserved) ||
+    reserved < 0 ||
+    reserved > existing.stock
+  ) {
+    throw new ConflictException(
+      'El inventario reservado del producto es inconsistente',
+    );
+  }
+  if (
+    reserved > 0 &&
+    (!existing.active ||
+      !tracksStock(existing) ||
+      !next.active ||
+      !tracksStock(next) ||
+      next.stock < reserved)
+  ) {
+    throw new ConflictException(
+      'No se puede reducir el stock por debajo de lo reservado, desactivar, eliminar o dejar de controlar un producto con reservas pendientes',
+    );
+  }
+}
+
+function assertNoReservationInput(dto: object): void {
+  if ('reservedStock' in dto) {
+    throw new BadRequestException(
+      'El inventario reservado no se puede modificar desde productos',
+    );
+  }
+}
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -131,8 +176,11 @@ export class ProductsService {
     organizationId: string | undefined,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
+    assertNoReservationInput(createProductDto);
     const {
       sku,
       barcode: rawBarcode,
@@ -258,12 +306,18 @@ export class ProductsService {
     ids?: string[],
     available = false,
   ) {
-    if (ids !== undefined && (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !isUUID(id)))) {
+    if (
+      ids !== undefined &&
+      (!Array.isArray(ids) ||
+        ids.some((id) => typeof id !== 'string' || !isUUID(id)))
+    ) {
       throw new BadRequestException('ids must contain UUID product IDs');
     }
     const { skip, take } = computeSkipTake(page, limit);
 
-    const where: Record<string, unknown> = { ...(organizationId ? { organizationId } : {}) };
+    const where: Record<string, unknown> = {
+      ...(organizationId ? { organizationId } : {}),
+    };
 
     if (status === 'active') {
       where.active = true;
@@ -302,11 +356,13 @@ export class ProductsService {
     // pagination bounds returned rows, not the favorite collection's reachability.
     if (ids !== undefined) where.id = { in: [...new Set(ids)] };
     if (available) {
-      const eligibility = { OR: [
-        { type: ProductType.SERVICE },
-        { tracksStock: false },
-        { stock: { gt: 0 } },
-      ] };
+      const eligibility = {
+        OR: [
+          { type: ProductType.SERVICE },
+          { tracksStock: false },
+          { stock: { gt: this.prisma.product.fields.reservedStock } },
+        ],
+      };
       where.AND = [...((where.AND as unknown[]) ?? []), eligibility];
     }
 
@@ -341,7 +397,11 @@ export class ProductsService {
 
   async findOne(id: string, organizationId: string | undefined) {
     const product = await this.prisma.product.findFirst({
-      where: { id, ...(organizationId ? { organizationId } : {}), active: true },
+      where: {
+        id,
+        ...(organizationId ? { organizationId } : {}),
+        active: true,
+      },
       include: { category: true, movements: true },
     });
 
@@ -359,8 +419,11 @@ export class ProductsService {
     organizationId: string | undefined,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
+    assertNoReservationInput(updateProductDto);
     const existingProduct = await this.prisma.product.findFirst({
       where: { id, organizationId, active: true },
     });
@@ -395,10 +458,7 @@ export class ProductsService {
     // Normalize empty barcode to null before comparing or saving
     const normalizedBarcode = updateProductDto.barcode?.trim() || null;
 
-    if (
-      normalizedBarcode &&
-      normalizedBarcode !== existingProduct.barcode
-    ) {
+    if (normalizedBarcode && normalizedBarcode !== existingProduct.barcode) {
       const existingBarcode = await this.prisma.product.findUnique({
         where: {
           organizationId_barcode: {
@@ -434,6 +494,12 @@ export class ProductsService {
       updateProductDto.stock ?? previousStock,
     );
 
+    assertReservationCompatible(existingProduct, {
+      ...effectiveSubject,
+      stock: newStock,
+      active: updateProductDto.active ?? existingProduct.active,
+    });
+
     // Apply the same opt-in tax invariant as create: `taxable=true` requires a
     // positive rate; `taxable=false` forces the stored rate back to 0.
     const taxData =
@@ -457,64 +523,101 @@ export class ProductsService {
       Number(updateProductDto.salePrice ?? existingProduct.salePrice),
     );
 
-    const updateResult = await this.prisma.product.updateMany({
-      where: { id, version: existingProduct.version, active: true },
-      data: {
-        ...updateProductDto,
-        ...taxData,
-        stock: newStock,
-        tracksStock: effectiveTracksStock,
-        barcode: normalizedBarcode,
-        version: { increment: 1 },
-      },
-    });
+    const changesEligibility =
+      effectiveType !== existingProduct.type ||
+      effectiveTracksStock !== existingProduct.tracksStock;
 
-    if (updateResult.count === 0) {
-      throw new ConflictException('Product was modified by another user');
-    }
+    // Reuse the existing write path without changing ordinary-edit atomicity.
+    const writeProduct = async (client: Prisma.TransactionClient) => {
+      const updateResult = await client.product.updateMany({
+        where: {
+          id,
+          organizationId,
+          version: existingProduct.version,
+          reservedStock: existingProduct.reservedStock,
+          active: true,
+        },
+        data: {
+          ...updateProductDto,
+          ...taxData,
+          stock: newStock,
+          tracksStock: effectiveTracksStock,
+          barcode: normalizedBarcode,
+          version: { increment: 1 },
+        },
+      });
 
-    const product = await this.prisma.product.findFirst({
-      where: { id, organizationId, active: true },
-      include: { category: true },
-    });
+      if (updateResult.count === 0) {
+        throw new ConflictException('Product was modified by another user');
+      }
 
-    if (!product) {
-      throw new NotFoundException('Product not found');
-    }
+      const product = await client.product.findFirst({
+        where: { id, organizationId, active: updateProductDto.active ?? true },
+        include: { category: true },
+      });
 
-    // The movement is decided from the stock the row actually had, so converting a
-    // stocked product into a service still records where its stock went, while an
-    // ordinary edit of a service records nothing at all. A conversion in either
-    // direction is a real stock event, so the basis is stocked as soon as either the
-    // previous or the resulting side tracks stock; only a service staying a service
-    // records nothing.
-    const movementBasis = tracksStock(existingProduct)
-      ? existingProduct
-      : effectiveSubject;
-    const movementType = resolveStockDeltaMovement(
-      movementBasis,
-      previousStock,
-      newStock,
-    );
+      if (!product) {
+        throw new NotFoundException('Product not found');
+      }
 
-    if (movementType) {
-      await this.createInventoryMovement(
-        id,
-        movementType,
+      // Preserve conversion movements using whichever side tracked stock.
+      const movementBasis = tracksStock(existingProduct)
+        ? existingProduct
+        : effectiveSubject;
+      const movementType = resolveStockDeltaMovement(
+        movementBasis,
         previousStock,
         newStock,
-        'Stock adjustment',
-        userId,
-        organizationId,
       );
-    }
+
+      if (movementType) {
+        await this.createInventoryMovement(
+          id,
+          movementType,
+          previousStock,
+          newStock,
+          'Stock adjustment',
+          userId,
+          organizationId,
+          undefined,
+          client.inventoryMovement,
+        );
+      }
+
+      return product;
+    };
+
+    const product = changesEligibility
+      ? await this.prisma.$transaction(
+          async (tx) => {
+            const outstanding = await tx.inventoryLoanItem.findFirst({
+              where: {
+                organizationId,
+                productId: id,
+                deliveredQuantity: {
+                  gt: tx.inventoryLoanItem.fields.returnedQuantity,
+                },
+              },
+            });
+            if (outstanding) {
+              throw new ConflictException(
+                'No se puede cambiar el tipo o seguimiento de inventario mientras hay unidades prestadas pendientes de devolución',
+              );
+            }
+            return writeProduct(tx);
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        )
+      : await writeProduct(this.prisma);
 
     return this.enrichProduct(product);
   }
 
   async deactivate(id: string, organizationId: string | undefined) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const product = await this.prisma.product.findFirst({
       where: { id, organizationId, active: true },
@@ -524,16 +627,35 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    return this.prisma.product.update({
-      where: { id },
-      data: { active: false },
-      include: { category: true },
-    });
+    assertReservationCompatible(product, { ...product, active: false });
+    try {
+      return await this.prisma.product.update({
+        where: {
+          id,
+          organizationId,
+          active: true,
+          version: product.version,
+          reservedStock: product.reservedStock,
+        },
+        data: { active: false, version: { increment: 1 } },
+        include: { category: true },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new ConflictException('Product was modified by another user');
+      }
+      throw error;
+    }
   }
 
   async remove(id: string, organizationId: string | undefined) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const product = await this.prisma.product.findFirst({
       where: { id, organizationId },
@@ -543,11 +665,24 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
+    assertReservationCompatible(product, { ...product, active: false });
     try {
       return await this.prisma.product.delete({
-        where: { id },
+        where: {
+          id,
+          organizationId,
+          active: product.active,
+          version: product.version,
+          reservedStock: product.reservedStock,
+        },
       });
     } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new ConflictException('Product was modified by another user');
+      }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2003'
@@ -566,16 +701,26 @@ export class ProductsService {
         'Organization ID is required for this operation',
       );
     }
-    return this.prisma.$queryRaw`
+    const products = await this.prisma.$queryRaw<
+      (Product & { categoryName: string | null })[]
+    >`
       SELECT p.*, c.name as "categoryName"
       FROM "Product" p
       LEFT JOIN "Category" c ON p."categoryId" = c.id
       WHERE p.active = true AND p."organizationId" = ${organizationId} AND p.stock <= p."minStock" AND p."type" = 'PRODUCT' AND p."tracksStock" = true
       ORDER BY p.stock ASC
     `;
+    return products.map((product) => ({
+      ...product,
+      availableStock: availableStock(product),
+    }));
   }
 
-  async searchProducts(query: string, limit = 20, organizationId: string | undefined) {
+  async searchProducts(
+    query: string,
+    limit = 20,
+    organizationId: string | undefined,
+  ) {
     const products = await this.prisma.product.findMany({
       where: {
         ...(organizationId ? { organizationId } : {}),
@@ -597,6 +742,7 @@ export class ProductsService {
       barcode: p.barcode,
       salePrice: p.salePrice,
       stock: p.stock,
+      availableStock: availableStock(p),
       taxable: p.taxable,
       taxRate: p.taxRate,
       effectiveTaxRate: resolveEffectiveTaxRate(p, p.category),
@@ -644,6 +790,7 @@ export class ProductsService {
       barcode: product.barcode,
       salePrice: product.salePrice,
       stock: product.stock,
+      availableStock: availableStock(product),
       taxable: product.taxable,
       taxRate: product.taxRate,
       effectiveTaxRate: resolveEffectiveTaxRate(product, product.category),
@@ -670,9 +817,10 @@ export class ProductsService {
     T extends {
       taxable: boolean;
       taxRate: Prisma.Decimal | number;
-      category?:
-        | { taxable: boolean; defaultTaxRate: Prisma.Decimal | null }
-        | null;
+      category?: {
+        taxable: boolean;
+        defaultTaxRate: Prisma.Decimal | null;
+      } | null;
     },
   >(product: T): T & { effectiveTaxRate: number } {
     return {
@@ -712,13 +860,14 @@ export class ProductsService {
 
   /**
    * The single response shape for a persisted product row: promo-aware price, effective
-   * tax rate and the low-stock flag. Every read that returns whole product rows (create,
+   * tax rate, physical low-stock flag and reservation-aware availability. Every read that
+   * returns whole product rows (create,
    * findAll, findOne, update) goes through here, so a new derived field cannot reach only
    * some of the endpoints and leave the client to guess.
    */
   private enrichProduct<
     T extends PromoPricingProduct &
-      StockSubject & {
+      AvailabilitySubject & {
         taxable: boolean;
         taxRate: Prisma.Decimal | number;
         stock: number;
@@ -729,9 +878,12 @@ export class ProductsService {
         } | null;
       },
   >(product: T) {
-    return this.enrichWithLowStock(
-      this.enrichWithEffectiveTax(this.enrichWithPromo(product)),
-    );
+    return {
+      ...this.enrichWithLowStock(
+        this.enrichWithEffectiveTax(this.enrichWithPromo(product)),
+      ),
+      availableStock: availableStock(product),
+    };
   }
 
   private async createInventoryMovement(
@@ -749,8 +901,9 @@ export class ProductsService {
     userId: string,
     organizationId: string,
     saleId?: string,
+    movementDelegate = this.prisma.inventoryMovement,
   ) {
-    await this.prisma.inventoryMovement.create({
+    await movementDelegate.create({
       data: {
         productId,
         type,
@@ -776,7 +929,9 @@ export class ProductsService {
     organizationId: string | undefined,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const product = await this.prisma.product.findFirst({
       where: { id: productId, organizationId },
@@ -810,7 +965,9 @@ export class ProductsService {
 
   async reactivate(id: string, organizationId: string | undefined) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const product = await this.prisma.product.findFirst({
       where: { id, organizationId },

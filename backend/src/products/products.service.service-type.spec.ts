@@ -1,4 +1,6 @@
-import { ProductType } from '@prisma/client';
+import { ConflictException } from '@nestjs/common';
+import { Prisma, ProductType } from '@prisma/client';
+import { UpdateProductDto } from './dto/product.dto';
 import { ProductsService } from './products.service';
 
 /**
@@ -30,6 +32,11 @@ describe('ProductsService — product versus service', () => {
     },
     inventoryMovement: { create: jest.fn() },
     $queryRaw: jest.fn(),
+    inventoryLoanItem: {
+      findFirst: jest.fn(),
+      fields: { returnedQuantity: { name: 'returnedQuantity' } },
+    },
+    $transaction: jest.fn(),
   };
 
   const cloudinaryServiceMock = {};
@@ -57,8 +64,10 @@ describe('ProductsService — product versus service', () => {
     taxable: false,
     taxRate: 0,
     stock: 10,
+    reservedStock: 0,
     minStock: 5,
     type: ProductType.PRODUCT,
+    tracksStock: overrides.type !== ProductType.SERVICE,
     imageUrl: null,
     categoryId: 'cat-1',
     active: true,
@@ -91,6 +100,11 @@ describe('ProductsService — product versus service', () => {
     prismaMock.category.findFirst.mockResolvedValue(categoryRow());
     prismaMock.product.findUnique.mockResolvedValue(null);
     prismaMock.inventoryMovement.create.mockResolvedValue({});
+    prismaMock.inventoryLoanItem.findFirst.mockResolvedValue(null);
+    prismaMock.$transaction.mockImplementation(
+      (callback: (tx: typeof prismaMock) => Promise<unknown>) =>
+        callback(prismaMock),
+    );
   });
 
   describe('create', () => {
@@ -607,5 +621,347 @@ describe('ProductsService — product versus service', () => {
 
       expect(result?.isLowStock).toBe(false);
     });
+  });
+});
+
+// Predicate-aware, commit-on-success model; not PostgreSQL SSI evidence.
+describe('ProductsService conversion eligibility', () => {
+  const initialProduct = () => ({
+    id: 'prod-1',
+    organizationId: 'org-1',
+    type: ProductType.PRODUCT as ProductType,
+    tracksStock: true,
+    active: true,
+    version: 2,
+    stock: 10,
+    reservedStock: 0,
+    minStock: 1,
+    name: 'Equipment',
+    salePrice: 100,
+    costPrice: 50,
+    taxable: false,
+    taxRate: 0,
+    promotionType: null,
+    promotionValue: null,
+    barcode: null,
+    category: null,
+  });
+  type Row = ReturnType<typeof initialProduct>;
+  type Item = {
+    organizationId: string;
+    productId: string;
+    deliveredQuantity: number;
+    returnedQuantity: number;
+    cancelledQuantity: number;
+    status: string;
+  };
+  const returnedField = { name: 'returnedQuantity' };
+  type Query = {
+    where: {
+      organizationId: string;
+      productId: string;
+      deliveredQuantity: { gt: typeof returnedField };
+    };
+  };
+  type Write = {
+    where: Partial<Row>;
+    data: Omit<Partial<Row>, 'version'> & { version: { increment: number } };
+  };
+  type Movement = {
+    data: {
+      productId: string;
+      type: string;
+      quantity: number;
+      previousStock: number;
+      newStock: number;
+      reason: string;
+      userId: string;
+      organizationId: string;
+      saleId?: string;
+    };
+  };
+  let state: { product: Row; items: Item[]; movements: Movement[] };
+  let loseCas: boolean;
+  let failMovement: boolean;
+  let events: string[];
+  const tx = {
+    inventoryLoanItem: {
+      fields: { returnedQuantity: returnedField },
+      findFirst: jest.fn<Promise<Item | null>, [Query]>(),
+    },
+    product: {
+      updateMany: jest.fn<Promise<{ count: number }>, [Write]>(),
+      findFirst: jest.fn<Promise<Row>, [unknown]>(),
+    },
+    inventoryMovement: {
+      create: jest.fn<Promise<Movement>, [Movement]>(),
+    },
+  };
+  const prisma = {
+    product: {
+      findFirst: jest.fn<Promise<Row>, [unknown]>(),
+      updateMany: jest.fn<Promise<{ count: number }>, [Write]>(),
+    },
+    inventoryMovement: {
+      create: jest.fn<Promise<Movement>, [Movement]>(),
+    },
+    $transaction: jest.fn<
+      Promise<Row>,
+      [(client: typeof tx) => Promise<Row>, unknown]
+    >(),
+  };
+  let service: ProductsService;
+  const item = (overrides: Partial<Item> = {}): Item => ({
+    organizationId: 'org-1',
+    productId: 'prod-1',
+    deliveredQuantity: 2,
+    returnedQuantity: 0,
+    cancelledQuantity: 0,
+    status: 'OPEN',
+    ...overrides,
+  });
+  const update = (dto: UpdateProductDto = { type: ProductType.SERVICE }) =>
+    service.update('prod-1', dto, 'user-1', 'org-1');
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    state = { product: initialProduct(), items: [], movements: [] };
+    loseCas = failMovement = false;
+    events = [];
+    prisma.product.findFirst.mockImplementation(() =>
+      Promise.resolve({ ...state.product }),
+    );
+    // Legacy direct writes really succeed: RED must expose the missing policy.
+    prisma.product.updateMany.mockImplementation(({ data }) => {
+      state.product = { ...state.product, ...data, version: 3 };
+      return Promise.resolve({ count: 1 });
+    });
+    prisma.inventoryMovement.create.mockImplementation((movement) => {
+      state.movements.push(movement);
+      return Promise.resolve(movement);
+    });
+    prisma.$transaction.mockImplementation(async (callback) => {
+      const pending = structuredClone(state);
+      tx.inventoryLoanItem.findFirst.mockImplementation(({ where }) => {
+        events.push('query');
+        expect(where.deliveredQuantity.gt).toBe(returnedField);
+        return Promise.resolve(
+          pending.items.find(
+            (entry) =>
+              entry.organizationId === where.organizationId &&
+              entry.productId === where.productId &&
+              entry.deliveredQuantity > entry.returnedQuantity,
+          ) ?? null,
+        );
+      });
+      tx.product.updateMany.mockImplementation(({ where, data }) => {
+        events.push('cas');
+        if (
+          loseCas ||
+          !Object.entries(where).every(
+            ([key, value]) => pending.product[key as keyof Row] === value,
+          )
+        )
+          return Promise.resolve({ count: 0 });
+        pending.product = {
+          ...pending.product,
+          ...data,
+          version: pending.product.version + data.version.increment,
+        };
+        return Promise.resolve({ count: 1 });
+      });
+      tx.product.findFirst.mockImplementation(() => {
+        events.push('read');
+        return Promise.resolve({ ...pending.product });
+      });
+      tx.inventoryMovement.create.mockImplementation((movement) => {
+        events.push('movement');
+        pending.movements.push(structuredClone(movement));
+        if (failMovement) throw new Error('late movement failure');
+        return Promise.resolve(movement);
+      });
+      const result = await callback(tx);
+      state = pending;
+      return result;
+    });
+    service = new ProductsService(prisma as never, {} as never, {} as never);
+  });
+
+  it('rejects a conversion with zero reservations but outstanding units', async () => {
+    state.items = [item()];
+    const before = structuredClone(state);
+    await expect(update()).rejects.toBeInstanceOf(ConflictException);
+    expect(state).toEqual(before);
+    expect(events).toEqual(['query']);
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it.each<Partial<Item>>([
+    { cancelledQuantity: 8 },
+    { status: 'CANCELLED' },
+    { status: 'CLOSED' },
+  ])('does not hide outstanding units with %j', async (overrides) => {
+    state.items = [item(overrides)];
+    const before = structuredClone(state);
+    await expect(update({ tracksStock: false })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(state).toEqual(before);
+    expect(events).toEqual(['query']);
+    expect(tx.product.updateMany).not.toHaveBeenCalled();
+    expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects if any of multiple matching items has outstanding units', async () => {
+    state.items = [
+      item({ returnedQuantity: 2 }),
+      item({ deliveredQuantity: 0 }),
+      item(),
+    ];
+    const before = structuredClone(state);
+    await expect(update()).rejects.toBeInstanceOf(ConflictException);
+    expect(state).toEqual(before);
+    expect(events).toEqual(['query']);
+  });
+
+  it.each<Partial<Item>>([
+    { organizationId: 'other-org' },
+    { productId: 'other-product' },
+    { returnedQuantity: 2 },
+    { deliveredQuantity: 0 },
+  ])('permits conversion for the nonblocking item %j', async (overrides) => {
+    state.items = [item(overrides)];
+    const result = await update();
+    expect(result.type).toBe(ProductType.SERVICE);
+    expect(result.tracksStock).toBe(false);
+    expect(result.stock).toBe(0);
+    expect(result.availableStock).toBeNull();
+    expect(state.product.version).toBe(3);
+    expect(events).toEqual(['query', 'cas', 'read', 'movement']);
+    expect(tx.inventoryLoanItem.findFirst).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        productId: 'prod-1',
+        deliveredQuantity: { gt: returnedField },
+      },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+    expect(prisma.product.findFirst).toHaveBeenCalledTimes(1);
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(tx.product.updateMany.mock.calls[0][0].where).toEqual({
+      id: 'prod-1',
+      organizationId: 'org-1',
+      version: 2,
+      reservedStock: 0,
+      active: true,
+    });
+    expect(tx.product.findFirst).toHaveBeenCalledWith({
+      where: { id: 'prod-1', organizationId: 'org-1', active: true },
+      include: { category: true },
+    });
+    expect(state.movements).toEqual([
+      {
+        data: {
+          productId: 'prod-1',
+          type: 'ADJUSTMENT_OUT',
+          quantity: -10,
+          previousStock: 10,
+          newStock: 0,
+          reason: 'Stock adjustment',
+          userId: 'user-1',
+          organizationId: 'org-1',
+          saleId: undefined,
+        },
+      },
+    ]);
+  });
+
+  it.each<UpdateProductDto>([
+    { name: 'Renamed' },
+    { salePrice: 200 },
+    { type: ProductType.PRODUCT },
+    { tracksStock: true },
+    { type: ProductType.PRODUCT, tracksStock: true },
+  ])('keeps ordinary and same-pair edits query-free %j', async (dto) => {
+    state.items = [item()];
+    await update(dto);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.inventoryLoanItem.findFirst).not.toHaveBeenCalled();
+    expect(prisma.product.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('normalizes an explicit tracking flag before deciding whether to query', async () => {
+    state.product = {
+      ...state.product,
+      type: ProductType.SERVICE,
+      tracksStock: false,
+      stock: 0,
+    };
+    state.items = [item()];
+    const result = await update({
+      type: ProductType.SERVICE,
+      tracksStock: true,
+    });
+    expect(result.tracksStock).toBe(false);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.inventoryLoanItem.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('also gates conversion back to tracked merchandise', async () => {
+    state.product = {
+      ...state.product,
+      type: ProductType.SERVICE,
+      tracksStock: false,
+      stock: 0,
+    };
+    const result = await update({
+      type: ProductType.PRODUCT,
+      tracksStock: true,
+      stock: 5,
+    });
+    expect(result.stock).toBe(5);
+    expect(events).toEqual(['query', 'cas', 'read', 'movement']);
+    expect(state.movements[0].data).toMatchObject({
+      type: 'ADJUSTMENT_IN',
+      quantity: 5,
+      previousStock: 0,
+      newStock: 5,
+    });
+  });
+
+  it.each(['stale version', 'CAS loss'])(
+    'rolls back the full cloned state on %s',
+    async (failure) => {
+      state.items = [item({ returnedQuantity: 2 })];
+      if (failure === 'stale version')
+        prisma.product.findFirst.mockResolvedValue({
+          ...state.product,
+          version: 1,
+        });
+      else loseCas = true;
+      const before = structuredClone(state);
+      await expect(update()).rejects.toBeInstanceOf(ConflictException);
+      expect(state).toEqual(before);
+      expect(events).toEqual(['query', 'cas']);
+      expect(tx.product.findFirst).not.toHaveBeenCalled();
+      expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+      expect(prisma.product.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rolls back product, items and movement on a late movement failure', async () => {
+    state.items = [item({ returnedQuantity: 2 })];
+    failMovement = true;
+    const before = structuredClone(state);
+    await expect(update()).rejects.toThrow('late movement failure');
+    expect(events).toEqual(['query', 'cas', 'read', 'movement']);
+    expect(state).toEqual(before);
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+    expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();
   });
 });

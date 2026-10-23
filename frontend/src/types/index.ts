@@ -116,13 +116,22 @@ export interface InventoryMovement {
   id: string;
   productId: string;
   product?: Product;
-  type: "PURCHASE" | "SALE" | "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "DAMAGE" | "RETURN";
+  type:
+    | "PURCHASE"
+    | "SALE"
+    | "ADJUSTMENT_IN"
+    | "ADJUSTMENT_OUT"
+    | "DAMAGE"
+    | "RETURN"
+    | "LOAN_DELIVERY"
+    | "LOAN_RETURN";
   quantity: number;
   previousStock: number;
   newStock: number;
   reason: string;
   userId: string;
   saleId: string | null;
+  inventoryLoanEventId: string | null;
   createdAt: string;
 }
 
@@ -705,3 +714,142 @@ export type ExpenseQueryParams = {
   status?: ExpenseStatus;
   search?: string;
 };
+
+export type MonetaryLoanType = "MONEY" | "SERVICE";
+
+export type MoneyLoanStatus = "OPEN" | "CLOSED" | "CANCELLED";
+
+export type LoanPaymentStatus = "UNPAID" | "PARTIAL" | "PAID";
+
+/** Minimal party projection returned by the loans selects. */
+export interface LoanParty {
+  id: string;
+  name: string;
+}
+
+/**
+ * The POS financing behind a loan, or `null` for an ordinary loan. Mirrors the
+ * additive `posFinancing` field the backend `present()` projects; `finalSaleId`
+ * is `null` until the financed checkout is finalized into a sale.
+ */
+export interface PosLoanFinancing {
+  intentId: string;
+  finalSaleId: string | null;
+}
+
+/**
+ * Money loan as returned by GET /loans and GET /loans/:id. The backend omits
+ * `version`/`events` and adds the server-owned `collected`/`balance` strings and
+ * `paymentStatus`; the UI reads those and never recomputes them.
+ */
+export interface Loan {
+  type: MonetaryLoanType;
+  id: string;
+  amount: string;
+  status: MoneyLoanStatus;
+  issuedAt: string;
+  dueAt: string | null;
+  reason: string;
+  customerId: string | null;
+  supplierId: string | null;
+  employeeId: string | null;
+  createdById: string;
+  createdAt: string;
+  customer: LoanParty | null;
+  supplier: LoanParty | null;
+  employee: LoanParty | null;
+  createdBy: LoanParty;
+  collected: string;
+  balance: string;
+  paymentStatus: LoanPaymentStatus;
+  /**
+   * Present on every backend projection, `null` for an ordinary loan with no
+   * POS financing intent; `finalSaleId` stays `null` until the financed
+   * checkout is finalized into a sale.
+   */
+  posFinancing: PosLoanFinancing | null;
+}
+
+export interface PosLoanItemInput {
+  productId: string;
+  quantity: number;
+  /** Send only for a deliberate manager override; the server prices the line otherwise. */
+  unitPrice?: number;
+  discountAmount?: number;
+}
+
+export interface CreatePosLoanInput {
+  customerId: string;
+  reason: string;
+  items: PosLoanItemInput[];
+  /** Defaults to the current date (YYYY-MM-DD) when the caller omits it. */
+  issuedAt?: string;
+  dueAt?: string;
+  /** Sale-wide discount. */
+  discountAmount?: number;
+  /** Pin a stable idempotency key so a retried attempt reuses it. */
+  requestKey?: string;
+}
+
+/** POST /loans/pos-initiation response. `agreedCustomerTotal` is the server total to display. */
+export interface PosLoanInitiation {
+  intentId: string;
+  loanId: string;
+  organizationId: string;
+  customerId: string;
+  agreedCustomerTotal: string;
+  quoteSnapshot: unknown;
+}
+
+/** The five append-only money loan event kinds (`MoneyLoanEventType`). */
+export type MoneyLoanEventType =
+  | "CREATED"
+  | "COLLECTED"
+  | "REVERSED"
+  | "CLOSED"
+  | "CANCELLED";
+
+/** One event from GET /loans/:id/history (the backend `eventSelect`). */
+export interface LoanHistoryEvent {
+  id: string;
+  loanId: string;
+  type: MoneyLoanEventType;
+  amount: string | null;
+  method: "CASH" | "CARD" | "TRANSFER" | null;
+  reversesId: string | null;
+  reason: string;
+  createdById: string;
+  createdAt: string;
+  createdBy: LoanParty;
+}
+
+/** Filters accepted by GET /loans, mirroring `QueryLoansDto`. */
+export type LoanQueryParams = {
+  type?: MonetaryLoanType;
+  page?: number;
+  limit?: number;
+};
+
+/** POST /loans/:id/collections, and /pos-completion with `intentId`/`saleId`. */
+export interface LoanOperationResult {
+  type: MonetaryLoanType;
+  loanId: string;
+  status: MoneyLoanStatus;
+  collected: string;
+  balance: string;
+  paymentStatus: LoanPaymentStatus;
+  eventId: string;
+  intentId?: string;
+  saleId?: string;
+}
+
+/** Body the client sends on POST /loans/:id/collections. */
+export interface CollectLoanInput {
+  amount: number;
+  method: "CASH" | "CARD" | "TRANSFER";
+  /** Pin a stable key so a retried collection stays idempotent. */
+  requestKey?: string;
+}
+
+/** Flat pagination envelope returned by GET /loans and GET /loans/:id/history. */
+export type LoanPage<T> = { data: T[]; total: number; page: number; limit: number; totalPages: number };

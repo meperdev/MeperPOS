@@ -98,7 +98,7 @@ Next.js App Router under `frontend/src/`:
 
 ## Key Conventions
 
-- **The server owns every number that becomes money.** Tax rate (`resolveEffectiveTaxRate`), effective sale price (`computeEffectiveSalePrice`), sale totals, change and low-stock classification are all derived in the backend and sent down as fields. The client *reads* them; it never re-derives them. A client-supplied `unitPrice` is a **request to override**, not a default — it requires ADMIN/OWNER/SUPER_ADMIN and is recorded in `AuditLog` as `SALE_PRICE_OVERRIDE` inside the sale transaction. See `SalesService.create` and `canOverridePrice`.
+- **The server owns every number that becomes money.** Tax rate (`resolveEffectiveTaxRate`), effective sale price (`computeEffectiveSalePrice`), sale totals, change and low-stock classification are all derived in the backend and sent down as fields. The client *reads* them; it never re-derives them. A client-supplied `unitPrice` is a **request to override**, not a default — it requires ADMIN/OWNER/CASHIER/SUPER_ADMIN and is recorded in `AuditLog` as `SALE_PRICE_OVERRIDE` inside the sale transaction. This permits raising or lowering the charged POS price, not editing catalog prices; MEMBER and INVENTORY_USER cannot override it. A financed sale's agreed total remains fixed after POS initiation. See `SalesService.create` and `canOverridePrice`.
 - `cn()` from `lib/utils.ts` for conditional Tailwind class merging — always use this instead of string concatenation
 - `formatCurrency(amount)` for COP formatting; `formatDate/formatDateTime` for es-CO locale
 - `getApiErrorMessage(error, fallback)` for extracting user-facing error messages from Axios errors
