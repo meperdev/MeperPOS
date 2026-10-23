@@ -23,6 +23,7 @@ Living inventory of every backend route: path × method × role(s) × org-scope 
 
 Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUPER_ADMIN` (platform).
 "any org role" = any authenticated membership role (no `@Roles` restriction).
+Where a row shows an inherited role in parentheses — `ADMIN (OWNER inherits)`, `CASHIER (OWNER, ADMIN, MEMBER inherit)` — the leading value is the single role declared in `@Roles(...)` and the parenthetical is what `RolesGuard.getInheritedRoles` additionally admits.
 
 ---
 
@@ -153,6 +154,30 @@ Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUP
 | /api/imports/full | POST | ADMIN, CASHIER | org-scoped | backend/src/imports/imports.service.int.spec.ts |
 | /api/imports/:jobId/status | GET | ADMIN, CASHIER | org-scoped | backend/src/imports/imports.service.int.spec.ts |
 | /api/imports/:jobId/retry-row | POST | ADMIN, CASHIER | org-scoped | backend/src/imports/imports.service.int.spec.ts |
+
+## loans
+
+All rows below are served by `backend/src/loans/loans.controller.ts`; the controller mounts
+`JwtAuthGuard`, `RolesGuard` and `OrganizationRequiredGuard`, and every read/mutation is filtered by
+`organizationId` in `LoansService`.
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/loans/pos-initiation | POST | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.pos-initiation.spec.ts |
+| /api/loans/:id/pos-completion | POST | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.boundary.spec.ts |
+| /api/loans | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/loans/loans.boundary.spec.ts |
+| /api/loans/:id/collections | POST | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.lifecycle.spec.ts |
+| /api/loans/:id/collections/:paymentId/reverse | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/loans/loans.lifecycle.spec.ts |
+| /api/loans/:id/close | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/loans/loans.lifecycle.spec.ts |
+| /api/loans/:id/cancel | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/loans/loans.lifecycle.spec.ts |
+| /api/loans | GET | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.service.spec.ts |
+| /api/loans/:id | GET | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.service.spec.ts |
+| /api/loans/:id/history | GET | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.service.spec.ts |
+
+Note: `InventoryLoansController` (`backend/src/loans/inventory-loans.controller.ts`, all routes
+`@Roles(OrgRole.OWNER, OrgRole.ADMIN)`) is a prepared artifact that is deliberately **unregistered**
+in every module, so it is absent from the OpenAPI document and has no rows here. Wire it into a
+module and add its rows in the same change that exposes it.
 
 ## plan-limits
 
