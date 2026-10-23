@@ -374,18 +374,23 @@ describe('reservation migration structure (not PostgreSQL enforcement)', () => {
     resolve(__dirname, '../../prisma/schema.prisma'),
     'utf8',
   );
+  // The migration prose explains why the bounds check is NOT VALID and mentions
+  // the word UPDATE; the no-rewrite guard must only inspect executable SQL.
+  const executableSql = sql.replace(/--[^\n]*/g, '');
 
   it('adds a default-zero integer matching Prisma without rewriting existing data', () => {
     expect(schema).toMatch(/reservedStock\s+Int\s+@default\(0\)/);
     expect(sql).toContain(
       'ADD COLUMN "reservedStock" INTEGER NOT NULL DEFAULT 0',
     );
-    expect(sql).not.toMatch(/\b(UPDATE|DELETE|TRUNCATE|DROP)\b/i);
+    expect(executableSql).not.toMatch(/\b(UPDATE|DELETE|TRUNCATE|DROP)\b/i);
   });
 
   it('requires nonnegative reservations bounded by physical on-hand stock', () => {
+    // Legacy rows may carry negative stock, so the stock bound must be skipped
+    // for them; the nonnegative plus on-hand invariant still holds otherwise.
     expect(sql).toContain(
-      'CHECK ("reservedStock" >= 0 AND "reservedStock" <= "stock")',
+      'CHECK ("reservedStock" >= 0 AND ("stock" < 0 OR "reservedStock" <= "stock"))',
     );
   });
 
