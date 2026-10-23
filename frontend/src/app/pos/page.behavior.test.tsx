@@ -1946,7 +1946,7 @@ describe("POS cart financing (pos-loan-initiation)", () => {
     await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
   });
 
-  it("does not claim a superseded late success for the sale on screen", async () => {
+  it("locks the cart while the initiation is pending so the financed payload cannot drift", async () => {
     const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
     const extra = makeProduct("p2", "Producto Extra", { salePrice: 10000 });
     let resolveInitiation: (value: ReturnType<typeof initiation>) => void = () => {};
@@ -1964,19 +1964,11 @@ describe("POS cart financing (pos-loan-initiation)", () => {
     await confirmFinance();
     await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
 
-    // The payload changes while the request is in flight.
+    // The financed payload owns the cart until the server answers.
     await userEvent.click(screen.getByRole("button", { name: "Producto Extra" }));
-    await waitFor(() =>
-      expect(screen.getAllByTestId("line-unit-price")).toHaveLength(2),
-    );
+    expect(screen.getAllByTestId("line-unit-price")).toHaveLength(1);
 
     resolveInitiation(initiation());
-    // The handler ran: the action is usable again once the request settles.
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^financiar$/i })).not.toBeDisabled(),
-    );
-    // The financed total is not claimed for the cart that is now on screen.
-    expect(screen.queryByText("Venta financiada iniciada")).toBeNull();
-    expect(screen.queryByText("Carrito vacío")).toBeNull();
+    await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
   });
 });

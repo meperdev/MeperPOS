@@ -282,6 +282,16 @@ export default function POSPage() {
   // same request reuses its key, while any change to the cart, customer or
   // discount mints a new one. Cleared on success so the next financing starts
   // a fresh initiation.
+  const [financing, setFinancing] = useState(false);
+  // Set synchronously around the request so the locks never depend on a
+  // query's pending flag flushing before the response resolves.
+  const financingRef = useRef(false);
+  const cartLocked = financing || createPosLoan.isPending;
+  // A financing in flight owns the payload it will report back: while it is
+  // pending nothing may edit the cart, the customer or the discount, or the
+  // financed lines could be sold or financed a second time.
+  const cartLockedRef = useRef(cartLocked);
+  cartLockedRef.current = cartLocked;
   const posLoanAttemptRef = useRef<{ key: string; signature: string } | null>(
     null,
   );
@@ -359,6 +369,7 @@ export default function POSPage() {
   const visibleProducts = products;
 
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
+    if (cartLockedRef.current) return;
     if (effectiveStock(product) <= 0) return;
 
     setCart((prev) => {
@@ -402,11 +413,13 @@ export default function POSPage() {
   }, []);
 
   const removeFromCart = useCallback((productId: string) => {
+    if (cartLockedRef.current) return;
     setCart((prev) => prev.filter((item) => item.productId !== productId));
   }, []);
 
   const updateQuantity = useCallback(
     (productId: string, quantity: number) => {
+      if (cartLockedRef.current) return;
       if (quantity <= 0) {
         removeFromCart(productId);
         return;
@@ -434,6 +447,7 @@ export default function POSPage() {
   /** Apply a fixed-amount discount (clears any percentage tracking) */
   const updateItemDiscount = useCallback(
     (productId: string, discountAmount: number) => {
+      if (cartLockedRef.current) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -458,6 +472,7 @@ export default function POSPage() {
   /** Apply a percentage discount that scales with quantity changes */
   const updateItemDiscountPercent = useCallback(
     (productId: string, percent: number) => {
+      if (cartLockedRef.current) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -486,6 +501,7 @@ export default function POSPage() {
   /** Override a cart line's unit price, preserving any existing discount */
   const updateItemPrice = useCallback(
     (productId: string, price: number) => {
+      if (cartLockedRef.current) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -654,6 +670,7 @@ export default function POSPage() {
   }, []);
 
   const handleCheckout = async () => {
+    if (cartLockedRef.current) return;
     if (cart.length === 0) return;
     const totalPaid = paymentMethods.reduce(
       (sum, method) => sum + method.amount,
@@ -734,7 +751,11 @@ export default function POSPage() {
    * only claims and clears the payload it financed.
    */
   const handleFinanceSale = async () => {
+    // Single flight: a second confirmation must not start another initiation.
+    if (financingRef.current || cartLockedRef.current) return;
     if (cart.length === 0 || !selectedCustomer) return;
+    financingRef.current = true;
+    setFinancing(true);
     const request = buildFinanceRequest();
     const signature = JSON.stringify(request);
     const attempt =
@@ -766,6 +787,9 @@ export default function POSPage() {
       toast.error(
         getApiErrorMessage(error, "Error al iniciar la venta financiada"),
       );
+    } finally {
+      financingRef.current = false;
+      setFinancing(false);
     }
   };
 
@@ -820,6 +844,7 @@ export default function POSPage() {
   };
 
   const handleResumeSale = async (saleId: string) => {
+    if (cartLockedRef.current) return;
     try {
       const resumedSale = resumeSale(saleId);
       // Re-derive each line's price from the product's CURRENT state so a
@@ -1267,9 +1292,7 @@ export default function POSPage() {
                   size="lg"
                   onClick={() => setShowFinanceConfirm(true)}
                   disabled={
-                    cart.length === 0 ||
-                    !selectedCustomer ||
-                    createPosLoan.isPending
+                    cart.length === 0 || !selectedCustomer || cartLocked
                   }
                   loading={createPosLoan.isPending}
                 >
@@ -1280,7 +1303,7 @@ export default function POSPage() {
                   className="flex-1 h-11 text-sm font-bold shadow-md shadow-primary/20"
                   size="lg"
                   onClick={openPaymentModal}
-                  disabled={cart.length === 0 || createPosLoan.isPending}
+                  disabled={cart.length === 0 || cartLocked}
                   loading={createSale.isPending}
                 >
                   <ShoppingCart className="w-4 h-4 mr-2" />
@@ -1369,6 +1392,7 @@ export default function POSPage() {
             <div
               className={`p-3 rounded-2xl cursor-pointer transition-colors border ${selectedCustomer === "" ? "bg-primary/20 border-primary/40 text-foreground" : "bg-background/40 border-primary/20 hover:bg-primary/10 hover:border-primary/30"}`}
               onClick={() => {
+                if (cartLockedRef.current) return;
                 setSelectedCustomer("");
                 setShowCustomerModal(false);
                 if (openedFromMobileCart) {
@@ -1389,6 +1413,7 @@ export default function POSPage() {
                 key={customer.id}
                 className={`p-3 rounded-2xl cursor-pointer transition-colors border ${selectedCustomer === customer.id ? "bg-primary/20 border-primary/40" : "bg-background/40 border-primary/20 hover:bg-primary/10 hover:border-primary/30"}`}
                 onClick={() => {
+                  if (cartLockedRef.current) return;
                   setSelectedCustomer(customer.id);
                   setShowCustomerModal(false);
                   if (openedFromMobileCart) {
@@ -1700,7 +1725,7 @@ export default function POSPage() {
         onClose={() => {
           // A pending initiation must not be abandoned: the request is already
           // on its way and the debt may exist without the cart that started it.
-          if (createPosLoan.isPending) return;
+          if (financingRef.current) return;
           setShowFinanceConfirm(false);
         }}
         onConfirm={handleFinanceSale}
