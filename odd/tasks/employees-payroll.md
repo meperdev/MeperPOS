@@ -16,7 +16,7 @@ S8. "Perfecto listo" (installments visible in cash flow on actual dates, optiona
 
 ## Tasks
 
-- T1 S1,S2: employee identity and manual shift foundation; in progress: storage cbf62dc/861fa52, unwired employee service 640920d; shift service and HTTP wiring pending.
+- T1 S1,S2: employee identity and manual shift foundation; in progress: storage cbf62dc/861fa52/a5f6d4d, unwired employee service 640920d and shift service abe7f0a, decimal fix fd4255f; HTTP wiring pending.
 - T2 S3,S4,S6: grouped shifts, period payments, installments, state and concurrency; bounded work units; commit pending.
 - T3 S5,S7,S8: optional expense, correction, cash flow and reimbursement integration; bounded work units; commit pending.
 - T4 S1-S8: employee/payroll UI and documentation; bounded work units; commit pending.
@@ -47,3 +47,5 @@ L20: Prisma generation exit 0, config reported environment loading skipped. Type
 L21: Employee service unit committed 640920d, source 452 lines (separate review slice). Native committed assessment unassessable due untracked declaration; independent verifier completed; no native review started. Delivery strategy: independent work-unit commits as review slices, no push or PR.
 L22: Shift service independent verifier mvt0pfxw-t-86ut: 28 mock tests and scoped tsc passed; missing approved observation and exponent-form number validation TypeError were identified. Same numeric decorator occurred in employee DTO.
 L23: Decimal validation correction RED 2/53 then GREEN 82; independent mvt0uji9-v-yndi repeated 82/scoped tsc. Observation storage structural 11/Prisma validate passed independently mvt0xe0d-x-ox0a; not PostgreSQL-tested. Generated client again with environment loading skipped. Observation service RED 1/42 then GREEN 84; independent mvt10r69-z-gscp repeated 84/scoped tsc, no candidate defect. HTTP/DB service and whole migration chain unverified.
+L24: Reviewable local slices: a5f6d4d storage observation (32 diff), fd4255f decimal fix (66 diff), abe7f0a unwired shift service (434 lines). Native assess of abe7f0a unassessable because untracked declaration; independent verifier completed. No native review started; no push/PR.
+L25: Unregistered employee controller: boolean query RED then 37 GREEN; production implicit body conversion bug corrected RED 4/56 then GREEN 150. Independent mvt1c5z3-13-axxb repeated 150 and scoped tsc; no concrete defect. Nest pipe sequencing inspected, but live HTTP and PostgreSQL remain unverified. Unit is 500 source lines; review as one controller/tests/DTO slice to keep safety tests alongside behavior.
