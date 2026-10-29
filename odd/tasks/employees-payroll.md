@@ -6,7 +6,7 @@ Engram mirror: `odd/employees-payroll/tasks`.
 ## Specs
 
 S1. "Los empleados pueden existir sin una cuenta si"; "Si me parece bien asi"; "Si" (inactive employees retain history and pending payments; no new shifts or periods until reactivated). Approved proposal: "Nombre, identificación y datos de contacto."; "Cargo y fecha de ingreso."; "Estado: activo o inactivo."; "Modalidad de remuneración de referencia: salario fijo, por día u otro acuerdo."; "Valor de referencia, cuando corresponda."
-S2. "Tambien ten en cuenta negocios que no dan un salario fijo al mes, sino tienen un empleado por dias."; "fechas por separado si"; "Día completo o parcial"; "Manual si"; "SOlo uno por dia".
+S2. "Tambien ten en cuenta negocios que no dan un salario fijo al mes, sino tienen un empleado por dias."; "fechas por separado si"; "Día completo o parcial"; "Manual si"; "SOlo uno por dia". Approved proposal: "Observación opcional."
 S3. "poderlos hacer en un solo abono total"; "SI, por fecha"; "Si, y el total se suma, no se distribuye, creo que lo hace mas facil ya que solo son posteriores."; "SI es asi, diria que si" (visible grouped shifts and completion).
 S4. "Si" (manual fixed-salary period payment with installments; no automatic payroll calculation); "únicamente cuando se abone completa, pero con la opcion de agregar unicamente el abono de forma informativa."; "Si" (installments reduce outstanding balance).
 S5. "Solo propietario y administradores"; "Decidir por pago"; "Pero el gasto se genera hasta que el pago se haga completo"; "Que se pueda elegir, pero por defecto sea la del dia que se pago completo".
@@ -16,7 +16,7 @@ S8. "Perfecto listo" (installments visible in cash flow on actual dates, optiona
 
 ## Tasks
 
-- T1 S1,S2: employee identity and manual shift foundation; in progress: Prisma client generation authorized; storage commits cbf62dc and 861fa52; API pending.
+- T1 S1,S2: employee identity and manual shift foundation; in progress: storage cbf62dc/861fa52, unwired employee service 640920d; shift service and HTTP wiring pending.
 - T2 S3,S4,S6: grouped shifts, period payments, installments, state and concurrency; bounded work units; commit pending.
 - T3 S5,S7,S8: optional expense, correction, cash flow and reimbursement integration; bounded work units; commit pending.
 - T4 S1-S8: employee/payroll UI and documentation; bounded work units; commit pending.
@@ -44,3 +44,6 @@ L17: Profile unit committed 861fa52; committed native assess unassessable becaus
 L18: Employee service uncommitted and unwired, 24 mock tests pass; verifier found stale generated client hidden by unknown cast. Full tsc 22 diagnostics elsewhere, baseline unknown. Generation attempt stopped before execution because prisma.config.ts imports dotenv/config; user decision required.
 L19: Si (authorized Prisma client generation with local config potentially loading .env; no secret disclosure, database connections or migrations).
 L20: Prisma generation exit 0, config reported environment loading skipped. Typed employee service uses tenant-scoped updateManyAndReturn; verifier mvt0kg4z-r-bjsl found no candidate defect, 25 mocked tests and scoped tsc passed. HTTP boolean parsing, runtime PostgreSQL service tests and global tsc (22 diagnostics, baseline unknown) remain pending.
+L21: Employee service unit committed 640920d, source 452 lines (separate review slice). Native committed assessment unassessable due untracked declaration; independent verifier completed; no native review started. Delivery strategy: independent work-unit commits as review slices, no push or PR.
+L22: Shift service independent verifier mvt0pfxw-t-86ut: 28 mock tests and scoped tsc passed; missing approved observation and exponent-form number validation TypeError were identified. Same numeric decorator occurred in employee DTO.
+L23: Decimal validation correction RED 2/53 then GREEN 82; independent mvt0uji9-v-yndi repeated 82/scoped tsc. Observation storage structural 11/Prisma validate passed independently mvt0xe0d-x-ox0a; not PostgreSQL-tested. Generated client again with environment loading skipped. Observation service RED 1/42 then GREEN 84; independent mvt10r69-z-gscp repeated 84/scoped tsc, no candidate defect. HTTP/DB service and whole migration chain unverified.

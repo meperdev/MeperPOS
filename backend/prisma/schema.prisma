@@ -98,6 +98,7 @@ model EmployeeShift {
   date           DateTime          @db.Date
   kind           EmployeeShiftKind
   amount         Decimal           @db.Decimal(12, 2)
+  observation    String?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
