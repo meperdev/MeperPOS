@@ -222,6 +222,8 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
+| /api/reports/daily-report | GET | ADMIN | org-scoped | backend/src/reports/daily-report.http.spec.ts |
+| /api/reports/daily-report/pdf | GET | ADMIN | org-scoped | backend/src/reports/daily-report.http.spec.ts |
 | /api/reports/dashboard | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
 | /api/reports/economic | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
 | /api/reports/economic/cash | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
