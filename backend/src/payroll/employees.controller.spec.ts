@@ -10,6 +10,7 @@ import { EmployeeShiftKind, OrgRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { OrganizationRequiredGuard } from '../common/guards/organization-required.guard';
+import { OrganizationStatusGuard } from '../common/guards/organization-status.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { EmployeesController } from './employees.controller';
@@ -103,7 +104,12 @@ describe('employee controller boundary', () => {
       expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(path || '/');
       expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(method);
       expect(Reflect.getMetadata(GUARDS_METADATA, EmployeesController)).toEqual(
-        [JwtAuthGuard, RolesGuard, OrganizationRequiredGuard],
+        [
+          JwtAuthGuard,
+          OrganizationStatusGuard,
+          RolesGuard,
+          OrganizationRequiredGuard,
+        ],
       );
       expect(
         new Reflector().getAllAndOverride(ROLES_KEY, [

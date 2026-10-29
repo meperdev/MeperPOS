@@ -30,6 +30,7 @@ import { CashRegistersModule } from './cash-registers/cash-registers.module';
 import { BillingModule } from './billing/billing.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { LoansModule } from './loans/loans.module';
+import { PayrollModule } from './payroll/payroll.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { LoansModule } from './loans/loans.module';
     BillingModule,
     ExpensesModule,
     LoansModule,
+    PayrollModule,
   ],
   controllers: [AppController],
   providers: [

@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { OrganizationRequiredGuard } from '../common/guards/organization-required.guard';
+import { OrganizationStatusGuard } from '../common/guards/organization-status.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/employee.dto';
@@ -46,7 +47,12 @@ class SetEmployeeActiveDto {
 }
 
 @Controller('employees')
-@UseGuards(JwtAuthGuard, RolesGuard, OrganizationRequiredGuard)
+@UseGuards(
+  JwtAuthGuard,
+  OrganizationStatusGuard,
+  RolesGuard,
+  OrganizationRequiredGuard,
+)
 @Roles(OrgRole.OWNER, OrgRole.ADMIN)
 export class EmployeesController {
   constructor(
