@@ -16,7 +16,7 @@ S8. "Perfecto listo" (installments visible in cash flow on actual dates, optiona
 
 ## Tasks
 
-- T1 S1,S2: employee identity and manual shift foundation; in progress: storage commit cbf62dc, API pending.
+- T1 S1,S2: employee identity and manual shift foundation; in progress: Prisma client generation authorized; storage commits cbf62dc and 861fa52; API pending.
 - T2 S3,S4,S6: grouped shifts, period payments, installments, state and concurrency; bounded work units; commit pending.
 - T3 S5,S7,S8: optional expense, correction, cash flow and reimbursement integration; bounded work units; commit pending.
 - T4 S1-S8: employee/payroll UI and documentation; bounded work units; commit pending.
@@ -40,3 +40,7 @@ L13: Si (authorized local Prisma schema validation with local config, without sh
 L14: Independent verifier mvszv9ya-h-6egn: Prisma validate exit 0, local config loaded and environment loading skipped. Storage remains unwired; no full migration-chain proof.
 L15: Storage unit committed cbf62dc; native committed assess unassessable due to untracked declarations, independent static and real PostgreSQL checks completed; no native review started.
 L16: Profile storage independent verifier mvszzhgb-j-gas9: no actionable defect, 9 structural tests and Prisma validate passed. Profile migration not executed in PostgreSQL; full chain unverified.
+L17: Profile unit committed 861fa52; committed native assess unassessable because of untracked declaration, no native review started; independent verifier completed.
+L18: Employee service uncommitted and unwired, 24 mock tests pass; verifier found stale generated client hidden by unknown cast. Full tsc 22 diagnostics elsewhere, baseline unknown. Generation attempt stopped before execution because prisma.config.ts imports dotenv/config; user decision required.
+L19: Si (authorized Prisma client generation with local config potentially loading .env; no secret disclosure, database connections or migrations).
+L20: Prisma generation exit 0, config reported environment loading skipped. Typed employee service uses tenant-scoped updateManyAndReturn; verifier mvt0kg4z-r-bjsl found no candidate defect, 25 mocked tests and scoped tsc passed. HTTP boolean parsing, runtime PostgreSQL service tests and global tsc (22 diagnostics, baseline unknown) remain pending.
