@@ -23,11 +23,19 @@ type Period = { status: Status; total: string; paid: string };
 // only: accepting JS numbers would silently accept already-rounded values.
 const max = new Prisma.Decimal('9999999999.99');
 const zero = new Prisma.Decimal(0);
-function money(value: string, positive = false): Prisma.Decimal {
-  if (typeof value !== 'string' || !/^\d{1,10}(?:\.\d{1,2})?$/.test(value))
+function money(
+  value: string,
+  positive = false,
+  individual = true,
+): Prisma.Decimal {
+  if (typeof value !== 'string' || !/^\d+(?:\.\d{1,2})?$/.test(value))
     throw new Error('Invalid monetary amount');
   const result = new Prisma.Decimal(value);
-  if (result.gt(max) || (positive && result.isZero()))
+  if (
+    !result.isFinite() ||
+    (individual && (value.split('.')[0].length > 10 || result.gt(max))) ||
+    (positive && result.isZero())
+  )
     throw new Error('Monetary amount out of range');
   return result;
 }
@@ -110,7 +118,7 @@ export function allocateShiftInstallment(
   amount: string,
 ): GroupBalance & { newAllocations: Allocation[] } {
   const summary = summarize(group);
-  let remaining = money(amount, true);
+  let remaining = money(amount, true, false);
   if (remaining.gt(new Prisma.Decimal(summary.balance)))
     throw new Error('Installment exceeds balance');
   const newAllocations: Allocation[] = [];

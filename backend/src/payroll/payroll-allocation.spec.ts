@@ -93,11 +93,28 @@ describe('payroll allocation', () => {
   });
 
   it('rejects invalid money, dates, duplicate shifts and inconsistent allocations', () => {
-    for (const amount of ['0', '-1', '0.001', '1e2', 'NaN', '99999999999.00']) {
+    for (const amount of [
+      '0',
+      '-1',
+      '0.001',
+      '1e2',
+      'NaN',
+      'Infinity',
+      '99999999999.00',
+    ]) {
       expect(() => allocateShiftInstallment(group(), amount)).toThrow();
     }
     expect(() =>
       allocateShiftInstallment(group(), 0.1 as unknown as string),
+    ).toThrow();
+    expect(() =>
+      allocateShiftInstallment(
+        {
+          ...group(),
+          shifts: [{ id: 'a', date: '2026-03-01', amount: '10000000000.00' }],
+        },
+        '1',
+      ),
     ).toThrow();
     expect(() =>
       allocateShiftInstallment(
@@ -201,6 +218,41 @@ describe('payroll allocation', () => {
       paid: '19999999999.98',
       balance: '0.00',
     });
+    const singlePayment = allocateShiftInstallment(
+      { ...input, allocations: [] },
+      '19999999999.98',
+    );
+    expect(singlePayment).toMatchObject({
+      status: 'completed',
+      paid: '19999999999.98',
+      balance: '0.00',
+      newAllocations: [
+        { shiftId: 'a', amount: '9999999999.99' },
+        { shiftId: 'b', amount: '9999999999.99' },
+      ],
+    });
+    const partial = allocateShiftInstallment(
+      { ...input, allocations: [] },
+      '10000000000.00',
+    );
+    expect(partial).toMatchObject({
+      status: 'pending',
+      balance: '9999999999.98',
+      newAllocations: [
+        { shiftId: 'a', amount: '9999999999.99' },
+        { shiftId: 'b', amount: '0.01' },
+      ],
+    });
+    for (const amount of [
+      '19999999999.99',
+      '10000000000.001',
+      'Infinity',
+      'NaN',
+    ]) {
+      expect(() =>
+        allocateShiftInstallment({ ...input, allocations: [] }, amount),
+      ).toThrow();
+    }
     expect(() => allocateShiftInstallment(input, '10000000000.00')).toThrow();
   });
 
