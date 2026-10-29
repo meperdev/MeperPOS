@@ -16,7 +16,7 @@ S8. "Perfecto listo" (installments visible in cash flow on actual dates, optiona
 
 ## Tasks
 
-- T1 S1,S2: employee identity and manual shift foundation; done: positive shift amount verified; prior storage cbf62dc/861fa52/a5f6d4d, employee 640920d, shift abe7f0a, decimal fd4255f, controller 58b1ae4, wiring 528c056; full-chain/real HTTP-DB proof remains T5.
+- T1 S1,S2: employee identity and manual shift foundation; done: positive amount 92045c4; prior storage cbf62dc/861fa52/a5f6d4d, employee 640920d, shift abe7f0a, decimal fd4255f, controller 58b1ae4, wiring 528c056; full-chain/real HTTP-DB proof remains T5.
 - T2 S3,S4,S6: grouped shifts, period payments, installments, state and concurrency; in progress: correct group limit; commit pending.
 - T3 S5,S7,S8: optional expense, correction, cash flow and reimbursement integration; bounded work units; commit pending.
 - T4 S1-S8: employee/payroll UI and documentation; bounded work units; commit pending.
@@ -56,4 +56,5 @@ L29: 1.
 L30: Pure allocation helper uncommitted; independent verifier mvt1xpmw-1b-br7e passed 7 tests and scoped tsc but found unrequested group-total maximum and undefined zero-value group completion.
 L31: Por que habria una jornada en $0?
 L32: SI (approved jornada value greater than zero).
-L33: Positive shift RED 4/55 then GREEN 59; independent mvt263ww-1e-pwu6 repeated 59/no defect. CHECK NOT VALID preserves old zero rows but blocks subsequent updates until corrected; not executed against PostgreSQL.
+L33: Positive shift RED 4/55 then GREEN 59; independent mvt263ww-1e-pwu6 repeated 59/no defect. CHECK NOT VALID preserves old zero rows but blocks subsequent updates until corrected; not executed against PostgreSQL. Committed 92045c4 as own review slice; native assess unassessable due untracked declarations; independent verifier completed.
+L34: Pure allocation helper aggregate and zero fixes RED 3/6 then GREEN 9; independent mvt2a0ob-1g-o479 repeated 9 and scoped tsc, no defect. Unwired; no persistence or concurrency proof.
