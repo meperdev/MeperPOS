@@ -36,6 +36,7 @@ model Organization {
   employees          Employee[]
   employeeShifts     EmployeeShift[]
   payrollObligations PayrollObligation[]
+  payrollCashOutflows PayrollCashOutflow[]
   inventoryMovements InventoryMovement[]
   sequences          OrganizationSequence[]
   users              OrganizationUser[]
@@ -88,6 +89,7 @@ model Employee {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   shifts         EmployeeShift[]
   payrollObligations PayrollObligation[]
+  payrollCashOutflows PayrollCashOutflow[]
 
   @@unique([id, organizationId])
   @@index([organizationId, active])
@@ -138,7 +140,9 @@ model PayrollObligation {
   organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   employee       Employee                @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
   shiftMemberships PayrollShiftMembership[]
+  installments PayrollInstallment[]
 
+  @@unique([id, organizationId, employeeId])
   @@unique([id, organizationId, employeeId, kind])
   @@index([organizationId, employeeId])
 }
@@ -158,6 +162,40 @@ model PayrollShiftMembership {
   obligation     PayrollObligation     @relation(fields: [obligationId, organizationId, employeeId, obligationKind], references: [id, organizationId, employeeId, kind], onDelete: Restrict, onUpdate: Restrict, map: "PayrollShiftMembership_obligation_fkey")
 
   @@index([obligationId, organizationId, employeeId, obligationKind], map: "PayrollShiftMembership_obligation_idx")
+}
+
+// Unwired cash identity and obligation references; revisions, audit and correction
+// workflows are future work. Reports must count outflows, not installment links.
+model PayrollCashOutflow {
+  id             String              @id @default(uuid())
+  organizationId String
+  employeeId     String
+  actorId        String
+  amount         Decimal             @db.Decimal
+  date           DateTime            @db.Date
+  method         PaymentMethod
+  createdAt      DateTime            @default(now())
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employee       Employee            @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashOutflow_employee_fkey")
+  actor          OrganizationUser    @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashOutflow_actor_fkey")
+  installments   PayrollInstallment[]
+
+  @@unique([id, organizationId, employeeId], map: "PayrollCashOutflow_identity_key")
+  @@index([organizationId, date], map: "PayrollCashOutflow_date_idx")
+}
+
+model PayrollInstallment {
+  id             String             @id @default(uuid())
+  organizationId String
+  employeeId     String
+  obligationId   String
+  outflowId      String
+  createdAt      DateTime           @default(now())
+  obligation     PayrollObligation  @relation(fields: [obligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_obligation_fkey")
+  outflow        PayrollCashOutflow @relation(fields: [outflowId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_outflow_fkey")
+
+  @@unique([obligationId, outflowId], map: "PayrollInstallment_obligation_outflow_key")
+  @@index([outflowId, organizationId, employeeId], map: "PayrollInstallment_outflow_idx")
 }
 
 model User {
@@ -199,6 +237,7 @@ model OrganizationUser {
   isPrimaryOwner Boolean      @default(false)
   inventoryLoansEmployee InventoryLoan[] @relation("InventoryLoanEmployee")
   inventoryLoanOperations InventoryLoanOperation[]
+  payrollCashOutflows PayrollCashOutflow[]
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
