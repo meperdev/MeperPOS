@@ -57,4 +57,5 @@ L30: Pure allocation helper uncommitted; independent verifier mvt1xpmw-1b-br7e p
 L31: Por que habria una jornada en $0?
 L32: SI (approved jornada value greater than zero).
 L33: Positive shift RED 4/55 then GREEN 59; independent mvt263ww-1e-pwu6 repeated 59/no defect. CHECK NOT VALID preserves old zero rows but blocks subsequent updates until corrected; not executed against PostgreSQL. Committed 92045c4 as own review slice; native assess unassessable due untracked declarations; independent verifier completed.
-L34: Pure allocation helper aggregate and zero fixes RED 3/6 then GREEN 9; independent mvt2a0ob-1g-o479 repeated 9 and scoped tsc, no defect. Unwired; no persistence or concurrency proof.
+L34: Pure allocation helper aggregate and zero fixes RED 3/6 then GREEN 9; independent mvt2a0ob-1g-o479 repeated 9 and scoped tsc, no defect. Unwired; no persistence or concurrency proof. Committed 8e875a6 (422 diff) as one review slice; native assess unassessable due untracked declarations, independent verifier completed.
+L35: Obligation storage verifier mvt2e2dd-1i-mro8 found no confirmed defect; structural 4 and Prisma validate passed. Unconstrained SQL NUMERIC versus Prisma @db.Decimal drift remains unproven; group membership, CAS, completion and correction not implemented. Not PostgreSQL-tested.
