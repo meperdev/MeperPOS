@@ -20,6 +20,7 @@ Living inventory of every backend route: path × method × role(s) × org-scope 
 | `superadmin-global` | Only SUPER_ADMIN; operates across organizations via `X-Organization-Id`. |
 | `authenticated-global` | Requires a valid JWT but no organization context (own profile, token flows). |
 | `pre-auth-public` | No JWT required (login, refresh, health). |
+| `provider-hmac` | No JWT; requires WAHA HMAC over the exact request body and does not process events. |
 
 Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUPER_ADMIN` (platform).
 "any org role" = any authenticated membership role (no `@Roles` restriction).
@@ -33,6 +34,15 @@ Where a row shows an inherited role in parentheses — `ADMIN (OWNER inherits)`,
 |---|---|---|---|---|
 | /api | GET | public | pre-auth-public | backend/src/app.controller.spec.ts |
 | /api/health | GET | public | pre-auth-public | backend/src/app.controller.spec.ts |
+
+## whatsapp
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/whatsapp/session | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp.controller.spec.ts |
+| /api/whatsapp/session | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp.controller.spec.ts |
+| /api/whatsapp/session/qr | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp.controller.spec.ts |
+| /api/whatsapp/webhook | POST | WAHA HMAC | provider-hmac | backend/src/whatsapp/whatsapp-webhook.spec.ts |
 
 ## auth
 
