@@ -209,6 +209,42 @@ describe('EmployeesService', () => {
     expect(employee.create).not.toHaveBeenCalled();
   });
 
+  it('rejects scientific-notation fractional reference amounts without throwing a TypeError', async () => {
+    const { service, employee } = setup();
+    await expect(
+      service.create({ name: 'Ana', referenceAmount: 1e-7 }, 'org', owner),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(employee.create).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 0.01, 0.29, 1.01, 9999999999.99, null])(
+    'accepts valid optional reference amount %s',
+    async (referenceAmount) => {
+      const { service } = setup();
+      await expect(
+        service.create({ name: 'Ana', referenceAmount }, 'org', owner),
+      ).resolves.toBeDefined();
+      await expect(
+        service.update('employee', { referenceAmount }, 'org', owner),
+      ).resolves.toBeDefined();
+    },
+  );
+
+  it.each([-0.01, 0.001, 1.234, 1e-7, 1e-8, 10000000000, NaN, Infinity])(
+    'rejects invalid reference amount %s on create and update',
+    async (referenceAmount) => {
+      const { service, employee } = setup();
+      await expect(
+        service.create({ name: 'Ana', referenceAmount }, 'org', owner),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.update('employee', { referenceAmount }, 'org', owner),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(employee.create).not.toHaveBeenCalled();
+      expect(employee.updateManyAndReturn).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects null name, status overposting and invalid status values', async () => {
     const { service, employee } = setup();
     await expect(

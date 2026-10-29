@@ -13,6 +13,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { IsDecimalAmount } from './decimal-amount.validator';
 
 export enum EmployeeModality {
   FIXED = 'FIXED',
@@ -62,7 +63,8 @@ export class CreateEmployeeDto {
   remunerationModality?: EmployeeModality | null;
 
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber()
+  @IsDecimalAmount()
   @Min(0)
   @Max(9999999999.99)
   referenceAmount?: number | null;
