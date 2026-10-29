@@ -105,12 +105,14 @@ model EmployeeShift {
   updatedAt      DateTime          @updatedAt
   organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   employee       Employee          @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  payrollMemberships PayrollShiftMembership[]
 
+  @@unique([id, organizationId, employeeId])
   @@unique([organizationId, employeeId, date])
 }
 
-// Unwired storage only. Membership, installments, CAS transitions and corrections
-// belong to later transactional flows; group totals are not stored here.
+// Unwired storage only. Installments, CAS transitions and corrections belong to
+// later transactional flows; group totals are not stored here.
 enum PayrollObligationKind {
   SHIFT_GROUP
   FIXED_PERIOD
@@ -135,8 +137,27 @@ model PayrollObligation {
   updatedAt      DateTime                @updatedAt
   organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   employee       Employee                @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  shiftMemberships PayrollShiftMembership[]
 
+  @@unique([id, organizationId, employeeId, kind])
   @@index([organizationId, employeeId])
+}
+
+// releasedAt is only a storage seam, not a complete correction workflow.
+// PostgreSQL enforces one unreleased membership per shift with a partial index.
+model PayrollShiftMembership {
+  id             String                @id @default(uuid())
+  organizationId String
+  employeeId     String
+  shiftId        String
+  obligationId   String
+  obligationKind PayrollObligationKind @default(SHIFT_GROUP)
+  createdAt      DateTime              @default(now())
+  releasedAt     DateTime?
+  shift          EmployeeShift         @relation(fields: [shiftId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollShiftMembership_shift_fkey")
+  obligation     PayrollObligation     @relation(fields: [obligationId, organizationId, employeeId, obligationKind], references: [id, organizationId, employeeId, kind], onDelete: Restrict, onUpdate: Restrict, map: "PayrollShiftMembership_obligation_fkey")
+
+  @@index([obligationId, organizationId, employeeId, obligationKind], map: "PayrollShiftMembership_obligation_idx")
 }
 
 model User {
