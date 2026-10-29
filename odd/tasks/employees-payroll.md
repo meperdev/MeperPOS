@@ -5,7 +5,7 @@ Engram mirror: `odd/employees-payroll/tasks`.
 
 ## Specs
 
-S1. "Los empleados pueden existir sin una cuenta si"; "Si me parece bien asi"; "Si" (inactive employees retain history and pending payments; no new shifts or periods until reactivated).
+S1. "Los empleados pueden existir sin una cuenta si"; "Si me parece bien asi"; "Si" (inactive employees retain history and pending payments; no new shifts or periods until reactivated). Approved proposal: "Nombre, identificación y datos de contacto."; "Cargo y fecha de ingreso."; "Estado: activo o inactivo."; "Modalidad de remuneración de referencia: salario fijo, por día u otro acuerdo."; "Valor de referencia, cuando corresponda."
 S2. "Tambien ten en cuenta negocios que no dan un salario fijo al mes, sino tienen un empleado por dias."; "fechas por separado si"; "Día completo o parcial"; "Manual si"; "SOlo uno por dia".
 S3. "poderlos hacer en un solo abono total"; "SI, por fecha"; "Si, y el total se suma, no se distribuye, creo que lo hace mas facil ya que solo son posteriores."; "SI es asi, diria que si" (visible grouped shifts and completion).
 S4. "Si" (manual fixed-salary period payment with installments; no automatic payroll calculation); "únicamente cuando se abone completa, pero con la opcion de agregar unicamente el abono de forma informativa."; "Si" (installments reduce outstanding balance).
@@ -16,7 +16,7 @@ S8. "Perfecto listo" (installments visible in cash flow on actual dates, optiona
 
 ## Tasks
 
-- T1 S1,S2: employee identity and manual shift foundation; in progress: storage checks passed, API pending; foundation commit pending.
+- T1 S1,S2: employee identity and manual shift foundation; in progress: storage commit cbf62dc, API pending.
 - T2 S3,S4,S6: grouped shifts, period payments, installments, state and concurrency; bounded work units; commit pending.
 - T3 S5,S7,S8: optional expense, correction, cash flow and reimbursement integration; bounded work units; commit pending.
 - T4 S1-S8: employee/payroll UI and documentation; bounded work units; commit pending.
@@ -38,3 +38,5 @@ L11: Si, ahora si procede con lo que te falta (authorized creation and deletion 
 L12: Independent verifier mvszcpuq-g-hwfy ran migration against user-authorized temporary PostgreSQL database; 18 checks passed including both lock orderings, database dropped; temporary test script removed. Prisma schema validation and full migration chain remain unverified.
 L13: Si (authorized local Prisma schema validation with local config, without showing secrets or applying migrations).
 L14: Independent verifier mvszv9ya-h-6egn: Prisma validate exit 0, local config loaded and environment loading skipped. Storage remains unwired; no full migration-chain proof.
+L15: Storage unit committed cbf62dc; native committed assess unassessable due to untracked declarations, independent static and real PostgreSQL checks completed; no native review started.
+L16: Profile storage independent verifier mvszzhgb-j-gas9: no actionable defect, 9 structural tests and Prisma validate passed. Profile migration not executed in PostgreSQL; full chain unverified.

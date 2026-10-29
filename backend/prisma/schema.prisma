@@ -63,10 +63,24 @@ enum EmployeeShiftKind {
   PARTIAL_DAY
 }
 
+enum EmployeeRemunerationModality {
+  FIXED
+  BY_DAY
+  OTHER
+}
+
 model Employee {
   id             String          @id @default(uuid())
   organizationId String
   name           String
+  identification String?
+  phone          String?
+  email          String?
+  address        String?
+  jobTitle       String?
+  startDate      DateTime?       @db.Date
+  remunerationModality EmployeeRemunerationModality?
+  referenceAmount Decimal?       @db.Decimal(12, 2)
   active         Boolean         @default(true)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
