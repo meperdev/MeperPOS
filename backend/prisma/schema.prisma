@@ -33,6 +33,8 @@ model Organization {
   expenseLabels      ExpenseLabel[]
   expensePayments    ExpensePayment[]
   expenses           Expense[]
+  employees          Employee[]
+  employeeShifts     EmployeeShift[]
   inventoryMovements InventoryMovement[]
   sequences          OrganizationSequence[]
   users              OrganizationUser[]
@@ -53,6 +55,41 @@ model Organization {
   posLoanSaleReservations PosLoanSaleReservation[]
 
   @@index([status, trialEndsAt])
+}
+
+// Unexposed payroll foundation; employees do not require login accounts.
+enum EmployeeShiftKind {
+  FULL_DAY
+  PARTIAL_DAY
+}
+
+model Employee {
+  id             String          @id @default(uuid())
+  organizationId String
+  name           String
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  shifts         EmployeeShift[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, active])
+}
+
+model EmployeeShift {
+  id             String            @id @default(uuid())
+  organizationId String
+  employeeId     String
+  date           DateTime          @db.Date
+  kind           EmployeeShiftKind
+  amount         Decimal           @db.Decimal(12, 2)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employee       Employee          @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([organizationId, employeeId, date])
 }
 
 model User {
