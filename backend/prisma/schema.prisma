@@ -160,7 +160,9 @@ model PayrollShiftMembership {
   releasedAt     DateTime?
   shift          EmployeeShift         @relation(fields: [shiftId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollShiftMembership_shift_fkey")
   obligation     PayrollObligation     @relation(fields: [obligationId, organizationId, employeeId, obligationKind], references: [id, organizationId, employeeId, kind], onDelete: Restrict, onUpdate: Restrict, map: "PayrollShiftMembership_obligation_fkey")
+  allocations    PayrollAllocation[]
 
+  @@unique([id, obligationId, organizationId, employeeId], map: "PayrollShiftMembership_allocation_target_key")
   @@index([obligationId, organizationId, employeeId, obligationKind], map: "PayrollShiftMembership_obligation_idx")
 }
 
@@ -193,9 +195,43 @@ model PayrollInstallment {
   createdAt      DateTime           @default(now())
   obligation     PayrollObligation  @relation(fields: [obligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_obligation_fkey")
   outflow        PayrollCashOutflow @relation(fields: [outflowId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_outflow_fkey")
+  allocations    PayrollAllocation[]
 
+  @@unique([id, obligationId, organizationId, employeeId], map: "PayrollInstallment_allocation_target_key")
   @@unique([obligationId, outflowId], map: "PayrollInstallment_obligation_outflow_key")
   @@index([outflowId, organizationId, employeeId], map: "PayrollInstallment_outflow_idx")
+}
+
+// Immutable application evidence; voids and replacements require a future transaction protocol.
+model PayrollAllocation {
+  id             String @id @default(uuid())
+  organizationId String
+  employeeId     String
+  obligationId   String
+  installmentId  String
+  membershipId   String
+  amount         Decimal @db.Decimal
+  createdAt      DateTime @default(now())
+  installment    PayrollInstallment @relation(fields: [installmentId, obligationId, organizationId, employeeId], references: [id, obligationId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollAllocation_installment_fkey")
+  membership     PayrollShiftMembership @relation(fields: [membershipId, obligationId, organizationId, employeeId], references: [id, obligationId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollAllocation_membership_fkey")
+  voids          PayrollAllocationVoid[]
+
+  @@unique([id, obligationId, organizationId, employeeId], map: "PayrollAllocation_void_target_key")
+  @@index([installmentId, membershipId], map: "PayrollAllocation_installment_membership_idx")
+  @@index([membershipId, obligationId, organizationId, employeeId], map: "PayrollAllocation_membership_idx")
+}
+
+// A void is immutable evidence, not an automated correction or actor audit.
+model PayrollAllocationVoid {
+  id             String @id @default(uuid())
+  allocationId   String
+  obligationId   String
+  organizationId String
+  employeeId     String
+  createdAt      DateTime @default(now())
+  allocation     PayrollAllocation @relation(fields: [allocationId, obligationId, organizationId, employeeId], references: [id, obligationId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollAllocationVoid_allocation_fkey")
+
+  @@unique([allocationId], map: "PayrollAllocationVoid_allocation_key")
 }
 
 model User {
