@@ -28,7 +28,7 @@ function setup() {
     $queryRaw: jest
       .fn<
         Promise<{ id: string; active: boolean }[]>,
-        [TemplateStringsArray, ...string[]]
+        [TemplateStringsArray | Prisma.Sql, ...unknown[]]
       >()
       .mockResolvedValue([{ id: 'emp', active: true }]),
     employeeShift: {
@@ -60,6 +60,45 @@ function setup() {
 }
 
 describe('PayrollGroupsService', () => {
+  it('locks scoped shifts in id order after the employee and before rereading and checking membership', async () => {
+    const { service, tx } = setup();
+    await service.create({ ...input, shiftIds: ['s2', 's1'] }, 'org', owner);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+    const [query] = tx.$queryRaw.mock.calls[1] as [Prisma.Sql];
+    expect(query.sql).toMatch(
+      /FROM "EmployeeShift"[\s\S]*"organizationId"\s*=\s*\?[\s\S]*"employeeId"\s*=\s*\?[\s\S]*"id" IN\s*\(\?,\?\)[\s\S]*ORDER BY "id"[\s\S]*FOR UPDATE/,
+    );
+    expect(query.values).toEqual(['org', 'emp', 's1', 's2']);
+    const [employeeLock, shiftLock] = tx.$queryRaw.mock.invocationCallOrder;
+    expect(employeeLock).toBeLessThan(shiftLock);
+    expect(shiftLock).toBeLessThan(
+      tx.employeeShift.findMany.mock.invocationCallOrder[0],
+    );
+    expect(tx.employeeShift.findMany.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.payrollShiftMembership.findFirst.mock.invocationCallOrder[0],
+    );
+    expect(
+      tx.payrollShiftMembership.findFirst.mock.invocationCallOrder[0],
+    ).toBeLessThan(tx.payrollObligation.create.mock.invocationCallOrder[0]);
+  });
+
+  it('validates the post-lock shift read and does not write when it became invalid', async () => {
+    const { service, tx, committed } = setup();
+    tx.employeeShift.findMany.mockImplementationOnce(() => {
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+      return Promise.resolve([
+        { id: 's1', amount: new Prisma.Decimal('1') },
+        { id: 's2', amount: new Prisma.Decimal('0') },
+      ]);
+    });
+    await expect(service.create(input, 'org', owner)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(tx.payrollShiftMembership.findFirst).not.toHaveBeenCalled();
+    expect(tx.payrollObligation.create).not.toHaveBeenCalled();
+    expect(committed).toHaveLength(0);
+  });
+
   it.each(['OWNER', 'ADMIN'])(
     'creates a pending group and all selected memberships for %s',
     async (role) => {
@@ -69,7 +108,7 @@ describe('PayrollGroupsService', () => {
       ).resolves.toMatchObject({ id: 'group', status: 'PENDING' });
       expect(transaction).toHaveBeenCalledTimes(1);
       const [sql, employeeId, organizationId] = tx.$queryRaw.mock.calls[0];
-      expect(sql.join('?')).toContain('FOR UPDATE');
+      expect((sql as TemplateStringsArray).join('?')).toContain('FOR UPDATE');
       expect([employeeId, organizationId]).toEqual(['emp', 'org']);
       expect(tx.employeeShift.findMany).toHaveBeenCalledWith({
         where: {

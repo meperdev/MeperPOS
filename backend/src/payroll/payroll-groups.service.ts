@@ -51,6 +51,14 @@ export class PayrollGroupsService {
           throw new NotFoundException('Empleado no encontrado');
         if (!employees[0].active)
           throw new ConflictException('El empleado está inactivo');
+        // Lock in a stable order before rereading amounts and memberships.
+        const lockShifts = Prisma.sql`
+          SELECT "id" FROM "EmployeeShift"
+          WHERE "organizationId" = ${organizationId}
+            AND "employeeId" = ${dto.employeeId}
+            AND "id" IN (${Prisma.join([...dto.shiftIds].sort())})
+          ORDER BY "id" FOR UPDATE`;
+        await tx.$queryRaw(lockShifts);
         const shifts = await tx.employeeShift.findMany({
           where: {
             id: { in: dto.shiftIds },
