@@ -203,6 +203,46 @@ describe('Payroll HTTP integration', () => {
     });
   });
 
+  it('rejects zero shifts but accepts the smallest positive amount and zero employee reference salary', async () => {
+    prisma.employee.create.mockResolvedValue({ id: 'e' });
+    await request(app.getHttpServer())
+      .post('/api/employees')
+      .set('x-test-role', 'OWNER')
+      .send({ name: 'Ada', referenceAmount: 0 })
+      .expect(201);
+    expect(prisma.employee.create).toHaveBeenCalledWith({
+      data: { name: 'Ada', referenceAmount: 0, organizationId: 'org-a' },
+    });
+
+    const shift = {
+      employeeId: 'e',
+      date: '2026-01-01',
+      kind: 'FULL_DAY',
+    };
+    prisma.employee.findFirst.mockResolvedValue({ id: 'e', active: true });
+    prisma.employeeShift.create.mockResolvedValue({ id: 's' });
+    await request(app.getHttpServer())
+      .post('/api/employees/shifts')
+      .set('x-test-role', 'OWNER')
+      .send({ ...shift, amount: 0 })
+      .expect(400);
+    expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+    expect(prisma.employeeShift.create).not.toHaveBeenCalled();
+    await request(app.getHttpServer())
+      .post('/api/employees/shifts')
+      .set('x-test-role', 'OWNER')
+      .send({ ...shift, amount: 0.01 })
+      .expect(201);
+    expect(prisma.employeeShift.create).toHaveBeenCalledWith({
+      data: {
+        ...shift,
+        date: new Date('2026-01-01T00:00:00.000Z'),
+        amount: 0.01,
+        organizationId: 'org-a',
+      },
+    });
+  });
+
   it('does not create shifts or update employees outside the tenant', async () => {
     prisma.employee.findFirst.mockResolvedValue(null);
     await request(app.getHttpServer())

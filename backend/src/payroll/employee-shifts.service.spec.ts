@@ -194,7 +194,7 @@ describe('EmployeeShiftsService', () => {
     expect(employeeShift.create).not.toHaveBeenCalled();
   });
 
-  it.each([0, 0.01, 0.29, 1.01, 9999999999.99])(
+  it.each([0.01, 0.29, 1.01, 9999999999.99])(
     'accepts valid amount %s',
     async (amount) => {
       const { service } = setup();
@@ -204,7 +204,7 @@ describe('EmployeeShiftsService', () => {
     },
   );
 
-  it.each([-0.01, 0.001, 1.234, 1e-7, 1e-8, 10000000000, NaN, Infinity])(
+  it.each([0, -0.01, 0.001, 1.234, 1e-7, 1e-8, 10000000000, NaN, Infinity])(
     'rejects invalid amount %s before accessing the database',
     async (amount) => {
       const { service, employee, employeeShift } = setup();

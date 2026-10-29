@@ -29,7 +29,7 @@ export class CreateEmployeeShiftDto {
 
   @IsNumber()
   @IsDecimalAmount()
-  @Min(0)
+  @Min(0.01)
   @Max(9999999999.99)
   amount: number;
 
