@@ -69,7 +69,7 @@ export function PaymentMethodsCard({
       data-testid="payment-methods-card"
       className="flex h-full min-h-0 flex-col"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+      <p className="text-sm font-semibold tracking-tight text-foreground">
         Métodos de pago
       </p>
 
@@ -97,12 +97,12 @@ export function PaymentMethodsCard({
             </Pie>
           </PieChart>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+            <span className="text-[10px] font-medium text-muted-foreground">
               Total
             </span>
             <span
               data-testid="payment-methods-total"
-              className="max-w-[82px] truncate px-1 text-center font-mono text-xs font-extrabold tracking-tight text-foreground tabular-nums sm:text-[13px]"
+              className="max-w-[82px] truncate px-1 text-center font-mono text-xs font-semibold tracking-tight text-foreground tabular-nums sm:text-[13px]"
             >
               {formatCurrency(total)}
             </span>
@@ -114,27 +114,28 @@ export function PaymentMethodsCard({
             <li
               key={slice.method}
               data-testid="payment-method-row"
-              className="flex items-center justify-between gap-2 text-xs"
+              className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,5.5rem)] items-center gap-2 text-xs"
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span
-                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-[3px]"
                   style={{ backgroundColor: slice.color }}
                 />
                 <span className="truncate font-medium text-foreground">
                   {slice.name}
                 </span>
               </span>
-              <span className="flex shrink-0 items-center gap-2">
-                <span
-                  data-testid="payment-method-percentage"
-                  className="rounded-full bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] font-bold text-muted-foreground tabular-nums"
-                >
-                  {slice.percentage}%
-                </span>
-                <span className="font-mono text-[11px] font-bold text-foreground tabular-nums">
-                  {formatCurrency(slice.value)}
-                </span>
+              <span
+                data-testid="payment-method-percentage"
+                className="inline-flex w-10 items-center justify-center rounded-md border border-border/60 bg-muted/50 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground tabular-nums"
+              >
+                {slice.percentage}%
+              </span>
+              <span
+                title={formatCurrency(slice.value)}
+                className="min-w-0 truncate text-left font-mono text-[11px] font-semibold text-foreground tabular-nums"
+              >
+                {formatCurrency(slice.value)}
               </span>
             </li>
           ))}

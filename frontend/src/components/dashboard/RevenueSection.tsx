@@ -42,7 +42,7 @@ export function RevenueSectionInner({ today }: { today: string }) {
   return (
     <section data-testid="revenue-section" className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <p className="text-sm font-semibold tracking-tight text-foreground">
           Ingresos
         </p>
         <div className="w-36">
@@ -55,16 +55,16 @@ export function RevenueSectionInner({ today }: { today: string }) {
         </div>
       </div>
 
-      <div className="mt-3 grid gap-3 lg:h-[26rem] lg:grid-cols-5">
-        <div className="flex h-[24rem] min-w-0 flex-col overflow-visible relative rounded-3xl border border-primary/20 bg-card p-4 text-foreground transition-colors hover:border-primary/35 sm:p-6 lg:col-span-3 lg:h-full lg:min-h-0">
+      <div className="mt-2.5 grid gap-3 lg:h-[26rem] lg:grid-cols-5">
+        <div className="flex h-[24rem] min-w-0 flex-col overflow-visible relative rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border sm:p-5 lg:col-span-3 lg:h-full lg:min-h-0">
           <CategoryStackedChart startDate={startDate} endDate={endDate} />
         </div>
 
         <div className="grid min-w-0 gap-3 lg:col-span-2 lg:h-full lg:min-h-0 lg:grid-rows-2">
-          <div className="flex h-[15rem] min-h-0 flex-col overflow-hidden rounded-3xl border border-primary/20 bg-card p-4 text-foreground transition-colors hover:border-primary/35 lg:h-full">
+          <div className="flex h-[15rem] min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border lg:h-full">
             <PaymentMethodsCard startDate={startDate} endDate={endDate} />
           </div>
-          <div className="flex h-[15rem] min-h-0 flex-col overflow-hidden rounded-3xl border border-primary/20 bg-card p-4 text-foreground transition-colors hover:border-primary/35 lg:h-full">
+          <div className="flex h-[15rem] min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border lg:h-full">
             <TopProductsCard startDate={startDate} endDate={endDate} />
           </div>
         </div>

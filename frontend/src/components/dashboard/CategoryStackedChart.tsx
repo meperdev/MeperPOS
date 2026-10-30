@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bar, BarChart, CartesianGrid, Tooltip, XAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { X } from "lucide-react";
 import { useSalesByCategoryDaily } from "@/hooks/useReports";
 import { formatCurrency } from "@/lib/utils";
@@ -11,6 +11,7 @@ import {
   buildDateWindow,
   buildStackedDailySeries,
   countDaysInclusive,
+  formatCategoryAmountTick,
   formatCategoryAxisTick,
   formatCategoryTooltipDate,
   type StackedDay,
@@ -61,29 +62,29 @@ export function CategoryTooltipContent({
   return (
     <div
       data-testid="category-tooltip"
-      className="pointer-events-none min-w-[175px] rounded-xl border border-white/10 bg-black/95 px-3.5 py-2.5 shadow-2xl backdrop-blur-md"
+      className="pointer-events-none min-w-[175px] rounded-lg border border-border/80 bg-card/95 px-3 py-2.5 shadow-lg backdrop-blur-xs text-foreground animate-in fade-in-0 duration-300 ease-out"
     >
-      <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-white/60">
+      <p className="text-[11px] font-medium text-muted-foreground capitalize">
         {formatCategoryTooltipDate(typeof row?.date === "string" ? row.date : "")}
       </p>
-      <p className="mt-1 text-center text-lg font-bold text-white tabular-nums">
+      <p className="mt-0.5 text-base font-semibold font-mono text-foreground tabular-nums">
         {formatCurrency(total)}
       </p>
       {segments.length > 0 && (
-        <ul className="mt-2.5 divide-y divide-white/10">
+        <ul className="mt-2 divide-y divide-border/50">
           {segments.map((entry) => (
             <li
               key={String(entry.dataKey)}
-              className="flex items-center justify-between gap-3 py-1.5 text-[11px]"
+              className="flex items-center justify-between gap-3 py-1 text-[11px]"
             >
-              <span className="flex items-center gap-1.5 font-medium text-white/70">
+              <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
                 <span
                   className="inline-block h-2 w-2 rounded-[2px]"
                   style={{ backgroundColor: entry.color }}
                 />
                 {entry.name ?? entry.dataKey}
               </span>
-              <span className="font-mono font-bold text-white tabular-nums">
+              <span className="font-mono font-semibold text-foreground tabular-nums">
                 {formatCurrency(Number(entry.value))}
               </span>
             </li>
@@ -103,7 +104,7 @@ interface CategoryDayDetailModalProps {
 /**
  * Modal triggered when clicking a day on the bar chart.
  * Uses createPortal to render outside any parent container transforms,
- * locks body scroll, and offers a spacious, detailed dark-glass breakdown.
+ * locks body scroll, and offers a spacious, detailed breakdown in both themes.
  */
 export function CategoryDayDetailModal({
   day,
@@ -134,7 +135,7 @@ export function CategoryDayDetailModal({
   return createPortal(
     <div
       data-testid="category-day-detail-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 sm:p-6 backdrop-blur-md overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6 backdrop-blur-xs overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -143,16 +144,15 @@ export function CategoryDayDetailModal({
         data-testid="category-day-detail-modal"
         role="dialog"
         aria-modal="true"
-        className="relative w-full max-w-xl md:max-w-2xl rounded-3xl border border-white/15 bg-zinc-950/98 p-8 sm:p-12 md:p-14 shadow-2xl backdrop-blur-2xl text-white my-auto"
+        className="relative w-full max-w-2xl rounded-2xl border border-border/80 bg-card p-6 sm:p-7 shadow-2xl text-foreground my-auto animate-in fade-in-0 zoom-in-95 duration-150 ease-out"
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-4">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary">
-              <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            <p className="text-xs font-medium text-muted-foreground">
               Detalle del día
-            </div>
-            <h3 className="text-2xl sm:text-3xl font-black text-white capitalize mt-2.5 tracking-tight truncate">
+            </p>
+            <h3 className="text-xl sm:text-2xl font-semibold text-foreground capitalize mt-0.5 tracking-tight truncate">
               {formatCategoryTooltipDate(day.date)}
             </h3>
           </div>
@@ -160,70 +160,69 @@ export function CategoryDayDetailModal({
             type="button"
             onClick={onClose}
             aria-label="Cerrar detalle"
-            className="rounded-full border border-white/15 bg-white/5 p-2.5 text-white/70 hover:bg-white/15 hover:text-white transition-colors shrink-0 self-start sm:self-center"
+            className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Hero Card: Total Recaudado (Centered, full-width, zero overflow) */}
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5 sm:p-6 text-center flex flex-col items-center justify-center">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-white/50 block">
-            Total Recaudado
-          </span>
-          <p className="mt-1 text-3xl sm:text-4xl font-black font-mono text-white tabular-nums tracking-tight">
-            {formatCurrency(day.total)}
-          </p>
-          <span className="text-xs text-white/40 block mt-1">
-            Ventas totales del día
-          </span>
-        </div>
-
-        {/* Secondary metrics (2 equal centered columns below) */}
-        <div className="mt-3.5 grid grid-cols-2 gap-3.5">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 text-center flex flex-col items-center justify-center">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-white/50 block">
-              Unidades Vendidas
+        {/* Summary metrics: Total recaudado gets double width so large COP figures never overflow */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-12 gap-3">
+          <div className="sm:col-span-6 rounded-xl border border-border/60 bg-muted/30 p-3.5 min-w-0">
+            <span className="text-xs font-medium text-muted-foreground block">
+              Total recaudado
             </span>
-            <p className="mt-1 text-2xl sm:text-3xl font-black font-mono text-white tabular-nums tracking-tight">
+            <p className="mt-1 text-xl sm:text-2xl font-semibold font-mono text-foreground tabular-nums tracking-tight whitespace-nowrap">
+              {formatCurrency(day.total)}
+            </p>
+            <span className="text-[11px] text-muted-foreground block mt-0.5">
+              Ventas del día
+            </span>
+          </div>
+
+          <div className="sm:col-span-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 min-w-0">
+            <span className="text-xs font-medium text-muted-foreground block">
+              Unidades
+            </span>
+            <p className="mt-1 text-xl sm:text-2xl font-semibold font-mono text-foreground tabular-nums tracking-tight">
               {totalQuantity}
             </p>
-            <span className="text-xs text-white/40 block mt-1">
+            <span className="text-[11px] text-muted-foreground block mt-0.5">
               {totalQuantity} {totalQuantity === 1 ? "unidad" : "unidades"}
             </span>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 text-center flex flex-col items-center justify-center">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-white/50 block">
-              Categorías con Venta
+          <div className="sm:col-span-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 min-w-0">
+            <span className="text-xs font-medium text-muted-foreground block">
+              Categorías
             </span>
-            <p className="mt-1 text-2xl sm:text-3xl font-black font-mono text-white tabular-nums tracking-tight">
+            <p className="mt-1 text-xl sm:text-2xl font-semibold font-mono text-foreground tabular-nums tracking-tight">
               {activeSegments.length}
             </p>
-            <span className="text-xs text-white/40 block mt-1">
+            <span className="text-[11px] text-muted-foreground block mt-0.5">
               {activeSegments.length === 1 ? "categoría activa" : "categorías activas"}
             </span>
           </div>
         </div>
 
         {/* Breakdown by category */}
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-white/70">
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-semibold text-foreground">
               Desglose por categoría
             </span>
-            <span className="text-xs font-mono text-white/50">
+            <span className="text-xs font-mono text-muted-foreground tabular-nums">
               {activeSegments.length}{" "}
               {activeSegments.length === 1 ? "categoría activa" : "categorías activas"}
             </span>
           </div>
 
           {activeSegments.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-xs text-white/40 italic">
+            <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-xs text-muted-foreground">
               Sin ventas registradas en esta fecha.
             </div>
           ) : (
-            <ul className="space-y-3 max-h-72 overflow-y-auto pr-1.5">
+            <ul className="space-y-2 max-h-80 sm:max-h-96 overflow-y-auto scrollbar-app pr-1">
               {activeSegments.map((segment) => {
                 const color = colorMap.get(segment.category) ?? "#C25E36";
                 const percentage =
@@ -232,34 +231,34 @@ export function CategoryDayDetailModal({
                 return (
                   <li
                     key={segment.category}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2.5 hover:bg-white/[0.08] transition-colors"
+                    className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2 hover:bg-muted/40 transition-colors"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="flex items-center gap-2.5 font-semibold text-sm sm:text-base text-white truncate">
+                      <span className="flex items-center gap-2 font-medium text-sm text-foreground truncate">
                         <span
-                          className="inline-block h-3.5 w-3.5 rounded-[4px] shrink-0"
+                          className="inline-block h-3 w-3 rounded-[3px] shrink-0"
                           style={{ backgroundColor: color }}
                         />
                         <span className="truncate">{segment.category}</span>
                       </span>
-                      <span className="font-mono font-bold text-sm sm:text-base text-white tabular-nums shrink-0">
+                      <span className="font-mono font-semibold text-sm text-foreground tabular-nums shrink-0">
                         {formatCurrency(segment.total)}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3 pt-0.5">
-                      <div className="flex-1 h-2.5 rounded-full bg-white/10 overflow-hidden">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-300"
                           style={{ width: `${percentage}%`, backgroundColor: color }}
                         />
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs font-mono text-white/70 shrink-0">
-                        <span className="font-medium">
+                      <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground tabular-nums shrink-0">
+                        <span>
                           {segment.quantity} {segment.quantity === 1 ? "ud" : "uds"}
                         </span>
                         <span>·</span>
-                        <span className="text-white font-bold">{percentage}%</span>
+                        <span className="text-foreground font-semibold">{percentage}%</span>
                       </div>
                     </div>
                   </li>
@@ -273,7 +272,7 @@ export function CategoryDayDetailModal({
         <button
           type="button"
           onClick={onClose}
-          className="mt-6 w-full rounded-2xl border border-white/10 bg-white/10 hover:bg-white/15 py-3.5 text-sm font-semibold text-white transition-colors text-center"
+          className="mt-5 w-full rounded-lg border border-border/70 bg-muted/40 hover:bg-muted py-2.5 text-xs font-semibold text-foreground transition-colors text-center"
         >
           Cerrar
         </button>
@@ -347,21 +346,25 @@ export function CategoryStackedChart({
     [series],
   );
 
-  const tickInterval = days.length <= 7 ? 0 : days.length <= 15 ? 1 : 4;
-  const barSize = days.length <= 7 ? 32 : days.length <= 15 ? 20 : 10;
+  const isDenseRange = days.length > 15;
+  const barSize = days.length <= 7 ? 32 : days.length <= 15 ? 20 : 12;
+  const tooltipOffset = Math.max(
+    18,
+    Math.round((chartWidth - 24) / Math.max(days.length, 1) / 2) + 8,
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-visible">
       <div className="flex items-start justify-between gap-2">
         <p
           data-testid="category-chart-title"
-          className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground"
+          className="text-sm font-semibold tracking-tight text-foreground"
         >
           Ingresos por categoría
         </p>
         <span
           data-testid="category-chart-range"
-          className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 font-mono text-[11px] font-bold text-primary"
+          className="shrink-0 rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums"
         >
           Últimos {days.length} días
         </span>
@@ -431,18 +434,49 @@ export function CategoryStackedChart({
             strokeDasharray="3 3"
             strokeOpacity={0.4}
           />
+          <YAxis
+            width={44}
+            tickLine={false}
+            axisLine={false}
+            tickCount={4}
+            tickMargin={6}
+            tickFormatter={(value: number) => formatCategoryAmountTick(Number(value))}
+            tick={{
+              fontSize: 10,
+              fill: "var(--muted-foreground)",
+              fontFamily: "var(--font-jetbrains-mono)",
+            }}
+          />
           <XAxis
             dataKey="date"
-            interval={tickInterval}
+            interval={0}
             tickFormatter={formatCategoryAxisTick}
-            tickLine={false}
+            tickLine={{ stroke: "var(--border)", strokeOpacity: 0.45 }}
+            tickSize={4}
+            tickMargin={6}
+            height={isDenseRange ? 38 : 30}
+            angle={isDenseRange ? -35 : 0}
+            textAnchor={isDenseRange ? "end" : "middle"}
             axisLine={{ stroke: "var(--border)", strokeOpacity: 0.5 }}
-            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            tick={{
+              fontSize: isDenseRange ? 9.5 : 11,
+              fill: "var(--muted-foreground)",
+            }}
           />
           <Tooltip
-            offset={14}
-            allowEscapeViewBox={{ x: true, y: true }}
-            wrapperStyle={{ zIndex: 50, outline: "none", pointerEvents: "none" }}
+            offset={tooltipOffset}
+            position={{ y: 8 }}
+            isAnimationActive={true}
+            animationDuration={380}
+            animationEasing="ease-out"
+            allowEscapeViewBox={{ x: false, y: false }}
+            wrapperStyle={{
+              zIndex: 50,
+              outline: "none",
+              pointerEvents: "none",
+              transition:
+                "transform 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease-out",
+            }}
             cursor={{ fill: "var(--primary)", fillOpacity: 0.08, rx: 8, ry: 8 }}
             content={<CategoryTooltipContent />}
           />
@@ -452,8 +486,10 @@ export function CategoryStackedChart({
               dataKey={category}
               stackId="revenue"
               fill={colorMap.get(category)}
-              stroke="var(--card)"
-              strokeWidth={1.5}
+              // No per-segment stroke: on slivers the card-coloured outline ate
+              // the block and made the stack look misaligned.
+              stroke="none"
+              minPointSize={2}
               isAnimationActive={false}
               cursor="pointer"
               onClick={(barData) => {
