@@ -33,8 +33,8 @@ export function useProducts(params?: {
       ),
     enabled,
     placeholderData: (previousData, previousQuery) => {
-      const previousParams = previousQuery?.queryKey[1] as { type?: ProductType; ids?: string; available?: boolean } | undefined;
-      return previousParams?.type === rest.type && previousParams?.ids === rest.ids && previousParams?.available === rest.available
+      const previousParams = previousQuery?.queryKey[1] as { categoryId?: string; type?: ProductType; ids?: string; available?: boolean } | undefined;
+      return previousParams?.categoryId === rest.categoryId && previousParams?.type === rest.type && previousParams?.ids === rest.ids && previousParams?.available === rest.available
         ? keepPreviousData(previousData) : undefined;
     },
   });
@@ -49,11 +49,13 @@ export function useProduct(id: string) {
   });
 }
 
-export function useLowStockProducts() {
+export function useLowStockProducts(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["products", "low-stock"],
     queryFn: () =>
       api.get<Product[]>("/products/low-stock").then((res) => res.data),
+    enabled: options?.enabled ?? true,
+    staleTime: 60_000,
   });
 }
 
