@@ -141,7 +141,17 @@ describe("inventory product modal", () => {
   });
 
   it("preloads edit values and updates the existing product without read-only metadata", async () => {
-    products = [product()];
+    products = [
+      product({
+        // Fields the API returns but the update DTO does not accept. Sending
+        // any of them fails the whitelisted validation and blocks editing.
+        reservedStock: 2,
+        availableStock: 6,
+        organizationId: "org-1",
+        effectiveSalePrice: 1800,
+        preferredSupplierId: "sup-1",
+      }),
+    ];
     render(<InventoryPage />);
     const dialog = openEdit();
     expect(within(dialog).getByLabelText("Nombre")).toHaveValue("Panela");
@@ -153,7 +163,22 @@ describe("inventory product modal", () => {
       id: "p-1",
       data: expect.objectContaining({ name: "Panela orgánica", type: "PRODUCT", tracksStock: true, stock: 8, minStock: 2 }),
     }));
-    expect(update.mock.calls[0][0].data).not.toHaveProperty("version");
+    const payload = update.mock.calls[0][0].data as Record<string, unknown>;
+    for (const field of [
+      "id",
+      "version",
+      "organizationId",
+      "reservedStock",
+      "availableStock",
+      "effectiveSalePrice",
+      "effectiveTaxRate",
+      "isLowStock",
+      "preferredSupplierId",
+      "createdAt",
+      "updatedAt",
+    ]) {
+      expect(payload, field).not.toHaveProperty(field);
+    }
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -487,12 +512,12 @@ describe("inventory product modal", () => {
     expect(within(dialog).getByRole("group", { name: /precios/i })).toBeInTheDocument();
   });
 
-  it("gives the image an 18rem column and a full-width container without the old cap", () => {
+  it("gives the image a wider column and a full-width container without the old cap", () => {
     render(<InventoryPage />);
     const dialog = openCreate();
     const identity = within(dialog).getByRole("group", { name: /identidad/i });
     const grid = identity.querySelector(".grid")!;
-    expect(grid.className).toContain("md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]");
+    expect(grid.className).toContain("md:grid-cols-[minmax(0,19.5rem)_minmax(0,1fr)]");
     expect(grid.className).not.toContain("12rem");
     const imageColumn = within(identity).getByTestId("product-image").parentElement!;
     expect(imageColumn.className).not.toContain("max-w-56");

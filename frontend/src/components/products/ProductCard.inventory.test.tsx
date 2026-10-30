@@ -468,13 +468,14 @@ describe("ProductCard — offer badge and strikethrough (#74)", () => {
 });
 
 describe("ProductCard — responsive action and price hierarchy", () => {
-  it("gives POS a dedicated add button that invokes the cart action once", async () => {
+  it("gives POS a full-card add button that invokes the cart action once without a duplicate rail add button", async () => {
     const onAdd = vi.fn();
     const user = userEvent.setup();
     render(<ProductCard product={baseProduct} mode="pos" onClick={onAdd} />);
 
-    const add = screen.getByRole("button", { name: /^\+ agregar$/i });
+    const add = screen.getByRole("button", { name: /agregar al carrito: camisa de lino natural/i });
     expect(add.tagName).toBe("BUTTON");
+    expect(screen.queryByRole("button", { name: /^\+ agregar$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /editar producto/i })).toBeNull();
     await user.click(add);
     expect(onAdd).toHaveBeenCalledTimes(1);
@@ -610,33 +611,32 @@ describe("ProductCard — responsive action and price hierarchy", () => {
     expect(onAdd).not.toHaveBeenCalled();
   });
 
-  it("allows untracked goods at zero stock through both POS add actions", async () => {
+  it("allows untracked goods at zero stock through POS add action", async () => {
     const onAdd = vi.fn();
     const user = userEvent.setup();
     render(
       <ProductCard product={{ ...baseProduct, tracksStock: false, stock: 0 }} mode="pos" onClick={onAdd} />,
     );
 
-    const add = screen.getByRole("button", { name: /^\+ agregar$/i });
     const card = screen.getByRole("button", { name: /agregar al carrito/i });
-    expect(add).not.toBeDisabled();
+    expect(card).not.toBeDisabled();
     expect(card).toHaveAttribute("aria-disabled", "false");
     expect(screen.getByTestId("untracked-chip")).toHaveTextContent("Sin inventario");
     expect(screen.queryByTestId("product-stock")).toBeNull();
     expect(screen.queryByText("0 uds.")).toBeNull();
     expect(screen.queryByTestId("stock-alert-icon")).toBeNull();
-    await user.click(add);
     await user.click(card);
-    expect(onAdd).toHaveBeenCalledTimes(2);
+    expect(onAdd).toHaveBeenCalledTimes(1);
   });
 
-  it("disables both POS add actions for inactive untracked goods", () => {
+  it("disables POS add action for inactive untracked goods", () => {
     render(
       <ProductCard product={{ ...baseProduct, tracksStock: false, stock: 0, active: false }} mode="pos" onClick={vi.fn()} />,
     );
 
-    expect(screen.getByRole("button", { name: /^\+ agregar$/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /agregar al carrito/i })).toHaveAttribute("aria-disabled", "true");
+    const card = screen.getByRole("button", { name: /agregar al carrito/i });
+    expect(card).toBeDisabled();
+    expect(card).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText("Inactivo")).toBeInTheDocument();
     expect(screen.queryByTestId("untracked-chip")).toBeNull();
   });
@@ -648,8 +648,8 @@ describe("ProductCard — responsive action and price hierarchy", () => {
       <ProductCard product={{ ...baseProduct, stock: 0 }} mode="pos" onClick={onAdd} />,
     );
 
-    expect(screen.getByRole("button", { name: /^\+ agregar$/i })).toHaveAttribute("disabled");
     const depletedCard = screen.getByRole("button", { name: /agregar al carrito/i });
+    expect(depletedCard).toHaveAttribute("disabled");
     expect(depletedCard).toHaveAttribute("aria-disabled", "true");
     await user.click(depletedCard);
     expect(onAdd).not.toHaveBeenCalled();
@@ -660,7 +660,7 @@ describe("ProductCard — responsive action and price hierarchy", () => {
         onClick={onAdd}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /^\+ agregar$/i }));
+    await user.click(screen.getByRole("button", { name: /agregar al carrito/i }));
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
 });
@@ -755,14 +755,13 @@ describe("ProductCard — premium layout contract", () => {
     expect(panel).not.toContainElement(screen.getByTestId("product-stock"));
   });
 
-  it("gives POS a compact icon add control named for assistive tech", () => {
+  it("exposes the full-card click surface as the single POS add control without a redundant rail button", () => {
     const onAdd = vi.fn();
     render(<ProductCard product={baseProduct} mode="pos" onClick={onAdd} />);
 
-    const add = screen.getByRole("button", { name: /^\+ agregar$/i });
-    expect(add.querySelector("svg")).not.toBeNull();
-    // Quiet by size: an icon control, not a full-width bar competing with the price.
-    expect(add.className).not.toMatch(/(?:^|\s)w-full(?=\s|$)/);
+    const add = screen.getByRole("button", { name: /agregar al carrito: camisa de lino natural/i });
+    expect(add).toHaveClass("absolute", "inset-0");
+    expect(screen.queryByRole("button", { name: /^\+ agregar$/i })).toBeNull();
   });
 });
 
@@ -850,7 +849,7 @@ describe("ProductCard — premium card v2: shape and layers", () => {
     const media = screen.getByTestId("product-media");
 
     expect(media).toHaveClass("absolute", "inset-0", "rounded-[inherit]");
-    expect(media.querySelector('[class*="bg-slate-800"]')).not.toBeNull();
+    expect(media.querySelector('[class*="bg-zinc-900"]')).not.toBeNull();
     expect(media.querySelector("svg")).not.toBeNull();
   });
 
@@ -890,7 +889,7 @@ describe("ProductCard — premium card v2: chips", () => {
 
     const chip = screen.getByText(label);
 
-    expect(chip).toHaveClass("rounded-md", "px-1.5", "py-0.5", "bg-white/90", "dark:bg-zinc-900/90");
+    expect(chip).toHaveClass("rounded-md", "bg-white/90", "dark:bg-zinc-900/90");
     expect(chip).not.toHaveClass("rounded-full");
   });
 
@@ -899,16 +898,16 @@ describe("ProductCard — premium card v2: chips", () => {
 
     const offer = screen.getByText(/Oferta/);
 
-    expect(offer).toHaveClass("rounded-md", "px-1.5", "py-0.5", "bg-white/90", "dark:bg-zinc-900/90");
+    expect(offer).toHaveClass("rounded-md", "bg-white/90", "dark:bg-zinc-900/90");
     expect(offer).not.toHaveClass("rounded-full");
   });
 
-  it.each(["pos", "inventory"] as const)("renders the category as a strong soft-rectangle chip in %s mode", (mode) => {
+  it.each(["pos", "inventory"] as const)("renders the category as a tinted soft-rectangle chip in %s mode", (mode) => {
     render(<ProductCard product={baseProduct} mode={mode} />);
 
     const category = screen.getByText("Ropa");
 
-    expect(category).toHaveClass("rounded-md", "uppercase", "font-mono", "max-w-full", "truncate", "bg-primary", "text-white");
+    expect(category).toHaveClass("rounded-md", "font-mono", "max-w-full", "truncate", "border", "border-primary/50", "bg-primary/25", "text-orange-200");
     expect(category).not.toHaveClass("rounded-full");
   });
 
@@ -964,7 +963,7 @@ describe("ProductCard — premium card v2: content block", () => {
     const sku = screen.getByText("SKU-0001");
     const price = screen.getByText("$ 45.000");
 
-    expect(name).toHaveClass("line-clamp-2", "break-words", "text-base", "font-bold", "text-white");
+    expect(name).toHaveClass("line-clamp-2", "break-words", "text-sm", "font-semibold", "text-white");
     expect(sku).toHaveClass("min-w-0", "truncate", "font-mono", "text-white/60");
     expect(price).toHaveClass("font-mono", "text-[1.375rem]", "font-extrabold", "tabular-nums", "whitespace-nowrap", "text-white");
     expect(price).not.toHaveClass("truncate");
@@ -1044,17 +1043,14 @@ describe("ProductCard — premium card v2: control rail", () => {
     expect(screen.queryByRole("button", { name: /desactivar producto|reactivar producto/i })).toBeNull();
   });
 
-  it("keeps the POS favorite and add controls always visible in one quiet rail", () => {
+  it("keeps the POS favorite control always visible in one quiet rail without a redundant add button", () => {
     render(<ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} onToggleFavorite={vi.fn()} />);
 
     const favorite = screen.getByRole("button", { name: /agregar a favoritos/i });
-    const add = screen.getByRole("button", { name: /^\+ agregar$/i });
 
-    expect(favorite.parentElement).toBe(add.parentElement);
+    expect(screen.queryByRole("button", { name: /^\+ agregar$/i })).toBeNull();
     expect(favorite.parentElement?.className).not.toMatch(/opacity-0/);
-    for (const control of [favorite, add]) {
-      expect(control).toHaveClass("h-11", "w-11");
-      expect(control.firstElementChild).toHaveClass("h-7", "w-7");
-    }
+    expect(favorite).toHaveClass("h-11", "w-11");
+    expect(favorite.firstElementChild).toHaveClass("h-7", "w-7");
   });
 });
