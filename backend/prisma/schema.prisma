@@ -52,6 +52,8 @@ model Organization {
   posLoanSaleIntents PosLoanSaleIntent[]
   posLoanSaleReservations PosLoanSaleReservation[]
   whatsAppConnections WhatsAppConnection[]
+  whatsAppConversations WhatsAppConversation[]
+  whatsAppInternalContacts WhatsAppInternalContact[]
 
   @@index([status, trialEndsAt])
 }
@@ -72,6 +74,7 @@ model User {
   organizationUsers  OrganizationUser[]
   purchaseOrders     PurchaseOrder[]
   refreshTokens      RefreshToken[]
+  whatsAppInternalContacts WhatsAppInternalContact[]
   sales              Sale[]
   tasksAssigned      Task[]              @relation("TaskAssignedTo")
   tasksCreated       Task[]              @relation("TaskCreatedBy")
@@ -249,6 +252,7 @@ model Customer {
   moneyLoans     MoneyLoan[]
   inventoryLoans InventoryLoan[]
   posLoanSaleIntents PosLoanSaleIntent[]
+  whatsAppConversations WhatsAppConversation[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, documentNumber])
@@ -895,6 +899,7 @@ model WhatsAppConnection {
 
   organization    Organization?          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   processedEvents WhatsAppProcessedEvent[]
+  conversations   WhatsAppConversation[]
 
   @@unique([channel, organizationId])
   @@index([channel])
@@ -928,4 +933,80 @@ enum WhatsAppSessionStatus {
   PASSKEY_CONFIRMATION_REQUIRED
   WORKING
   FAILED
+}
+
+/// One WhatsApp thread on one connection. There is no location: the commercial
+/// number is shared by every branch, so a conversation is never attributed to a
+/// site automatically. The location column arrives with the branches work.
+model WhatsAppConversation {
+  id              String                    @id @default(uuid())
+  connectionId    String
+  organizationId  String?
+  contactPhone    String
+  contactKind     WhatsAppContactKind       @default(CLIENT)
+  state           WhatsAppConversationState @default(AUTOMATED)
+  customerId      String?
+  firstInboundAt  DateTime?
+  firstResponseAt DateTime?
+  lastMessageAt   DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  connection   WhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  organization Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  messages     WhatsAppMessage[]
+
+  @@unique([connectionId, contactPhone])
+  @@index([organizationId, state])
+}
+
+/// Stored only for text we already received; media stays out of scope.
+model WhatsAppMessage {
+  id                String                   @id @default(uuid())
+  conversationId    String
+  providerMessageId String
+  direction         WhatsAppMessageDirection
+  source            String
+  body              String?
+  sentAt            DateTime
+  createdAt         DateTime                 @default(now())
+
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, providerMessageId])
+  @@index([conversationId, sentAt])
+}
+
+/// Numbers that must never receive an automated reply: employees and the
+/// administrator. Scoped per organization.
+model WhatsAppInternalContact {
+  id             String   @id @default(uuid())
+  organizationId String
+  phone          String
+  userId         String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, phone])
+  @@index([organizationId])
+}
+
+enum WhatsAppContactKind {
+  CLIENT
+  INTERNAL
+  UNKNOWN
+}
+
+enum WhatsAppConversationState {
+  AUTOMATED
+  HUMAN
+  SUSPENDED
+}
+
+enum WhatsAppMessageDirection {
+  INBOUND
+  OUTBOUND
 }
