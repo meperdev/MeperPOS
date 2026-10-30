@@ -2,28 +2,15 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { useSales } from "@/hooks/useSales";
 import { getPaymentState } from "@/components/sales/PaymentState";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import type { Sale } from "@/types";
 
 /** The card is a compact peek at the last sales; it never asks for more. */
 const RECENT_SALES_LIMIT = 5;
 
-function getStatusBadge(status: Sale["status"]) {
-  switch (status) {
-    case "COMPLETED":
-      return <Badge variant="success">Completada</Badge>;
-    case "CANCELLED":
-      return <Badge variant="danger">Cancelada</Badge>;
-    case "RETURNED_PARTIAL":
-      return <Badge variant="warning">Parcial</Badge>;
-    default:
-      return <Badge variant="default">{status}</Badge>;
-  }
-}
 
 
 /**
@@ -101,7 +88,7 @@ export function RecentSalesCard() {
                     {formatCurrency(sale.total)}
                   </TableCell>
                   <TableCell className="px-2 py-2 text-right">
-                    {getStatusBadge(sale.status)}
+                    <StatusBadge domain="sale" status={sale.status} dot={false} />
                   </TableCell>
                 </TableRow>
               ))}
