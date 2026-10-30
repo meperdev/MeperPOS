@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Pagination } from "@/components/ui/Pagination";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
@@ -220,7 +220,7 @@ export default function CustomersPage() {
 
         {/* Content */}
         {isLoading ? (
-          <LoadingState icon={<Users className="w-4 h-4 text-muted-foreground" />} message="Cargando clientes..." />
+          <TableSkeleton columns={5} rows={8} label="Cargando clientes..." />
         ) : customers.length === 0 ? (
           <EmptyState icon={<Users className="w-5 h-5 text-muted-foreground" />} title="No hay clientes" subtitle="Agrega tu primer cliente" />
         ) : (

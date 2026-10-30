@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Pagination } from "@/components/ui/Pagination";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
@@ -302,10 +302,7 @@ export default function SuppliersPage() {
 
         {/* Content */}
         {isLoading ? (
-          <LoadingState
-            icon={<Truck className="w-4 h-4 text-muted-foreground" />}
-            message="Cargando proveedores..."
-          />
+          <TableSkeleton columns={4} rows={6} label="Cargando proveedores..." />
         ) : suppliers.length === 0 ? (
           <EmptyState
             icon={<Truck className="w-5 h-5 text-muted-foreground" />}

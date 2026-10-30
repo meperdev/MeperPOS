@@ -26,7 +26,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   ClipboardList,
@@ -408,10 +408,7 @@ export default function TasksPage() {
   if (tasksQuery.isLoading) {
     return (
       <DashboardLayout>
-        <LoadingState
-          icon={<ClipboardList className="w-4 h-4 text-muted-foreground" />}
-          message="Cargando tareas del local..."
-        />
+        <CardSkeleton count={6} label="Cargando tareas del local..." />
       </DashboardLayout>
     );
   }
