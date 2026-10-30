@@ -124,7 +124,7 @@ export default function OrganizationsPage() {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <Table variant="default" className="w-full">
+            <Table variant="default" className="min-w-[720px]">
               <TableHeader>
                 <TableRow>
                   <TableCell as="th" className="px-4 py-3 text-left font-semibold text-foreground">Nombre</TableCell>
