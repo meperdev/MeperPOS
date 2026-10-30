@@ -75,7 +75,9 @@ export class PayrollGroupInstallmentsService {
         },
         select: { id: true, shiftId: true },
       });
-      const shiftIds = [...new Set(before.map((m) => m.shiftId))].sort();
+      const shiftIds = [...new Set(before.map((m) => m.shiftId))].sort((a, b) =>
+        a.localeCompare(b),
+      );
       if (!shiftIds.length || shiftIds.length !== before.length)
         throw new ConflictException('Grupo inconsistente');
       const locked = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`

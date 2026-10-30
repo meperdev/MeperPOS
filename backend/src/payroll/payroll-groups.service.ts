@@ -56,7 +56,7 @@ export class PayrollGroupsService {
           SELECT "id" FROM "EmployeeShift"
           WHERE "organizationId" = ${organizationId}
             AND "employeeId" = ${dto.employeeId}
-            AND "id" IN (${Prisma.join([...dto.shiftIds].sort())})
+            AND "id" IN (${Prisma.join([...dto.shiftIds].sort((a, b) => a.localeCompare(b)))})
           ORDER BY "id" FOR UPDATE`;
         await tx.$queryRaw(lockShifts);
         const shifts = await tx.employeeShift.findMany({

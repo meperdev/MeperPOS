@@ -547,9 +547,12 @@ describe('group installment (mock transaction, not database locks or rollback)',
         service.create({ ...input, amount: '25' }, 'org', actor),
       ).resolves.toMatchObject({ status: 'COMPLETED' });
 
-      expect(transactionCount(tx)).toBe(4);
+      expect(transactionCount(tx)).toBe(5);
       expect(tx.$queryRaw.mock.calls[3][0].join('?')).toMatch(
         /FROM "Organization"[\s\S]*FOR UPDATE/,
+      );
+      expect(tx.$queryRaw.mock.calls[4][0].join('?')).toMatch(
+        /FROM "ExpenseLabel"[\s\S]*FOR UPDATE/,
       );
       expect(tx.$queryRaw.mock.calls[3].slice(1)).toEqual(['org']);
       // Employee, obligation and shift locks all precede the tenant lock.
