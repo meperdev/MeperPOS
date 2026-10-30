@@ -88,7 +88,7 @@ Where a row shows an inherited role in parentheses — `ADMIN (OWNER inherits)`,
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/categories | POST | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
-| /api/categories | GET | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
+| /api/categories | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
 | /api/categories/:id | GET | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
 | /api/categories/:id | PUT | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
 | /api/categories/:id | DELETE | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
