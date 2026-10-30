@@ -16,6 +16,6 @@ import { ExpensesModule } from '../expenses/expenses.module';
     OrganizationRequiredGuard,
     AdminOrganizationInterceptor,
   ],
-  exports: [ReportsService],
+  exports: [ReportsService, DailyReportService],
 })
 export class ReportsModule {}
