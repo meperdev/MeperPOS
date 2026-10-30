@@ -5,14 +5,14 @@ describe('WahaAdapter', () => {
   const config = {
     baseUrl: 'http://waha:3000',
     apiKey: 'private-api-key',
-    webhookKey: 'private-webhook-key',
     webhookUrl: 'https://example.test/api/whatsapp/webhook',
   };
+  const webhookKey = 'private-webhook-key';
   const original = global.fetch;
   afterEach(() => {
     global.fetch = original;
   });
-  it.each(['baseUrl', 'apiKey', 'webhookKey', 'webhookUrl'] as const)(
+  it.each(['baseUrl', 'apiKey', 'webhookUrl'] as const)(
     'fails closed without %s before sending any request',
     async (missing) => {
       global.fetch = jest.fn();
@@ -36,7 +36,7 @@ describe('WahaAdapter', () => {
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 201 }))
       .mockResolvedValueOnce(new Response(null, { status: 200 }));
-    await new WahaAdapter(config).connect('meper-abc');
+    await new WahaAdapter(config).ensureStarted('meper-abc', webhookKey);
     const calls = (global.fetch as jest.Mock).mock.calls;
     expect(calls[1][0]).toBe('http://waha:3000/api/sessions/');
     expect(JSON.parse(calls[1][1].body)).toEqual({
@@ -46,8 +46,8 @@ describe('WahaAdapter', () => {
         webhooks: [
           {
             url: config.webhookUrl,
-            events: ['message'],
-            hmac: { key: config.webhookKey },
+            events: ['message.any'],
+            hmac: { key: webhookKey },
           },
         ],
       },
@@ -67,7 +67,10 @@ describe('WahaAdapter', () => {
           new Response(body, { status }),
         );
       }
-      const result = new WahaAdapter(config).connect('meper-abc');
+      const result = new WahaAdapter(config).ensureStarted(
+        'meper-abc',
+        webhookKey,
+      );
       if (statuses.includes(500)) await expect(result).rejects.toThrow();
       else await expect(result).resolves.toBeUndefined();
       for (const cancel of cancels) expect(cancel).toHaveBeenCalledTimes(1);
@@ -85,7 +88,7 @@ describe('WahaAdapter', () => {
         .fn()
         .mockResolvedValueOnce(new Response(body, { status: 200 }))
         .mockResolvedValueOnce(new Response(null, { status: 200 }));
-      await new WahaAdapter(config).connect('meper-abc');
+      await new WahaAdapter(config).ensureStarted('meper-abc', webhookKey);
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(log).toHaveBeenCalledWith({
         event: 'waha_provider_failure',
@@ -107,13 +110,14 @@ describe('WahaAdapter', () => {
       .mockResolvedValueOnce(new Response(stalled, { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 200 }));
     await expect(
-      new WahaAdapter(config).connect('meper-abc'),
+      new WahaAdapter(config).ensureStarted('meper-abc', webhookKey),
     ).resolves.toBeUndefined();
   });
-  it('rejects an oversized QR stream', async () => {
+  it('rejects an oversized QR payload before reading more than the cap', async () => {
+    const oversized = 'A'.repeat(1024 * 1024 + 4);
     global.fetch = jest.fn().mockResolvedValue(
-      new Response(new Uint8Array(1024 * 1024 + 1), {
-        headers: { 'content-type': 'image/png' },
+      new Response(JSON.stringify({ mimetype: 'image/png', data: oversized }), {
+        headers: { 'content-type': 'application/json' },
       }),
     );
     await expect(new WahaAdapter(config).qr('meper-abc')).rejects.toThrow(
@@ -137,7 +141,9 @@ describe('WahaAdapter', () => {
             },
           });
           return Promise.resolve(
-            new Response(body, { headers: { 'content-type': 'image/png' } }),
+            new Response(body, {
+              headers: { 'content-type': 'application/json' },
+            }),
           );
         });
       const result = new WahaAdapter(config).qr('meper-abc');
@@ -149,13 +155,19 @@ describe('WahaAdapter', () => {
     }
   });
   it('returns QR image only and never returns provider metadata', async () => {
+    const data = Buffer.from('fake-png').toString('base64');
     global.fetch = jest.fn().mockResolvedValue(
-      new Response(Buffer.from('fake-png'), {
-        headers: { 'Content-Type': 'image/png' },
-      }),
+      new Response(
+        JSON.stringify({
+          mimetype: 'image/png',
+          data: `data:image/png;base64,${data}`,
+          engine: 'private-engine-metadata',
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
     );
     await expect(new WahaAdapter(config).qr('meper-abc')).resolves.toEqual({
-      data: Buffer.from('fake-png').toString('base64'),
+      data,
     });
     expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
       'http://waha:3000/api/meper-abc/auth/qr',

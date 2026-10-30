@@ -1,4 +1,4 @@
-import { verifyWahaSignature } from './waha-signature';
+import { deriveWebhookKey, verifyWahaSignature } from './waha-signature';
 
 describe('WAHA webhook signature', () => {
   const body = Buffer.from(
@@ -40,5 +40,29 @@ describe('WAHA webhook signature', () => {
     expect(
       verifyWahaSignature(undefined, 'my-secret-key', signature, 'sha512'),
     ).toBe(false);
+  });
+});
+
+describe('per-session webhook key derivation', () => {
+  const master = 'master-webhook-key';
+
+  it('derives a stable key per session that differs from the master', () => {
+    const commercial = deriveWebhookKey(master, 'meper-commercial-abc');
+    expect(commercial).toBe(deriveWebhookKey(master, 'meper-commercial-abc'));
+    expect(commercial).toMatch(/^[0-9a-f]{64}$/);
+    expect(commercial).not.toBe(master);
+    expect(deriveWebhookKey(master, 'meper-intelligence')).not.toBe(commercial);
+  });
+
+  it('does not reveal the master key or another session key from one session', () => {
+    const commercial = deriveWebhookKey(master, 'meper-commercial-abc');
+    expect(commercial).not.toContain(master);
+    expect(deriveWebhookKey('other-master', 'meper-commercial-abc')).not.toBe(
+      commercial,
+    );
+  });
+
+  it('refuses to derive without a master key', () => {
+    expect(deriveWebhookKey('', 'meper-intelligence')).toBeNull();
   });
 });

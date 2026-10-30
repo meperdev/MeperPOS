@@ -22,7 +22,6 @@ import { WahaAdapter } from './waha-adapter';
         new WahaAdapter({
           baseUrl: process.env.WAHA_BASE_URL ?? '',
           apiKey: process.env.WAHA_API_KEY ?? '',
-          webhookKey: process.env.WAHA_WEBHOOK_HMAC_KEY ?? '',
           webhookUrl: process.env.WAHA_WEBHOOK_URL ?? '',
         }),
     },
