@@ -28,7 +28,12 @@ function money(
   positive = false,
   individual = true,
 ): Prisma.Decimal {
-  if (typeof value !== 'string' || !/^\d+(?:\.\d{1,2})?$/.test(value))
+  if (typeof value !== 'string') throw new Error('Invalid monetary amount');
+  // Bound input before regex validation and Decimal construction to PostgreSQL's
+  // NUMERIC limit (131072 integer digits and at most two fractional digits).
+  if (value.length > 131075 || value.split('.', 1)[0].length > 131072)
+    throw new Error('Monetary amount out of range');
+  if (!/^\d+(?:\.\d{1,2})?$/.test(value))
     throw new Error('Invalid monetary amount');
   const result = new Prisma.Decimal(value);
   if (
@@ -158,9 +163,18 @@ export function allocatePeriodInstallment(
   amount: string,
 ): Period & { balance: string } {
   pending(period.status);
-  const total = money(period.total, true);
-  const paid = money(period.paid);
-  const installment = money(amount, true);
+  const validatedTotal = money(period.total, true, false);
+  const validatedPaid = money(period.paid, false, false);
+  const validatedInstallment = money(amount, true, false);
+  // Decimal.js defaults to 20 significant digits; period amounts have no
+  // individual shift cap, so size arithmetic precision to the input strings.
+  const Decimal = Prisma.Decimal.clone({
+    precision:
+      Math.max(20, period.total.length, period.paid.length, amount.length) + 2,
+  });
+  const total = new Decimal(validatedTotal);
+  const paid = new Decimal(validatedPaid);
+  const installment = new Decimal(validatedInstallment);
   if (paid.gte(total) || installment.gt(total.minus(paid)))
     throw new Error('Installment exceeds balance');
   const nextPaid = paid.plus(installment);

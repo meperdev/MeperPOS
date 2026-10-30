@@ -267,6 +267,64 @@ describe('payroll allocation', () => {
     ).toThrow();
   });
 
+  it('allocates large fixed periods and installments with exact cents', () => {
+    expect(
+      allocatePeriodInstallment(
+        { status: 'pending', total: '20000000000.03', paid: '10000000000.01' },
+        '10000000000.01',
+      ),
+    ).toEqual({
+      status: 'pending',
+      total: '20000000000.03',
+      paid: '20000000000.02',
+      balance: '0.01',
+    });
+    expect(
+      allocatePeriodInstallment(
+        { status: 'pending', total: '20000000000.03', paid: '10000000000.01' },
+        '10000000000.02',
+      ),
+    ).toMatchObject({ status: 'completed', balance: '0.00' });
+    expect(() =>
+      allocatePeriodInstallment(
+        { status: 'pending', total: '20000000000.03', paid: '10000000000.01' },
+        '10000000000.03',
+      ),
+    ).toThrow();
+    for (const amount of ['0', '-1', '1e2', '1.001', 'NaN']) {
+      expect(() =>
+        allocatePeriodInstallment(
+          { status: 'pending', total: '20000000000.03', paid: '0' },
+          amount,
+        ),
+      ).toThrow();
+    }
+    expect(
+      allocatePeriodInstallment(
+        { status: 'pending', total: '123456789012345678901234.56', paid: '0' },
+        '123456789012345678901234.55',
+      ),
+    ).toEqual({
+      status: 'pending',
+      total: '123456789012345678901234.56',
+      paid: '123456789012345678901234.55',
+      balance: '0.01',
+    });
+  });
+
+  it('rejects oversized monetary strings in fixed-period allocation', () => {
+    const oversized = '1'.repeat(131073);
+    for (const [total, paid, amount] of [
+      [oversized, '0', '1'],
+      ['2', oversized, '1'],
+      ['2', '0', oversized],
+    ]) {
+      expect(() =>
+        allocatePeriodInstallment({ status: 'pending', total, paid }, amount),
+      ).toThrow('Monetary amount out of range');
+    }
+  });
+
   it('handles a manually entered fixed-period obligation without deriving salary', () => {
     expect(
       allocatePeriodInstallment(
