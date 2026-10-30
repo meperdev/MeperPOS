@@ -24,11 +24,28 @@ import { SequenceService } from '../common/sequences/sequence.service';
 import { PLAN_LIMITS } from '../plan-limits/plan-limits.constants';
 import { ReceiptsService } from '../receipts/receipts.service';
 
+/**
+ * A POS-financed sale carries no cash/card rows, so the derived flag travels
+ * with the payload instead of the relation: the UI renders it as its own
+ * payment state ("Financiado") next to cash, card and mixed.
+ */
+function withFinancedFlag<
+  T extends { posLoanSaleIntent?: { id: string } | null },
+>(sale: T): Omit<T, 'posLoanSaleIntent'> & { financed: boolean } {
+  const { posLoanSaleIntent, ...rest } = sale;
+  return { ...rest, financed: Boolean(posLoanSaleIntent) };
+}
+
 @Injectable()
 export class SalesService {
   /** Prisma select for seller attribution on every sale query */
   private readonly sellerInclude = {
     user: { select: { id: true, name: true, email: true } },
+  } as const;
+
+  /** Presence of the POS loan intent is what marks a sale as financed. */
+  private readonly financingInclude = {
+    posLoanSaleIntent: { select: { id: true } },
   } as const;
 
   constructor(
@@ -466,6 +483,7 @@ export class SalesService {
             include: { product: true },
           },
           payments: true,
+          ...this.financingInclude,
           ...this.sellerInclude,
         },
         orderBy: { createdAt: 'desc' },
@@ -474,7 +492,7 @@ export class SalesService {
     ]);
 
     return {
-      data: sales,
+      data: sales.map(withFinancedFlag),
       meta: {
         total,
         page,
@@ -497,6 +515,7 @@ export class SalesService {
           include: { product: true },
         },
         payments: true,
+        ...this.financingInclude,
         ...this.sellerInclude,
       },
     });
@@ -510,7 +529,7 @@ export class SalesService {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
-    return sale;
+    return withFinancedFlag(sale);
   }
 
   async findBySaleNumber(saleNumber: number, user?: RequestUser) {
@@ -530,6 +549,7 @@ export class SalesService {
           include: { product: true },
         },
         payments: true,
+        ...this.financingInclude,
         ...this.sellerInclude,
       },
     });
@@ -543,7 +563,7 @@ export class SalesService {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
-    return sale;
+    return withFinancedFlag(sale);
   }
 
   async update(
