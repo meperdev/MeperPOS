@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
@@ -236,7 +237,7 @@ function SalesPageContent() {
 
         {/* Table */}
         {isLoading ? (
-          <LoadingState icon={<Receipt className="w-4 h-4 text-primary/50" />} message="Cargando ventas..." />
+          <CardSkeleton count={6} label="Cargando ventas..." />
         ) : (
           <>
             {/* Cards View */}

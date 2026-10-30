@@ -27,7 +27,7 @@ import {
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ExpenseStatusBadge } from "@/components/expenses/ExpenseStatusBadge";
@@ -405,10 +405,7 @@ export default function ExpensesPage() {
         />
 
         {isLoading ? (
-          <LoadingState
-            icon={<Wallet className="w-4 h-4 text-muted-foreground" />}
-            message="Cargando salidas..."
-          />
+          <CardSkeleton count={6} label="Cargando salidas..." />
         ) : (
           <>
             {/* Mobile Cards (Always visible on mobile) */}

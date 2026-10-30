@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
@@ -183,10 +183,7 @@ export default function PurchaseOrdersPage() {
 
         {/* Content */}
         {isLoading ? (
-          <LoadingState
-            icon={<ClipboardList className="w-4 h-4 text-muted-foreground" />}
-            message="Cargando órdenes de compra..."
-          />
+          <TableSkeleton columns={6} rows={6} label="Cargando órdenes de compra..." />
         ) : orders.length === 0 ? (
           <EmptyState
             icon={<ClipboardList className="w-5 h-5 text-muted-foreground" />}

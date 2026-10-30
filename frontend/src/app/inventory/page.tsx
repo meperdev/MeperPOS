@@ -22,6 +22,7 @@ import { ImageUpload } from "@/components/ui/ImageUpload";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Pagination } from "@/components/ui/Pagination";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
@@ -597,7 +598,7 @@ function InventoryContent() {
 
         {/* Content */}
         {isLoading ? (
-          <LoadingState icon={<Package className="w-4 h-4 text-muted-foreground" />} message="Cargando productos..." />
+          <CardSkeleton count={6} label="Cargando productos..." />
         ) : displayProducts.length === 0 ? (
           <EmptyState
             icon={<Package className="w-5 h-5 text-muted-foreground" />}

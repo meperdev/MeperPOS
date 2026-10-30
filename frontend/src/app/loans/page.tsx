@@ -26,6 +26,7 @@ import {
   FilterGroup,
   FilterOptionButton,
 } from "@/components/ui/FilterBar";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
@@ -358,10 +359,7 @@ export default function LoansPage() {
 
         <div className="flex flex-1 flex-col gap-4">
           {loansQuery.isLoading ? (
-            <LoadingState
-              icon={<HandCoins className="h-4 w-4 text-muted-foreground" />}
-              message="Cargando préstamos..."
-            />
+            <CardSkeleton count={6} label="Cargando préstamos..." />
           ) : loansQuery.isError ? (
             <ErrorState
               message={getApiErrorMessage(

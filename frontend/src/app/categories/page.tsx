@@ -20,7 +20,7 @@ import { Modal } from "@/components/ui/Modal";
 import { CategoryProductsModal } from "@/components/categories/CategoryProductsModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
@@ -215,10 +215,7 @@ export default function CategoriesPage() {
 
         {/* Content */}
         {isLoading ? (
-          <LoadingState
-            icon={<FolderTree className="w-4 h-4 text-muted-foreground" />}
-            message="Cargando categorías..."
-          />
+          <CardSkeleton count={6} label="Cargando categorías..." />
         ) : categories.length === 0 ? (
           <EmptyState
             icon={<FolderTree className="w-5 h-5 text-muted-foreground" />}
