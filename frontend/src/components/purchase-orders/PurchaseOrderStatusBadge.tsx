@@ -1,18 +1,35 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { chipStyles } from "@/lib/chipStyles";
+import { Badge } from "@/components/ui/Badge";
 import type { PurchaseOrderStatus } from "@/types";
 
 const statusConfig: Record<
   PurchaseOrderStatus,
-  { label: string; className: string }
+  {
+    label: string;
+    variant: "default" | "primary" | "warning" | "success" | "danger";
+  }
 > = {
-  DRAFT: { label: "Borrador", className: chipStyles.neutral },
-  PENDING: { label: "Pendiente", className: chipStyles.primary },
-  PARTIAL_RECEIVED: { label: "Recibida parcialmente", className: chipStyles.warning },
-  RECEIVED: { label: "Recibida", className: chipStyles.success },
-  CANCELLED: { label: "Cancelada", className: chipStyles.danger },
+  DRAFT: {
+    label: "Borrador",
+    variant: "default",
+  },
+  PENDING: {
+    label: "Pendiente",
+    variant: "primary",
+  },
+  PARTIAL_RECEIVED: {
+    label: "Recibida parcial",
+    variant: "warning",
+  },
+  RECEIVED: {
+    label: "Recibida",
+    variant: "success",
+  },
+  CANCELLED: {
+    label: "Cancelada",
+    variant: "danger",
+  },
 };
 
 export function PurchaseOrderStatusBadge({
@@ -24,14 +41,8 @@ export function PurchaseOrderStatusBadge({
 }) {
   const cfg = statusConfig[status];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap",
-        cfg.className,
-        className,
-      )}
-    >
+    <Badge variant={cfg.variant} dot className={className}>
       {cfg.label}
-    </span>
+    </Badge>
   );
 }
