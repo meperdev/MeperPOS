@@ -471,7 +471,7 @@ function InventoryContent() {
                 disabled={isSaving}
                 className="w-full sm:w-auto"
               >
-                <Plus className="w-4 h-4" /> Nuevo Producto
+                <Plus className="w-4 h-4" /> Nuevo producto
               </Button>
             ) : undefined
           }
@@ -814,7 +814,7 @@ function InventoryContent() {
       <Modal
         isOpen={canManageInventory && showModal}
         onClose={closeEditor}
-        title={editingProduct ? "Editar Producto" : "Nuevo Producto"}
+        title={editingProduct ? "Editar producto" : "Nuevo producto"}
         size="lg"
       >
         <form
@@ -1144,7 +1144,7 @@ function InventoryContent() {
           setProductToDelete(null);
         }}
         onConfirm={confirmDelete}
-        title="Eliminar Producto Definitivamente"
+        title="Eliminar producto definitivamente"
         message="Esta acción elimina el producto de forma permanente. Si tiene ventas o movimientos asociados, no se podrá eliminar."
         confirmText="Eliminar"
         cancelText="Cancelar"

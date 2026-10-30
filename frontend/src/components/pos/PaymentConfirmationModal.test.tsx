@@ -156,7 +156,7 @@ describe("PaymentConfirmationModal change preview — server parity", () => {
     expect(screen.queryByText("Cambio")).not.toBeInTheDocument();
     // The sale is still payable: total covered, just not in cash.
     expect(
-      screen.getByRole("button", { name: /Confirmar Pago/i }),
+      screen.getByRole("button", { name: /Confirmar pago/i }),
     ).toBeEnabled();
   });
 
@@ -247,7 +247,7 @@ describe("PaymentConfirmationModal change preview — server parity", () => {
     expect(screen.getByText("Faltante")).toBeInTheDocument();
     expect(screen.getByText(fmtText("60.000"))).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Confirmar Pago/i }),
+      screen.getByRole("button", { name: /Confirmar pago/i }),
     ).toBeDisabled();
   });
 });

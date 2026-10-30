@@ -163,7 +163,7 @@ export default function CustomersPage() {
           actions={
             canCreate ? (
               <Button onClick={handleCreate} className="w-full sm:w-auto">
-                <Plus className="w-4 h-4" /> Nuevo Cliente
+                <Plus className="w-4 h-4" /> Nuevo cliente
               </Button>
             ) : undefined
           }
@@ -522,7 +522,7 @@ export default function CustomersPage() {
         )}
       </div>
 
-      <Modal isOpen={canCreate && showModal} onClose={() => setShowModal(false)} title={editingCustomer ? "Editar Cliente" : "Nuevo Cliente"} size="md">
+      <Modal isOpen={canCreate && showModal} onClose={() => setShowModal(false)} title={editingCustomer ? "Editar cliente" : "Nuevo cliente"} size="md">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Nombre" value={formData.name || ""} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required className="sm:col-span-2" />
@@ -542,7 +542,7 @@ export default function CustomersPage() {
         </form>
       </Modal>
 
-      <ConfirmDialog isOpen={canEdit && showConfirmModal} onClose={() => setShowConfirmModal(false)} onConfirm={confirmDelete} title="Eliminar Cliente" message="¿Estás seguro? Esta acción no se puede deshacer." confirmText="Eliminar" cancelText="Cancelar" />
+      <ConfirmDialog isOpen={canEdit && showConfirmModal} onClose={() => setShowConfirmModal(false)} onConfirm={confirmDelete} title="Eliminar cliente" message="¿Estás seguro? Esta acción no se puede deshacer." confirmText="Eliminar" cancelText="Cancelar" />
     </DashboardLayout>
   );
 }

@@ -317,7 +317,7 @@ export default function BillingSettingsPage() {
               variant="secondary"
               onClick={() => setShowPaymentForm((s) => !s)}
             >
-              {showPaymentForm ? "Cancelar" : "Registrar Pago"}
+              {showPaymentForm ? "Cancelar" : "Registrar pago"}
             </Button>
           )}
         </div>

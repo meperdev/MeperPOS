@@ -244,7 +244,7 @@ export default function SuppliersPage() {
           actions={
             canManage ? (
               <Button onClick={handleCreate} className="w-full sm:w-auto">
-                <Plus className="w-4 h-4" /> Nuevo Proveedor
+                <Plus className="w-4 h-4" /> Nuevo proveedor
               </Button>
             ) : undefined
           }
@@ -709,7 +709,7 @@ export default function SuppliersPage() {
       <Modal
         isOpen={canManage && showModal}
         onClose={() => setShowModal(false)}
-        title={editingSupplier ? "Editar Proveedor" : "Nuevo Proveedor"}
+        title={editingSupplier ? "Editar proveedor" : "Nuevo proveedor"}
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-5">

@@ -1643,7 +1643,7 @@ export default function POSPage() {
         <Modal
           isOpen={!!editingDiscount}
           onClose={handleCloseDiscountModal}
-          title="Agregar Descuento"
+          title="Agregar descuento"
           size="sm"
         >
           <div className="space-y-4">
