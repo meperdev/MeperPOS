@@ -47,7 +47,12 @@ export class ExpensesService {
       where: { id: labelId, organizationId, active: true },
       include: { group: { select: { organizationId: true, active: true } } },
     });
-    if (!label || !label.active || !label.group.active || label.group.organizationId !== organizationId) {
+    if (
+      !label ||
+      !label.active ||
+      !label.group.active ||
+      label.group.organizationId !== organizationId
+    ) {
       throw new NotFoundException('Expense label not found');
     }
   }
@@ -186,7 +191,11 @@ export class ExpensesService {
             })),
           },
         },
-        include: { payments: true, label: { include: { group: true } }, supplier: true },
+        include: {
+          payments: true,
+          label: { include: { group: true } },
+          supplier: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -251,7 +260,11 @@ export class ExpensesService {
         skip,
         take: limit,
         orderBy: { date: 'desc' },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       }),
       this.prisma.expense.count({ where }),
     ]);
@@ -283,24 +296,59 @@ export class ExpensesService {
 
     const categories = await this.prisma.expenseLabel.findMany({
       where: { id: { in: grouped.map((row) => row.labelId) } },
-      select: { id: true, name: true, groupId: true, group: { select: { id: true, name: true } } },
+      select: {
+        id: true,
+        name: true,
+        groupId: true,
+        group: { select: { id: true, name: true } },
+      },
     });
 
-    const labelsById = new Map(
-      categories.map((label) => [label.id, label]),
-    );
+    const labelsById = new Map(categories.map((label) => [label.id, label]));
 
-    const groups = new Map<string, { groupId: string; name: string; total: Prisma.Decimal; labels: Array<{ labelId: string; name: string; total: Prisma.Decimal }> }>();
+    const groups = new Map<
+      string,
+      {
+        groupId: string;
+        name: string;
+        total: Prisma.Decimal;
+        labels: Array<{ labelId: string; name: string; total: Prisma.Decimal }>;
+      }
+    >();
     for (const row of grouped) {
       const label = labelsById.get(row.labelId);
       if (!label) continue;
       const amount = row._sum.total ?? new Prisma.Decimal(0);
-      const current = groups.get(label.group.id) ?? { groupId: label.group.id, name: label.group.name, total: new Prisma.Decimal(0), labels: [] };
+      const current = groups.get(label.group.id) ?? {
+        groupId: label.group.id,
+        name: label.group.name,
+        total: new Prisma.Decimal(0),
+        labels: [],
+      };
       current.total = current.total.add(amount);
-      current.labels.push({ labelId: label.id, name: label.name, total: amount });
+      current.labels.push({
+        labelId: label.id,
+        name: label.name,
+        total: amount,
+      });
       groups.set(label.group.id, current);
     }
-    const rows = [...groups.values()].map((group) => ({ ...group, labels: group.labels.sort((a, b) => b.total.comparedTo(a.total) || a.name.localeCompare(b.name) || a.labelId.localeCompare(b.labelId)) })).sort((a, b) => b.total.comparedTo(a.total) || a.name.localeCompare(b.name) || a.groupId.localeCompare(b.groupId));
+    const rows = [...groups.values()]
+      .map((group) => ({
+        ...group,
+        labels: group.labels.sort(
+          (a, b) =>
+            b.total.comparedTo(a.total) ||
+            a.name.localeCompare(b.name) ||
+            a.labelId.localeCompare(b.labelId),
+        ),
+      }))
+      .sort(
+        (a, b) =>
+          b.total.comparedTo(a.total) ||
+          a.name.localeCompare(b.name) ||
+          a.groupId.localeCompare(b.groupId),
+      );
 
     const total = rows.reduce(
       (sum, row) => sum.add(row.total),
@@ -310,18 +358,18 @@ export class ExpensesService {
     return { month, total, groups: rows };
   }
 
-  async findForReports(
-    organizationId: string,
-    start: Date,
-    end: Date,
-  ) {
+  async findForReports(organizationId: string, start: Date, end: Date) {
     return this.prisma.expense.findMany({
       where: {
         organizationId: this.requireOrganizationId(organizationId),
         active: true,
         date: { gte: start, lte: end },
       },
-      select: { total: true, purchaseOrderId: true, label: { select: { name: true, group: { select: { name: true } } } } },
+      select: {
+        total: true,
+        purchaseOrderId: true,
+        label: { select: { name: true, group: { select: { name: true } } } },
+      },
     });
   }
 
@@ -428,7 +476,11 @@ export class ExpensesService {
           ...(dto.total !== undefined && { total: lockedTotal }),
           status: lockedStatus,
         },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -539,7 +591,11 @@ export class ExpensesService {
       const updated = await tx.expense.update({
         where: { id },
         data: { status: lockedStatus },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -625,7 +681,11 @@ export class ExpensesService {
             })),
           },
         },
-        include: { payments: true, label: { include: { group: true } }, supplier: true },
+        include: {
+          payments: true,
+          label: { include: { group: true } },
+          supplier: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -701,7 +761,11 @@ export class ExpensesService {
       const updated = await tx.expense.update({
         where: { id },
         data: { receiptUrl },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
 
       await tx.auditLog.create({
