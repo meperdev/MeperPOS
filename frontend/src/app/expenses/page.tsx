@@ -17,6 +17,7 @@ import { api, getApiErrorMessage } from "@/lib/api";
 import { formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { Pagination } from "@/components/ui/Pagination";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import {
@@ -209,6 +210,45 @@ export default function ExpensesPage() {
     setEditingExpense(expense);
     setFormOpen(true);
   };
+
+  /**
+   * One action list for the table row and the card so both layouts offer the
+   * same operations through the same overflow menu.
+   */
+  const actionsFor = (
+    expense: Expense,
+    isPaid: boolean,
+    paymentLabel: string,
+  ): RowActionItem[] => [
+    {
+      label: paymentLabel,
+      icon: <Wallet className="w-3.5 h-3.5" aria-hidden="true" />,
+      onSelect: () => setPaymentExpense(expense),
+      disabled: isPaid,
+    },
+    {
+      label: "Ver historial",
+      icon: <History className="w-3.5 h-3.5" aria-hidden="true" />,
+      onSelect: () => setHistoryExpense(expense),
+    },
+    {
+      kind: "file",
+      label: "Subir comprobante",
+      icon: <Upload className="w-3.5 h-3.5" aria-hidden="true" />,
+      accept: "image/*",
+      onFile: (file) => void handleReceiptUpload(expense, file),
+    },
+    {
+      label: "Duplicar gasto",
+      icon: <Copy className="w-3.5 h-3.5" aria-hidden="true" />,
+      onSelect: () => setDuplicateTarget(expense),
+    },
+    {
+      label: "Editar gasto",
+      icon: <Pencil className="w-3.5 h-3.5" aria-hidden="true" />,
+      onSelect: () => openEdit(expense),
+    },
+  ];
 
   return (
     <DashboardLayout>
@@ -448,55 +488,20 @@ export default function ExpensesPage() {
                             </p>
                           )}
                         </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            aria-label="Ver detalle"
-                            title="Ver detalle"
-                            onClick={() => setDetailExpense(expense)}
-                            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={paymentButtonLabel}
-                            title={paymentButtonLabel}
-                            disabled={isPaid}
-                            onClick={() => setPaymentExpense(expense)}
-                            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                          >
-                            <Wallet className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Ver historial"
-                            title="Ver historial"
-                            onClick={() => setHistoryExpense(expense)}
-                            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                          >
-                            <History className="w-3.5 h-3.5" />
-                          </button>
-                          <label
-                            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent cursor-pointer text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                            title="Subir comprobante"
-                          >
-                            <input
-                              type="file"
-                              accept="image/*"
-                              aria-label="Subir comprobante"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  void handleReceiptUpload(expense, file);
-                                }
-                                e.target.value = "";
-                              }}
-                            />
-                            <Upload className="w-3.5 h-3.5" />
-                          </label>
-                        </div>
+                        <button
+                          type="button"
+                          aria-label="Ver detalle"
+                          title="Ver detalle"
+                          onClick={() => setDetailExpense(expense)}
+                          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                        </button>
+                        <RowActions
+                          label="Más acciones"
+                          items={actionsFor(expense, isPaid, paymentButtonLabel)}
+                        />
+
                       </div>
                     </div>
                   );
@@ -769,73 +774,20 @@ export default function ExpensesPage() {
                               </p>
                             )}
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              aria-label="Ver detalle"
-                              title="Ver detalle"
-                              onClick={() => setDetailExpense(expense)}
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={paymentButtonLabel}
-                              title={paymentButtonLabel}
-                              disabled={isPaid}
-                              onClick={() => setPaymentExpense(expense)}
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                            >
-                              <Wallet className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Ver historial"
-                              title="Ver historial"
-                              onClick={() => setHistoryExpense(expense)}
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                            >
-                              <History className="w-3.5 h-3.5" />
-                            </button>
-                            <label
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent cursor-pointer text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                              title="Subir comprobante"
-                            >
-                              <input
-                                type="file"
-                                accept="image/*"
-                                aria-label="Subir comprobante"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    void handleReceiptUpload(expense, file);
-                                  }
-                                  e.target.value = "";
-                                }}
-                              />
-                              <Upload className="w-3.5 h-3.5" />
-                            </label>
-                            <button
-                              type="button"
-                              aria-label="Duplicar gasto"
-                              title="Duplicar gasto"
-                              onClick={() => setDuplicateTarget(expense)}
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Editar gasto"
-                              title="Editar gasto"
-                              onClick={() => openEdit(expense)}
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            aria-label="Ver detalle"
+                            title="Ver detalle"
+                            onClick={() => setDetailExpense(expense)}
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <RowActions
+                            label="Más acciones"
+                            items={actionsFor(expense, isPaid, paymentButtonLabel)}
+                          />
+
                         </div>
                       </div>
                     );

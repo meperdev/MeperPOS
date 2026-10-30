@@ -256,12 +256,18 @@ describe("Expenses page evidence", () => {
     expect(await screen.findByText("ExpenseFormModal")).toBeTruthy();
   });
 
+
+async function openRowActions(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getAllByRole("button", { name: "Más acciones" })[0]);
+}
+
   it("opens the add payment modal from the row actions", async () => {
     const user = userEvent.setup();
 
     render(<ExpensesPage />);
 
-    await user.click(screen.getAllByRole("button", { name: "Agregar pago" })[0]);
+    await openRowActions(user);
+    await user.click(screen.getByRole("menuitem", { name: "Agregar pago" }));
 
     expect(await screen.findByText("AddPaymentModal")).toBeTruthy();
   });
@@ -271,7 +277,8 @@ describe("Expenses page evidence", () => {
 
     render(<ExpensesPage />);
 
-    await user.click(screen.getAllByRole("button", { name: "Ver historial" })[0]);
+    await openRowActions(user);
+    await user.click(screen.getByRole("menuitem", { name: "Ver historial" }));
 
     expect(await screen.findByText("HistoryModal")).toBeTruthy();
   });
@@ -286,15 +293,18 @@ describe("Expenses page evidence", () => {
     expect(await screen.findByText("ExpenseDetailModal")).toBeTruthy();
   });
 
-  it("keeps the add payment button enabled with the Agregar pago label for partial expenses", () => {
-    render(<ExpensesPage />);
+  it("keeps the add payment action enabled with the Agregar pago label for partial expenses", async () => {
+    const user = userEvent.setup();
 
-    const button = screen.getAllByRole("button", { name: "Agregar pago" })[0];
-    expect(button).not.toBeDisabled();
-    expect(button).toHaveAttribute("title", "Agregar pago");
+    render(<ExpensesPage />);
+    await openRowActions(user);
+
+    const item = screen.getByRole("menuitem", { name: "Agregar pago" });
+    expect(item).not.toBeDisabled();
+    expect(item).toHaveAttribute("title", "Agregar pago");
   });
 
-  it("disables the add payment button and exposes the reason for paid expenses", () => {
+  it("disables the add payment action and exposes the reason for paid expenses", async () => {
     useExpensesMock.mockReturnValue({
       data: {
         data: [paidExpenseFixture],
@@ -303,13 +313,15 @@ describe("Expenses page evidence", () => {
       isLoading: false,
     });
 
+    const user = userEvent.setup();
     render(<ExpensesPage />);
+    await openRowActions(user);
 
-    const button = screen.getAllByRole("button", {
+    const item = screen.getByRole("menuitem", {
       name: "La salida ya está pagada",
-    })[0];
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "La salida ya está pagada");
+    });
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute("title", "La salida ya está pagada");
   });
 
   // Absence regression (EXP-5): the owner asked for the per-row delete
@@ -329,7 +341,8 @@ describe("Expenses page evidence", () => {
 
     render(<ExpensesPage />);
 
-    await user.click(screen.getAllByRole("button", { name: "Duplicar gasto" })[0]);
+    await openRowActions(user);
+    await user.click(screen.getByRole("menuitem", { name: "Duplicar gasto" }));
     expect(screen.getByText("Duplicar gasto")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Sí, duplicar" }));
@@ -344,7 +357,8 @@ describe("Expenses page evidence", () => {
     render(<ExpensesPage />);
 
     const file = new File(["receipt"], "recibo.png", { type: "image/png" });
-    const input = screen.getAllByLabelText("Subir comprobante")[0];
+    await openRowActions(user);
+    const input = screen.getByLabelText("Subir comprobante");
     await user.upload(input, file);
 
     expect(uploadReceiptMutateAsyncMock).toHaveBeenCalledWith({
