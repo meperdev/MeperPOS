@@ -507,14 +507,14 @@ describe("inventory product modal", () => {
     const dialog = openEdit();
     const media = within(dialog).getByTestId("product-image");
     const preview = within(media).getByRole("img", { name: "Preview" }).parentElement!;
-    expect(preview).toHaveClass("aspect-[4/3]", "md:aspect-[4/5]");
+    expect(preview).toHaveClass("aspect-[4/3]", "md:aspect-square");
     expect(within(media).getByRole("button", { name: "Cambiar" }).textContent?.trim()).toBe("");
     expect(within(media).getByRole("button", { name: "Eliminar" }).textContent?.trim()).toBe("");
     cleanup();
     products = [];
     render(<InventoryPage />);
     const createDialog = openCreate();
-    expect(within(createDialog).getByRole("button", { name: /Seleccionar imagen/ })).toHaveClass("aspect-[4/3]", "md:aspect-[4/5]");
+    expect(within(createDialog).getByRole("button", { name: /Seleccionar imagen/ })).toHaveClass("aspect-[4/3]", "md:aspect-square");
   });
 
   it("keeps Descripción inside the identity group, spanning both right-column sub-columns, and still edits and saves it", async () => {

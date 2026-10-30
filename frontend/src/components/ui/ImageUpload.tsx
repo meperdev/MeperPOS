@@ -126,12 +126,12 @@ export function ImageUpload({
         />
 
         {visiblePreview ? (
-          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border bg-muted md:aspect-[4/5]">
+          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border bg-muted md:aspect-square">
             <Image
               src={visiblePreview}
               alt="Preview"
               fill
-              sizes="(max-width: 768px) 100vw, 288px"
+              sizes="(max-width: 768px) 100vw, 320px"
               unoptimized={visiblePreview.startsWith("data:") || visiblePreview.startsWith("blob:")}
               className="object-cover"
             />
@@ -168,19 +168,21 @@ export function ImageUpload({
             onClick={handleClick}
             disabled={disabled}
             className={cn(
-              "aspect-[4/3] w-full rounded-2xl border-2 border-dashed border-border bg-muted/50 md:aspect-[4/5]",
+              "aspect-[4/3] w-full rounded-2xl border border-dashed border-border/80 bg-muted/30 md:aspect-square",
               "flex cursor-pointer flex-col items-center justify-center px-3 text-center",
-              "transition-colors hover:border-primary/50 hover:bg-muted/80 focus-visible:outline-2 focus-visible:outline-primary",
+              "transition-colors hover:border-border hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-primary",
               disabled && "cursor-not-allowed opacity-50",
             )}
           >
             {isUploading ? (
-              <span className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary" />
+              <span className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />
             ) : (
               <>
-                <ImageIcon className="mb-3 h-20 w-20 text-muted-foreground" aria-hidden="true" />
-                <span className="text-sm font-medium text-muted-foreground">Seleccionar imagen</span>
-                <span className="mt-1 text-xs leading-relaxed text-muted-foreground">JPG, PNG, GIF o WEBP · Máx. 5 MB</span>
+                <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground shadow-2xs">
+                  <ImageIcon className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <span className="text-xs font-medium text-foreground">Seleccionar imagen</span>
+                <span className="mt-1 text-[11px] leading-relaxed text-muted-foreground">JPG, PNG, GIF o WEBP · Máx. 5 MB</span>
               </>
             )}
           </button>
@@ -227,19 +229,21 @@ export function ImageUpload({
           onClick={handleClick}
           disabled={disabled}
           className={cn(
-            "aspect-square w-full rounded-xl border-2 border-dashed border-border bg-muted/50",
+            "aspect-square w-full rounded-xl border border-dashed border-border/80 bg-muted/30",
             "flex flex-col items-center justify-center cursor-pointer text-center px-3",
-            "hover:border-primary/50 hover:bg-muted/80 focus-visible:outline-2 focus-visible:outline-primary transition-colors",
+            "hover:border-border hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-primary transition-colors",
             disabled && "opacity-50 cursor-not-allowed",
           )}
         >
           {isUploading ? (
-            <span className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+            <span className="animate-spin rounded-full h-8 w-8 border-2 border-muted-foreground/30 border-t-primary" />
           ) : (
             <>
-              <ImageIcon className="w-16 h-16 text-muted-foreground mb-2" />
-              <span className="text-sm text-muted-foreground">Seleccionar imagen</span>
-              <span className="text-xs text-muted-foreground mt-1 leading-relaxed">JPG, PNG, GIF o WEBP · Máx. 5 MB</span>
+              <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground shadow-2xs">
+                <ImageIcon className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-medium text-foreground">Seleccionar imagen</span>
+              <span className="text-[11px] text-muted-foreground mt-1 leading-relaxed">JPG, PNG, GIF o WEBP · Máx. 5 MB</span>
             </>
           )}
         </button>

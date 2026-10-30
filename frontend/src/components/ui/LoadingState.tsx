@@ -10,10 +10,10 @@ interface LoadingStateProps {
 export function LoadingState({ icon, message, className }: LoadingStateProps) {
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-[200px]", className)}>
-      <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center animate-pulse">
+      <div className="w-8 h-8 rounded-lg bg-muted/50 border border-border/70 flex items-center justify-center text-muted-foreground animate-pulse">
         {icon}
       </div>
-      <p className="text-xs text-muted-foreground mt-3">{message}</p>
+      <p className="text-xs text-muted-foreground mt-2.5">{message}</p>
     </div>
   );
 }

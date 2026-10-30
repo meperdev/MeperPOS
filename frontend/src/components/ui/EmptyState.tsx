@@ -16,10 +16,10 @@ export function EmptyState({ icon, title, subtitle, className }: EmptyStateProps
         className,
       )}
     >
-      <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mb-3">
+      <div className="w-10 h-10 rounded-lg border border-border/60 bg-muted/40 flex items-center justify-center text-muted-foreground mb-2.5">
         {icon}
       </div>
-      <p className="text-sm font-medium text-foreground mb-1">{title}</p>
+      <p className="text-xs sm:text-sm font-medium text-foreground mb-0.5">{title}</p>
       {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
     </div>
   );
