@@ -97,7 +97,7 @@ export function PaymentMethodsCard({
             </Pie>
           </PieChart>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[10px] font-medium text-muted-foreground">
+            <span className="text-[11px] font-medium text-muted-foreground">
               Total
             </span>
             <span
@@ -127,7 +127,7 @@ export function PaymentMethodsCard({
               </span>
               <span
                 data-testid="payment-method-percentage"
-                className="inline-flex w-10 items-center justify-center rounded-md border border-border/60 bg-muted/50 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground tabular-nums"
+                className="inline-flex w-10 items-center justify-center rounded-md border border-border/60 bg-muted/50 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground tabular-nums"
               >
                 {slice.percentage}%
               </span>

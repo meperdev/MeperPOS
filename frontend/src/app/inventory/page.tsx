@@ -530,7 +530,7 @@ function InventoryContent() {
                 {lowStockProducts.length > 0 && (
                   <span
                     className={cn(
-                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md font-mono text-[10px] font-semibold tabular-nums shrink-0",
+                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md font-mono text-[11px] font-semibold tabular-nums shrink-0",
                       showLowStockOnly
                         ? "bg-rose-600 text-white"
                         : "bg-rose-500/15 text-rose-700 dark:text-rose-300",

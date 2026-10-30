@@ -168,7 +168,7 @@ export function BentoSelect({
                   {option.badge && (
                     <span
                       className={cn(
-                        "text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md",
+                        "text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md",
                         option.badgeClass ||
                           "bg-muted text-muted-foreground"
                       )}

@@ -282,7 +282,7 @@ function ComparisonChart({
           <span className="mt-0.5 font-mono text-xs font-semibold text-foreground tabular-nums block">
             {formatReportMoney(previousProfit)}
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
             Actual: {formatReportMoney(currentProfit)}
           </span>
         </div>
@@ -293,7 +293,7 @@ function ComparisonChart({
           <span className="mt-0.5 font-mono text-xs font-semibold text-foreground tabular-nums block">
             {formatReportMoney(previousExpenses)}
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
             Actual: {formatReportMoney(currentExpenses)}
           </span>
         </div>
@@ -926,7 +926,7 @@ export default function ReportsPage() {
                               <span className="text-xs sm:text-sm font-medium text-foreground">
                                 {formatPaymentMethod(method.paymentMethod)}
                               </span>
-                              <span className="rounded border border-border/60 bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground tabular-nums">
+                              <span className="rounded border border-border/60 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
                                 {share}%
                               </span>
                             </div>

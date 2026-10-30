@@ -200,7 +200,7 @@ export function MobileCartDrawer({
                         onChange={(value) => onUpdateQuantity(item.productId, value)}
                       />
                       {item.quantity >= item.availableStock && (
-                        <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                        <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
                           máx.
                         </span>
                       )}

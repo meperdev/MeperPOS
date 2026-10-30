@@ -790,7 +790,7 @@ export default function LoansPage() {
                             {EVENT_LABELS[event.type]}
                           </p>
                           {event.method && (
-                            <span className="rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+                            <span className="rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
                               {METHOD_OPTIONS.find((m) => m.value === event.method)
                                 ?.label ?? event.method}
                             </span>

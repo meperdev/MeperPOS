@@ -38,7 +38,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const sizes = {
       sm: "h-7 px-2.5 py-1 text-xs font-medium gap-1.5 rounded-md",
       md: "h-[38px] px-3.5 py-2 text-xs font-medium gap-2 rounded-lg",
-      lg: "h-10 px-5 py-2.5 text-sm font-semibold gap-2 rounded-lg",
+      lg: "h-11 px-5 py-2.5 text-sm font-semibold gap-2 rounded-lg",
     };
 
     return (
@@ -47,9 +47,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         className={cn(
           "inline-flex items-center justify-center font-medium",
-          "transition-colors duration-150",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-          "disabled:cursor-not-allowed disabled:opacity-50",
+          "transition-[background-color,border-color,color,transform,opacity] duration-150",
+          // HIG: every custom button needs a press state, and focus must stay visible.
+          "active:translate-y-px active:duration-75",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          // A loading button is busy, not unavailable: keep it legible while it spins.
+          loading ? "cursor-wait" : "disabled:cursor-not-allowed disabled:opacity-50",
           variants[variant],
           sizes[size],
           className,

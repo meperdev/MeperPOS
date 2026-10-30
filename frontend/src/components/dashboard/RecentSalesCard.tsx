@@ -46,7 +46,7 @@ export function RecentSalesCard() {
         </p>
         <Link
           href="/sales"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
+          className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
         >
           Ver todas
           <ArrowRight className="h-3 w-3" aria-hidden="true" />
