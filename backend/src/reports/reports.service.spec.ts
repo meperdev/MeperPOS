@@ -26,6 +26,12 @@ describe('ReportsService', () => {
     payment: {
       groupBy: jest.fn(),
     },
+    expensePayment: {
+      findMany: jest.fn(),
+    },
+    payrollCashOutflow: {
+      findMany: jest.fn(),
+    },
     inventoryMovement: {
       findMany: jest.fn(),
     },
@@ -568,5 +574,174 @@ describe('ReportsService', () => {
     const result = await service.getInventorySnapshot('org-1');
 
     expect(result.current.retailValue).toBe('50000.00');
+  });
+
+  describe('getCashFlow payroll cash outflows', () => {
+    const cashFlowPrisma = prismaMock as unknown as {
+      payment: { groupBy: jest.Mock };
+      expensePayment: { findMany: jest.Mock };
+      payrollCashOutflow: { findMany: jest.Mock };
+    };
+
+    beforeEach(() => {
+      cashFlowPrisma.payment.groupBy.mockResolvedValue([]);
+      cashFlowPrisma.expensePayment.findMany.mockResolvedValue([]);
+      cashFlowPrisma.payrollCashOutflow.findMany.mockResolvedValue([]);
+    });
+
+    it('excludes expense payments whose expense mirrors a payroll obligation', async () => {
+      await service.getCashFlow('org-1', '2026-03-10', '2026-03-12');
+
+      expect(cashFlowPrisma.expensePayment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organizationId: 'org-1',
+            date: expect.objectContaining({
+              gte: expect.any(Date),
+              lte: expect.any(Date),
+            }),
+            // The generated payroll expense is a mirror of cash already reported
+            // by PayrollCashOutflow, so its payments must not be counted again.
+            expense: { payrollObligationExpense: { is: null } },
+          }),
+        }),
+      );
+      // Unlinked expense behaviour is untouched: no invented `active` filter.
+      const where = cashFlowPrisma.expensePayment.findMany.mock.calls[0][0]
+        .where as Record<string, unknown>;
+      expect(where).not.toHaveProperty('active');
+      expect(where).not.toHaveProperty('expense.active');
+    });
+
+    it('keeps counting an unlinked expense payment', async () => {
+      cashFlowPrisma.expensePayment.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal('120.00'), method: 'CASH' },
+      ]);
+
+      const result = await service.getCashFlow(
+        'org-1',
+        '2026-03-10',
+        '2026-03-12',
+      );
+
+      expect(result.expensePayments.total).toBe('120.00');
+      expect(result.expensePayments.byPaymentMethod).toEqual([
+        { paymentMethod: 'CASH', total: '120.00', count: 1 },
+      ]);
+    });
+
+    it('counts a payroll cash outflow even when no expense exists', async () => {
+      // The generated expense is optional at completion: cash must still move.
+      cashFlowPrisma.expensePayment.findMany.mockResolvedValue([]);
+      cashFlowPrisma.payrollCashOutflow.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal('2500000.00'), method: 'CASH' },
+      ]);
+
+      const result = await service.getCashFlow(
+        'org-1',
+        '2026-03-10',
+        '2026-03-12',
+      );
+
+      expect(result.expensePayments.total).toBe('2500000.00');
+      expect(result.expensePayments.byPaymentMethod).toEqual([
+        { paymentMethod: 'CASH', total: '2500000.00', count: 1 },
+      ]);
+      expect(cashFlowPrisma.payrollCashOutflow.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organizationId: 'org-1',
+            date: expect.objectContaining({
+              gte: expect.any(Date),
+              lte: expect.any(Date),
+            }),
+          }),
+          select: { amount: true, method: true },
+        }),
+      );
+    });
+
+    it('counts a payroll cash outflow exactly once alongside unlinked expense payments', async () => {
+      cashFlowPrisma.expensePayment.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal('100.00'), method: 'CASH' },
+      ]);
+      cashFlowPrisma.payrollCashOutflow.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal('250000.00'), method: 'CASH' },
+      ]);
+
+      const result = await service.getCashFlow(
+        'org-1',
+        '2026-03-10',
+        '2026-03-12',
+      );
+
+      expect(result.expensePayments.total).toBe('250100.00');
+      expect(result.expensePayments.byPaymentMethod).toEqual([
+        { paymentMethod: 'CASH', total: '250100.00', count: 2 },
+      ]);
+    });
+
+    it('sums same-day payroll cash outflows with the correct method breakdown', async () => {
+      cashFlowPrisma.expensePayment.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal('10.25'), method: 'CARD' },
+      ]);
+      cashFlowPrisma.payrollCashOutflow.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal('100.50'), method: 'CASH' },
+        { amount: new Prisma.Decimal('200.25'), method: 'TRANSFER' },
+      ]);
+
+      const result = await service.getCashFlow(
+        'org-1',
+        '2026-03-10',
+        '2026-03-12',
+      );
+
+      expect(result.expensePayments.total).toBe('311.00');
+      expect(result.expensePayments.byPaymentMethod).toEqual([
+        { paymentMethod: 'CARD', total: '10.25', count: 1 },
+        { paymentMethod: 'CASH', total: '100.50', count: 1 },
+        { paymentMethod: 'TRANSFER', total: '200.25', count: 1 },
+      ]);
+    });
+
+    it('scopes payroll cash outflows and expense payments to the tenant', async () => {
+      await service.getCashFlow('org-1', '2026-03-10', '2026-03-12');
+
+      expect(
+        cashFlowPrisma.payrollCashOutflow.findMany.mock.calls[0][0].where
+          .organizationId,
+      ).toBe('org-1');
+      expect(
+        cashFlowPrisma.expensePayment.findMany.mock.calls[0][0].where
+          .organizationId,
+      ).toBe('org-1');
+      expect(
+        cashFlowPrisma.payment.groupBy.mock.calls[0][0].where.organizationId,
+      ).toBe('org-1');
+    });
+
+    it('keeps the cash flow response shape unchanged', async () => {
+      cashFlowPrisma.payrollCashOutflow.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal('50.00'), method: 'CASH' },
+      ]);
+
+      const result = await service.getCashFlow(
+        'org-1',
+        '2026-03-10',
+        '2026-03-12',
+      );
+
+      expect(Object.keys(result).sort()).toEqual([
+        'accountingBasis',
+        'appliedRange',
+        'collections',
+        'expensePayments',
+      ]);
+      expect(result.accountingBasis).toBe('CASH_BY_PAYMENT_DATE');
+      expect(Object.keys(result.expensePayments).sort()).toEqual([
+        'byPaymentMethod',
+        'total',
+      ]);
+    });
   });
 });
