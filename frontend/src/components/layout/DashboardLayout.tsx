@@ -11,6 +11,11 @@ import { cn } from "@/lib/utils";
 
 type UserRole = AppRole;
 
+// S5: payroll and the employee directory belong to owners and administrators
+// only. They are checked by identity before the shared route map, because the
+// inherited role list would let an ADMIN-scoped SUPER_ADMIN read tenant payroll.
+const ownerAdminOnlyPrefixes = ["/employees", "/payroll"];
+
 const routeRoleMap: Array<{ prefix: string; roles: UserRole[] }> = [
   { prefix: "/dashboard", roles: ["ADMIN", "INVENTORY_USER"] },
   { prefix: "/pos", roles: ["ADMIN", "CASHIER"] },
@@ -53,7 +58,7 @@ export const DashboardLayout = memo(function DashboardLayout({
   useEffect(() => {
     if (loading || !isAuthenticated || !userRole) return;
 
-    if (pathname === "/employees" || pathname.startsWith("/employees/")) {
+    if (ownerAdminOnlyPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
       if (userRole !== "OWNER" && userRole !== "ADMIN") {
         router.replace(userRole === "CASHIER" ? "/pos" : "/dashboard");
       }

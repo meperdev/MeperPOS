@@ -26,6 +26,7 @@ import {
   ClipboardList,
   Truck,
   Wallet,
+  Banknote,
   Building2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -107,6 +108,12 @@ const navItems: NavItem[] = [
     roles: ["ADMIN"],
   },
   {
+    label: "Nómina",
+    href: "/payroll",
+    icon: <Banknote className="w-4 h-4" />,
+    roles: ["ADMIN"],
+  },
+  {
     label: "Salidas",
     href: "/expenses",
     icon: <Wallet className="w-4 h-4" />,
@@ -142,6 +149,10 @@ const navItems: NavItem[] = [
     roles: ["SUPER_ADMIN"],
   },
 ];
+
+// Owners and administrators only. These routes are checked by identity instead of
+// the inherited role list, so a SUPER_ADMIN scope never reaches tenant payroll.
+const OWNER_ADMIN_ONLY_ROUTES = ["/employees", "/payroll"];
 
 const roleLabels: Record<string, string> = {
   OWNER: "Propietario",
@@ -195,7 +206,7 @@ export function Sidebar() {
   const navRef = useRef<HTMLElement>(null);
 
   const filteredItems = navItems.filter(
-    (item) => item.href === "/employees"
+    (item) => OWNER_ADMIN_ONLY_ROUTES.includes(item.href)
       ? user?.role === "OWNER" || user?.role === "ADMIN"
       : !item.roles || (user && hasAnyRole(user.role, item.roles))
   );

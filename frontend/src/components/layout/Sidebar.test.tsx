@@ -172,6 +172,7 @@ describe("Sidebar", () => {
       "Proveedores",
       "Compras",
       "Empleados",
+      "Nómina",
       "Salidas",
       "Reportes",
       "Tareas",
@@ -196,6 +197,22 @@ describe("Sidebar", () => {
     if (permitted) expect(link).toHaveAttribute("href", "/employees");
     else expect(link).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Mi perfil" })).toHaveAttribute("href", "/profile");
+  });
+
+  it.each([
+    ["OWNER", true], ["ADMIN", true], ["CASHIER", false],
+    ["MEMBER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
+  ])("shows the payroll link for %s only when permitted", async (role, permitted) => {
+    useAuthMock.mockReturnValue({
+      user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
+      logout: vi.fn(), switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { organizations: [organizations[0]] } });
+    render(<Sidebar />, { wrapper });
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    const link = screen.queryByRole("link", { name: "Nómina" });
+    if (permitted) expect(link).toHaveAttribute("href", "/payroll");
+    else expect(link).not.toBeInTheDocument();
   });
 
   it("hides the Importar nav item now that it lives under Configuración", async () => {
