@@ -31,6 +31,7 @@ model Organization {
   customers          Customer[]
   expenseGroups      ExpenseGroup[]
   expenseLabels      ExpenseLabel[]
+  payrollExpenseCategory PayrollExpenseCategory?
   expensePayments    ExpensePayment[]
   expenses           Expense[]
   employees          Employee[]
@@ -921,7 +922,9 @@ model ExpenseGroup {
   updatedAt      DateTime       @updatedAt
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   labels         ExpenseLabel[]
+  payrollExpenseCategories PayrollExpenseCategory[]
 
+  @@unique([id, organizationId], map: "ExpenseGroup_payroll_target_key")
   @@unique([organizationId, name])
   @@index([organizationId, active])
 }
@@ -937,9 +940,25 @@ model ExpenseLabel {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   group          ExpenseGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   expenses       Expense[]
+  payrollExpenseCategory PayrollExpenseCategory?
 
+  @@unique([id, groupId, organizationId], map: "ExpenseLabel_payroll_target_key")
   @@unique([groupId, name])
   @@index([organizationId, active])
+}
+
+// Unwired association: no automatic assignment or taxonomy creation occurs here.
+// Both label and group must belong to the organization, including legacy data.
+model PayrollExpenseCategory {
+  organizationId String @id
+  labelId        String
+  groupId        String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "PayrollExpenseCategory_organization_fkey")
+  label          ExpenseLabel @relation(fields: [labelId, groupId, organizationId], references: [id, groupId, organizationId], onDelete: Cascade, onUpdate: Restrict, map: "PayrollExpenseCategory_label_fkey")
+  group          ExpenseGroup @relation(fields: [groupId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict, map: "PayrollExpenseCategory_group_fkey")
+
+  @@unique([labelId, groupId, organizationId], map: "PayrollExpenseCategory_label_key")
+  @@index([groupId, organizationId], map: "PayrollExpenseCategory_group_idx")
 }
 
 model Expense {
