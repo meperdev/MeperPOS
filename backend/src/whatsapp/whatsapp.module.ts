@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { WhatsAppController } from './whatsapp.controller';
+import { WhatsAppCommercialController } from './whatsapp-commercial.controller';
+import { WhatsAppIntelligenceController } from './whatsapp-intelligence.controller';
 import {
   WhatsAppWebhookController,
   WAHA_WEBHOOK_KEY,
@@ -11,7 +12,11 @@ import { WHATSAPP_PROVIDER } from './whatsapp-provider';
 import { WahaAdapter } from './waha-adapter';
 
 @Module({
-  controllers: [WhatsAppController, WhatsAppWebhookController],
+  controllers: [
+    WhatsAppCommercialController,
+    WhatsAppIntelligenceController,
+    WhatsAppWebhookController,
+  ],
   providers: [
     WhatsAppSessionService,
     WhatsAppConnectionsService,
