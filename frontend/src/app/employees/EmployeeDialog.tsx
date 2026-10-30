@@ -17,7 +17,8 @@ export function EmployeeDialog({ title, onClose, children }: { title: string; on
     if (!dialog) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const elements = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusable));
+    const elements = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusable))
+      .filter((element) => !element.matches(":disabled"));
     (elements()[0] ?? dialog).focus();
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
