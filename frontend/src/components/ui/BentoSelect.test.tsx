@@ -69,7 +69,7 @@ describe("BentoSelect", () => {
     const selectedOptionLabel = screen.getAllByText("Opción B")[1];
     const selectedRow = selectedOptionLabel.closest("div")!.parentElement!;
     expect(selectedRow.className).toContain("bg-primary-light");
-    expect(selectedRow.className).toContain("text-primary");
+    expect(selectedRow.className).toContain("text-primary-text");
     expect(selectedRow.className).toContain("font-bold");
     expect(selectedRow.querySelector("svg")).toBeInTheDocument();
 

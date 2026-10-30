@@ -12,14 +12,21 @@ import {
   useUpdateTaskStatus,
 } from "@/hooks/useTasks";
 import { Badge } from "@/components/ui/Badge";
+import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import {
+  FilterBar,
+  FilterClearButton,
+  FilterGroup,
+  FilterOptionButton,
+} from "@/components/ui/FilterBar";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   ClipboardList,
@@ -31,10 +38,6 @@ import {
   Calendar,
   User as UserIcon,
   Users,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  Search,
   Loader2,
   Edit3,
 } from "lucide-react";
@@ -54,45 +57,20 @@ function getTaskStatusLabel(status: TaskStatus) {
   }
 }
 
-function getTaskStatusClass(status: TaskStatus) {
+function getTaskStatusVariant(
+  status: TaskStatus,
+): "warning" | "primary" | "success" | "danger" {
   switch (status) {
     case "PENDING":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return "warning";
     case "IN_PROGRESS":
-      return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+      return "primary";
     case "COMPLETED":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return "success";
     case "CANCELLED":
-      return "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300";
+      return "danger";
   }
 }
-
-function getTaskStatusChipClass(status: TaskStatus, isSelected: boolean) {
-  if (isSelected) {
-    switch (status) {
-      case "PENDING":
-        return "border-amber-500/60 bg-amber-500/20 text-amber-700 dark:text-amber-200 shadow-xs ring-1 ring-amber-500/40 font-bold";
-      case "IN_PROGRESS":
-        return "border-sky-500/60 bg-sky-500/20 text-sky-700 dark:text-sky-200 shadow-xs ring-1 ring-sky-500/40 font-bold";
-      case "COMPLETED":
-        return "border-emerald-500/60 bg-emerald-500/20 text-emerald-700 dark:text-emerald-200 shadow-xs ring-1 ring-emerald-500/40 font-bold";
-      case "CANCELLED":
-        return "border-rose-500/60 bg-rose-500/20 text-rose-700 dark:text-rose-200 shadow-xs ring-1 ring-rose-500/40 font-bold";
-    }
-  }
-
-  switch (status) {
-    case "PENDING":
-      return "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 hover:border-amber-500/50";
-    case "IN_PROGRESS":
-      return "border-sky-500/30 bg-sky-500/5 text-sky-700 dark:text-sky-300 hover:bg-sky-500/15 hover:border-sky-500/50";
-    case "COMPLETED":
-      return "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15 hover:border-emerald-500/50";
-    case "CANCELLED":
-      return "border-rose-500/30 bg-rose-500/5 text-rose-700 dark:text-rose-300 hover:bg-rose-500/15 hover:border-rose-500/50";
-  }
-}
-
 function getTaskStatusDotClass(status: TaskStatus) {
   switch (status) {
     case "PENDING":
@@ -414,221 +392,225 @@ export default function TasksPage() {
     }
   };
 
+  const hasActiveFilters =
+    scope !== "all" ||
+    statusFilter !== "ALL" ||
+    selectedAssigneeId !== "ALL" ||
+    Boolean(searchQuery.trim());
+
+  const clearFilters = () => {
+    setScope("all");
+    setStatusFilter("ALL");
+    setSelectedAssigneeId("ALL");
+    setSearchQuery("");
+  };
+
   if (tasksQuery.isLoading) {
     return (
       <DashboardLayout>
-        <LoadingState icon={<ClipboardList className="w-5 h-5 text-primary" />} message="Cargando tareas del local..." />
+        <CardSkeleton count={6} label="Cargando tareas del local..." />
       </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 lg:space-y-5">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-1.5 shrink-0 rounded-full bg-primary" />
-              <h1 className="text-2xl font-bold tracking-tight text-foreground lg:text-3xl">
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
                 Tareas del local
               </h1>
+              <span className="hidden sm:inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
+                {totalTasks} {totalTasks === 1 ? "tarea" : "tareas"}
+              </span>
             </div>
-            <p className="ml-4.5 mt-1 text-xs sm:text-sm text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Gestión operativa del equipo y seguimiento de actividades
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setShowDeleteAllModal(true)}
               disabled={!hasCompletedTasks || deleteTask.isPending}
-              className="text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 border-rose-500/20"
             >
-              <Trash2 className="h-4 w-4 mr-1.5" />
+              <Trash2 className="h-3.5 w-3.5" />
               Borrar completadas
             </Button>
-            <Button
-              size="sm"
-              onClick={() => setShowCreateModal(true)}
-              className="shadow-sm shadow-primary/25"
-            >
-              <Plus className="h-4 w-4 mr-1.5" />
+            <Button size="sm" onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-3.5 w-3.5" />
               Nueva tarea
             </Button>
           </div>
         </div>
 
         {/* Metrics KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-          <Card className="p-4 border-border/70 hover:border-primary/40 transition-colors">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Activas</span>
-              <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                <ClipboardList className="w-4 h-4" />
-              </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 lg:gap-4">
+          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Activas
+              </span>
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground/70 shrink-0" />
             </div>
-            <p className="mt-2 text-2xl font-bold text-foreground">{pendingTasks + inProgressTasks}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{totalTasks} en total</p>
-          </Card>
+            <p className="mt-2 font-mono text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+              {pendingTasks + inProgressTasks}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground tabular-nums">
+              {totalTasks} en total
+            </p>
+          </div>
 
-          <Card className="p-4 border-border/70 hover:border-amber-500/40 transition-colors">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Pendientes</span>
-              <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                <AlertCircle className="w-4 h-4" />
-              </div>
+          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Pendientes
+              </span>
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
             </div>
-            <p className="mt-2 text-2xl font-bold text-foreground">{pendingTasks}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Por comenzar</p>
-          </Card>
+            <p className="mt-2 font-mono text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+              {pendingTasks}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Por comenzar
+            </p>
+          </div>
 
-          <Card className="p-4 border-border/70 hover:border-sky-500/40 transition-colors">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wider">En curso</span>
-              <div className="w-7 h-7 rounded-lg bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400">
-                <Clock className="w-4 h-4" />
-              </div>
+          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                En curso
+              </span>
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />
             </div>
-            <p className="mt-2 text-2xl font-bold text-foreground">{inProgressTasks}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">En progreso</p>
-          </Card>
+            <p className="mt-2 font-mono text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+              {inProgressTasks}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              En progreso
+            </p>
+          </div>
 
-          <Card className="p-4 border-border/70 hover:border-emerald-500/40 transition-colors">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completadas</span>
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="w-4 h-4" />
-              </div>
+          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Completadas
+              </span>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
             </div>
-            <p className="mt-2 text-2xl font-bold text-foreground">{completedTasks}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Finalizadas</p>
-          </Card>
+            <p className="mt-2 font-mono text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+              {completedTasks}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Finalizadas
+            </p>
+          </div>
         </div>
 
         {/* Filter Toolbar */}
-        <Card className="p-3 border-border/80">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            {/* Left: Scope & Status Tabs */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Scope Selector */}
-              <div className="flex items-center bg-muted/60 p-1 rounded-xl border border-border/60">
-                <button
-                  type="button"
+        <FilterBar
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Buscar tarea por título, descripción o responsable..."
+          filterControls={
+            <>
+              <FilterGroup>
+                <FilterOptionButton
+                  active={scope === "all"}
                   onClick={() => setScope("all")}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                    scope === "all"
-                      ? "bg-card text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
+                  className="inline-flex items-center gap-1.5"
                 >
                   <Users className="w-3.5 h-3.5" />
-                  Equipo
-                </button>
-                <button
-                  type="button"
+                  <span>Equipo</span>
+                </FilterOptionButton>
+                <FilterOptionButton
+                  active={scope === "mine"}
                   onClick={() => setScope("mine")}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                    scope === "mine"
-                      ? "bg-card text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
+                  className="inline-flex items-center gap-1.5"
                 >
                   <UserIcon className="w-3.5 h-3.5" />
-                  Mis tareas
-                </button>
-              </div>
+                  <span>Mis tareas</span>
+                </FilterOptionButton>
+              </FilterGroup>
 
-              {/* Status Pills */}
-              <div className="hidden sm:flex items-center gap-1">
-                {(["ALL", "PENDING", "IN_PROGRESS", "COMPLETED"] as const).map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setStatusFilter(st)}
-                    className={cn(
-                      "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
-                      statusFilter === st
-                        ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    {st === "ALL" ? "Todas" : getTaskStatusLabel(st)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Right: Search & Assignee filter */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 sm:w-60">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Buscar tarea..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-9 pl-9 pr-3 bg-muted/40 rounded-xl text-base sm:text-xs text-foreground placeholder:text-muted-foreground/60 border border-border/60 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 transition"
-                />
-              </div>
+              <FilterGroup label="Estado" className="hidden sm:inline-flex">
+                {(["ALL", "PENDING", "IN_PROGRESS", "COMPLETED"] as const).map(
+                  (st) => (
+                    <FilterOptionButton
+                      key={st}
+                      active={statusFilter === st}
+                      onClick={() => setStatusFilter(st)}
+                    >
+                      {st === "ALL" ? "Todas" : getTaskStatusLabel(st)}
+                    </FilterOptionButton>
+                  ),
+                )}
+              </FilterGroup>
 
               {assignees.length > 1 && (
-                <select
+                <BentoSelect
                   value={selectedAssigneeId}
-                  onChange={(e) => setSelectedAssigneeId(e.target.value)}
-                  className="h-9 px-2.5 bg-muted/40 rounded-xl text-xs text-foreground border border-border/60 focus:border-primary/50 focus:outline-none cursor-pointer"
-                >
-                  <option value="ALL">Todo el personal</option>
-                  <option value="UNASSIGNED">Sin asignar</option>
-                  {assignees.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedAssigneeId}
+                  className="w-full sm:w-44"
+                  options={[
+                    { value: "ALL", label: "Todo el personal" },
+                    { value: "UNASSIGNED", label: "Sin asignar" },
+                    ...assignees.map((a) => ({
+                      value: a.id,
+                      label: a.name,
+                    })),
+                  ]}
+                />
               )}
-            </div>
-          </div>
-        </Card>
+
+              {hasActiveFilters && (
+                <FilterClearButton onClick={clearFilters} />
+              )}
+            </>
+          }
+        />
 
         {/* Main Content: Split Master-Detail */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
           {/* Left Column: Task List (7 cols) */}
           <div className="lg:col-span-7 space-y-4">
-            {/* Task List Card */}
-            <Card className="overflow-hidden border-border/80 bg-card shadow-xs">
+            <Card className="overflow-hidden border-border/70 bg-card shadow-2xs">
               <div className="border-b border-border/60 px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <h3 className="text-xs sm:text-sm font-semibold text-foreground">
                     Lista de tareas
                   </h3>
-                  <Badge variant="primary" dot>
+                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
                     {filteredTasks.length}
-                  </Badge>
+                  </span>
                 </div>
 
                 <div className="sm:hidden flex items-center gap-1">
-                  <select
+                  <BentoSelect
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value as "ALL" | TaskStatus)}
-                    className="h-7 text-[11px] bg-muted/60 rounded-lg px-2 text-foreground border border-border/60"
-                  >
-                    <option value="ALL">Todas</option>
-                    <option value="PENDING">Pendientes</option>
-                    <option value="IN_PROGRESS">En curso</option>
-                    <option value="COMPLETED">Completadas</option>
-                  </select>
+                    onChange={(val) =>
+                      setStatusFilter(val as "ALL" | TaskStatus)
+                    }
+                    className="w-36"
+                    options={[
+                      { value: "ALL", label: "Todas" },
+                      { value: "PENDING", label: "Pendientes" },
+                      { value: "IN_PROGRESS", label: "En curso" },
+                      { value: "COMPLETED", label: "Completadas" },
+                    ]}
+                  />
                 </div>
               </div>
 
-              <div className="p-3 divide-y divide-border/40">
+              <div className="p-3">
                 {filteredTasks.length === 0 ? (
                   <EmptyState
-                    icon={<ClipboardList className="h-8 w-8 text-muted-foreground/40" />}
+                    icon={<ClipboardList className="h-5 w-5 text-muted-foreground" />}
                     title={
                       searchQuery || statusFilter !== "ALL" || scope === "mine"
                         ? "No se encontraron tareas con los filtros aplicados"
@@ -658,10 +640,10 @@ export default function TasksPage() {
                             setIsEditingTask(false);
                           }}
                           className={cn(
-                            "rounded-2xl border p-3.5 transition-all cursor-pointer select-none",
+                            "rounded-xl border p-3.5 transition-colors cursor-pointer select-none",
                             isSelected
-                              ? "border-primary/50 bg-primary/5 shadow-xs"
-                              : "border-border/60 bg-background/50 hover:bg-muted/30 hover:border-border",
+                              ? "border-border bg-muted/40 shadow-2xs"
+                              : "border-border/60 bg-background/40 hover:bg-muted/20 hover:border-border",
                           )}
                         >
                           <div className="flex items-start gap-3">
@@ -672,13 +654,13 @@ export default function TasksPage() {
                                 e.stopPropagation();
                                 handleToggleTask(task.id, task.status);
                               }}
-                              className="mt-0.5 shrink-0 rounded-lg p-0.5 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+                              className="mt-0.5 shrink-0 rounded-md p-0.5 text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
                               aria-label={`Cambiar estado rápido de ${task.title}`}
                             >
                               {task.status === "COMPLETED" ? (
-                                <CheckSquare className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                               ) : (
-                                <Square className="h-5 w-5 hover:text-primary" />
+                                <Square className="h-4 w-4" />
                               )}
                             </button>
 
@@ -687,7 +669,7 @@ export default function TasksPage() {
                               <div className="flex items-start justify-between gap-2">
                                 <span
                                   className={cn(
-                                    "text-sm font-semibold transition-all line-clamp-1",
+                                    "text-xs sm:text-sm font-semibold transition-colors line-clamp-1",
                                     task.status === "COMPLETED"
                                       ? "text-muted-foreground line-through decoration-muted-foreground/60"
                                       : "text-foreground",
@@ -695,31 +677,30 @@ export default function TasksPage() {
                                 >
                                   {task.title}
                                 </span>
-                                <span
-                                  className={cn(
-                                    "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                                    getTaskStatusClass(task.status),
-                                  )}
+                                <Badge
+                                  variant={getTaskStatusVariant(task.status)}
+                                  dot
+                                  className="shrink-0"
                                 >
                                   {getTaskStatusLabel(task.status)}
-                                </span>
+                                </Badge>
                               </div>
 
                               {task.description && (
-                                <p className="mt-1 text-xs text-muted-foreground/80 line-clamp-1">
+                                <p className="mt-1 text-xs text-muted-foreground line-clamp-1">
                                   {task.description}
                                 </p>
                               )}
 
-                              {/* Badges row */}
+                              {/* Metadata row */}
                               <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                                 {task.assignedTo ? (
-                                  <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-2 py-0.5 font-medium text-foreground/80 border border-border/40">
-                                    <UserIcon className="h-3 w-3 text-primary" />
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5 font-medium text-foreground border border-border/60">
+                                    <UserIcon className="h-3 w-3 text-muted-foreground" />
                                     {task.assignedTo.name}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded-md bg-muted/30 px-1.5 py-0.5 text-muted-foreground/70">
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-muted/30 px-1.5 py-0.5 text-muted-foreground">
                                     <Users className="h-3 w-3" />
                                     Sin asignar
                                   </span>
@@ -728,10 +709,10 @@ export default function TasksPage() {
                                 {task.dueDate && (
                                   <span
                                     className={cn(
-                                      "inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium border",
+                                      "inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[11px] font-medium border tabular-nums",
                                       isOverdue
-                                        ? "bg-rose-500/10 text-rose-600 border-rose-500/20"
-                                        : "bg-muted/60 text-muted-foreground border-border/40",
+                                        ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25"
+                                        : "bg-muted/50 text-muted-foreground border-border/60",
                                     )}
                                   >
                                     <Calendar className="h-3 w-3" />
@@ -740,7 +721,7 @@ export default function TasksPage() {
                                   </span>
                                 )}
 
-                                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 ml-auto">
+                                <span className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground tabular-nums ml-auto">
                                   <Clock3 className="h-3 w-3" />
                                   {formatDateTime(task.updatedAt)}
                                 </span>
@@ -759,15 +740,15 @@ export default function TasksPage() {
           {/* Right Column: Selected Task Inspector & Timeline (5 cols) */}
           <div className="lg:col-span-5 lg:sticky lg:top-4">
             {selectedTask ? (
-              <Card className="border-border/80 bg-card overflow-hidden shadow-xs flex flex-col lg:max-h-[calc(100vh-6.5rem)]">
+              <Card className="border-border/70 bg-card overflow-hidden shadow-2xs flex flex-col lg:max-h-[calc(100vh-6.5rem)]">
                 {/* Header & Quick Action Buttons */}
-                <div className="border-b border-border/60 p-3.5 sm:p-4 shrink-0">
+                <div className="border-b border-border/60 p-4 shrink-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <span className="text-xs font-medium text-muted-foreground">
                         Detalle de la tarea
                       </span>
-                      <h2 className="text-base font-bold text-foreground mt-0.5 truncate">
+                      <h2 className="text-sm sm:text-base font-semibold text-foreground mt-0.5 truncate">
                         {selectedTask.title}
                       </h2>
                       <p className="text-xs text-muted-foreground mt-0.5">
@@ -803,7 +784,7 @@ export default function TasksPage() {
                             size="sm"
                             onClick={handleEditSelectedTask}
                           >
-                            <Edit3 className="h-3.5 w-3.5 mr-1" />
+                            <Edit3 className="h-3.5 w-3.5" />
                             Editar
                           </Button>
                           <Button
@@ -812,7 +793,7 @@ export default function TasksPage() {
                             onClick={() => handleDeleteTask(selectedTask.id)}
                             disabled={deleteTask.isPending}
                           >
-                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            <Trash2 className="h-3.5 w-3.5" />
                             Eliminar
                           </Button>
                         </>
@@ -820,10 +801,10 @@ export default function TasksPage() {
                     </div>
                   </div>
 
-                  {/* Status Transition Quick Selectors with colored chips */}
-                  <div className="mt-3.5 pt-2.5 border-t border-border/40">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                      Estado actual:
+                  {/* Status Transition Quick Selectors */}
+                  <div className="mt-3.5 pt-3 border-t border-border/50">
+                    <span className="text-xs font-medium text-muted-foreground block mb-1.5">
+                      Estado actual
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {(["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const).map(
@@ -836,15 +817,16 @@ export default function TasksPage() {
                               onClick={() => handleSetTaskStatus(selectedTask.id, status)}
                               disabled={updateTaskStatus.isPending || isCurrent}
                               className={cn(
-                                "inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition-all disabled:opacity-60 cursor-pointer disabled:cursor-default",
-                                getTaskStatusChipClass(status, isCurrent),
+                                "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer disabled:cursor-default",
+                                isCurrent
+                                  ? "border-border bg-muted/70 text-foreground font-semibold shadow-2xs"
+                                  : "border-border/60 bg-background/50 text-muted-foreground hover:border-border hover:bg-muted/30 hover:text-foreground",
                               )}
                             >
                               <span
                                 className={cn(
                                   "h-1.5 w-1.5 rounded-full shrink-0",
                                   getTaskStatusDotClass(status),
-                                  isCurrent && "animate-pulse",
                                 )}
                               />
                               {getTaskStatusLabel(status)}
@@ -857,11 +839,11 @@ export default function TasksPage() {
                 </div>
 
                 {/* Task Details Content / Form */}
-                <div className="p-3.5 sm:p-4 border-b border-border/60 bg-muted/5 shrink-0">
+                <div className="p-4 border-b border-border/60 bg-muted/10 shrink-0">
                   {isTaskEditing ? (
                     <div className="space-y-3">
                       <div>
-                        <label className="mb-1 block text-xs font-semibold text-foreground">
+                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                           Título de la tarea
                         </label>
                         <input
@@ -870,12 +852,12 @@ export default function TasksPage() {
                             setTaskDraft((prev) => ({ ...prev, title: e.target.value }))
                           }
                           maxLength={120}
-                          className="h-10 w-full rounded-xl border border-border/70 bg-card px-3 text-xs sm:text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          className="h-[38px] w-full rounded-lg border border-border/70 bg-card px-3 text-xs sm:text-sm text-foreground focus:border-border focus:outline-none transition-colors"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-1 block text-xs font-semibold text-foreground">
+                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                           Descripción o notas
                         </label>
                         <textarea
@@ -886,36 +868,31 @@ export default function TasksPage() {
                           rows={3}
                           maxLength={500}
                           placeholder="Detalles e instrucciones para el equipo..."
-                          className="w-full rounded-xl border border-border/70 bg-card px-3 py-2 text-xs sm:text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          className="w-full rounded-lg border border-border/70 bg-card px-3 py-2 text-xs sm:text-sm text-foreground focus:border-border focus:outline-none resize-none transition-colors"
                         />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="mb-1 block text-xs font-semibold text-foreground">
-                            Asignar a
-                          </label>
-                          <select
-                            value={taskDraft.assignedToId ?? ""}
-                            onChange={(e) =>
-                              setTaskDraft((prev) => ({
-                                ...prev,
-                                assignedToId: e.target.value || null,
-                              }))
-                            }
-                            className="h-10 w-full rounded-xl border border-border/70 bg-card px-2.5 text-xs sm:text-sm text-foreground focus:border-primary focus:outline-none"
-                          >
-                            <option value="">Sin asignar</option>
-                            {assignees.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.name} ({a.role})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <BentoSelect
+                          label="Asignar a"
+                          value={taskDraft.assignedToId ?? ""}
+                          onChange={(val) =>
+                            setTaskDraft((prev) => ({
+                              ...prev,
+                              assignedToId: val || null,
+                            }))
+                          }
+                          options={[
+                            { value: "", label: "Sin asignar" },
+                            ...assignees.map((a) => ({
+                              value: a.id,
+                              label: `${a.name} (${a.role})`,
+                            })),
+                          ]}
+                        />
 
                         <div>
-                          <label className="mb-1 block text-xs font-semibold text-foreground">
+                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                             Fecha límite
                           </label>
                           <input
@@ -927,7 +904,7 @@ export default function TasksPage() {
                                 dueDate: e.target.value || null,
                               }))
                             }
-                            className="h-10 w-full rounded-xl border border-border/70 bg-card px-3 text-xs sm:text-sm text-foreground focus:border-primary focus:outline-none"
+                            className="h-[38px] w-full rounded-lg border border-border/70 bg-card px-3 font-mono text-xs text-foreground tabular-nums focus:border-border focus:outline-none transition-colors"
                           />
                         </div>
                       </div>
@@ -935,41 +912,33 @@ export default function TasksPage() {
                   ) : (
                     <div className="space-y-2.5">
                       <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                        <span className="text-xs font-medium text-muted-foreground block mb-1">
                           Descripción
                         </span>
-                        <p className="text-xs text-foreground/90 leading-relaxed bg-card p-2.5 rounded-xl border border-border/60 max-h-20 overflow-y-auto">
+                        <p className="text-xs text-foreground leading-relaxed bg-card p-3 rounded-lg border border-border/60 max-h-24 overflow-y-auto">
                           {selectedTask.description?.trim() || "Sin descripción adicional por ahora."}
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="flex items-center gap-2.5 p-2 sm:p-2.5 rounded-xl bg-card border border-border/60 min-w-0">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <UserIcon className="h-3.5 w-3.5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
-                              Asignado
-                            </span>
-                            <span className="font-semibold text-foreground text-xs truncate block mt-0.5">
-                              {selectedTask.assignedTo?.name ?? "Sin asignar"}
-                            </span>
-                          </div>
+                      <div className="grid grid-cols-2 gap-2.5 text-xs">
+                        <div className="p-2.5 rounded-lg bg-card border border-border/60 min-w-0">
+                          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <UserIcon className="h-3.5 w-3.5 shrink-0" />
+                            <span>Asignado</span>
+                          </span>
+                          <span className="font-semibold text-foreground text-xs truncate block mt-1">
+                            {selectedTask.assignedTo?.name ?? "Sin asignar"}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-2.5 p-2 sm:p-2.5 rounded-xl bg-card border border-border/60 min-w-0">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Calendar className="h-3.5 w-3.5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
-                              Fecha Límite
-                            </span>
-                            <span className="font-semibold text-foreground text-xs truncate block mt-0.5">
-                              {selectedTask.dueDate ? formatDate(selectedTask.dueDate) : "Sin fecha"}
-                            </span>
-                          </div>
+                        <div className="p-2.5 rounded-lg bg-card border border-border/60 min-w-0">
+                          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <Calendar className="h-3.5 w-3.5 shrink-0" />
+                            <span>Fecha límite</span>
+                          </span>
+                          <span className="font-mono font-semibold text-foreground text-xs tabular-nums truncate block mt-1">
+                            {selectedTask.dueDate ? formatDate(selectedTask.dueDate) : "Sin fecha"}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -977,13 +946,15 @@ export default function TasksPage() {
                 </div>
 
                 {/* Timeline / Historial Section */}
-                <div className="flex flex-1 min-h-0 flex-col p-3.5 sm:p-4">
-                  <div className="flex items-center justify-between mb-2 shrink-0">
+                <div className="flex flex-1 min-h-0 flex-col p-4">
+                  <div className="flex items-center justify-between mb-2.5 shrink-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      <h3 className="text-xs font-semibold text-foreground">
                         Historial
                       </h3>
-                      <Badge variant="secondary">{selectedTaskTimeline.length}</Badge>
+                      <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
+                        {selectedTaskTimeline.length}
+                      </span>
                     </div>
                     {isTimelineLoading && (
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -991,20 +962,20 @@ export default function TasksPage() {
                   </div>
 
                   {selectedTaskTimeline.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-3 text-center text-xs text-muted-foreground">
+                    <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 p-3 text-center text-xs text-muted-foreground">
                       Todavía no hay eventos registrados para esta tarea.
                     </div>
                   ) : (
-                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                       {selectedTaskTimeline.map((event) => (
                         <div
                           key={event.id}
-                          className="flex items-start gap-2.5 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/30 transition-colors p-2 text-xs"
+                          className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/20 p-2.5 text-xs"
                         >
-                          <div className="mt-1 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                          <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
                           <div className="min-w-0 flex-1 space-y-0.5">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-semibold text-foreground text-[11px] truncate">
+                              <span className="font-semibold text-foreground text-xs truncate">
                                 {getTaskEventLabel(event.type)}
                                 {event.fromStatus && event.fromStatus !== event.toStatus && (
                                   <span className="ml-1.5 font-normal text-muted-foreground">
@@ -1012,11 +983,11 @@ export default function TasksPage() {
                                   </span>
                                 )}
                               </span>
-                              <span className="text-[10px] text-muted-foreground shrink-0">
+                              <span className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
                                 {formatDateTime(event.createdAt)}
                               </span>
                             </div>
-                            <p className="text-[10px] text-muted-foreground truncate">
+                            <p className="text-[11px] text-muted-foreground truncate">
                               {event.createdBy?.name ?? "Sistema"}
                               {event.note ? ` - ${event.note}` : ""}
                             </p>
@@ -1028,11 +999,13 @@ export default function TasksPage() {
                 </div>
               </Card>
             ) : (
-              <Card className="p-12 text-center border-dashed border-border/80 bg-muted/10">
-                <div className="w-12 h-12 rounded-2xl bg-muted/60 border border-border/60 flex items-center justify-center mx-auto mb-3 text-muted-foreground/50">
-                  <ClipboardList className="w-6 h-6" />
+              <Card className="p-10 text-center border-dashed border-border/70 bg-card/40">
+                <div className="w-10 h-10 rounded-lg bg-muted/50 border border-border/60 flex items-center justify-center mx-auto mb-2.5 text-muted-foreground">
+                  <ClipboardList className="w-5 h-5" />
                 </div>
-                <h4 className="text-sm font-semibold text-foreground">Ninguna tarea seleccionada</h4>
+                <h4 className="text-xs sm:text-sm font-semibold text-foreground">
+                  Ninguna tarea seleccionada
+                </h4>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
                   Haz clic en una tarea de la lista para ver sus detalles, editarla o consultar su historial de cambios.
                 </p>
@@ -1046,12 +1019,12 @@ export default function TasksPage() {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Crear Nueva Tarea"
+        title="Nueva tarea"
         size="md"
       >
         <form onSubmit={handleCreateModalSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
               Título <span className="text-rose-500">*</span>
             </label>
             <input
@@ -1060,13 +1033,13 @@ export default function TasksPage() {
               onChange={(e) => setNewModalDraft((prev) => ({ ...prev, title: e.target.value }))}
               placeholder="Ej: Revisar stock de vitrina..."
               maxLength={120}
-              className="h-10 w-full rounded-xl border border-border/80 bg-card px-3 text-xs sm:text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="h-[38px] w-full rounded-lg border border-border/70 bg-muted/30 px-3 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-border focus:bg-background focus:outline-none transition-colors"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">
-              Descripción o Instrucciones
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Descripción o instrucciones
             </label>
             <textarea
               value={newModalDraft.description}
@@ -1076,34 +1049,29 @@ export default function TasksPage() {
               rows={3}
               maxLength={500}
               placeholder="Detalla qué necesita hacerse y cualquier consideración especial..."
-              className="w-full rounded-xl border border-border/80 bg-card px-3 py-2 text-xs sm:text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-border focus:bg-background focus:outline-none resize-none transition-colors"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-foreground">
-                Asignar a compañero
-              </label>
-              <select
-                value={newModalDraft.assignedToId}
-                onChange={(e) =>
-                  setNewModalDraft((prev) => ({ ...prev, assignedToId: e.target.value }))
-                }
-                className="h-10 w-full rounded-xl border border-border/80 bg-card px-3 text-xs sm:text-sm text-foreground focus:border-primary focus:outline-none cursor-pointer"
-              >
-                <option value="">Sin asignar (general)</option>
-                {assignees.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.role})
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <BentoSelect
+              label="Asignar a compañero"
+              value={newModalDraft.assignedToId}
+              onChange={(val) =>
+                setNewModalDraft((prev) => ({ ...prev, assignedToId: val }))
+              }
+              options={[
+                { value: "", label: "Sin asignar (general)" },
+                ...assignees.map((a) => ({
+                  value: a.id,
+                  label: `${a.name} (${a.role})`,
+                })),
+              ]}
+            />
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-foreground">
-                Fecha Límite
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Fecha límite
               </label>
               <input
                 type="date"
@@ -1111,7 +1079,7 @@ export default function TasksPage() {
                 onChange={(e) =>
                   setNewModalDraft((prev) => ({ ...prev, dueDate: e.target.value }))
                 }
-                className="h-10 w-full rounded-xl border border-border/80 bg-card px-3 text-xs sm:text-sm text-foreground focus:border-primary focus:outline-none"
+                className="h-[38px] w-full rounded-lg border border-border/70 bg-muted/30 px-3 font-mono text-xs text-foreground tabular-nums focus:border-border focus:bg-background focus:outline-none transition-colors"
               />
             </div>
           </div>

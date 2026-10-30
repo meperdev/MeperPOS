@@ -48,12 +48,12 @@ export function CancelPurchaseOrderModal({
       size="sm"
     >
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           Esta acción no se puede deshacer. Indica el motivo de la cancelación
           (mínimo 5 caracteres).
         </p>
         <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
             Motivo
           </label>
           <textarea
@@ -62,7 +62,7 @@ export function CancelPurchaseOrderModal({
             onChange={(e) => setReason(e.target.value)}
             rows={4}
             placeholder="Ej: Proveedor sin stock, pedido duplicado..."
-            className="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none"
+            className="w-full rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border focus:bg-background transition-colors resize-none"
           />
         </div>
         <div className="flex flex-col sm:flex-row gap-3 justify-end pt-4 border-t border-border/60">

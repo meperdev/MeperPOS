@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -21,6 +21,7 @@ import {
   useRemoveOrganizationMember,
   useDeleteOrganization,
 } from "@/hooks/useAdmin";
+import type { Organization } from "@/hooks/useAdmin";
 import { formatDate } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api";
 import {
@@ -75,26 +76,12 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
   const removeMember = useRemoveOrganizationMember();
   const deleteOrg = useDeleteOrganization();
 
-  const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [showAddMember, setShowAddMember] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [newMember, setNewMember] = useState({ email: "", name: "", role: "CASHIER" });
   const [addMemberError, setAddMemberError] = useState("");
   const [deleteError, setDeleteError] = useState("");
-
-  // Initialize edit form when org data loads
-  useEffect(() => {
-    if (org) {
-      setEditForm({
-        name: org.name,
-        slug: org.slug,
-        taxId: org.taxId ?? "",
-        phone: org.phone ?? "",
-        address: org.address ?? "",
-      });
-    }
-  }, [org]);
 
   if (isLoading) {
     return <LoadingState icon={<Building2 className="w-5 h-5 text-primary/50" />} message="Cargando organización..." />;
@@ -125,103 +112,12 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <h3 className="text-lg font-semibold text-foreground">Información General</h3>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                label="Nombre"
-                value={editForm.name ?? ""}
-                onChange={(e) =>
-                  setEditForm((prev) => ({ ...prev, name: e.target.value }))
-                }
-              />
-              <Input
-                label="Slug"
-                value={editForm.slug ?? ""}
-                onChange={(e) =>
-                  setEditForm((prev) => ({ ...prev, slug: e.target.value }))
-                }
-              />
-              <Input
-                label="NIT"
-                value={editForm.taxId ?? ""}
-                onChange={(e) =>
-                  setEditForm((prev) => ({ ...prev, taxId: e.target.value }))
-                }
-              />
-              <Input
-                label="Teléfono"
-                value={editForm.phone ?? ""}
-                onChange={(e) =>
-                  setEditForm((prev) => ({ ...prev, phone: e.target.value }))
-                }
-              />
-              <div className="sm:col-span-2">
-                <Input
-                  label="Dirección"
-                  value={editForm.address ?? ""}
-                  onChange={(e) =>
-                    setEditForm((prev) => ({ ...prev, address: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Button
-                variant="primary"
-                size="sm"
-                loading={updateOrg.isPending}
-                onClick={() =>
-                  updateOrg.mutate({ id: org.id, ...editForm })
-                }
-              >
-                Guardar cambios
-              </Button>
-              {org.trialEndsAt && (
-                <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Trial finaliza: {formatDate(org.trialEndsAt)}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-4 text-sm border-t border-border pt-4">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                  <Building2 className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Estado</p>
-                  <Badge variant={statusBadgeVariant[org.status] ?? "default"}>
-                    {org.status}
-                  </Badge>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                  <CreditCard className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Plan</p>
-                  <p className="text-sm font-semibold text-foreground">{org.plan}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Facturación</p>
-                <p className="text-sm font-semibold text-foreground">{org.billingStatus ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Creada</p>
-                <p className="text-sm font-semibold text-foreground">{formatDate(org.createdAt)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <OrganizationGeneralCard
+          key={org.updatedAt}
+          organization={org}
+          saving={updateOrg.isPending}
+          onSave={(values) => updateOrg.mutate({ id: org.id, ...values })}
+        />
 
         <Card>
           <CardHeader>
@@ -271,7 +167,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
+              <Users className="h-5 w-5 text-primary-text" />
               <h3 className="text-lg font-semibold text-foreground">Usuarios de la organización</h3>
             </div>
             <Button
@@ -294,11 +190,11 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <table className="w-full text-sm">
                 <thead className="border-b border-border bg-muted/50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Nombre</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Email</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Rol</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Owner</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Acciones</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Nombre</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Email</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Rol</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Owner</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -509,5 +405,102 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
         </div>
       </Modal>
     </div>
+  );
+}
+
+type OrganizationFormValues = {
+  name: string;
+  slug: string;
+  taxId: string;
+  phone: string;
+  address: string;
+};
+
+/**
+ * The editable half of the organization detail card. Its state starts from the
+ * loaded organization; the parent keys it by `updatedAt`, so a refetch after a
+ * save re-seeds the form without an effect writing state during render.
+ */
+function OrganizationGeneralCard({
+  organization,
+  saving,
+  onSave,
+}: {
+  organization: Organization;
+  saving: boolean;
+  onSave: (values: OrganizationFormValues) => void;
+}) {
+  const [form, setForm] = useState<OrganizationFormValues>(() => ({
+    name: organization.name,
+    slug: organization.slug,
+    taxId: organization.taxId ?? "",
+    phone: organization.phone ?? "",
+    address: organization.address ?? "",
+  }));
+
+  const update = (key: keyof OrganizationFormValues, value: string) =>
+    setForm((previous) => ({ ...previous, [key]: value }));
+
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader>
+        <h3 className="text-lg font-semibold text-foreground">Información General</h3>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input label="Nombre" value={form.name} onChange={(e) => update("name", e.target.value)} />
+          <Input label="Slug" value={form.slug} onChange={(e) => update("slug", e.target.value)} />
+          <Input label="NIT" value={form.taxId} onChange={(e) => update("taxId", e.target.value)} />
+          <Input label="Teléfono" value={form.phone} onChange={(e) => update("phone", e.target.value)} />
+          <div className="sm:col-span-2">
+            <Input label="Dirección" value={form.address} onChange={(e) => update("address", e.target.value)} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button variant="primary" size="sm" loading={saving} onClick={() => onSave(form)}>
+            Guardar cambios
+          </Button>
+          {organization.trialEndsAt && (
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Trial finaliza: {formatDate(organization.trialEndsAt)}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4 text-sm border-t border-border pt-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+              <Building2 className="h-4 w-4 text-primary-text" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Estado</p>
+              <Badge variant={statusBadgeVariant[organization.status] ?? "default"}>
+                {organization.status}
+              </Badge>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+              <CreditCard className="h-4 w-4 text-primary-text" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Plan</p>
+              <p className="text-sm font-semibold text-foreground">{organization.plan}</p>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Facturación</p>
+            <p className="text-sm font-semibold text-foreground">{organization.billingStatus ?? "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Creada</p>
+            <p className="text-sm font-semibold text-foreground">{formatDate(organization.createdAt)}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

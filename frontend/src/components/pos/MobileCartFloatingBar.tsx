@@ -36,7 +36,7 @@ export function MobileCartFloatingBar({
           </div>
           <div className="text-left min-w-0">
             <p className="text-[11px] font-medium text-white/80 uppercase tracking-wider leading-none mb-1">
-              Ver Carrito
+              Ver carrito
             </p>
             <p className="stat-number text-base font-extrabold text-white leading-none truncate">
               {formatCurrency(total)}

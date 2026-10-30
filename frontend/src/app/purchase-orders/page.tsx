@@ -7,16 +7,27 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { usePurchaseOrders } from "@/hooks/usePurchaseOrders";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { FilterBar } from "@/components/ui/FilterBar";
+import {
+  FilterBar,
+  FilterClearButton,
+} from "@/components/ui/FilterBar";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
-import { Plus, Eye, ClipboardList, X } from "lucide-react";
+import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
+import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import {
+  Plus,
+  Eye,
+  ClipboardList,
+  Truck,
+  Calendar,
+} from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { chipStyles } from "@/lib/chipStyles";
 import { hasAnyRole } from "@/lib/auth";
 import type { PurchaseOrderStatus } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,11 +52,12 @@ export default function PurchaseOrdersPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = usePersistedViewMode("purchase-orders");
 
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
   const { data, isLoading } = usePurchaseOrders({
     page,
-    limit: 15,
+    limit: viewMode === "grid" ? 12 : 10,
     q: q.trim() || undefined,
     supplierId: supplierId || undefined,
     status: status || undefined,
@@ -58,7 +70,7 @@ export default function PurchaseOrdersPage() {
   const suppliers = suppliersData?.data ?? [];
 
   const hasFilters =
-    !!q || !!supplierId || !!status || !!dateFrom || !!dateTo;
+    Boolean(q || supplierId || status || dateFrom || dateTo);
 
   const clearFilters = () => {
     setPage(1);
@@ -71,35 +83,28 @@ export default function PurchaseOrdersPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 lg:space-y-7">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-1 h-7 rounded-full bg-primary shrink-0" />
-              <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
-                Órdenes de compra
-              </h1>
-              {meta && (
-                <span
-                  className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${chipStyles.primary}`}
-                >
-                  {meta.total} registros
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground ml-4">
-              Gestiona las compras y el abastecimiento
-            </p>
-          </div>
-          {canManage && (
-            <Link href="/purchase-orders/new" className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto shrink-0">
-                <Plus className="w-4 h-4" /> Nueva OC
-              </Button>
-            </Link>
-          )}
-        </div>
+      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+        {/* Page Header */}
+<PageHeader
+          title="Órdenes de compra"
+          subtitle="Gestiona las compras, recepción de mercancía y abastecimiento"
+          count={
+            meta
+              ? `${meta.total} ${meta.total === 1 ? "orden" : "órdenes"}`
+              : undefined
+          }
+          actions={
+            canManage ? (
+              <Link href="/purchase-orders/new" className="w-full sm:w-auto">
+                <Button className="w-full sm:w-auto">
+                  <Plus className="w-4 h-4" /> Nueva OC
+                </Button>
+              </Link>
+            ) : undefined
+          }
+        />
 
+        {/* Filter Bar */}
         <FilterBar
           searchValue={q}
           onSearchChange={(value) => {
@@ -108,7 +113,7 @@ export default function PurchaseOrdersPage() {
           }}
           searchPlaceholder="Buscar por N° OC o proveedor..."
           filterControls={
-            <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+            <>
               <BentoSelect
                 value={supplierId}
                 onChange={(value) => {
@@ -146,7 +151,8 @@ export default function PurchaseOrdersPage() {
                     setPage(1);
                     setDateFrom(e.target.value);
                   }}
-                  className="h-8 px-2 rounded-lg text-xs font-semibold bg-muted/40 border border-border/60 text-foreground focus:outline-none focus:border-primary/50 flex-1 sm:flex-none"
+                  className="h-[38px] px-2.5 rounded-lg text-xs bg-muted/40 border border-transparent focus:border-border/70 focus:bg-background text-foreground transition-colors font-mono tabular-nums flex-1 sm:flex-none"
+                  aria-label="Fecha inicial"
                 />
                 <input
                   type="date"
@@ -155,60 +161,164 @@ export default function PurchaseOrdersPage() {
                     setPage(1);
                     setDateTo(e.target.value);
                   }}
-                  className="h-8 px-2 rounded-lg text-xs font-semibold bg-muted/40 border border-border/60 text-foreground focus:outline-none focus:border-primary/50 flex-1 sm:flex-none"
+                  className="h-[38px] px-2.5 rounded-lg text-xs bg-muted/40 border border-transparent focus:border-border/70 focus:bg-background text-foreground transition-colors font-mono tabular-nums flex-1 sm:flex-none"
+                  aria-label="Fecha final"
                 />
               </div>
+
               {hasFilters && (
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 border border-border/60 transition-colors"
-                >
-                  <X className="w-3 h-3" /> Limpiar
-                </button>
+                <FilterClearButton onClick={clearFilters} />
               )}
-            </div>
+
+              <ViewModeToggle
+                value={viewMode}
+                onChange={(mode) => {
+                  setPage(1);
+                  setViewMode(mode);
+                }}
+              />
+            </>
           }
         />
 
+        {/* Content */}
         {isLoading ? (
-          <LoadingState icon={<ClipboardList className="w-4 h-4 text-primary/50" />} message="Cargando órdenes..." />
+          <TableSkeleton columns={6} rows={6} label="Cargando órdenes de compra..." />
+        ) : orders.length === 0 ? (
+          <EmptyState
+            icon={<ClipboardList className="w-5 h-5 text-muted-foreground" />}
+            title={
+              hasFilters
+                ? "Sin resultados para los filtros aplicados"
+                : "No hay órdenes de compra registradas"
+            }
+            subtitle={
+              hasFilters
+                ? "Prueba cambiando el rango de fechas, proveedor o estado."
+                : "Crea tu primera orden de compra para abastecer inventario."
+            }
+          />
         ) : (
           <>
-            {/* Mobile Cards View */}
-            <div className="md:hidden space-y-3">
-              {orders.length === 0 ? (
-                <EmptyState icon={<ClipboardList className="w-6 h-6 text-muted-foreground/30" />} title="No hay órdenes de compra" />
-              ) : (
-                orders.map((order) => (
+            {viewMode === "table" ? (
+              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden animate-fade-in flex-1">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[680px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableCell as="th">N° OC</TableCell>
+                        <TableCell as="th">Proveedor</TableCell>
+                        <TableCell as="th">Fecha</TableCell>
+                        <TableCell as="th">Estado</TableCell>
+                        <TableCell as="th" className="text-right">
+                          Total
+                        </TableCell>
+                        <TableCell as="th" className="text-right">
+                          Acciones
+                        </TableCell>
+                      </TableRow>
+                    </TableHeader>
+                    <tbody>
+                      {orders.map((order) => (
+                        <TableRow
+                          key={order.id}
+                          className="cursor-pointer"
+                          onClick={() =>
+                            router.push(`/purchase-orders/${order.id}`)
+                          }
+                        >
+                          <TableCell>
+                            <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                              OC-{order.orderNumber}
+                            </span>
+                          </TableCell>
+                          <TableCell className="max-w-[240px]">
+                            <span className="text-xs font-medium text-foreground line-clamp-1">
+                              {order.supplier?.name ?? "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-mono text-xs text-muted-foreground whitespace-nowrap tabular-nums">
+                              {formatDate(order.createdAt)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <PurchaseOrderStatusBadge status={order.status} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                              {formatCurrency(order.total)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div
+                              className="inline-flex items-center justify-end"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  router.push(`/purchase-orders/${order.id}`)
+                                }
+                                className="h-7 px-2.5 text-xs inline-flex items-center gap-1.5"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> Detalle
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              </div>
+            ) : (
+              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 lg:gap-4 stagger-children">
+                {orders.map((order) => (
                   <div
                     key={order.id}
-                    className="rounded-2xl border border-accent/30 bg-card p-4 shadow-xs space-y-3 cursor-pointer active:scale-[0.99] transition-transform"
+                    className="group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border cursor-pointer"
                     onClick={() => router.push(`/purchase-orders/${order.id}`)}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-sm font-bold text-primary">
-                        OC-{order.orderNumber}
-                      </span>
-                      <PurchaseOrderStatusBadge status={order.status} />
-                    </div>
-
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between items-center text-muted-foreground">
-                        <span>Proveedor</span>
-                        <span className="font-semibold text-foreground truncate max-w-[180px]">
-                          {order.supplier?.name ?? "—"}
+                    <div>
+                      {/* Header */}
+                      <div className="flex items-center justify-between gap-2 mb-2.5">
+                        <span className="font-mono text-xs font-semibold text-foreground tracking-tight tabular-nums">
+                          OC-{order.orderNumber}
                         </span>
+                        <PurchaseOrderStatusBadge status={order.status} />
                       </div>
-                      <div className="flex justify-between items-center text-muted-foreground">
-                        <span>Fecha</span>
-                        <span className="font-mono">{formatDate(order.createdAt)}</span>
+
+                      {/* Supplier and Date */}
+                      <div className="space-y-1.5 mt-3 pt-2.5 border-t border-border/50 text-xs">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Truck className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
+                          <span className="font-semibold text-foreground truncate">
+                            {order.supplier?.name ?? "Sin proveedor"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
+                          <span className="font-mono tabular-nums text-muted-foreground">
+                            {formatDate(order.createdAt)}
+                          </span>
+                        </div>
+                        {order.notes && (
+                          <p className="text-xs text-muted-foreground/70 line-clamp-1 pt-0.5">
+                            {order.notes}
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
+                    {/* Footer */}
+                    <div className="flex items-center justify-between pt-3 mt-3.5 border-t border-border/60">
                       <div>
-                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Total</p>
-                        <p className="stat-number text-base font-bold text-foreground">
+                        <p className="text-[11px] font-medium text-muted-foreground">
+                          Total compra
+                        </p>
+                        <p className="font-mono text-sm font-semibold text-foreground tabular-nums">
                           {formatCurrency(order.total)}
                         </p>
                       </div>
@@ -219,103 +329,17 @@ export default function PurchaseOrdersPage() {
                           e.stopPropagation();
                           router.push(`/purchase-orders/${order.id}`);
                         }}
-                        className="h-8 px-2.5 text-xs"
+                        className="h-7 px-2.5 text-xs inline-flex items-center gap-1"
                       >
-                        <Eye className="w-3.5 h-3.5 mr-1" /> Detalle
+                        <Eye className="w-3.5 h-3.5" /> Detalle
                       </Button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-
-            {/* Desktop Table View */}
-            <div className="hidden md:block rounded-3xl border border-accent/30 bg-accent/10 overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table variant="accent" className="min-w-[680px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        N° OC
-                      </TableCell>
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Proveedor
-                      </TableCell>
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Fecha
-                      </TableCell>
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Estado
-                      </TableCell>
-                      <TableCell as="th" className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Total
-                      </TableCell>
-                      <TableCell as="th" className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Acciones
-                      </TableCell>
-                    </TableRow>
-                  </TableHeader>
-                  <tbody>
-                    {orders.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-14">
-                          <EmptyState icon={<ClipboardList className="w-6 h-6 text-muted-foreground/30" />} title="No hay órdenes de compra" />
-                        </td>
-                      </tr>
-                    ) : (
-                      orders.map((order) => (
-                        <TableRow
-                          key={order.id}
-                          className="cursor-pointer"
-                          onClick={() =>
-                            router.push(`/purchase-orders/${order.id}`)
-                          }
-                        >
-                          <TableCell>
-                            <span className="text-xs font-bold text-primary font-mono">
-                              OC-{order.orderNumber}
-                            </span>
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate">
-                            <span className="text-xs font-semibold text-foreground">
-                              {order.supplier?.name ?? "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground whitespace-nowrap font-mono">
-                            {formatDate(order.createdAt)}
-                          </TableCell>
-                          <TableCell>
-                            <PurchaseOrderStatusBadge status={order.status} />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="stat-number text-sm font-bold text-foreground">
-                              {formatCurrency(order.total)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  router.push(`/purchase-orders/${order.id}`);
-                                }}
-                                className="p-1.5 h-7 w-7"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </tbody>
-                </Table>
+                ))}
               </div>
-            </div>
+            )}
 
-            {meta && meta.totalPages > 1 && (
+            {meta && (
               <Pagination
                 currentPage={page}
                 totalPages={meta.totalPages}

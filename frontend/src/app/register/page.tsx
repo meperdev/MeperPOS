@@ -10,7 +10,7 @@ export default function RegisterPage() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen w-full bg-background flex items-center justify-center p-4 sm:p-6 selection:bg-primary/20 selection:text-primary">
+    <div className="min-h-screen w-full bg-background flex items-center justify-center p-4 sm:p-6 selection:bg-primary/20 selection:text-primary-text">
       <div className="w-full max-w-md animate-fade-in-up">
         <div className="rounded-3xl p-8 sm:p-10 bg-card border border-border/80 shadow-2xl shadow-black/10 space-y-6 text-left">
           {/* Header */}
@@ -31,14 +31,14 @@ export default function RegisterPage() {
                 className="w-36 h-auto hidden dark:block"
               />
             </div>
-            <div className="font-mono text-[10px] uppercase font-bold text-primary px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
+            <div className="font-mono text-[11px] uppercase font-bold text-primary-text px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
               Acceso Restringido
             </div>
           </div>
 
           {/* Contexto y Explicación */}
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-primary text-xs font-mono font-bold uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-primary-text text-xs font-mono font-bold uppercase tracking-wider">
               <ShieldAlert className="w-4 h-4 text-terracotta" />
               <span>Registro Institucional</span>
             </div>
@@ -59,7 +59,7 @@ export default function RegisterPage() {
             </p>
             <p className="leading-relaxed">
               Contacta al administrador del sistema o escribe a{" "}
-              <span className="font-mono text-primary font-bold">
+              <span className="font-mono text-primary-text font-bold">
                 soporte@meperpos.com
               </span>
             </p>
@@ -69,7 +69,7 @@ export default function RegisterPage() {
                 href="https://folio.mepersoft.app/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+                className="text-primary-text font-medium hover:underline inline-flex items-center gap-1"
               >
                 folio.mepersoft.app
                 <ExternalLink className="w-2.5 h-2.5" />

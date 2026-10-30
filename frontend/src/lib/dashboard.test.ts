@@ -12,6 +12,7 @@ import {
   DASHBOARD_RANGES,
   DEFAULT_DASHBOARD_RANGE,
   filterOpenTasks,
+  formatCategoryAmountTick,
   formatCategoryAxisTick,
   formatCategoryTooltipDate,
   getDashboardRange,
@@ -62,6 +63,15 @@ describe("computePendingAmount (DIA-7)", () => {
 
   it("falls back to the full total when payments are absent", () => {
     expect(computePendingAmount({ total: 100000 })).toBe(100000);
+  });
+
+  it("coerces the decimal strings the API sends before subtracting", () => {
+    expect(
+      computePendingAmount({
+        total: "100000",
+        payments: [{ amount: "40000" }, { amount: "30000" }],
+      }),
+    ).toBe(30000);
   });
 });
 
@@ -192,6 +202,29 @@ describe("sumExpensesOnDate (Salidas hoy)", () => {
   it("returns 0 when the list is empty or undefined", () => {
     expect(sumExpensesOnDate([], today)).toBe(0);
     expect(sumExpensesOnDate(undefined, today)).toBe(0);
+  });
+
+  it("sums the decimal strings the API sends instead of concatenating them", () => {
+    expect(
+      sumExpensesOnDate(
+        [
+          { date: "2026-08-22", total: "120000" },
+          { date: "2026-08-22T05:00:00.000Z", total: "5000" },
+          { date: "2026-08-21", total: "90000" },
+        ],
+        today,
+      ),
+    ).toBe(125000);
+  });
+});
+
+describe("formatCategoryAmountTick", () => {
+  it("keeps every money tick to one short token", () => {
+    expect(formatCategoryAmountTick(18_000_000)).toBe("$18M");
+    expect(formatCategoryAmountTick(6_000_000)).toBe("$6M");
+    expect(formatCategoryAmountTick(450_000)).toBe("$450k");
+    expect(formatCategoryAmountTick(900)).toBe("$900");
+    expect(formatCategoryAmountTick(0)).toBe("");
   });
 });
 

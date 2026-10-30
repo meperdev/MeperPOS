@@ -49,7 +49,7 @@ export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
               {footer.text}{" "}
               <Link
                 href={footer.href}
-                className="font-bold text-primary hover:text-primary-dark transition-colors ml-1"
+                className="font-bold text-primary-text hover:text-primary-dark transition-colors ml-1"
               >
                 {footer.linkText}
               </Link>

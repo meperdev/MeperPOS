@@ -1,12 +1,6 @@
-import { Badge } from "@/components/ui/Badge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { ExpenseStatus } from "@/types";
 
 export function ExpenseStatusBadge({ status }: { status: ExpenseStatus }) {
-  const isPaid = status === "PAID";
-
-  return (
-    <Badge variant={isPaid ? "success" : "warning"}>
-      {isPaid ? "Pagado" : "Parcial"}
-    </Badge>
-  );
+  return <StatusBadge domain="expense" status={status} />;
 }

@@ -25,11 +25,16 @@ export function Pagination({
   isDisabled = false,
   className,
 }: PaginationProps) {
-  if (totalPages <= 1) return null;
+  // The footer stays on screen whenever there are results, so a one-page list
+  // still shows its range and keeps the page from looking truncated.
+  if (typeof totalItems === "number" ? totalItems <= 0 : totalPages <= 1) {
+    return null;
+  }
 
-  const clamped = Math.max(1, Math.min(currentPage, totalPages));
+  const pageCount = Math.max(1, totalPages);
+  const clamped = Math.max(1, Math.min(currentPage, pageCount));
   const prev = () => onPageChange(Math.max(1, clamped - 1));
-  const next = () => onPageChange(Math.min(totalPages, clamped + 1));
+  const next = () => onPageChange(Math.min(pageCount, clamped + 1));
 
   const hasTotal = typeof totalItems === "number";
   const hasRange = hasTotal && typeof pageSize === "number" && pageSize > 0;
@@ -66,21 +71,21 @@ export function Pagination({
           size="sm"
           onClick={prev}
           disabled={clamped <= 1 || isDisabled}
-          className="px-2.5 rounded-xl font-mono text-xs"
+          className="h-7 px-2.5 py-1 rounded-md font-mono text-xs"
         >
           <ChevronLeft className="h-3.5 w-3.5 mr-1" />
           Anterior
         </Button>
-        <span className="px-3 py-1 rounded-xl bg-muted border border-border/60 text-xs font-bold text-foreground">
-          {clamped} / {totalPages}
+        <span className="inline-flex h-7 items-center px-2.5 rounded-md bg-muted/60 border border-border/70 text-xs font-semibold tabular-nums text-foreground">
+          {clamped} / {pageCount}
         </span>
         <Button
           type="button"
           variant="secondary"
           size="sm"
           onClick={next}
-          disabled={clamped >= totalPages || isDisabled}
-          className="px-2.5 rounded-xl font-mono text-xs"
+          disabled={clamped >= pageCount || isDisabled}
+          className="h-7 px-2.5 py-1 rounded-md font-mono text-xs"
         >
           Siguiente
           <ChevronRight className="h-3.5 w-3.5 ml-1" />

@@ -54,7 +54,7 @@ describe("MobileCartFloatingBar", () => {
       />,
     );
 
-    expect(screen.getByText("Ver Carrito")).toBeInTheDocument();
+    expect(screen.getByText("Ver carrito")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("Abrir")).toBeInTheDocument();
 

@@ -83,16 +83,10 @@ function expenseLabel(obligation: PayrollObligation): string {
     : "Gasto al completar: Sí";
 }
 
-/**
- * The shared Modal renders the visual panel only, and it is out of this task's
- * scope, so the dialog semantics live here: one labelled dialog per form.
- */
 function PayrollDialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <Modal isOpen onClose={onClose} title={title}>
-      <div role="dialog" aria-modal="true" aria-label={title}>
-        {children}
-      </div>
+      {children}
     </Modal>
   );
 }

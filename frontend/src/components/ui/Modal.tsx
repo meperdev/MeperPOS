@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -8,10 +8,14 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  /** Accessible name when the dialog renders its own heading instead of `title`. */
+  ariaLabel?: string;
   children: React.ReactNode;
+  footer?: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   /** Opt out only when the consumer measures and fits its content to the viewport. */
   scrollContent?: boolean;
+  className?: string;
 }
 
 const sizes = {
@@ -26,13 +30,65 @@ export function Modal({
   isOpen,
   onClose,
   title,
+  ariaLabel,
   children,
+  footer,
   size = "md",
   scrollContent = true,
+  className,
 }: ModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
   useEffect(() => {
     document.body.style.overflow = isOpen ? "hidden" : "unset";
     return () => { document.body.style.overflow = "unset"; };
+  }, [isOpen]);
+
+  // Modal dialogs own the keyboard: focus moves in, Tab stays inside, and the
+  // element that opened the dialog gets focus back when it closes.
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    const previous = document.activeElement as HTMLElement | null;
+
+    const focusables = () =>
+      Array.from(
+        panel?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length > 0);
+
+    const frame = window.requestAnimationFrame(() => {
+      const [first] = focusables();
+      (first ?? panel)?.focus();
+    });
+
+    const handleTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) {
+        event.preventDefault();
+        panel?.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleTab);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleTab);
+      previous?.focus?.();
+    };
   }, [isOpen]);
 
   useEffect(() => {
@@ -47,7 +103,7 @@ export function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 md:p-8">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -56,20 +112,27 @@ export function Modal({
 
       {/* Panel */}
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={!title ? ariaLabel : undefined}
+        tabIndex={-1}
         className={cn(
-          "relative w-full rounded-2xl sm:rounded-3xl border border-border/80",
+          "relative w-full rounded-xl sm:rounded-2xl border border-border/80",
           "bg-card shadow-2xl shadow-black/20",
-          "animate-fade-in-up flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)]",
+          "animate-fade-in-up flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-4rem)]",
           sizes[size],
+          className,
         )}
       >
         {/* Header */}
         {title && (
           <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 sm:px-6 sm:py-4 shrink-0">
-            <h2 className={cn("text-base font-bold text-foreground pr-2", scrollContent ? "truncate" : "min-w-0 [overflow-wrap:anywhere]")}>{title}</h2>
+            <h2 id={titleId} className={cn("text-base font-bold text-foreground pr-2", scrollContent ? "truncate" : "min-w-0 [overflow-wrap:anywhere]")}>{title}</h2>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-xl border border-border/60 bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-xs shrink-0"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:h-9 sm:w-9"
               aria-label="Cerrar"
             >
               <X className="w-4 h-4" />
@@ -79,6 +142,13 @@ export function Modal({
 
         {/* Content */}
         <div className={cn("p-4 sm:p-6", scrollContent ? "overflow-y-auto scrollbar-app flex-1" : "shrink-0")}>{children}</div>
+
+        {/* Footer */}
+        {footer && (
+          <div className="border-t border-border/60 px-4 py-3 sm:px-6 sm:py-3.5 bg-muted/10 shrink-0 rounded-b-xl sm:rounded-b-2xl">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

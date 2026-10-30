@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo } from "react";
 import Image from "next/image";
@@ -151,7 +151,7 @@ export function PaymentConfirmationModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Confirmar Pago" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Confirmar pago" size="xl">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
           <div>
@@ -164,7 +164,7 @@ export function PaymentConfirmationModal({
                   key={item.productId}
                   className="flex items-start gap-3 p-3 bg-background rounded-lg border border-border"
                 >
-                  <div className="relative w-12 h-12 bg-gradient-to-br from-primary/10 to-accent/10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <div className="relative w-12 h-12 bg-muted/60 border border-border/50 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                     {item.product.imageUrl ? (
                       <Image
                         src={item.product.imageUrl}
@@ -174,7 +174,7 @@ export function PaymentConfirmationModal({
                         className="object-cover"
                       />
                     ) : (
-                      <Package className="w-6 h-6 text-primary" />
+                      <Package className="w-5 h-5 text-muted-foreground/50" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -355,7 +355,7 @@ export function PaymentConfirmationModal({
             </div>
             <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
               <span className="text-foreground">Total</span>
-              <span className="text-primary">{formatCurrency(total)}</span>
+              <span className="text-primary-text">{formatCurrency(total)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Pagado</span>
@@ -393,7 +393,7 @@ export function PaymentConfirmationModal({
               loading={loading}
             >
               <Check className="w-5 h-5 mr-2" />
-              Confirmar Pago
+              Confirmar pago
             </Button>
           </div>
         </div>

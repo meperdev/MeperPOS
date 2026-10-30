@@ -39,7 +39,7 @@ vi.mock("@/contexts/ToastContext", () => ({
 }));
 vi.mock("@/components/ui/Modal", () => ({
   Modal: ({ isOpen, children }: { isOpen: boolean; children: ReactNode }) =>
-    isOpen ? <div role="dialog" aria-label="Editar Producto">{children}</div> : null,
+    isOpen ? <div role="dialog" aria-label="Editar producto">{children}</div> : null,
 }));
 vi.mock("@/components/ui/ConfirmDialog", () => ({ ConfirmDialog: () => null }));
 vi.mock("@/components/products/ProductCard", () => ({
@@ -73,7 +73,7 @@ function decimalProduct(overrides: Record<string, unknown> = {}) {
 
 const openEdit = () => {
   fireEvent.click(screen.getByRole("button", { name: "Panela" }));
-  return screen.getByRole("dialog", { name: "Editar Producto" });
+  return screen.getByRole("dialog", { name: "Editar producto" });
 };
 
 beforeEach(() => {

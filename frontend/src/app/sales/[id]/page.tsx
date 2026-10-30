@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Download, Receipt } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Badge } from "@/components/ui/Badge";
+import { getPaymentState } from "@/components/sales/PaymentState";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -13,21 +15,8 @@ import { useSale } from "@/hooks/useSales";
 import { printReceipt } from "@/hooks/useReceipt";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { chipStyles } from "@/lib/chipStyles";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 
-function getStatusBadge(status: string) {
-  switch (status) {
-    case "COMPLETED":
-      return <Badge variant="success">Completada</Badge>;
-    case "CANCELLED":
-      return <Badge variant="danger">Cancelada</Badge>;
-    case "RETURNED_PARTIAL":
-      return <Badge variant="warning">Parcial</Badge>;
-    default:
-      return <Badge variant="default">{status}</Badge>;
-  }
-}
 
 function getPaymentMethodLabel(method: string) {
   switch (method) {
@@ -84,16 +73,18 @@ export default function SaleDetailPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 lg:space-y-7">
+      <div className="space-y-4 lg:space-y-5">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-1 h-7 rounded-full bg-primary shrink-0" />
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
               Detalle de venta
             </h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Resumen completo de la transacción
+            </p>
           </div>
-          <Button variant="secondary" onClick={() => router.push("/sales") }>
-            <ArrowLeft className="w-4 h-4" /> Volver
+          <Button variant="secondary" size="sm" onClick={() => router.push("/sales") }>
+            <ArrowLeft className="w-3.5 h-3.5" /> Volver
           </Button>
         </div>
 
@@ -105,7 +96,7 @@ export default function SaleDetailPage() {
               <p className="text-sm font-semibold text-foreground">No se pudo abrir la venta</p>
               <p className="text-xs text-muted-foreground">{errorMessage ?? "La venta solicitada no esta disponible."}</p>
               <div className="pt-1">
-                <Button variant="secondary" onClick={() => router.push("/sales") }>
+                <Button variant="secondary" size="sm" onClick={() => router.push("/sales") }>
                   Ir a Ventas
                 </Button>
               </div>
@@ -113,82 +104,101 @@ export default function SaleDetailPage() {
           </Card>
         ) : (
           <>
-            <Card className="overflow-hidden">
-              <div className="card-top-rail card-top-rail--primary" />
-              <CardContent className="space-y-5 pt-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            <Card className="overflow-hidden border-border/70 shadow-2xs">
+              <CardContent className="space-y-5 pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
                   <div>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                    <p className="text-xs font-medium text-muted-foreground">
                       Venta
                     </p>
-                    <p className="text-xl font-bold text-primary font-mono">
+                    <p className="mt-0.5 text-xl font-semibold text-foreground font-mono tabular-nums tracking-tight">
                       #{sale.saleNumber}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {getStatusBadge(sale.status)}
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${chipStyles.primary}`}
-                    >
+                    <StatusBadge domain="sale" status={sale.status} dot={false} />
+                    {sale.financed && (
+                      <Badge variant="primary" dot>
+                        Financiado
+                      </Badge>
+                    )}
+                    <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
                       {formatDateTime(sale.createdAt)}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="p-3 rounded-lg bg-muted/40 border border-border/50">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                  <div className="p-3 rounded-lg bg-muted/30 border border-border/60">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       Cliente
                     </p>
                     <p className="text-sm font-semibold text-foreground">
                       {sale.customer?.name || "Cliente General"}
                     </p>
                   </div>
-                  <div className="p-3 rounded-lg bg-muted/40 border border-border/50">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  <div className="p-3 rounded-lg bg-muted/30 border border-border/60">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       Vendedor
                     </p>
                     <p className="text-sm font-semibold text-foreground">
                       {sale.user?.name || "N/A"}
                     </p>
                   </div>
-                  <div className="p-3 rounded-lg bg-muted/40 border border-border/50 md:col-span-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                      Metodos de pago
+                  <div className="p-3 rounded-lg bg-muted/30 border border-border/60 md:col-span-2">
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                      Métodos de pago
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {sale.payments?.length ? (
                         sale.payments.map((payment) => (
-                          <Badge key={payment.id} variant="secondary">
+                          <Badge
+                            key={payment.id}
+                            variant="secondary"
+                            className={getPaymentState([payment]).className}
+                          >
                             {getPaymentMethodLabel(payment.method)}: {formatCurrency(payment.amount)}
                           </Badge>
                         ))
+                      ) : sale.financed ? (
+                        <span className="inline-flex flex-col gap-0.5">
+                          <Badge variant="primary">Financiado</Badge>
+                          <span className="text-[11px] text-muted-foreground">
+                            El cobro se registra en el préstamo asociado.
+                          </span>
+                        </span>
                       ) : (
-                        <span className="text-sm text-muted-foreground">Sin pago</span>
+                        <span className="text-xs text-muted-foreground">Sin pago</span>
                       )}
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Items
-                  </p>
-                  <div className="space-y-1.5 max-h-72 overflow-y-auto scrollbar-hide">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-foreground">
+                      Items de la venta
+                    </p>
+                    <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                      {sale.items.length}{" "}
+                      {sale.items.length === 1 ? "producto" : "productos"}
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-muted/20 divide-y divide-border/50 max-h-72 overflow-y-auto scrollbar-app">
                     {sale.items.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40"
+                        className="flex items-center justify-between px-3.5 py-2.5"
                       >
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground truncate">
                             {item.product?.name || "Producto eliminado"}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatCurrency(item.unitPrice)} x {item.quantity}
+                          <p className="text-xs font-mono text-muted-foreground tabular-nums mt-0.5">
+                            {formatCurrency(item.unitPrice)} × {item.quantity}
                           </p>
                         </div>
-                        <span className="stat-number text-sm font-bold text-foreground ml-4">
+                        <span className="font-mono text-sm font-semibold text-foreground tabular-nums ml-4">
                           {formatCurrency(item.total)}
                         </span>
                       </div>
@@ -196,36 +206,36 @@ export default function SaleDetailPage() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border/60 space-y-2">
-                  <div className="flex justify-between text-sm">
+                <div className="pt-4 border-t border-border/60 space-y-1.5">
+                  <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium text-foreground">
+                    <span className="font-mono font-medium text-foreground tabular-nums">
                       {formatCurrency(sale.subtotal)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Impuestos</span>
-                    <span className="font-medium text-foreground">
+                    <span className="font-mono font-medium text-foreground tabular-nums">
                       {formatCurrency(sale.taxAmount)}
                     </span>
                   </div>
                   {sale.discountAmount > 0 && (
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Descuento</span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
                         -{formatCurrency(sale.discountAmount)}
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center pt-2 border-t border-border/60">
-                    <span className="font-bold text-foreground">Total</span>
-                    <span className="stat-number text-xl font-bold text-primary">
+                  <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
+                    <span className="text-sm font-semibold text-foreground">Total</span>
+                    <span className="font-mono text-lg font-semibold text-foreground tabular-nums">
                       {formatCurrency(sale.total)}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end pt-1">
                   <Button onClick={handlePrintReceipt}>
                     <Download className="w-4 h-4" /> Descargar comprobante
                   </Button>

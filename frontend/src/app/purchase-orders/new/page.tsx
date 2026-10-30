@@ -11,9 +11,12 @@ import {
   type CreatePurchaseOrderItemPayload,
 } from "@/hooks/usePurchaseOrders";
 import { Button } from "@/components/ui/Button";
+import { BentoSelect } from "@/components/ui/BentoSelect";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
+import { SearchField } from "@/components/ui/SearchField";
 import { ArrowLeft, Plus, Trash2, ClipboardList } from "lucide-react";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import type { Product } from "@/types";
@@ -128,88 +131,83 @@ export default function NewPurchaseOrderPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 lg:space-y-7">
+      <div className="space-y-4 lg:space-y-5">
         <div className="flex items-center gap-3">
           <Link
             href="/purchase-orders"
-            className="inline-flex items-center gap-1 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-primary"
+            className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border hover:bg-muted hover:text-foreground"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Volver
           </Link>
           <div>
-            <div className="flex items-center gap-3">
-              <div className="w-1 h-7 rounded-full bg-primary shrink-0" />
-              <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
-                Nueva orden de compra
-              </h1>
-            </div>
-            <p className="text-sm text-muted-foreground ml-4">
-              Crea un borrador para confirmar más tarde
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+              Nueva orden de compra
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Crea un borrador de compra para confirmar y recibir stock más tarde
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 space-y-5">
-            <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Proveedor
-                </label>
-                <select
-                  value={supplierId}
-                  onChange={(e) => setSupplierId(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                  required
-                >
-                  <option value="">Selecciona un proveedor...</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} — {s.documentNumber}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
+          <div className="lg:col-span-2 space-y-4">
+            <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-4">
+              <BentoSelect
+                label="Proveedor *"
+                value={supplierId}
+                onChange={setSupplierId}
+                placeholder="Selecciona un proveedor..."
+                options={[
+                  { value: "", label: "Selecciona un proveedor..." },
+                  ...suppliers.map((s) => ({
+                    value: s.id,
+                    label: `${s.name} — ${s.documentNumber}`,
+                  })),
+                ]}
+              />
 
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Notas (opcional)
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Notas u observaciones (opcional)
                 </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  placeholder="Observaciones sobre la orden..."
-                  className="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none"
+                  placeholder="Instrucciones de entrega, número de cotización o detalles del pedido..."
+                  className="w-full rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border focus:bg-background transition-colors resize-none"
                 />
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/60 bg-card overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-border/60">
-                <h2 className="text-sm font-semibold text-foreground">Items</h2>
+            <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+                <h2 className="text-xs font-semibold text-foreground">
+                  Productos en la orden ({items.length})
+                </h2>
                 <Button
                   type="button"
                   size="sm"
                   onClick={() => setShowPicker((s) => !s)}
+                  className="h-7 text-xs"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Agregar producto
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Agregar producto
                 </Button>
               </div>
 
               {showPicker && (
-                <div className="px-5 py-3 border-b border-border/60 bg-muted/40 space-y-2">
-                  <input
+                <div className="px-4 py-3 border-b border-border/60 bg-muted/30 space-y-2">
+                  <SearchField
                     autoFocus
-                    placeholder="Buscar producto por nombre o SKU..."
                     value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50"
+                    onChange={setProductSearch}
+                    placeholder="Buscar producto por nombre o SKU..."
+                    inputClassName="border border-border/70 bg-background text-sm"
                   />
-                  <div className="max-h-60 overflow-y-auto rounded-lg border border-border/60 bg-card divide-y divide-border/60">
+                  <div className="max-h-60 overflow-y-auto rounded-lg border border-border/70 bg-card divide-y divide-border/60">
                     {products.length === 0 ? (
                       <p className="p-3 text-xs text-muted-foreground text-center">
-                        Sin resultados
+                        Sin resultados para esa búsqueda
                       </p>
                     ) : (
                       products.map((p) => (
@@ -217,17 +215,17 @@ export default function NewPurchaseOrderPage() {
                           key={p.id}
                           type="button"
                           onClick={() => addProduct(p)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-primary/5 transition-colors"
+                          className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/50 transition-colors"
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-foreground truncate">
                               {p.name}
                             </p>
-                            <p className="text-[11px] text-muted-foreground font-mono">
+                            <p className="text-[11px] text-muted-foreground font-mono tabular-nums">
                               {p.sku} · Costo {formatCurrency(p.costPrice)}
                             </p>
                           </div>
-                          <Plus className="w-4 h-4 text-primary shrink-0" />
+                          <Plus className="w-4 h-4 text-primary-text shrink-0 ml-2" />
                         </button>
                       ))
                     )}
@@ -236,145 +234,146 @@ export default function NewPurchaseOrderPage() {
               )}
 
               {items.length === 0 ? (
-                <div className="px-5 py-12 text-center">
-                  <div className="w-10 h-10 mx-auto rounded-xl bg-muted flex items-center justify-center mb-3">
-                    <ClipboardList className="w-5 h-5 text-muted-foreground/40" />
+                <div className="px-5 py-10 text-center">
+                  <div className="w-9 h-9 mx-auto rounded-lg bg-muted/40 border border-border/60 flex items-center justify-center mb-2.5 text-muted-foreground">
+                    <ClipboardList className="w-4 h-4" />
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Agrega productos a la orden
+                  <p className="text-sm font-medium text-foreground">
+                    No hay productos agregados
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Haz clic en &ldquo;Agregar producto&rdquo; para incorporar artículos a la orden
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px]">
-                    <thead>
-                      <tr className="border-b border-border/60 bg-muted/40">
-                        <th className="text-left py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Producto
-                        </th>
-                        <th className="text-right py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-24">
-                          Cant.
-                        </th>
-                        <th className="text-right py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-32">
-                          Costo Unit.
-                        </th>
-                        <th className="text-right py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-20">
-                          IVA %
-                        </th>
-                        <th className="text-right py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-32">
-                          Subtotal
-                        </th>
-                        <th className="w-10" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((it) => {
-                        const lineSubtotal = it.qtyOrdered * it.unitCost;
-                        return (
-                          <tr
-                            key={it.tempId}
-                            className="border-b border-border/40 last:border-b-0"
-                          >
-                            <td className="py-2 px-4">
-                              <p className="text-sm font-medium text-foreground truncate max-w-[200px]">
-                                {it.productName}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground font-mono">
-                                {it.productSku}
-                              </p>
-                            </td>
-                            <td className="py-2 px-3">
-                              <input
-                                type="number"
-                                min={1}
-                                value={it.qtyOrdered}
-                                onChange={(e) =>
-                                  updateItem(it.tempId, {
-                                    qtyOrdered: Number(e.target.value) || 0,
-                                  })
-                                }
-                                className="w-full rounded-md border border-border bg-card px-2 py-1 text-right text-sm focus:outline-none focus:border-primary/50"
-                              />
-                            </td>
-                            <td className="py-2 px-3">
-                              <CurrencyInput
-                                value={it.unitCost}
-                                onChange={(value) =>
-                                  updateItem(it.tempId, { unitCost: value })
-                                }
-                                className="text-right"
-                              />
-                            </td>
-                            <td className="py-2 px-3">
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                step="0.1"
-                                value={it.taxRate}
-                                onChange={(e) =>
-                                  updateItem(it.tempId, {
-                                    taxRate: Number(e.target.value) || 0,
-                                  })
-                                }
-                                className="w-full rounded-md border border-border bg-card px-2 py-1 text-right text-sm focus:outline-none focus:border-primary/50"
-                              />
-                            </td>
-                            <td className="py-2 px-4 text-right text-sm font-semibold text-foreground whitespace-nowrap">
-                              {formatCurrency(lineSubtotal)}
-                            </td>
-                            <td className="py-2 pr-3">
-                              <button
-                                type="button"
-                                onClick={() => removeItem(it.tempId)}
-                                className="p-1.5 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <div className="overflow-x-auto"><Table className="min-w-[560px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell as="th">Producto</TableCell>
+                      <TableCell as="th" className="text-right w-24">
+                        Cant.
+                      </TableCell>
+                      <TableCell as="th" className="text-right w-36">
+                        Costo unit.
+                      </TableCell>
+                      <TableCell as="th" className="text-right w-24">
+                        IVA %
+                      </TableCell>
+                      <TableCell as="th" className="text-right w-32">
+                        Subtotal
+                      </TableCell>
+                      <TableCell as="th" className="w-10">
+                        <span className="sr-only">Acciones</span>
+                      </TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <tbody>
+                    {items.map((it) => {
+                      const lineSubtotal = it.qtyOrdered * it.unitCost;
+                      return (
+                        <TableRow key={it.tempId}>
+                          <TableCell>
+                            <p className="text-xs font-semibold text-foreground truncate max-w-[200px]">
+                              {it.productName}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground font-mono">
+                              {it.productSku}
+                            </p>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <input
+                              type="number"
+                              min={1}
+                              value={it.qtyOrdered}
+                              onChange={(e) =>
+                                updateItem(it.tempId, {
+                                  qtyOrdered: Number(e.target.value) || 0,
+                                })
+                              }
+                              className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <CurrencyInput
+                              value={it.unitCost}
+                              onChange={(value) =>
+                                updateItem(it.tempId, { unitCost: value })
+                              }
+                              className="text-right"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="0.1"
+                              value={it.taxRate}
+                              onChange={(e) =>
+                                updateItem(it.tempId, {
+                                  taxRate: Number(e.target.value) || 0,
+                                })
+                              }
+                              className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right text-xs font-mono font-semibold text-foreground tabular-nums whitespace-nowrap">
+                            {formatCurrency(lineSubtotal)}
+                          </TableCell>
+                          <TableCell className="text-right pr-2">
+                            <button
+                              type="button"
+                              onClick={() => removeItem(it.tempId)}
+                              className="p-1 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                              aria-label="Quitar producto"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </tbody>
+                </Table></div>
               )}
             </div>
           </div>
 
           <aside className="space-y-4">
-            <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 space-y-3 sticky top-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Resumen
+            <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs sticky top-4">
+              <h3 className="text-xs font-semibold text-foreground">
+                Resumen de orden
               </h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
+              <div className="space-y-2 pt-1">
+                <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium text-foreground">
+                  <span className="font-mono text-foreground tabular-nums">
                     {formatCurrency(totals.subtotal)}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Impuestos</span>
-                  <span className="font-medium text-foreground">
+                  <span className="font-mono text-foreground tabular-nums">
                     {formatCurrency(totals.taxAmount)}
                   </span>
                 </div>
-                <div className="flex justify-between items-center pt-2 border-t border-primary/20">
-                  <span className="font-bold text-foreground">Total</span>
-                  <span className="stat-number text-xl font-bold text-primary">
+                <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
+                  <span className="text-xs font-semibold text-foreground">
+                    Total
+                  </span>
+                  <span className="font-mono text-base font-semibold text-foreground tabular-nums">
                     {formatCurrency(totals.total)}
                   </span>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 pt-2">
+              <div className="flex flex-col gap-2 pt-2 border-t border-border/60">
                 <Button
                   type="button"
                   onClick={handleSubmit}
                   disabled={!canSubmit}
                   loading={createPO.isPending}
-                  className={cn("w-full", !canSubmit && "opacity-60")}
+                  className="w-full"
                 >
                   Guardar borrador
                 </Button>
@@ -392,7 +391,7 @@ export default function NewPurchaseOrderPage() {
               )}
               {supplierId && items.length === 0 && (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                  Agrega al menos un item
+                  Agrega al menos un producto a la orden
                 </p>
               )}
             </div>

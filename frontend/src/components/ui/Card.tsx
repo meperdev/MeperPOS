@@ -11,9 +11,9 @@ export function Card({ children, className = "", onClick }: CardProps) {
     <div
       onClick={onClick}
       className={cn(
-        "rounded-2xl lg:rounded-3xl border border-border/80 bg-card shadow-xs transition-all duration-200",
+        "rounded-xl border border-border/70 bg-card shadow-2xs transition-colors duration-150",
         onClick &&
-          "cursor-pointer hover:border-primary/40 hover:shadow-md",
+          "cursor-pointer hover:border-border hover:bg-muted/20",
         className,
       )}
     >
@@ -30,7 +30,7 @@ export function CardHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("border-b border-border/60 p-5", className)}>
+    <div className={cn("border-b border-border/60 px-5 py-4", className)}>
       {children}
     </div>
   );
@@ -43,7 +43,7 @@ export function CardContent({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={cn("p-6", className)}>{children}</div>;
+  return <div className={cn("p-5", className)}>{children}</div>;
 }
 
 export function CardFooter({
@@ -54,7 +54,7 @@ export function CardFooter({
   className?: string;
 }) {
   return (
-    <div className={cn("border-t border-border/60 p-6", className)}>
+    <div className={cn("border-t border-border/60 px-5 py-4", className)}>
       {children}
     </div>
   );

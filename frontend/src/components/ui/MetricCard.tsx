@@ -27,35 +27,35 @@ interface MetricCardProps {
 }
 
 const toneCardClasses: Record<MetricCardTone, string> = {
-  primary: "border-primary/25 bg-card hover:border-primary/45 transition-colors",
-  accent: "border-accent/25 bg-card hover:border-accent/45 transition-colors",
-  rose: "border-rose-500/25 bg-card hover:border-rose-500/45 transition-colors",
-  green: "border-green-500/25 bg-card hover:border-green-500/45 transition-colors",
-  blue: "border-blue-500/25 bg-card hover:border-blue-500/45 transition-colors",
+  primary: "border-border/70 bg-card hover:border-border transition-colors",
+  accent: "border-border/70 bg-card hover:border-border transition-colors",
+  rose: "border-rose-500/25 bg-card hover:border-rose-500/40 transition-colors",
+  green: "border-border/70 bg-card hover:border-border transition-colors",
+  blue: "border-border/70 bg-card hover:border-border transition-colors",
 };
 
 const toneValueClasses: Record<MetricCardTone, string> = {
-  primary: "text-primary",
-  accent: "text-accent",
-  rose: "text-rose-500",
-  green: "text-green-500",
-  blue: "text-blue-500",
+  primary: "text-foreground",
+  accent: "text-foreground",
+  rose: "text-rose-700 dark:text-rose-400",
+  green: "text-foreground",
+  blue: "text-foreground",
 };
 
 const toneSparkColor: Record<MetricCardTone, string> = {
   primary: "#C25E36",
   accent: "#C25E36",
   rose: "#F43F5E",
-  green: "#22C55E",
+  green: "#10B981",
   blue: "#3B82F6",
 };
 
 const toneActionClasses: Record<MetricCardTone, string> = {
-  primary: "border-primary/30 text-primary hover:bg-primary/10",
-  accent: "border-accent/30 text-accent hover:bg-accent/10",
-  rose: "border-rose-500/30 text-rose-500 hover:bg-rose-500/10",
-  green: "border-green-500/30 text-green-500 hover:bg-green-500/10",
-  blue: "border-blue-500/30 text-blue-500 hover:bg-blue-500/10",
+  primary: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
+  accent: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
+  rose: "border-rose-500/35 bg-rose-500/[0.06] text-rose-700 dark:text-rose-400 hover:bg-rose-500/12",
+  green: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
+  blue: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
 };
 
 const NEUTRAL_SPARK_COLOR = "#94A3B8";
@@ -69,7 +69,11 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
   const data = values.map((value, index) => ({ index, value }));
 
   return (
-    <div data-testid="metric-sparkline" className="mt-2 h-8 w-full">
+    <div
+      data-testid="metric-sparkline"
+      aria-hidden="true"
+      className="mt-2 h-8 w-full"
+    >
       <AreaChart
         width="100%"
         height={32}
@@ -125,20 +129,21 @@ export function MetricCard({
       className={
         tone
           ? cn(
-              "rounded-3xl border p-5 shadow-xs flex flex-col justify-between",
+              "rounded-xl border p-3 sm:p-4 shadow-2xs flex flex-col justify-between",
               toneCardClasses[tone],
             )
-          : "rounded-3xl border border-border/80 bg-card p-5 shadow-xs flex flex-col justify-between"
+          : "rounded-xl border border-border/70 bg-card p-3 sm:p-4 shadow-2xs flex flex-col justify-between"
       }
     >
-      <p className="text-[11px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
+      <p className="text-xs font-medium text-muted-foreground">
         {label}
       </p>
       <p
         className={cn(
-          "mt-2 text-2xl font-extrabold font-mono text-foreground tracking-tight",
+          "mt-1.5 truncate text-lg font-semibold font-mono text-foreground tracking-tight tabular-nums sm:text-2xl",
           tone && toneValueClasses[tone],
         )}
+        title={value}
       >
         {value}
       </p>
@@ -152,12 +157,12 @@ export function MetricCard({
         {delta ? (
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px] font-bold",
+              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums",
               !hasBaseline
-                ? "bg-muted text-muted-foreground border border-border"
+                ? "bg-muted/70 text-muted-foreground border border-border/70"
                 : positive
-                  ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800",
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25"
+                  : "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/25",
             )}
           >
             {hasBaseline && (
@@ -177,10 +182,10 @@ export function MetricCard({
           type="button"
           onClick={action.onClick}
           className={cn(
-            "mt-3 inline-flex items-center gap-1 self-start rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors",
+            "mt-3 inline-flex min-h-7 items-center gap-1 self-start rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
             tone
               ? toneActionClasses[tone]
-              : "border-border/60 text-foreground hover:bg-muted",
+              : "border-border/70 bg-muted/40 text-foreground hover:bg-muted",
           )}
         >
           {action.label}

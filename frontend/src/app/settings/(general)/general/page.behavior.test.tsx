@@ -72,11 +72,11 @@ describe("General settings page", () => {
 
     const nameInput = screen.getByLabelText(/nombre de la organización/i);
     await user.clear(nameInput);
-    await user.type(nameInput, "Nueva Empresa");
+    await user.type(nameInput, "Nueva empresa");
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     expect(updateOrganizationNameMutateAsyncMock).toHaveBeenCalledWith(
-      "Nueva Empresa"
+      "Nueva empresa"
     );
   });
 

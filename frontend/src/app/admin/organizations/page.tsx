@@ -124,7 +124,7 @@ export default function OrganizationsPage() {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <Table variant="default" className="w-full">
+            <Table variant="default" className="min-w-[720px]">
               <TableHeader>
                 <TableRow>
                   <TableCell as="th" className="px-4 py-3 text-left font-semibold text-foreground">Nombre</TableCell>
@@ -184,7 +184,7 @@ export default function OrganizationsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Crear Organización"
+        title="Crear organización"
         size="md"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -215,7 +215,7 @@ export default function OrganizationsPage() {
               id="hasAdmin"
               checked={formData.hasAdmin}
               onChange={(e) => setFormData({ ...formData, hasAdmin: e.target.checked })}
-              className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              className="h-4 w-4 rounded border-border text-primary-text focus:ring-primary"
             />
             <label htmlFor="hasAdmin" className="text-sm font-medium text-foreground">
               Crear administrador inicial
