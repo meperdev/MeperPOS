@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -303,7 +303,7 @@ describe("WhatsApp settings page", () => {
     const user = userEvent.setup();
     mocks.challenge.mockResolvedValue({
       code: "ABCDEFGHJK",
-      expiresAt: "2026-02-10T12:45:00.000Z",
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     });
     mocks.sendReport.mockResolvedValue({
       status: "failed",
@@ -323,5 +323,39 @@ describe("WhatsApp settings page", () => {
     expect(
       await screen.findByText(/No se envió el reporte: no se pudo generar el reporte/),
     ).toBeInTheDocument();
+  });
+
+  it("hides the code on demand so it stops being readable", async () => {
+    const user = userEvent.setup();
+    mocks.challenge.mockResolvedValue({
+      code: "ABCDEFGHJK",
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
+
+    render(<WhatsAppSettingsPage />);
+
+    await user.click(screen.getByRole("button", { name: /Solicitar código/ }));
+    expect(await screen.findByTestId("whatsapp-link-code")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ocultar código" }));
+    expect(screen.queryByTestId("whatsapp-link-code")).toBeNull();
+  });
+
+  it("clears an expired code without requiring a reload", async () => {
+    const user = userEvent.setup();
+    mocks.challenge.mockResolvedValue({
+      code: "ABCDEFGHJK",
+      expiresAt: new Date(Date.now() + 400).toISOString(),
+    });
+
+    render(<WhatsAppSettingsPage />);
+
+    await user.click(screen.getByRole("button", { name: /Solicitar código/ }));
+    expect(await screen.findByTestId("whatsapp-link-code")).toBeInTheDocument();
+
+    await waitFor(
+      () => expect(screen.queryByTestId("whatsapp-link-code")).toBeNull(),
+      { timeout: 3000 },
+    );
   });
 });

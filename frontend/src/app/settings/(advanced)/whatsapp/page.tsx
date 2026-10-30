@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Ban,
   Link2,
@@ -71,6 +71,9 @@ function Panel({
     </section>
   );
 }
+
+/** How often the link list refreshes while a code is waiting to be sent. */
+const IDENTITY_POLL_MS = 5_000;
 
 const KIND_LABELS: Record<WhatsAppDeliveryKind, string> = {
   SCHEDULED: "Automático",
@@ -181,7 +184,17 @@ function WhatsAppSettings() {
   const stopSession = useWhatsAppStop();
   const restartSession = useWhatsAppRestart();
 
-  const identitiesQuery = useWhatsAppIdentities();
+  const [linkCode, setLinkCode] = useState<WhatsAppLinkChallenge | null>(null);
+  const [identityToRevoke, setIdentityToRevoke] =
+    useState<WhatsAppIdentity | null>(null);
+  const [reportOutcome, setReportOutcome] =
+    useState<WhatsAppReportOutcome | null>(null);
+
+  // While a code is on screen the operator is linking from their phone, so the
+  // list has to pick up the new number without a reload.
+  const identitiesQuery = useWhatsAppIdentities(
+    linkCode ? IDENTITY_POLL_MS : undefined,
+  );
   const requestChallenge = useWhatsAppChallenge();
   const revokeIdentity = useWhatsAppRevokeIdentity();
 
@@ -192,14 +205,6 @@ function WhatsAppSettings() {
   // the operator is looking at it.
   const [qrRequested, setQrRequested] = useState(false);
   const qrQuery = useWhatsAppQr(qrRequested);
-
-  const [linkCode, setLinkCode] = useState<WhatsAppLinkChallenge | null>(null);
-  const [identityToRevoke, setIdentityToRevoke] = useState<WhatsAppIdentity | null>(
-    null,
-  );
-  const [reportOutcome, setReportOutcome] = useState<WhatsAppReportOutcome | null>(
-    null,
-  );
 
   const identities = identitiesQuery.data ?? [];
   const deliveries = deliveriesQuery.data ?? [];
@@ -241,6 +246,21 @@ function WhatsAppSettings() {
       );
     }
   };
+
+  // A code is a credential with a deadline: it clears itself when it expires, so
+  // a stale code cannot be read off the screen later.
+  useEffect(() => {
+    if (!linkCode) return;
+    const remaining = new Date(linkCode.expiresAt).getTime() - Date.now();
+    if (remaining <= 0) {
+      setLinkCode(null);
+      return;
+    }
+    const timer = setTimeout(() => setLinkCode(null), remaining);
+    return () => clearTimeout(timer);
+  }, [linkCode]);
+
+  const handleHideCode = () => setLinkCode(null);
 
   const handleRevoke = async () => {
     if (!identityToRevoke) return;
@@ -430,6 +450,11 @@ function WhatsAppSettings() {
                 <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
                 Solicitar código
               </Button>
+              {linkCode && (
+                <Button size="sm" variant="outline" onClick={handleHideCode}>
+                  Ocultar código
+                </Button>
+              )}
               {linkCode && (
                 <span className="text-xs text-muted-foreground">
                   Vence el{" "}
