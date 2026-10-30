@@ -166,8 +166,8 @@ model PayrollShiftMembership {
   @@index([obligationId, organizationId, employeeId, obligationKind], map: "PayrollShiftMembership_obligation_idx")
 }
 
-// Unwired cash identity and obligation references; revisions, audit and correction
-// workflows are future work. Reports must count outflows, not installment links.
+// Unwired cash identity and obligation references. Revision evidence is storage
+// only; correction workflows are future work. Reports must count outflows.
 model PayrollCashOutflow {
   id             String              @id @default(uuid())
   organizationId String
@@ -196,10 +196,35 @@ model PayrollInstallment {
   obligation     PayrollObligation  @relation(fields: [obligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_obligation_fkey")
   outflow        PayrollCashOutflow @relation(fields: [outflowId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_outflow_fkey")
   allocations    PayrollAllocation[]
+  revisions      PayrollCashRevision[]
 
+  @@unique([id, obligationId, outflowId, organizationId, employeeId], map: "PayrollInstallment_revision_target_key")
   @@unique([id, obligationId, organizationId, employeeId], map: "PayrollInstallment_allocation_target_key")
   @@unique([obligationId, outflowId], map: "PayrollInstallment_obligation_outflow_key")
   @@index([outflowId, organizationId, employeeId], map: "PayrollInstallment_outflow_idx")
+}
+
+// Row updates/deletes are rejected; TRUNCATE and privileged operations are not
+// guarded. Actor membership cannot be deleted or re-keyed while referenced.
+// Writers must validate snapshots, pending status and chain continuity
+// transactionally. Multiple revisions per outflow are allowed.
+model PayrollCashRevision {
+  id             String @id @default(uuid())
+  organizationId String
+  employeeId     String
+  installmentId  String
+  obligationId   String
+  outflowId      String
+  actorId        String
+  oldAmount      Decimal @db.Decimal
+  newAmount      Decimal @db.Decimal
+  originalDate   DateTime @db.Date
+  originalMethod PaymentMethod
+  createdAt      DateTime @default(now())
+  installment    PayrollInstallment @relation(fields: [installmentId, obligationId, outflowId, organizationId, employeeId], references: [id, obligationId, outflowId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashRevision_installment_fkey")
+  actor          OrganizationUser @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashRevision_actor_fkey")
+
+  @@index([installmentId, obligationId, outflowId, organizationId, employeeId], map: "PayrollCashRevision_installment_idx")
 }
 
 // Immutable application evidence; voids and replacements require a future transaction protocol.
@@ -274,6 +299,7 @@ model OrganizationUser {
   inventoryLoansEmployee InventoryLoan[] @relation("InventoryLoanEmployee")
   inventoryLoanOperations InventoryLoanOperation[]
   payrollCashOutflows PayrollCashOutflow[]
+  payrollCashRevisions PayrollCashRevision[]
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
