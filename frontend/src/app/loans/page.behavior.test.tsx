@@ -254,7 +254,11 @@ describe("Loans page", () => {
   it("references the linked financed sale in the modal", async () => {
     loanMock.mockReturnValue({
       data: makeLoan({
-        posFinancing: { intentId: "intent-1", finalSaleId: "sale-42" },
+        posFinancing: {
+          intentId: "intent-1",
+          finalSaleId: "sale-42",
+          finalSaleNumber: 427,
+        },
       }),
       isLoading: false,
       isError: false,
@@ -264,7 +268,7 @@ describe("Loans page", () => {
 
     const financing = within(screen.getByTestId("pos-financing"));
     expect(financing.getByTestId("pos-financing-sale").textContent).toBe(
-      "sale-42",
+      "#427",
     );
     expect(screen.queryByTestId("pos-financing-pending")).toBeNull();
   });
