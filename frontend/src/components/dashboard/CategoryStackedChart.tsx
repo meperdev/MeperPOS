@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { X } from "lucide-react";
@@ -38,6 +38,8 @@ interface CategoryTooltipContentProps {
   payload?: CategoryTooltipEntry[];
   coordinate?: { x?: number; y?: number };
   viewBox?: { x?: number; y?: number; width?: number; height?: number };
+  /** Reports the highlighted day so keyboard users can open its detail. */
+  onActiveDay?: (date: string | null) => void;
 }
 
 /**
@@ -47,12 +49,20 @@ interface CategoryTooltipContentProps {
 export function CategoryTooltipContent({
   active,
   payload,
+  onActiveDay,
 }: CategoryTooltipContentProps) {
+  const row = payload?.[0]?.payload;
+  const activeDate =
+    active && typeof row?.date === "string" ? row.date : null;
+
+  useEffect(() => {
+    onActiveDay?.(activeDate);
+  }, [activeDate, onActiveDay]);
+
   if (!active || !payload || payload.length === 0) {
     return null;
   }
 
-  const row = payload[0]?.payload;
   const total =
     typeof row?.total === "number"
       ? row.total
@@ -111,10 +121,14 @@ export function CategoryDayDetailModal({
   onClose,
   colorMap,
 }: CategoryDayDetailModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!day) return;
     const originalOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -124,6 +138,7 @@ export function CategoryDayDetailModal({
     return () => {
       document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus?.();
     };
   }, [day, onClose]);
 
@@ -141,9 +156,12 @@ export function CategoryDayDetailModal({
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         data-testid="category-day-detail-modal"
         role="dialog"
         aria-modal="true"
+        aria-labelledby="category-day-detail-title"
         className="relative w-full max-w-2xl rounded-2xl border border-border/80 bg-card p-6 sm:p-7 shadow-2xl text-foreground my-auto animate-in fade-in-0 zoom-in-95 duration-150 ease-out"
       >
         {/* Header */}
@@ -152,7 +170,10 @@ export function CategoryDayDetailModal({
             <p className="text-xs font-medium text-muted-foreground">
               Detalle del día
             </p>
-            <h3 className="text-xl sm:text-2xl font-semibold text-foreground capitalize mt-0.5 tracking-tight truncate">
+            <h3
+              id="category-day-detail-title"
+              className="text-xl sm:text-2xl font-semibold text-foreground capitalize mt-0.5 tracking-tight truncate"
+            >
               {formatCategoryTooltipDate(day.date)}
             </h3>
           </div>
@@ -346,6 +367,16 @@ export function CategoryStackedChart({
     [series],
   );
 
+  const keyboardDayRef = useRef<StackedDay | null>(null);
+  const trackActiveDay = useCallback(
+    (date: string | null) => {
+      keyboardDayRef.current = date
+        ? (series.find((day) => day.date === date) ?? null)
+        : null;
+    },
+    [series],
+  );
+
   const windowTotal = useMemo(
     () => series.reduce((sum, day) => sum + day.total, 0),
     [series],
@@ -379,6 +410,9 @@ export function CategoryStackedChart({
         <p>
           {`Ingresos por categoría de los últimos ${days.length} días: ${formatCurrency(windowTotal)} en total.`}
         </p>
+        <p>
+          Usa las flechas para recorrer los días y Enter para abrir el detalle.
+        </p>
         <table>
           <caption>Ventas por día</caption>
           <thead>
@@ -405,6 +439,13 @@ export function CategoryStackedChart({
         data-start-date={startDate}
         data-end-date={endDate}
         className="mt-4 min-h-0 w-full flex-1 overflow-visible relative cursor-pointer"
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          const day = keyboardDayRef.current;
+          if (!day) return;
+          event.preventDefault();
+          setSelectedDay(day);
+        }}
         onClick={() => {
           if (hoveredDayRef.current) {
             setSelectedDay(hoveredDayRef.current);
@@ -507,7 +548,7 @@ export function CategoryStackedChart({
                 "transform 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease-out",
             }}
             cursor={{ fill: "var(--primary)", fillOpacity: 0.08, rx: 8, ry: 8 }}
-            content={<CategoryTooltipContent />}
+            content={<CategoryTooltipContent onActiveDay={trackActiveDay} />}
           />
           {categories.map((category) => (
             <Bar
