@@ -39,15 +39,15 @@ export function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-xs"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-sm rounded-3xl border border-border/80 bg-card p-6 shadow-2xl animate-fade-in-up">
-        <div className="space-y-5">
+      <div className="relative w-full max-w-sm rounded-xl border border-border/80 bg-card p-5 shadow-xl animate-fade-in-up">
+        <div className="space-y-4">
           <div className="text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-danger border border-rose-200 dark:border-rose-800 shadow-xs">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25">
               <svg
-                className="h-6 w-6"
+                className="h-5 w-5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -60,7 +60,7 @@ export function ConfirmDialog({
                 />
               </svg>
             </div>
-            <h3 className="text-base font-bold text-foreground">
+            <h3 className="text-sm font-semibold text-foreground">
               {title}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -68,13 +68,13 @@ export function ConfirmDialog({
             </p>
           </div>
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2 pt-1">
             <Button
               variant="secondary"
               onClick={onClose}
               disabled={isConfirming}
               className="flex-1"
-              size="sm"
+              size="md"
             >
               {cancelText}
             </Button>
@@ -83,7 +83,7 @@ export function ConfirmDialog({
               onClick={handleConfirm}
               loading={isConfirming}
               className="flex-1"
-              size="sm"
+              size="md"
             >
               {confirmText}
             </Button>
