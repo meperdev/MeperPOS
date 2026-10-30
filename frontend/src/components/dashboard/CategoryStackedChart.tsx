@@ -346,6 +346,11 @@ export function CategoryStackedChart({
     [series],
   );
 
+  const windowTotal = useMemo(
+    () => series.reduce((sum, day) => sum + day.total, 0),
+    [series],
+  );
+
   const isDenseRange = days.length > 15;
   const barSize = days.length <= 7 ? 32 : days.length <= 15 ? 20 : 12;
   const tooltipOffset = Math.max(
@@ -370,6 +375,29 @@ export function CategoryStackedChart({
         </span>
       </div>
 
+      <div className="sr-only" data-testid="category-chart-summary">
+        <p>
+          {`Ingresos por categoría de los últimos ${days.length} días: ${formatCurrency(windowTotal)} en total.`}
+        </p>
+        <table>
+          <caption>Ventas por día</caption>
+          <thead>
+            <tr>
+              <th scope="col">Día</th>
+              <th scope="col">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {series.map((day) => (
+              <tr key={day.date}>
+                <td>{formatCategoryTooltipDate(day.date)}</td>
+                <td>{formatCurrency(day.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div
         ref={containerRef}
         data-testid="category-stacked-chart"
@@ -389,6 +417,7 @@ export function CategoryStackedChart({
           data={chartData}
           barSize={barSize}
           margin={{ top: 12, right: 12, bottom: 0, left: 12 }}
+          accessibilityLayer
           className="cursor-pointer"
           onMouseMove={(state) => {
             if (typeof state?.activeLabel === "string") {

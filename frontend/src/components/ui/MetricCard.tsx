@@ -69,7 +69,11 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
   const data = values.map((value, index) => ({ index, value }));
 
   return (
-    <div data-testid="metric-sparkline" className="mt-2 h-8 w-full">
+    <div
+      data-testid="metric-sparkline"
+      aria-hidden="true"
+      className="mt-2 h-8 w-full"
+    >
       <AreaChart
         width="100%"
         height={32}
