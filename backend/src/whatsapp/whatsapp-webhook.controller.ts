@@ -10,6 +10,7 @@ import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { deriveWebhookKey, verifyWahaSignature } from './waha-signature';
 import { WhatsAppEventsService } from './whatsapp-events.service';
+import type { WhatsAppEventPayload } from './whatsapp-ingestion.service';
 
 export const WAHA_WEBHOOK_KEY = Symbol('WAHA_WEBHOOK_KEY');
 
@@ -20,13 +21,16 @@ interface Envelope {
   session: string;
   event: string;
   providerEventId: string | null;
+  payload: WhatsAppEventPayload;
 }
 
 /**
- * Read only the routing envelope. The session name is read before verification
- * because it selects the key, but it is not trusted until the HMAC over the
- * exact bytes passes: a body naming another session derives another key and
- * fails. A missing id cannot be deduplicated and is dropped without effect.
+ * Read the routing envelope plus the five message fields ingestion reads, and
+ * nothing else: the provider payload is never forwarded as a whole. The session
+ * name is read before verification because it selects the key, but it is not
+ * trusted until the HMAC over the exact bytes passes: a body naming another
+ * session derives another key and fails. A missing id cannot be deduplicated
+ * and is dropped without effect.
  */
 function readEnvelope(body: Buffer): Envelope | null {
   let parsed: unknown;
@@ -43,14 +47,22 @@ function readEnvelope(body: Buffer): Envelope | null {
   };
   if (typeof session !== 'string' || !SESSION_NAME.test(session)) return null;
   if (typeof event !== 'string' || event.length === 0) return null;
-  const id =
+  const fields =
     typeof payload === 'object' && payload !== null
-      ? (payload as { id?: unknown }).id
-      : undefined;
+      ? (payload as Record<string, unknown>)
+      : {};
+  const id = fields.id;
   return {
     session,
     event,
     providerEventId: typeof id === 'string' && id !== '' ? id : null,
+    payload: {
+      from: fields.from,
+      fromMe: fields.fromMe,
+      source: fields.source,
+      body: fields.body,
+      timestamp: fields.timestamp,
+    },
   };
 }
 
@@ -95,6 +107,7 @@ export class WhatsAppWebhookController {
       envelope.session,
       envelope.providerEventId,
       envelope.event,
+      envelope.payload,
     );
   }
 }
