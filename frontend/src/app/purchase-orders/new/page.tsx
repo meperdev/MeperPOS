@@ -14,7 +14,8 @@ import { Button } from "@/components/ui/Button";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
-import { ArrowLeft, Plus, Trash2, ClipboardList, Search } from "lucide-react";
+import { SearchField } from "@/components/ui/SearchField";
+import { ArrowLeft, Plus, Trash2, ClipboardList } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -196,16 +197,13 @@ export default function NewPurchaseOrderPage() {
 
               {showPicker && (
                 <div className="px-4 py-3 border-b border-border/60 bg-muted/30 space-y-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                    <input
-                      autoFocus
-                      placeholder="Buscar producto por nombre o SKU..."
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      className="w-full h-[38px] pl-9 pr-3 rounded-lg border border-border/70 bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border transition-colors"
-                    />
-                  </div>
+                  <SearchField
+                    autoFocus
+                    value={productSearch}
+                    onChange={setProductSearch}
+                    placeholder="Buscar producto por nombre o SKU..."
+                    inputClassName="border border-border/70 bg-background text-sm"
+                  />
                   <div className="max-h-60 overflow-y-auto rounded-lg border border-border/70 bg-card divide-y divide-border/60">
                     {products.length === 0 ? (
                       <p className="p-3 text-xs text-muted-foreground text-center">

@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { BentoSelect } from "@/components/ui/BentoSelect";
+import { SearchField } from "@/components/ui/SearchField";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { useProducts } from "@/hooks/useProducts";
 import { useUpdatePurchaseOrder } from "@/hooks/usePurchaseOrders";
@@ -169,12 +170,12 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
           </div>
           {showPicker && (
             <div className="px-4 py-3 border-b border-border/60 bg-muted/20 space-y-2">
-              <input
+              <SearchField
                 autoFocus
-                placeholder="Buscar producto..."
                 value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                className="w-full h-[38px] rounded-lg border border-border/70 bg-card px-3 text-sm text-foreground focus:outline-none focus:border-border transition-colors"
+                onChange={setProductSearch}
+                placeholder="Buscar producto..."
+                inputClassName="border border-border/70 bg-card text-sm"
               />
               <div className="max-h-44 overflow-y-auto rounded-lg border border-border/60 bg-card divide-y divide-border/60">
                 {products.length === 0 ? (
