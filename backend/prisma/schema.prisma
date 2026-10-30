@@ -216,6 +216,7 @@ model PayrollCashRevision {
   obligationId   String
   outflowId      String
   actorId        String
+  sequence       Int
   oldAmount      Decimal @db.Decimal
   newAmount      Decimal @db.Decimal
   originalDate   DateTime @db.Date
@@ -224,6 +225,7 @@ model PayrollCashRevision {
   installment    PayrollInstallment @relation(fields: [installmentId, obligationId, outflowId, organizationId, employeeId], references: [id, obligationId, outflowId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashRevision_installment_fkey")
   actor          OrganizationUser @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashRevision_actor_fkey")
 
+  @@unique([installmentId, sequence], map: "PayrollCashRevision_installment_sequence_key")
   @@index([installmentId, obligationId, outflowId, organizationId, employeeId], map: "PayrollCashRevision_installment_idx")
 }
 

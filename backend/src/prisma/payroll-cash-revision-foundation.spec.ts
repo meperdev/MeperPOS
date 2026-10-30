@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -10,6 +11,13 @@ const path = resolve(
   '../../prisma/migrations/20261009200000_payroll_cash_revision/migration.sql',
 );
 const sql = existsSync(path) ? readFileSync(path, 'utf8') : '';
+const sequencePath = resolve(
+  __dirname,
+  '../../prisma/migrations/20261009210000_payroll_revision_sequence/migration.sql',
+);
+const sequenceSql = existsSync(sequencePath)
+  ? readFileSync(sequencePath, 'utf8')
+  : '';
 const model = (name: string) =>
   schema.split(`model ${name} {`)[1]?.split('\n}')[0] ?? '';
 
@@ -89,10 +97,37 @@ describe('unwired payroll cash revision foundation', () => {
       "RAISE EXCEPTION 'Payroll cash revision history cannot be changed or deleted'",
     );
     expect(model('PayrollCashRevision')).not.toMatch(
-      /@@unique\(\[(?:installmentId|outflowId)/,
+      /@@unique\(\[(?:installmentId|outflowId)\]/,
     );
     expect(sql).not.toMatch(
-      /CREATE UNIQUE INDEX[^;]*ON "PayrollCashRevision"\("(?:installmentId|outflowId)"/,
+      /CREATE UNIQUE INDEX[^;]*ON "PayrollCashRevision"\("(?:installmentId|outflowId)"\)/,
+    );
+  });
+
+  it('stores a positive sequence unique within each installment', () => {
+    expect(model('PayrollCashRevision')).toMatch(/sequence\s+Int/);
+    expect(model('PayrollCashRevision')).toContain(
+      '@@unique([installmentId, sequence], map: "PayrollCashRevision_installment_sequence_key")',
+    );
+    expect(sequenceSql).toContain('"sequence" INTEGER NOT NULL');
+    expect(sequenceSql).toContain('CHECK ("sequence" > 0)');
+    expect(sequenceSql).toContain(
+      'ON "PayrollCashRevision"("installmentId", "sequence")',
+    );
+  });
+
+  it('preserves the committed revision migration byte for byte', () => {
+    expect(createHash('sha256').update(sql).digest('hex')).toBe(
+      '4d9ea8cae8554645a48c2ad12c5cf05ce51769fc5ad5066a7ca780ed862a61d1',
+    );
+  });
+
+  it('locks and rejects existing history before sequence DDL in one transaction', () => {
+    expect(sequenceSql).toMatch(
+      /BEGIN;[\s\S]*LOCK TABLE "PayrollCashRevision" IN ACCESS EXCLUSIVE MODE;[\s\S]*IF EXISTS \(SELECT 1 FROM "PayrollCashRevision"\) THEN[\s\S]*RAISE EXCEPTION[\s\S]*END IF;[\s\S]*ALTER TABLE "PayrollCashRevision"[\s\S]*CREATE UNIQUE INDEX[\s\S]*COMMIT;/,
+    );
+    expect(sequenceSql).not.toMatch(
+      /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE)\s+"PayrollCashRevision"/i,
     );
   });
 
