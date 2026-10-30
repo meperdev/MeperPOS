@@ -66,13 +66,17 @@ export function useCreatePosLoan() {
   });
 }
 
-export function useLoans(params?: LoanQueryParams) {
+export function useLoans(
+  params?: LoanQueryParams,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ["loans", params],
     queryFn: () =>
       api
         .get<LoanPage<Loan>>("/loans", params)
         .then((res) => res.data),
+    enabled: options?.enabled ?? true,
   });
 }
 
