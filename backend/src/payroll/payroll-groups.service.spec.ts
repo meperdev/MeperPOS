@@ -128,6 +128,9 @@ describe('PayrollGroupsService', () => {
           employeeId: 'emp',
           kind: PayrollObligationKind.SHIFT_GROUP,
           status: PayrollObligationStatus.PENDING,
+          // An omitted choice is stored as unspecified, never as a default.
+          expenseEnabled: null,
+          selectedExpenseDate: null,
           shiftMemberships: {
             create: input.shiftIds.map((shiftId) => ({
               shift: {
@@ -170,6 +173,13 @@ describe('PayrollGroupsService', () => {
     { ...input, shiftIds: ['s1', 's1'] },
     { ...input, shiftIds: [''] },
     { ...input, employeeId: '' },
+    { ...input, expenseEnabled: 'true' },
+    { ...input, expenseEnabled: 1 },
+    { ...input, expenseEnabled: 'false' },
+    { ...input, selectedExpenseDate: '2023-02-29' },
+    { ...input, selectedExpenseDate: '2024-03-31T00:00:00Z' },
+    { ...input, selectedExpenseDate: '2024-03-31 ' },
+    { ...input, selectedExpenseDate: 20240331 },
     { ...input, extra: true },
   ])('rejects invalid selection without writes', async (bad) => {
     const { service, transaction } = setup();
@@ -243,6 +253,80 @@ describe('PayrollGroupsService', () => {
     expect(tx.payrollObligation.create).not.toHaveBeenCalled();
     expect(committed).toHaveLength(0);
   });
+
+  it.each([true, false])(
+    'persists the explicit %s expense choice with its selected date',
+    async (expenseEnabled) => {
+      const { service, tx } = setup();
+      await service.create(
+        { ...input, expenseEnabled, selectedExpenseDate: '2024-02-29' },
+        'org',
+        owner,
+      );
+      expect(tx.payrollObligation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          expenseEnabled,
+          selectedExpenseDate: new Date('2024-02-29T00:00:00.000Z'),
+        }),
+        include: { shiftMemberships: true },
+      });
+    },
+  );
+
+  it('keeps an explicitly null expense choice unspecified', async () => {
+    const { service, tx } = setup();
+    await service.create(
+      { ...input, expenseEnabled: null, selectedExpenseDate: null },
+      'org',
+      owner,
+    );
+    expect(tx.payrollObligation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        expenseEnabled: null,
+        selectedExpenseDate: null,
+      }),
+      include: { shiftMemberships: true },
+    });
+  });
+
+  it('accepts a choice without a selected date and a date without a choice', async () => {
+    for (const choice of [
+      { expenseEnabled: false },
+      { selectedExpenseDate: '2024-03-05' },
+    ]) {
+      const { service, tx } = setup();
+      await service.create({ ...input, ...choice }, 'org', owner);
+      expect(tx.payrollObligation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          expenseEnabled: choice.expenseEnabled ?? null,
+          selectedExpenseDate:
+            choice.selectedExpenseDate === undefined
+              ? null
+              : new Date(`${choice.selectedExpenseDate}T00:00:00.000Z`),
+        }),
+        include: { shiftMemberships: true },
+      });
+    }
+  });
+
+  it.each([
+    { ...owner, organizationId: 'other' },
+    { ...owner, role: 'MEMBER' },
+  ])(
+    'does not let an expense choice relax authorization or tenant scope',
+    async (actor) => {
+      const { service, transaction, committed } = setup();
+      await expect(
+        service.create(
+          { ...input, expenseEnabled: true, selectedExpenseDate: '2024-03-05' },
+          'org',
+          actor as RequestUser,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(transaction).not.toHaveBeenCalled();
+      expect(committed).toHaveLength(0);
+    },
+  );
 
   it('translates the active-shift unique race and rolls back, without retry', async () => {
     const { service, tx, transaction, committed } = setup();

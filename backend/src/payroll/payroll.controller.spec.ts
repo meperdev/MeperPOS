@@ -52,6 +52,9 @@ const routeCases = [
       periodStart: '2026-01-01',
       periodEnd: '2026-01-31',
       periodAmount: '1500000.00',
+      // The per-payment expense decision is forwarded to the service as sent.
+      expenseEnabled: false,
+      selectedExpenseDate: '2026-01-31',
     },
     invalid: {
       employeeId: 'emp-a',
@@ -148,6 +151,8 @@ const obligationSelect = {
   periodStart: true,
   periodEnd: true,
   periodAmount: true,
+  expenseEnabled: true,
+  selectedExpenseDate: true,
   createdAt: true,
   updatedAt: true,
   installments: {
@@ -370,6 +375,23 @@ describe('payroll HTTP boundary', () => {
     },
   );
 
+  it('rejects an invalid expense choice before any service call', async () => {
+    const periodBody = routeCases[0].body;
+    const groupBody = routeCases[1].body;
+    for (const bad of [
+      { expenseEnabled: 'true' },
+      { expenseEnabled: 1 },
+      { selectedExpenseDate: '2026-02-30' },
+      { selectedExpenseDate: '2026-01-31T00:00:00Z' },
+      { selectedExpenseDate: 20260131 },
+    ]) {
+      await post('/api/payroll/periods', { ...periodBody, ...bad }).expect(400);
+      await post('/api/payroll/groups', { ...groupBody, ...bad }).expect(400);
+      expect(periods.create).not.toHaveBeenCalled();
+      expect(groups.create).not.toHaveBeenCalled();
+    }
+  });
+
   it('lists obligations for the authenticated tenant only', async () => {
     const rows = [
       {
@@ -379,6 +401,8 @@ describe('payroll HTTP boundary', () => {
         status: 'PENDING',
         version: 2,
         periodAmount: '1500000',
+        expenseEnabled: true,
+        selectedExpenseDate: '2026-01-31T00:00:00.000Z',
         installments: [
           {
             id: 'installment-a',

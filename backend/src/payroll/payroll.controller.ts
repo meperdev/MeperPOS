@@ -158,6 +158,9 @@ export class PayrollController {
         periodStart: true,
         periodEnd: true,
         periodAmount: true,
+        // The stored per-payment expense decision, so a UI can show it.
+        expenseEnabled: true,
+        selectedExpenseDate: true,
         createdAt: true,
         updatedAt: true,
         installments: {

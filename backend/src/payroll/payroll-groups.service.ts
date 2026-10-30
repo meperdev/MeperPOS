@@ -91,6 +91,11 @@ export class PayrollGroupsService {
             employeeId: dto.employeeId,
             kind: PayrollObligationKind.SHIFT_GROUP,
             status: PayrollObligationStatus.PENDING,
+            // Stored as sent: an omitted choice is null (unspecified), never a default.
+            expenseEnabled: dto.expenseEnabled ?? null,
+            selectedExpenseDate: dto.selectedExpenseDate
+              ? new Date(`${dto.selectedExpenseDate}T00:00:00.000Z`)
+              : null,
             shiftMemberships: {
               create: dto.shiftIds.map((shiftId) => ({
                 shift: {

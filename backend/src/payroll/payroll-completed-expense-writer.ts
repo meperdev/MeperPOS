@@ -12,8 +12,12 @@ import {
 } from './payroll-obligation-completion';
 
 /**
- * Unwired transaction-client-level expense foundation for an already completed
- * payroll obligation (S5, S8).
+ * Transaction-client-level writer of the optional completion expense of an
+ * already completed payroll obligation (S5, S8). It is called from the wired
+ * completion paths: `PayrollPeriodInstallmentsService.create` and
+ * `PayrollGroupInstallmentsService.create` invoke it inside their own open
+ * transaction, only when the planner says an expense will be written for the
+ * payment they are completing.
  *
  * The caller owns one **real** transaction that it already opened, and every lock
  * inside it. On entry that transaction must hold the obligation row locked and
@@ -32,14 +36,27 @@ import {
  * - `facts` describes the proposed post-operation state, so the planner can
  *   classify completion before the caller commits (the facts are unverifiable here);
  * - when the stored choice enables an expense, the caller supplies the
- *   tenant-scoped category identity it resolved earlier. That resolver
- *   (`PayrollExpenseCategoryService.resolve()`) owns its **own** transaction and
- *   releases the `Organization` lock before this call, so no organization lock is
- *   held here and this unit must not be described as running under it. Payroll row
- *   locks are also not taken or validated here: a concurrent taxonomy deactivation
- *   is only detected if it commits before the category read below.
+ *   tenant-scoped category identity it resolved earlier **in the same
+ *   transaction**, through `resolvePayrollExpenseCategoryWithin(tx, ...)`.
+ *   Neither this function nor its `category` input may come from
+ *   `PayrollExpenseCategoryService.resolve()`, whose own transaction would not be
+ *   atomic with these writes. The in-transaction resolver takes the tenant
+ *   `Organization ... FOR UPDATE` lock and keeps it until the caller commits, so
+ *   this writer runs while that lock is held; it does not take or release the
+ *   organization lock itself. Payroll row locks are also not taken or validated
+ *   here: they are the caller's (`Employee`, then `PayrollObligation`, then the
+ *   ordered `EmployeeShift` rows on the group path), so a concurrent taxonomy
+ *   deactivation is only detected if it commits before the category read below.
  *
- * Order of decisions, which is part of the contract:
+ * Real order the wired production path takes: payroll row locks → insert the
+ * cash outflow, installment and allocations → planner decision in the caller →
+ * `resolvePayrollExpenseCategoryWithin` (tenant `Organization` row lock, then
+ * taxonomy read/create) → this writer (verified replay lock, bound/active
+ * category re-read, expense writes) → obligation status CAS → commit or
+ * rollback. The category resolver's transaction and this writer's transaction are
+ * therefore the same transaction, not two.
+ *
+ * Order of decisions inside this function, which is part of the contract:
  * 1. structural ids; 2. matching-tenant OWNER/ADMIN authorization, enforced before
  * any outcome is returned; 3. the planner decision, so a disabled, unknown or
  * still-pending payment needs no expense category and neither reads nor writes
@@ -55,10 +72,10 @@ import {
  * `addPayment` and `remove` take the same tenant-scoped `Expense ... FOR UPDATE`
  * lock before their own payroll-link check. Without taking it here first, this unit
  * could verify a linked expense from facts a concurrent expense mutation has
- * already changed, or attach a link to an expense it never proved. Exactly one
- * lock is taken, in the caller's transaction: no payroll, obligation or cash row
- * is locked here, and a missing locked row fails closed with ConflictException
- * before any write.
+ * already changed, or attach a link to an expense it never proved. The only lock
+ * taken here is that one: no payroll, obligation, organization or cash row is
+ * locked by this function, and a missing locked row fails closed with
+ * ConflictException before any write.
  *
  * Fail-closed precedence of step 4: no category, link or persisted-expense state
  * can mask the limit error, and an over-limit selected expense can never complete
@@ -81,19 +98,18 @@ import {
  * `PayrollCashOutflow` and never updates the obligation. Audit failures propagate
  * unchanged; mocked tests cannot prove the resulting rollback.
  *
- * HARD GATE before wiring (not solved here, do not claim otherwise): the replay
- * now locks the linked expense, but this unit still reads the category without a
- * lock, so a concurrent taxonomy deactivation can land between that read and
- * these writes; a first completion can also race another writer on the same
- * obligation, and a first write is not guarded against a concurrent expense
- * mutation because the row does not exist yet. Resolving those races needs a
- * transaction-scoped category design (the current resolver's separate transaction
- * cannot be used atomically), a consistent lock protocol agreed with every payroll
- * and expense writer, P2028-style lock-wait/conflict mapping and real
- * PostgreSQL/concurrency proof. Mocks here prove ordering only: they cannot prove
- * that PostgreSQL blocks, that the lock is the same one, or that anything rolls
- * back. Duplicate-key errors are propagated, never retried, so a lost race
- * surfaces as a failure instead of a false success.
+ * Remaining gates, stated honestly (not solved here, do not claim otherwise):
+ * the locks, ordering and rollback above are a static argument from the code and
+ * mocked call order, not a PostgreSQL trace. Two writers of the same obligation
+ * serialize on the caller's `Employee`/`PayrollObligation` locks only because
+ * every payroll writer keeps that employee-first order; a future writer that
+ * violates it would be a new cycle. The expense taxonomy API takes no organization
+ * lock, so a taxonomy change outside this path is not serialized against the
+ * in-transaction category resolution. P2028-style lock-wait/conflict mapping and
+ * real PostgreSQL/rollback proof are still missing. Mocks here prove ordering
+ * only: they cannot prove that PostgreSQL blocks, that the lock is the same one,
+ * or that anything rolls back. Duplicate-key errors are propagated, never retried,
+ * so a lost race surfaces as a failure instead of a false success.
  *
  * Reporting is integrated: cash-flow reports exclude expense payments of linked
  * expenses and count `PayrollCashOutflow` on its own date, so these mirror
@@ -106,8 +122,9 @@ export interface PayrollCompletionExpenseWriteInput {
   obligationId: string;
   actor: RequestUser | undefined;
   /**
-   * Already-resolved, tenant-scoped automatic category identity. Only required
-   * when this call writes an expense (enabled choice on a completed payment).
+   * Tenant-scoped automatic category identity the caller resolved **in the same
+   * transaction** before calling this writer. Only required when this call writes
+   * an expense (enabled choice on a completed payment).
    */
   category?: PayrollExpenseCategoryIdentity;
   facts: PayrollObligationCompletionFacts;

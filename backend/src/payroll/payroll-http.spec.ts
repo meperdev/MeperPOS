@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,6 +25,10 @@ describe('Payroll HTTP integration', () => {
       findMany: jest.fn(),
       findFirst: jest.fn(),
     },
+    payrollShiftMembership: { findFirst: jest.fn() },
+    payrollObligation: { create: jest.fn() },
+    $queryRaw: jest.fn(),
+    $transaction: jest.fn(),
   };
   const actor = { userId: 'user-a', organizationId: 'org-a', role: 'OWNER' };
 
@@ -59,6 +64,85 @@ describe('Payroll HTTP integration', () => {
   beforeEach(() => jest.resetAllMocks());
   const get = (path: string, role = 'OWNER') =>
     request(app.getHttpServer()).get(path).set('x-test-role', role);
+  const post = (path: string, body: unknown, role = 'OWNER') =>
+    request(app.getHttpServer())
+      .post(path)
+      .set('x-test-role', role)
+      .send(body as object);
+
+  it('persists the expense choice sent over HTTP through the real payroll services and rejects an invalid one', async () => {
+    prisma.$transaction.mockImplementation(
+      (fn: (client: typeof prisma) => Promise<unknown>) => fn(prisma),
+    );
+    prisma.$queryRaw.mockResolvedValue([{ id: 'e', active: true }]);
+    prisma.employeeShift.findMany.mockResolvedValue([
+      { id: 's1', amount: new Prisma.Decimal('10') },
+    ]);
+    prisma.payrollShiftMembership.findFirst.mockResolvedValue(null);
+    prisma.payrollObligation.create.mockImplementation(
+      ({ data }: { data: unknown }) => Promise.resolve({ id: 'p', data }),
+    );
+
+    const period = {
+      employeeId: 'e',
+      periodStart: '2026-01-01',
+      periodEnd: '2026-01-31',
+      periodAmount: '100.00',
+    };
+    await post('/api/payroll/periods', {
+      ...period,
+      expenseEnabled: false,
+      selectedExpenseDate: '2026-01-31',
+    }).expect(201);
+    expect(prisma.payrollObligation.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        expenseEnabled: false,
+        selectedExpenseDate: new Date('2026-01-31T00:00:00.000Z'),
+      }),
+    });
+
+    await post('/api/payroll/periods', period).expect(201);
+    expect(prisma.payrollObligation.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        expenseEnabled: null,
+        selectedExpenseDate: null,
+      }),
+    });
+
+    const group = { employeeId: 'e', shiftIds: ['s1'] };
+    await post('/api/payroll/groups', {
+      ...group,
+      expenseEnabled: true,
+      selectedExpenseDate: '2024-02-29',
+    }).expect(201);
+    expect(prisma.payrollObligation.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        expenseEnabled: true,
+        selectedExpenseDate: new Date('2024-02-29T00:00:00.000Z'),
+      }),
+      include: { shiftMemberships: true },
+    });
+
+    await post('/api/payroll/groups', group).expect(201);
+    expect(prisma.payrollObligation.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        expenseEnabled: null,
+        selectedExpenseDate: null,
+      }),
+      include: { shiftMemberships: true },
+    });
+
+    for (const bad of [
+      { expenseEnabled: 'true' },
+      { expenseEnabled: 1 },
+      { selectedExpenseDate: '2026-02-30' },
+      { selectedExpenseDate: '2026-01-31T00:00:00Z' },
+    ]) {
+      await post('/api/payroll/periods', { ...period, ...bad }).expect(400);
+      await post('/api/payroll/groups', { ...group, ...bad }).expect(400);
+    }
+    expect(prisma.payrollObligation.create).toHaveBeenCalledTimes(4);
+  });
 
   it('requires authentication and allows only owner/admin', async () => {
     await request(app.getHttpServer()).get('/api/employees').expect(401);

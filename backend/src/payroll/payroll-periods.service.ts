@@ -72,6 +72,11 @@ export class PayrollPeriodsService {
           periodStart: new Date(`${dto.periodStart}T00:00:00.000Z`),
           periodEnd: new Date(`${dto.periodEnd}T00:00:00.000Z`),
           periodAmount: amount,
+          // Stored as sent: an omitted choice is null (unspecified), never a default.
+          expenseEnabled: dto.expenseEnabled ?? null,
+          selectedExpenseDate: dto.selectedExpenseDate
+            ? new Date(`${dto.selectedExpenseDate}T00:00:00.000Z`)
+            : null,
         },
       });
     });
