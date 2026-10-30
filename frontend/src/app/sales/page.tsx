@@ -35,6 +35,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
 import { PaymentStateBadge, getPaymentState } from "@/components/sales/PaymentState";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 function SalesPageContent() {
   const { user: currentUser } = useAuth();
@@ -143,18 +144,6 @@ function SalesPageContent() {
     }
   };
 
-  const getStatusBadge = (s: string) => {
-    switch (s) {
-      case "COMPLETED":
-        return <Badge variant="success">Completada</Badge>;
-      case "CANCELLED":
-        return <Badge variant="danger">Cancelada</Badge>;
-      case "RETURNED_PARTIAL":
-        return <Badge variant="warning">Parcial</Badge>;
-      default:
-        return <Badge variant="default">{s}</Badge>;
-    }
-  };
 
 
 
@@ -286,7 +275,7 @@ function SalesPageContent() {
                       <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
                         #{sale.saleNumber}
                       </span>
-                      {getStatusBadge(sale.status)}
+                      <StatusBadge domain="sale" status={sale.status} dot={false} />
                     </div>
 
                     <div className="space-y-1.5 text-xs">
@@ -434,7 +423,7 @@ function SalesPageContent() {
                             <PaymentStateBadge payments={sale.payments} financed={sale.financed} short />
                           </TableCell>
                           <TableCell>
-                            {getStatusBadge(sale.status)}
+                            <StatusBadge domain="sale" status={sale.status} dot={false} />
                           </TableCell>
                           <TableCell className="text-right">
                             <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
@@ -515,7 +504,7 @@ function SalesPageContent() {
                 },
                 {
                   label: "Estado",
-                  value: getStatusBadge(selectedSale.status),
+                  value: <StatusBadge domain="sale" status={selectedSale.status} dot={false} />,
                   isNode: true,
                 },
               ].map(({ label, value, isNode, mono }) => (

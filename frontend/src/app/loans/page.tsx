@@ -12,6 +12,7 @@ import {
   useLoans,
 } from "@/hooks/useLoans";
 import { Badge } from "@/components/ui/Badge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -45,18 +46,6 @@ import type {
 const TYPE_LABELS: Record<MonetaryLoanType, string> = {
   MONEY: "Efectivo",
   SERVICE: "Servicio",
-};
-
-const STATUS_LABELS: Record<MoneyLoanStatus, string> = {
-  OPEN: "Abierto",
-  CLOSED: "Cerrado",
-  CANCELLED: "Cancelado",
-};
-
-const STATUS_VARIANTS: Record<MoneyLoanStatus, "primary" | "success" | "danger"> = {
-  OPEN: "primary",
-  CLOSED: "success",
-  CANCELLED: "danger",
 };
 
 const EVENT_LABELS: Record<MoneyLoanEventType, string> = {
@@ -186,9 +175,7 @@ function LoanCard({ loan, onOpen }: { loan: Loan; onOpen: () => void }) {
               </p>
             </div>
           </div>
-          <Badge variant={STATUS_VARIANTS[loan.status]} dot>
-            {STATUS_LABELS[loan.status]}
-          </Badge>
+          <StatusBadge domain="loan" status={loan.status} />
         </div>
       </div>
 
@@ -439,9 +426,7 @@ export default function LoansPage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={STATUS_VARIANTS[row.status]} dot>
-                            {STATUS_LABELS[row.status]}
-                          </Badge>
+                          <StatusBadge domain="loan" status={row.status} />
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs text-foreground tabular-nums">
                           {money(row.amount)}
@@ -628,9 +613,7 @@ export default function LoansPage() {
                 <DetailField
                   label="Estado"
                   value={
-                    <Badge variant={STATUS_VARIANTS[loan.status]}>
-                      {STATUS_LABELS[loan.status]}
-                    </Badge>
+                    <StatusBadge domain="loan" status={loan.status} dot={false} />
                   }
                 />
                 <DetailField

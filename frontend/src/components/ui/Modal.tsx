@@ -8,6 +8,8 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  /** Accessible name when the dialog renders its own heading instead of `title`. */
+  ariaLabel?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
@@ -28,6 +30,7 @@ export function Modal({
   isOpen,
   onClose,
   title,
+  ariaLabel,
   children,
   footer,
   size = "md",
@@ -113,6 +116,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
+        aria-label={!title ? ariaLabel : undefined}
         tabIndex={-1}
         className={cn(
           "relative w-full rounded-xl sm:rounded-2xl border border-border/80",

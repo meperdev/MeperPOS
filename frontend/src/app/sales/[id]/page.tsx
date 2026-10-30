@@ -7,6 +7,7 @@ import { ArrowLeft, Download, Receipt } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Badge } from "@/components/ui/Badge";
 import { getPaymentState } from "@/components/sales/PaymentState";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -16,18 +17,6 @@ import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 
-function getStatusBadge(status: string) {
-  switch (status) {
-    case "COMPLETED":
-      return <Badge variant="success">Completada</Badge>;
-    case "CANCELLED":
-      return <Badge variant="danger">Cancelada</Badge>;
-    case "RETURNED_PARTIAL":
-      return <Badge variant="warning">Parcial</Badge>;
-    default:
-      return <Badge variant="default">{status}</Badge>;
-  }
-}
 
 function getPaymentMethodLabel(method: string) {
   switch (method) {
@@ -127,7 +116,7 @@ export default function SaleDetailPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {getStatusBadge(sale.status)}
+                    <StatusBadge domain="sale" status={sale.status} dot={false} />
                     {sale.financed && (
                       <Badge variant="primary" dot>
                         Financiado
