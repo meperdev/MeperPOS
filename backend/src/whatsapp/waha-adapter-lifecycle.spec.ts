@@ -1,6 +1,13 @@
 import { Logger } from '@nestjs/common';
 import { WahaAdapter } from './waha-adapter';
 
+const reportFile = {
+  chatId: '573001112233@c.us',
+  filename: 'reporte-diario-2026-03-03.pdf',
+  mimetype: 'application/pdf',
+  base64: 'JVBERi0xLjQKJSVFT0YK',
+};
+
 describe('WahaAdapter lifecycle', () => {
   const config = {
     baseUrl: 'http://waha:3000',
@@ -138,6 +145,7 @@ describe('WahaAdapter lifecycle', () => {
         () => adapter.qr(name),
         () => adapter.me(name),
         () => adapter.ensureStarted(name, 'private-webhook-key'),
+        () => adapter.sendFile(name, reportFile),
       ];
       // The write methods reject synchronously, the read methods return a
       // rejected promise; both must fail before any request is attempted.
@@ -154,4 +162,82 @@ describe('WahaAdapter lifecycle', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     },
   );
+
+  describe('sendFile', () => {
+    it('posts the document to the instance endpoint with the session in the body', async () => {
+      global.fetch = jest.fn().mockResolvedValue(
+        new Response(JSON.stringify({ id: 'wamid-1', body: 'ignored' }), {
+          status: 200,
+        }),
+      );
+
+      await expect(
+        new WahaAdapter(config).sendFile('meper-intelligence', reportFile),
+      ).resolves.toEqual({ providerMessageId: 'wamid-1' });
+
+      const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [
+        string,
+        RequestInit,
+      ];
+      expect(url).toBe('http://waha:3000/api/sendFile');
+      expect(init.method).toBe('POST');
+      expect(init.headers).toMatchObject({
+        'X-Api-Key': 'private-api-key',
+        'Content-Type': 'application/json',
+      });
+      // The session travels in the body, never the path, and the payload is the
+      // documented `{ mimetype, filename, data }` document shape.
+      expect(JSON.parse(init.body as string)).toEqual({
+        session: 'meper-intelligence',
+        chatId: '573001112233@c.us',
+        file: {
+          mimetype: 'application/pdf',
+          filename: 'reporte-diario-2026-03-03.pdf',
+          data: 'JVBERi0xLjQKJSVFT0YK',
+        },
+      });
+      expect(url).not.toContain('meper-intelligence');
+      expect(init.body as string).not.toContain('data:application/pdf');
+    });
+
+    it.each([
+      ['an empty object', new Response(JSON.stringify({}), { status: 200 })],
+      ['a non-JSON body', new Response('<html>sent</html>', { status: 200 })],
+    ])(
+      'reports a sent document without a message id for %s',
+      async (_label, response) => {
+        global.fetch = jest.fn().mockResolvedValue(response);
+
+        await expect(
+          new WahaAdapter(config).sendFile('meper-intelligence', reportFile),
+        ).resolves.toEqual({ providerMessageId: null });
+      },
+    );
+
+    it('rejects a non-2xx send and logs only a fixed reason', async () => {
+      const log = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        global.fetch = jest.fn().mockResolvedValue(
+          new Response('private-api-key private-chat-id secret-body', {
+            status: 500,
+          }),
+        );
+
+        await expect(
+          new WahaAdapter(config).sendFile('meper-intelligence', reportFile),
+        ).rejects.toThrow('WhatsApp provider unavailable');
+        expect(log).toHaveBeenCalledWith({
+          event: 'waha_provider_failure',
+          reason: 'provider_rejected',
+        });
+        expect(JSON.stringify(log.mock.calls)).not.toMatch(
+          /private-api-key|private-chat-id|secret-body|meper-intelligence/,
+        );
+      } finally {
+        log.mockRestore();
+      }
+    });
+  });
 });

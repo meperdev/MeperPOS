@@ -1,6 +1,8 @@
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import {
   isWhatsAppSessionStatus,
+  type WhatsAppFileMessage,
+  type WhatsAppFileSender,
   type WhatsAppProvider,
   type WhatsAppSessionStatus,
 } from './whatsapp-provider';
@@ -29,11 +31,12 @@ const SESSION_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 const STATUS_LIMIT = 64 * 1024;
 const ME_LIMIT = 16 * 1024;
+const SEND_LIMIT = 16 * 1024;
 const QR_JSON_LIMIT = 2 * 1024 * 1024;
 const QR_BASE64_LIMIT = 1024 * 1024;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
-export class WahaAdapter implements WhatsAppProvider {
+export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
   private readonly logger = new Logger(WahaAdapter.name);
 
   constructor(private readonly config: WahaConfig) {}
@@ -256,6 +259,50 @@ export class WahaAdapter implements WhatsAppProvider {
           ? 'response_too_large'
           : 'invalid_response',
       );
+    }
+  }
+
+  /**
+   * Deliver one document into an existing chat.
+   *
+   * WAHA documents `POST /api/sendFile` with the session named in the body and
+   * the payload as `{ session, chatId, file: { mimetype, filename, data } }`,
+   * where `data` is raw base64 without a `data:` prefix. Those four field names,
+   * the instance-level path (not `/api/{session}/...`) and reading the message id
+   * from the `id` property are the parts most likely to differ in the installed
+   * WAHA version; a mismatch surfaces as `503 WhatsApp provider unavailable`
+   * instead of a silent drop.
+   *
+   * A non-2xx response is `provider_rejected` and its body is discarded unread,
+   * so no provider text, URL, session name or credential can reach a caller or a
+   * log line. A 2xx whose body cannot be read is still a delivered document: the
+   * message id is reported as absent rather than turned into a failure the
+   * caller would retry.
+   */
+  async sendFile(
+    session: string,
+    file: WhatsAppFileMessage,
+  ): Promise<{ providerMessageId: string | null }> {
+    if (!SESSION_NAME.test(session)) throw this.failure('invalid_session');
+    const response = await this.call('/api/sendFile', 'POST', {
+      session,
+      chatId: file.chatId,
+      file: {
+        mimetype: file.mimetype,
+        filename: file.filename,
+        data: file.base64,
+      },
+    });
+    if (!response.ok) {
+      this.discard(response);
+      throw this.failure('provider_rejected');
+    }
+    try {
+      const parsed = await this.readJson(response, SEND_LIMIT);
+      const id = (parsed as { id?: unknown })?.id;
+      return { providerMessageId: typeof id === 'string' && id ? id : null };
+    } catch {
+      return { providerMessageId: null };
     }
   }
 }
