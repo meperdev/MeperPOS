@@ -101,6 +101,12 @@ const navItems: NavItem[] = [
     roles: ["ADMIN", "INVENTORY_USER"],
   },
   {
+    label: "Empleados",
+    href: "/employees",
+    icon: <Users className="w-4 h-4" />,
+    roles: ["ADMIN"],
+  },
+  {
     label: "Salidas",
     href: "/expenses",
     icon: <Wallet className="w-4 h-4" />,
@@ -189,7 +195,9 @@ export function Sidebar() {
   const navRef = useRef<HTMLElement>(null);
 
   const filteredItems = navItems.filter(
-    (item) => !item.roles || (user && hasAnyRole(user.role, item.roles))
+    (item) => item.href === "/employees"
+      ? user?.role === "OWNER" || user?.role === "ADMIN"
+      : !item.roles || (user && hasAnyRole(user.role, item.roles))
   );
 
   const toggleMobileMenu = useCallback(() => setIsMobileMenuOpen((p) => !p), []);

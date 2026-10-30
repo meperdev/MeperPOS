@@ -53,6 +53,13 @@ export const DashboardLayout = memo(function DashboardLayout({
   useEffect(() => {
     if (loading || !isAuthenticated || !userRole) return;
 
+    if (pathname === "/employees" || pathname.startsWith("/employees/")) {
+      if (userRole !== "OWNER" && userRole !== "ADMIN") {
+        router.replace(userRole === "CASHIER" ? "/pos" : "/dashboard");
+      }
+      return;
+    }
+
     if (userRole === "SUPER_ADMIN") {
       return;
     }
