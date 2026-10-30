@@ -22,23 +22,23 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const variants = {
       primary:
-        "bg-primary text-white shadow-md shadow-primary/20 hover:bg-primary-dark hover:shadow-primary/30",
+        "bg-primary text-white border border-primary/80 shadow-2xs hover:bg-primary-dark",
       secondary:
-        "bg-card text-foreground border border-border hover:border-primary/40 hover:bg-primary-light hover:text-primary",
+        "border border-border/70 bg-muted/40 text-foreground hover:border-border hover:bg-muted",
       danger:
-        "bg-danger text-white shadow-md shadow-danger/20 hover:opacity-90 hover:shadow-danger/30",
+        "bg-danger text-white border border-danger/80 shadow-2xs hover:opacity-90",
       ghost:
-        "text-muted-foreground hover:text-foreground hover:bg-muted/80",
+        "border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60",
       outline:
-        "border border-border text-foreground hover:bg-primary-light hover:text-primary hover:border-primary/40",
+        "border border-border/70 bg-card text-foreground shadow-2xs hover:border-border hover:bg-muted/50",
       success:
-        "bg-success text-white shadow-md shadow-success/20 hover:opacity-90 hover:shadow-success/30",
+        "bg-success text-white border border-success/80 shadow-2xs hover:opacity-90",
     };
 
     const sizes = {
-      sm: "px-3 py-1.5 text-xs gap-1.5 rounded-lg",
-      md: "px-4 py-2.5 text-xs font-semibold gap-2 rounded-xl",
-      lg: "px-6 py-3 text-sm font-semibold gap-2.5 rounded-xl",
+      sm: "h-7 px-2.5 py-1 text-xs font-medium gap-1.5 rounded-md",
+      md: "h-[38px] px-3.5 py-2 text-xs font-medium gap-2 rounded-lg",
+      lg: "h-10 px-5 py-2.5 text-sm font-semibold gap-2 rounded-lg",
     };
 
     return (
@@ -47,9 +47,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         className={cn(
           "inline-flex items-center justify-center font-medium",
-          "transition-all duration-200",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          "active:scale-[0.97]",
+          "transition-colors duration-150",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           "disabled:cursor-not-allowed disabled:opacity-50",
           variants[variant],
           sizes[size],
