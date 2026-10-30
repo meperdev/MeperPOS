@@ -87,6 +87,8 @@ export interface Sale {
   user?: SaleUser;
   items: SaleItem[];
   payments?: Payment[];
+  /** A POS-financed sale: settled through the linked money loan, no cash rows. */
+  financed?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -735,6 +737,8 @@ export interface LoanParty {
 export interface PosLoanFinancing {
   intentId: string;
   finalSaleId: string | null;
+  /** Human-facing sale number once the financed checkout is finalized. */
+  finalSaleNumber?: number | null;
 }
 
 /**
