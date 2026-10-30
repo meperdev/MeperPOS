@@ -7,6 +7,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { usePurchaseOrders } from "@/hooks/usePurchaseOrders";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -84,30 +85,24 @@ export default function PurchaseOrdersPage() {
     <DashboardLayout>
       <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-                Órdenes de compra
-              </h1>
-              {meta && (
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted/50 text-muted-foreground border border-border/70 tabular-nums">
-                  {meta.total} {meta.total === 1 ? "orden" : "órdenes"}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Gestiona las compras, recepción de mercancía y abastecimiento
-            </p>
-          </div>
-          {canManage && (
-            <Link href="/purchase-orders/new" className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto shrink-0">
-                <Plus className="w-4 h-4" /> Nueva OC
-              </Button>
-            </Link>
-          )}
-        </div>
+<PageHeader
+          title="Órdenes de compra"
+          subtitle="Gestiona las compras, recepción de mercancía y abastecimiento"
+          count={
+            meta
+              ? `${meta.total} ${meta.total === 1 ? "orden" : "órdenes"}`
+              : undefined
+          }
+          actions={
+            canManage ? (
+              <Link href="/purchase-orders/new" className="w-full sm:w-auto">
+                <Button className="w-full sm:w-auto">
+                  <Plus className="w-4 h-4" /> Nueva OC
+                </Button>
+              </Link>
+            ) : undefined
+          }
+        />
 
         {/* Filter Bar */}
         <FilterBar
