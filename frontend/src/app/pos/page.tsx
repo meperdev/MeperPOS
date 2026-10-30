@@ -1164,7 +1164,7 @@ export default function POSPage() {
                         {cartItemOffer(item) && (
                           <Badge
                             variant="danger"
-                            className="shrink-0 text-[10px] px-1.5 py-0.5 font-mono uppercase rounded-md"
+                            className="shrink-0 text-[11px] px-1.5 py-0.5 font-mono uppercase rounded-md"
                           >
                             Oferta -{cartItemOffer(item)!.percent}%
                           </Badge>
@@ -1173,7 +1173,7 @@ export default function POSPage() {
                           <span data-testid="price-overridden" className="shrink-0">
                             <Badge
                               variant="warning"
-                              className="text-[10px] px-1.5 py-0.5 font-mono uppercase rounded-md"
+                              className="text-[11px] px-1.5 py-0.5 font-mono uppercase rounded-md"
                             >
                               Precio ajustado
                             </Badge>
@@ -1581,7 +1581,7 @@ export default function POSPage() {
                   key={label}
                   className="p-3 rounded-2xl bg-background/40 border border-accent/20"
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                     {label}
                   </p>
                   <p className="text-sm font-semibold text-foreground">
@@ -1590,7 +1590,7 @@ export default function POSPage() {
                 </div>
               ))}
               <div className="p-3 rounded-2xl bg-primary/10 border border-primary/30">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                   Total
                 </p>
                 <p className="stat-number text-lg font-bold text-primary">

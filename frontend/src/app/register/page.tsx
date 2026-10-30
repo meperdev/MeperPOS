@@ -31,7 +31,7 @@ export default function RegisterPage() {
                 className="w-36 h-auto hidden dark:block"
               />
             </div>
-            <div className="font-mono text-[10px] uppercase font-bold text-primary px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
+            <div className="font-mono text-[11px] uppercase font-bold text-primary px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
               Acceso Restringido
             </div>
           </div>
