@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { cn, formatCurrency } from "@/lib/utils";
 import { isService, tracksStock } from "@/lib/product-type";
-import { AlertTriangle, Package, Plus, Power, RotateCcw, Star, Wrench } from "lucide-react";
+import { AlertTriangle, Package, Power, RotateCcw, Star, Wrench } from "lucide-react";
 
 type ProductCardData = {
   id: string;
@@ -59,10 +59,11 @@ const STATUS_TONE: Record<StatusKey, string> = {
   healthy: "border-emerald-300 bg-white/90 text-emerald-700 dark:border-emerald-500/50 dark:bg-zinc-900/90 dark:text-emerald-300",
 };
 
-/** The stock count sits on the dark scrim: only an alert status tints it, the rest stay quiet white. */
+/** The stock count sits on the dark scrim with a subtle semantic tint. */
 const STOCK_TONE: Partial<Record<StatusKey, string>> = {
-  low: "text-amber-300",
-  depleted: "text-rose-300",
+  healthy: "border-emerald-500/30 bg-emerald-500/12 text-white/85",
+  low: "border-amber-500/35 bg-amber-500/15 text-amber-300",
+  depleted: "border-rose-500/35 bg-rose-500/15 text-rose-300",
 };
 
 /**
@@ -92,7 +93,7 @@ function StatusChip({ status }: { status: StatusKey }) {
     <span
       data-testid={statusTestId(status)}
       className={cn(
-        "inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none sm:text-[11px]",
+        "inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 font-mono text-[11px] font-medium leading-none sm:text-xs",
         STATUS_TONE[status],
       )}
     >
@@ -110,7 +111,7 @@ function StatusChip({ status }: { status: StatusKey }) {
 
 function OfferBadge({ discount }: { discount: number }) {
   return (
-    <span className="inline-flex max-w-full items-center whitespace-nowrap rounded-md border border-rose-300 bg-white/90 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-rose-700 dark:border-rose-500/50 dark:bg-zinc-900/90 dark:text-rose-300 sm:text-[11px]">
+    <span className="inline-flex max-w-full items-center whitespace-nowrap rounded-md border border-rose-300 bg-white/90 px-2 py-1 font-mono text-[11px] font-medium leading-none text-rose-700 dark:border-rose-500/50 dark:bg-zinc-900/90 dark:text-rose-300 sm:text-xs">
       Oferta{discount > 0 ? ` -${discount}%` : ""}
     </span>
   );
@@ -125,21 +126,23 @@ function OfferBadge({ discount }: { discount: number }) {
  */
 function ProductMedia({ product }: { product: ProductCardData }) {
   return (
-    <div data-testid="product-media" className="absolute inset-0 overflow-hidden rounded-[inherit] bg-slate-900">
+    <div data-testid="product-media" className="absolute inset-0 overflow-hidden rounded-[inherit] bg-zinc-900">
       {product.imageUrl ? (
         <Image
           src={product.imageUrl}
           alt={product.name}
           fill
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+          className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
         />
       ) : (
         <>
-          <div className="absolute inset-0 rounded-[inherit] bg-slate-800" aria-hidden="true" />
-          {/* Centred in the visible upper half; the content block covers the rest. */}
-          <div className="absolute inset-x-0 top-0 flex h-1/2 items-center justify-center">
-            <Package className="h-10 w-10 text-white/30" aria-hidden="true" />
+          <div className="absolute inset-0 rounded-[inherit] bg-zinc-800 dark:bg-zinc-900" aria-hidden="true" />
+          {/* Centred in the visible upper space above the content sheet. */}
+          <div className="absolute inset-x-0 top-0 bottom-[8.25rem] flex items-center justify-center">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.03]">
+              <Package className="h-5 w-5 stroke-[1.5] text-zinc-500" aria-hidden="true" />
+            </div>
           </div>
         </>
       )}
@@ -206,13 +209,14 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
   const categoryName = product.category?.name || (isInventory ? "Sin categoría" : "General");
   // The healthy chip is inventory-only: on the POS floor "everything is fine" is pure noise.
   const showStatusChip = status !== "healthy" || isInventory;
-  // Inventory edits through the full-card button, so its rail holds deactivation alone.
-  const railVisible = isInventory ? Boolean(footerHandler) : Boolean(onClick || onToggleFavorite);
+  // Inventory edits through the full-card button, so its rail holds deactivation alone;
+  // POS adds through the full-card button, so its rail holds favorite alone.
+  const railVisible = isInventory ? Boolean(footerHandler) : Boolean(onToggleFavorite);
 
   return (
     <div
       className={cn(
-        "group relative isolate flex aspect-[4/5] max-h-[22rem] min-h-[15.5rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-slate-900 shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg",
+        "group relative isolate flex w-full max-w-[22rem] aspect-[4/5] max-h-[22rem] min-h-[15.5rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-zinc-900 shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-500/60 hover:shadow-lg",
         isInactive && "opacity-60",
       )}
     >
@@ -264,16 +268,6 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
               <Star className={cn("h-3.5 w-3.5", isFavorite && "fill-current")} aria-hidden="true" />
             </RailButton>
           )}
-          {!isInventory && onClick && (
-            <RailButton
-              label="+ Agregar"
-              tone="border-white/30 bg-primary/85 group-hover/rail:bg-primary"
-              onClick={onClick}
-              disabled={cannotAdd}
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            </RailButton>
-          )}
           {isInventory && footerHandler && (
             <RailButton
               label={isInactive ? "Reactivar producto" : "Desactivar producto"}
@@ -294,14 +288,14 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
       */}
       <div
         data-testid="product-sheet"
-        className="relative mt-auto w-full min-w-0 border-t border-white/10 bg-zinc-950/80 px-3 pb-3 pt-3"
+        className="relative mt-auto flex w-full min-w-0 flex-col border-t border-white/10 bg-zinc-950/80 px-3 pb-3 pt-3"
       >
-        <h3 className="line-clamp-2 min-w-0 break-words text-base font-bold leading-snug text-white">
+        <h3 className="line-clamp-2 min-h-[2.25rem] min-w-0 break-words text-sm sm:text-[15px] font-semibold leading-snug text-white">
           {product.name}
         </h3>
 
         {(product.sku || showStock) && (
-          <div className="mt-0.5 flex min-w-0 items-center justify-between gap-2">
+          <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
             {product.sku && (
               <span className="min-w-0 truncate font-mono text-[11px] text-white/60">{product.sku}</span>
             )}
@@ -309,8 +303,8 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
               <span
                 data-testid="product-stock"
                 className={cn(
-                  "ml-auto shrink-0 font-mono text-[11px] font-semibold leading-none",
-                  STOCK_TONE[status] ?? "text-white/85",
+                  "ml-auto shrink-0 rounded-md border px-2 py-0.5 font-mono text-xs font-medium leading-none tabular-nums",
+                  STOCK_TONE[status] ?? "border-white/10 bg-white/[0.06] text-white/85",
                 )}
               >
                 {product.stock} uds.
@@ -319,8 +313,8 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
           </div>
         )}
 
-        <div data-testid="product-price-panel" className="mt-2 min-w-0">
-          <span className="block w-fit max-w-full truncate rounded-md bg-primary px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase leading-none tracking-[0.12em] text-white">
+        <div data-testid="product-price-panel" className={cn("min-w-0", product.sku || showStock ? "mt-2" : "mt-auto pt-2")}>
+          <span className="block w-fit max-w-full truncate rounded-md border border-primary/50 bg-primary/25 px-2 py-1 font-mono text-[11px] font-semibold leading-none text-orange-200">
             {categoryName}
           </span>
           {/* Wraps so the list price drops below the selling price instead of overflowing. */}
