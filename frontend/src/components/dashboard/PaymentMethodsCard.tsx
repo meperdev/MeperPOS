@@ -76,6 +76,7 @@ export function PaymentMethodsCard({
       <div className="mt-3 flex min-h-0 flex-1 items-center gap-4">
         <div
           data-testid="payment-methods-chart"
+          aria-hidden="true"
           className="relative h-[136px] w-[136px] shrink-0"
         >
           <PieChart width={136} height={136}>
