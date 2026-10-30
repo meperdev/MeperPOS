@@ -56,6 +56,8 @@ describe("MobileCartDrawer", () => {
         onOpenDiscountModal={vi.fn()}
         onRemoveFromCart={vi.fn()}
         onCheckout={vi.fn()}
+        onFinance={vi.fn()}
+        canFinance={false}
       />,
     );
 
@@ -89,6 +91,8 @@ describe("MobileCartDrawer", () => {
         onOpenDiscountModal={vi.fn()}
         onRemoveFromCart={handleRemoveFromCart}
         onCheckout={handleCheckout}
+        onFinance={vi.fn()}
+        canFinance={true}
       />,
     );
 
@@ -99,6 +103,9 @@ describe("MobileCartDrawer", () => {
     const checkoutButton = screen.getByRole("button", { name: /Cobrar/i });
     await user.click(checkoutButton);
     expect(handleCheckout).toHaveBeenCalledTimes(1);
+
+    const financeButton = screen.getByRole("button", { name: /Financiar/i });
+    expect(financeButton).toBeEnabled();
 
     const closeButton = screen.getByRole("button", { name: /Cerrar carrito/i });
     await user.click(closeButton);

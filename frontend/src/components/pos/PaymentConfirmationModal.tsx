@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo } from "react";
 import Image from "next/image";
@@ -164,7 +164,7 @@ export function PaymentConfirmationModal({
                   key={item.productId}
                   className="flex items-start gap-3 p-3 bg-background rounded-lg border border-border"
                 >
-                  <div className="relative w-12 h-12 bg-gradient-to-br from-primary/10 to-accent/10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <div className="relative w-12 h-12 bg-muted/60 border border-border/50 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                     {item.product.imageUrl ? (
                       <Image
                         src={item.product.imageUrl}
@@ -174,7 +174,7 @@ export function PaymentConfirmationModal({
                         className="object-cover"
                       />
                     ) : (
-                      <Package className="w-6 h-6 text-primary" />
+                      <Package className="w-5 h-5 text-muted-foreground/50" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">

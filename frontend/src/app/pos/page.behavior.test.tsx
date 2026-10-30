@@ -20,6 +20,7 @@ type UseProductsParams = {
   page?: number;
   limit?: number;
   search?: string;
+  categoryId?: string;
   type?: "PRODUCT" | "SERVICE";
   ids?: string[];
   available?: boolean;
@@ -244,6 +245,17 @@ vi.mock("@/hooks/useProducts", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useCategories", () => ({
+  useCategories: () => ({
+    data: {
+      data: [
+        { id: "cat-1", name: "Mecánica", active: true },
+        { id: "cat-2", name: "Accesorios", active: true },
+      ],
+    },
+  }),
+}));
+
 vi.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({
     data: {
@@ -326,12 +338,14 @@ vi.mock("@/hooks/useSettings", () => ({
   }),
 }));
 
+const toastState = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+}));
+
 vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({
-    error: vi.fn(),
-    success: vi.fn(),
-    info: vi.fn(),
-  }),
+  useToast: () => toastState,
 }));
 
 // The POS reads the acting role to decide whether to offer the price-override
@@ -420,20 +434,27 @@ describe("products query service filter", () => {
     apiGetMock.mockReset();
   });
 
-  it("forwards type in the request and isolates cache/placeholder data across types", async () => {
+  it("forwards type and categoryId in the request and isolates cache/placeholder data across them", async () => {
     const { useProducts } = await vi.importActual<typeof import("@/hooks/useProducts")>("@/hooks/useProducts");
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
     const previous = { data: [makeProduct("p1", "Mercancia")], meta: { total: 80, totalPages: 4 } };
-    apiGetMock.mockResolvedValueOnce({ data: previous }).mockImplementationOnce(() => new Promise(() => {}));
-    const { result, rerender, unmount } = renderHook(({ type }: { type?: "SERVICE" }) => useProducts({ page: 1, limit: 6, type }), { wrapper, initialProps: { type: undefined } as { type?: "SERVICE" } });
+    apiGetMock.mockResolvedValueOnce({ data: previous }).mockImplementation(() => new Promise(() => {}));
+    const { result, rerender, unmount } = renderHook(
+      ({ type, categoryId }: { type?: "SERVICE"; categoryId?: string }) => useProducts({ page: 1, limit: 6, type, categoryId }),
+      { wrapper, initialProps: { type: undefined, categoryId: undefined } as { type?: "SERVICE"; categoryId?: string } },
+    );
     await waitFor(() => expect(result.current.data).toEqual(previous));
-    rerender({ type: "SERVICE" });
+    rerender({ type: "SERVICE", categoryId: undefined });
     expect(result.current.data).toBeUndefined();
-    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith("/products", { page: 1, limit: 6, type: "SERVICE" }));
+    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith("/products", { page: 1, limit: 6, type: "SERVICE", categoryId: undefined }));
+    rerender({ type: undefined, categoryId: "cat-1" });
+    expect(result.current.data).toBeUndefined();
+    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith("/products", { page: 1, limit: 6, type: undefined, categoryId: "cat-1" }));
     expect(client.getQueryCache().findAll({ queryKey: ["products"] }).map((query) => query.queryKey)).toEqual([
-      ["products", { page: 1, limit: 6, type: undefined }],
-      ["products", { page: 1, limit: 6, type: "SERVICE" }],
+      ["products", { page: 1, limit: 6, type: undefined, categoryId: undefined }],
+      ["products", { page: 1, limit: 6, type: "SERVICE", categoryId: undefined }],
+      ["products", { page: 1, limit: 6, type: undefined, categoryId: "cat-1" }],
     ]);
     unmount();
     client.clear();
@@ -547,7 +568,7 @@ describe("POS behavior evidence (#19, #18)", () => {
       return { data: { data: filtered.slice((params.page! - 1) * limit, params.page! * limit), meta: { total: filtered.length, totalPages: Math.ceil(filtered.length / limit) } }, isLoading: false, isFetching: false };
     });
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Todos" }));
+    await userEvent.click(screen.getByRole("button", { name: "Favoritos" }));
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ ids, available: true }));
     expect(screen.getByText("Favorito 10")).toBeTruthy();
     expect(screen.getByRole("button", { name: /siguiente/i })).toBeTruthy();
@@ -567,8 +588,9 @@ describe("POS behavior evidence (#19, #18)", () => {
       return { data: { data: filtered.slice((params.page! - 1) * params.limit!, params.page! * params.limit!), meta: { total: filtered.length, totalPages: Math.ceil(filtered.length / params.limit!) } }, isLoading: false, isFetching: false };
     });
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Todos" }));
-    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByRole("button", { name: "Favoritos" }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
     await userEvent.type(screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código..."), "repair");
     await waitFor(() => expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ search: "repair", type: "SERVICE", ids, available: true })));
     await userEvent.click(screen.getByRole("button", { name: /siguiente/i }));
@@ -584,13 +606,13 @@ describe("POS behavior evidence (#19, #18)", () => {
     localStorage.setItem("pos_favorite_product_ids", JSON.stringify([null, {}, "bad"]));
     useProductsMock.mockImplementation((params: UseProductsParams) => ({ data: { data: params.ids === undefined ? [makeProduct("p1", "Catalogo")] : [], meta: { total: params.ids === undefined ? 1 : 0, totalPages: 1 } }, isLoading: false, isFetching: false }));
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Todos" }));
+    await userEvent.click(screen.getByRole("button", { name: "Favoritos" }));
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ ids: [], available: true }));
     expect(screen.queryByText("Catalogo")).toBeNull();
     localStorage.removeItem("pos_favorite_product_ids");
   });
 
-  it.each(["pending", "error", "empty"])("keeps repeated Services toggles available during %s while preserving search/favorites", async (state) => {
+  it.each(["pending", "error", "empty"])("keeps repeated Services dropdown selections available during %s while preserving search/favorites", async (state) => {
     const ids = ["00000000-0000-4000-8000-000000000001"];
     localStorage.setItem("pos_favorite_product_ids", JSON.stringify(ids));
     const refetch = vi.fn();
@@ -609,14 +631,15 @@ describe("POS behavior evidence (#19, #18)", () => {
       };
     });
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Todos" }));
+    await userEvent.click(screen.getByRole("button", { name: "Favoritos" }));
     const search = screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código...");
     await userEvent.type(search, "repair");
     await waitFor(() => expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ search: "repair" })));
     for (let cycle = 0; cycle < 2; cycle++) {
       await userEvent.click(screen.getByRole("button", { name: /siguiente/i }));
       expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
-      await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+      await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+      await userEvent.click(screen.getByText("Servicios"));
       expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, type: "SERVICE", search: "repair", ids }));
       expect(screen.getByRole("button", { name: "Servicios" })).not.toBeDisabled();
       if (state === "pending") expect(screen.getByText("Buscando productos...")).toBeTruthy();
@@ -628,6 +651,7 @@ describe("POS behavior evidence (#19, #18)", () => {
         expect(refetch).toHaveBeenCalledTimes(cycle + 1);
       }
       await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+      await userEvent.click(screen.getByText("Todas las categorías"));
       expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, type: undefined, search: "repair", ids }));
       expect(search).toHaveValue("repair");
       expect(screen.getByRole("button", { name: "Favoritos" })).toBeTruthy();
@@ -644,7 +668,8 @@ describe("POS behavior evidence (#19, #18)", () => {
       isLoading: false, isFetching: false, isError: failed, refetch,
     }));
     const { rerender } = render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
     await userEvent.click(screen.getByRole("button", { name: /siguiente/i }));
     failed = true;
     rerender(<POSPage />);
@@ -660,15 +685,18 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, type: "SERVICE" }));
   });
 
-  it("exposes the Services selection as a pressed toggle", async () => {
+  it("exposes Services and Categories in the unified filter dropdown", async () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
-    const toggle = screen.getByRole("button", { name: "Servicios" });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
+    expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: "SERVICE", categoryId: undefined, page: 1 }));
+    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByText("Mecánica"));
+    expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: undefined, categoryId: "cat-1", page: 1 }));
+    await userEvent.click(screen.getByRole("button", { name: "Mecánica" }));
+    await userEvent.click(screen.getByText("Todas las categorías"));
+    expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: undefined, categoryId: undefined, page: 1 }));
   });
 
   it("caps the rendered grid tracks using a responsive minimum rather than fixed five columns", () => {
@@ -688,7 +716,8 @@ describe("POS behavior evidence (#19, #18)", () => {
       return { data: { data: list.slice((page - 1) * limit, page * limit), meta: { total: list.length, totalPages: Math.ceil(list.length / limit) } }, isLoading: false, isFetching: false };
     });
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: "SERVICE", page: 1 }));
     expect(screen.getByText("Servicio 0")).toBeTruthy();
     expect(screen.getByText("7", { selector: "span" })).toBeTruthy();
@@ -696,6 +725,7 @@ describe("POS behavior evidence (#19, #18)", () => {
       await userEvent.click(screen.getByRole("button", { name: /siguiente/i }));
     }
     await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByText("Todas las categorías"));
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: undefined, page: 1 }));
   });
 
@@ -756,7 +786,8 @@ describe("POS behavior evidence (#19, #18)", () => {
       isPlaceholderData: params.type === "SERVICE", isFetching: params.type === "SERVICE", isLoading: false,
     }));
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
     expect(screen.queryByText("80", { selector: "span" })).toBeNull();
     expect(screen.queryByText("Mercancia anterior")).toBeNull();
   });
@@ -1128,14 +1159,19 @@ describe("POS behavior evidence (#19, #18)", () => {
     ).toBeNull();
   });
 
-  it("filters the grid by item type", async () => {
+  it("filters the grid by item type and category via the dropdown", async () => {
     useProductsMock.mockImplementation((params: UseProductsParams) => ({
       data: {
         data: [
-          makeProduct("1", "Producto Base", { stock: 5 }),
-          makeProduct("9", "Mantenimiento", { type: "SERVICE", stock: 0 }),
-        ].filter((product) => !params.type || product.type === params.type),
-        meta: { total: params.type ? 1 : 2, page: 1, limit: 20, totalPages: 1 },
+          makeProduct("1", "Producto Base", { stock: 5, categoryId: "cat-1" }),
+          makeProduct("2", "Producto Accesorios", { stock: 5, categoryId: "cat-2" }),
+          makeProduct("9", "Mantenimiento", { type: "SERVICE", stock: 0, categoryId: "cat-1" }),
+        ].filter(
+          (product) =>
+            (!params.type || product.type === params.type) &&
+            (!params.categoryId || product.categoryId === params.categoryId),
+        ),
+        meta: { total: params.type || params.categoryId ? 1 : 3, page: 1, limit: 20, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -1144,13 +1180,23 @@ describe("POS behavior evidence (#19, #18)", () => {
     render(<POSPage />);
 
     expect(screen.getByRole("button", { name: "Producto Base" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Producto Accesorios" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Mantenimiento" })).toBeTruthy();
 
-    await userEvent.click(screen.getByRole("button", { name: /^Servicios$/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
 
     expect(screen.getByRole("button", { name: "Mantenimiento" })).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Producto Base" }),
+    ).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByText("Accesorios"));
+
+    expect(screen.getByRole("button", { name: "Producto Accesorios" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Mantenimiento" }),
     ).toBeNull();
   });
 });
@@ -1848,11 +1894,13 @@ describe("POS cart financing (pos-loan-initiation)", () => {
     expect(payload.items[0]).not.toHaveProperty("unitPrice");
 
     // The surfaced money must be the server agreed total, never the client-computed 45000.
+    // It leaves as a toast: no panel stays pinned to the cart.
     await waitFor(() =>
-      expect(
-        screen.getAllByText((_, el) => (el?.textContent ?? "").includes(formatCurrency(12345))).length,
-      ).toBeGreaterThan(0),
+      expect(toastState.success).toHaveBeenCalledWith(
+        expect.stringContaining(formatCurrency(12345)),
+      ),
     );
+    expect(screen.queryByText("Venta financiada iniciada")).toBeNull();
   });
 
   it("reuses the request key on a failed retry and clears the cart, customer and discount only after success", async () => {
