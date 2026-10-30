@@ -32,6 +32,7 @@ model Organization {
   expenseGroups      ExpenseGroup[]
   expenseLabels      ExpenseLabel[]
   payrollExpenseCategory PayrollExpenseCategory?
+  payrollObligationExpenses PayrollObligationExpense[]
   expensePayments    ExpensePayment[]
   expenses           Expense[]
   employees          Employee[]
@@ -145,6 +146,7 @@ model PayrollObligation {
   employee       Employee                @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
   shiftMemberships PayrollShiftMembership[]
   installments PayrollInstallment[]
+  expenseLink PayrollObligationExpense?
 
   @@unique([id, organizationId, employeeId])
   @@unique([id, organizationId, employeeId, kind])
@@ -961,6 +963,37 @@ model PayrollExpenseCategory {
   @@index([groupId, organizationId], map: "PayrollExpenseCategory_group_idx")
 }
 
+// Unwired storage only: this foundation creates, annuls and reports no expense
+// and stores no cash or per-installment mirror. One obligation links to at most
+// one expense and an expense cannot be shared by obligations, all inside one
+// tenant. The parent foreign keys are RESTRICT, so a linked obligation or expense
+// cannot be removed or re-keyed, but they do not make the link row itself
+// immutable: the append-only trigger in the matching migration rejects ordinary
+// UPDATE and DELETE of a link row. That trigger does not guard TRUNCATE or
+// privileged bypass, and blocking those writes also blocks administrative cleanup
+// of a link row. The correction and annulment copy protocol is not established:
+// annulment keeps the annulled payment history, annuls the associated expense
+// when present and creates a pending copy with the valid shifts and installments.
+// The copy identity and its link to a replacement expense are not established.
+// Future expense creation still needs at least one ExpensePayment because the
+// expense service requires it (a service rule, not a database constraint), and
+// must handle the expense money column being Decimal(12,2) while a payroll
+// aggregate can exceed it.
+model PayrollObligationExpense {
+  obligationId   String
+  organizationId String
+  employeeId     String
+  expenseId      String
+  createdAt      DateTime @default(now())
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "PayrollObligationExpense_organization_fkey")
+  obligation     PayrollObligation @relation(fields: [obligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollObligationExpense_obligation_fkey")
+  expense        Expense           @relation(fields: [expenseId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollObligationExpense_expense_fkey")
+
+  @@id([obligationId, organizationId, employeeId], map: "PayrollObligationExpense_pkey")
+  @@unique([expenseId, organizationId], map: "PayrollObligationExpense_expense_key")
+  @@index([organizationId], map: "PayrollObligationExpense_organization_idx")
+}
+
 model Expense {
   id              String              @id @default(uuid())
   organizationId  String
@@ -982,7 +1015,9 @@ model Expense {
   purchaseOrder   PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   createdBy       User                @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
   payments        ExpensePayment[]
+  payrollObligationExpense PayrollObligationExpense?
 
+  @@unique([id, organizationId], map: "Expense_payroll_target_key")
   @@index([organizationId, date])
   @@index([organizationId, labelId])
 }
