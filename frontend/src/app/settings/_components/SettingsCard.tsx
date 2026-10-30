@@ -13,39 +13,32 @@ export function SettingsCard({
   title,
   description,
   icon,
-  tone = "primary",
   children,
   className,
 }: SettingsCardProps) {
-  const isAccent = tone === "accent";
-
   return (
     <section
       className={cn(
-        "rounded-3xl border overflow-hidden",
-        isAccent ? "border-accent/30 bg-accent/10" : "border-primary/30 bg-primary/10",
-        className
+        "rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden",
+        className,
       )}
     >
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-black/5 dark:border-white/5">
+      <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-border/60">
         {icon && (
-          <div
-            className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-              isAccent ? "bg-accent/20" : "bg-primary/20"
-            )}
-          >
+          <span className="text-muted-foreground shrink-0 [&_svg]:text-muted-foreground">
             {icon}
-          </div>
+          </span>
         )}
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          <h2 className="text-xs sm:text-sm font-semibold tracking-tight text-foreground">
+            {title}
+          </h2>
           {description && (
             <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
           )}
         </div>
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </section>
   );
 }

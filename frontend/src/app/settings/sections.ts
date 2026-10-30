@@ -1,5 +1,6 @@
 import {
   Building2,
+  CreditCard,
   Database,
   Receipt,
   UsersRound,
@@ -37,5 +38,11 @@ export const settingsSections: SettingsSection[] = [
     label: "Importar y exportar datos",
     href: "/settings/data",
     icon: Database,
+  },
+  {
+    key: "billing",
+    label: "Suscripción",
+    href: "/settings/billing",
+    icon: CreditCard,
   },
 ];
