@@ -73,34 +73,33 @@ export function ImportSheetErrors({
   };
 
   return (
-    <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 overflow-hidden">
-      <div className="px-3 py-2 border-b border-rose-500/20 bg-rose-500/10">
-        <p className="text-xs font-semibold uppercase tracking-wide text-rose-500">
+    <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 overflow-hidden">
+      <div className="px-3.5 py-2.5 border-b border-rose-500/20 bg-rose-500/10">
+        <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">
           Errores por hoja
         </p>
       </div>
 
       <div className="divide-y divide-rose-500/10">
         {sheetOrder.map((sheetId) => (
-          <div key={sheetId} className="p-3 space-y-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          <div key={sheetId} className="p-3.5 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">
               {sheetLabel(sheetId)}
             </p>
-
             {errors
               .filter((error) => error.sheetId === sheetId)
               .map((error) => (
                 <div
                   key={`${error.sheetId}-${error.row ?? error.rowIndex}-${error.code ?? error.errorCode}`}
                   data-testid={`import-error-row-${error.row ?? error.rowIndex}`}
-                  className="rounded-xl border border-rose-500/20 bg-background/40 p-3 space-y-2"
+                  className="rounded-lg border border-rose-500/20 bg-card/80 p-3 space-y-2"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Badge variant={mapErrorVariant(error.code ?? error.errorCode ?? "UNKNOWN_ERROR")}>
                         {error.code ?? error.errorCode}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="font-mono text-xs text-muted-foreground tabular-nums">
                         Fila {error.row ?? error.rowIndex}
                       </span>
                     </div>
@@ -115,10 +114,10 @@ export function ImportSheetErrors({
                     )}
                   </div>
 
-                  <p className="text-sm text-foreground">{error.message}</p>
+                  <p className="text-xs sm:text-sm text-foreground">{error.message}</p>
 
                   {editingRow === (error.row ?? error.rowIndex) && error.field && (
-                    <div className="rounded-xl border border-accent/20 bg-background/40 p-3 space-y-3">
+                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <Input
                           label={fieldLabel(error.field)}
