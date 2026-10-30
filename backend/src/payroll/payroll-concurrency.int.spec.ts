@@ -49,11 +49,12 @@ import { PayrollPeriodsService } from './payroll-periods.service';
  * 6. what actually happens when a lock waiter outlives Prisma's interactive
  *    transaction timeout: the observed error code, nothing written, and a clean
  *    retry afterwards;
- * 7. the taxonomy-deactivation race the writer comment admits: a deactivation
+ * 7. the taxonomy-deactivation race the writer documents: a deactivation
  *    committed between the category read and the expense write fails the
- *    completion closed, and a deactivation committed after the writer's last
- *    re-read still leaves an expense bound to an inactive label (observed and
- *    reported here, not fixed: no production code is changed by this suite);
+ *    completion closed, and a deactivation that is already in flight when the
+ *    writer takes its `ExpenseLabel ... FOR UPDATE` lock serializes with it, so
+ *    the completion fails closed instead of committing an expense bound to an
+ *    inactive label;
  * 8. cross-tenant isolation between two namespaced fixture organizations for
  *    the obligation, installment, cash and expense rows these paths own.
  *
@@ -1734,11 +1735,11 @@ describePostgres(
       expect(deadlockEvidence(shortResult.error)).toMatch(/P2028/);
 
       // (b) The production completion, with Prisma's default interactive
-      // transaction budget, blocked at the very last foreign key of the flow:
-      // the payroll label is held FOR UPDATE, so the cash outflow, the
-      // installment and the expense payments of the transaction are already
-      // written when the deadline passes. This is the money-relevant case: the
-      // expired transaction must not leave that work behind.
+      // transaction budget, blocked at the writer's taxonomy lock: the payroll
+      // label is held FOR UPDATE by another transaction, so the cash outflow, the
+      // installment and the allocations of this transaction are already written
+      // when the deadline passes. This is the money-relevant case: the expired
+      // transaction must not leave that work behind.
       let releaseLabelHolder = (): void => {};
       const labelHolderMayFinish = new Promise<void>((resolve) => {
         releaseLabelHolder = resolve;
@@ -1781,14 +1782,14 @@ describePostgres(
         (value) => ({ ok: true as const, value }),
         (error: unknown) => ({ ok: false as const, error }),
       );
-      // The blocked statement is the `Expense` insert; the foreign-key wait on
-      // the label row itself is not visible as a statement in pg_stat_activity.
+      // The blocked statement is the writer's own `ExpenseLabel ... FOR UPDATE`,
+      // which it takes before re-reading the label's `active` flag.
       let interruptedWaited = 0;
       let interruptedWaitFailure: unknown;
       try {
         interruptedWaited = await waitForLockWaiter(
           prismaProbe,
-          '%"Expense"%',
+          '%"ExpenseLabel"%',
           5000,
         );
       } catch (error) {
@@ -1802,7 +1803,7 @@ describePostgres(
         delay(6500).then(() => ({ settled: false as const })),
       ]);
       console.log(
-        `[payroll-pg-int] the production completion settled while its expense insert was still blocked: ${String(interruptedRaced.settled)}`,
+        `[payroll-pg-int] the production completion settled while its taxonomy lock was still blocked: ${String(interruptedRaced.settled)}`,
       );
       expect(interruptedRaced.settled).toBe(false);
       releaseLabelHolder();
@@ -1883,7 +1884,7 @@ describePostgres(
       ).resolves.toBe(1);
     }, 90000);
 
-    it('7. taxonomy deactivation race: forced between the category read and the expense write, and forced after the writer re-read', async () => {
+    it('7. taxonomy deactivation race: forced between the category read and the expense write, and forced to compete for the writer label lock', async () => {
       const expensesBeforePhaseA = await prisma.expense.count({
         where: { organizationId: orgId },
       });
@@ -1949,75 +1950,113 @@ describePostgres(
         data: { active: true },
       });
 
-      // Phase B: the deactivation commits after the writer's last bound/active
-      // re-read and before the completion commits. The writer takes no lock on
-      // the label, so this window is the one its own comment leaves open.
-      let writerFinished = (): void => {};
-      const writerDone = new Promise<void>((resolve) => {
-        writerFinished = resolve;
+      // Phase B: the deactivation is in flight and uncommitted when the writer
+      // asks for its taxonomy lock. This is the ordering that used to commit an
+      // expense bound to a label that was already inactive. The writer now takes
+      // `ExpenseLabel ... FOR UPDATE` on the bound label before re-reading it, so
+      // the two taxonomy writers serialize: the writer waits for the deactivation
+      // to commit, its post-lock re-read then sees `active = false`, and the
+      // completion fails closed instead of binding an expense to a dead label.
+      let deactivationHoldsLock = (): void => {};
+      const deactivationLocked = new Promise<void>((resolve) => {
+        deactivationHoldsLock = resolve;
       });
-      let releaseCommit = (): void => {};
-      const commitGate = new Promise<void>((resolve) => {
-        releaseCommit = resolve;
+      let releaseDeactivation = (): void => {};
+      const deactivationGate = new Promise<void>((resolve) => {
+        releaseDeactivation = resolve;
       });
 
-      const phaseB = prisma.$transaction(
+      const deactivation = prismaSecond.$transaction(
         async (tx) => {
-          const category = await resolvePayrollExpenseCategoryWithin(
-            tx,
-            orgId,
-            actor,
-          );
-          const written = await writePayrollCompletionExpense(tx, {
-            organizationId: orgId as string,
-            employeeId: employeeTaxonomyId,
-            obligationId: taxonomyAfterWriteObligationId,
-            actor,
-            category,
-            facts: completionFacts(
-              TAXONOMY_TOTAL_AFTER_WRITE,
-              DATE_TAXONOMY,
-              TEST_OWNED_OUTFLOW_B,
-            ),
+          await tx.expenseLabel.update({
+            where: { id: labelId },
+            data: { active: false },
           });
-          writerFinished();
-          await commitGate;
-          return written;
+          deactivationHoldsLock();
+          await deactivationGate;
+          return 'deactivated' as const;
         },
         { timeout: 30000, maxWait: 30000 },
       );
+      await deactivationLocked;
 
-      await writerDone;
-      await prismaSecond.expenseLabel.update({
-        where: { id: labelId },
-        data: { active: false },
+      let writerReachedCategory = (): void => {};
+      const writerAtCategory = new Promise<void>((resolve) => {
+        writerReachedCategory = resolve;
       });
-      releaseCommit();
-      const phaseBResult = await phaseB;
-      if (phaseBResult.kind !== 'created')
-        throw new Error(
-          `The writer did not create the expense: ${phaseBResult.kind}`,
+
+      const phaseB = prisma
+        .$transaction(
+          async (tx) => {
+            const category = await resolvePayrollExpenseCategoryWithin(
+              tx,
+              orgId,
+              actor,
+            );
+            writerReachedCategory();
+            return writePayrollCompletionExpense(tx, {
+              organizationId: orgId as string,
+              employeeId: employeeTaxonomyId,
+              obligationId: taxonomyAfterWriteObligationId,
+              actor,
+              category,
+              facts: completionFacts(
+                TAXONOMY_TOTAL_AFTER_WRITE,
+                DATE_TAXONOMY,
+                TEST_OWNED_OUTFLOW_B,
+              ),
+            });
+          },
+          { timeout: 30000, maxWait: 30000 },
+        )
+        .then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => ({ ok: false as const, error }),
         );
+
+      await writerAtCategory;
+      // PostgreSQL reports the writer blocked on the `ExpenseLabel` row the
+      // deactivation holds: the lock is real and it is that same row.
+      await waitForLockWaiter(prismaProbe, '%"ExpenseLabel"%', 10000);
+      releaseDeactivation();
+      await expect(deactivation).resolves.toBe('deactivated');
+
+      const phaseBResult = await phaseB;
+      if (phaseBResult.ok)
+        throw new Error(
+          `The writer committed an expense after the deactivation: ${phaseBResult.value.kind}`,
+        );
+      console.log(
+        `[payroll-pg-int] deactivation serialized with the writer label lock: ${describeDatabaseError(phaseBResult.error)}`,
+      );
+      expect(phaseBResult.error).toBeInstanceOf(ConflictException);
       const boundLabel = await prisma.expenseLabel.findUniqueOrThrow({
         where: { id: labelId },
       });
-      const boundExpense = await prisma.expense.findUniqueOrThrow({
-        where: { id: phaseBResult.expenseId },
-        include: { payments: true, payrollObligationExpense: true },
-      });
-      console.log(
-        `[payroll-pg-int] deactivation after the writer re-read: expense=${boundExpense.id} labelActive=${String(boundLabel.active)} linked=${String(boundExpense.payrollObligationExpense !== null)}`,
-      );
-      // Observed residual race, reported and not fixed here: because the label row
-      // is not locked until commit, a completion can commit an expense whose
-      // label is already inactive. The writer's re-read only closes the earlier
-      // window (phase A).
+      // Fail-closed, and no residue: the deactivation is the state the writer
+      // observed, and neither an expense nor a link was committed for it.
       expect(boundLabel.active).toBe(false);
-      expect(boundExpense.active).toBe(true);
-      expect(boundExpense.payrollObligationExpense?.obligationId).toBe(
-        taxonomyAfterWriteObligationId,
-      );
-      expect(boundExpense.payments).toHaveLength(1);
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBeforePhaseA);
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: {
+            obligationId: {
+              in: [
+                taxonomyBeforeWriteObligationId,
+                taxonomyAfterWriteObligationId,
+              ],
+            },
+          },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: taxonomyAfterWriteObligationId },
+          select: { status: true, version: true },
+        }),
+      ).resolves.toEqual({ status: 'PENDING', version: 0 });
 
       await prisma.expenseLabel.update({
         where: { id: labelId },
@@ -2383,11 +2422,13 @@ describePostgres(
  *   completes;
  * - the taxonomy-deactivation race the writer documents: a deactivation committed
  *   between the category read and the expense write fails the completion closed
- *   (409, no expense, no link); a deactivation committed after the writer's last
- *   bound/active re-read and before commit DOES leave a committed expense bound to
- *   a label that is inactive at commit time. That second window is a reported
- *   residual race, not a behaviour this suite blesses: if production later locks
- *   the label for the write, the phase B assertion has to be inverted;
+ *   (409, no expense, no link). A deactivation that is already in flight when the
+ *   writer asks for its `ExpenseLabel ... FOR UPDATE` lock really waits: Prisma's
+ *   transaction blocks, `pg_locks` shows the waiting statement on `ExpenseLabel`,
+ *   and once the deactivation commits the writer's post-lock re-read observes it
+ *   and the completion fails closed, so a committed expense bound to an inactive
+ *   label is no longer reachable through this ordering. The lock is the writer's
+ *   own (`lockCategoryLabel`); no test-only lock is involved;
  * - cross-tenant isolation of these paths between two namespaced organizations:
  *   reads never cross, and twelve reads/mutations (period installment, correction,
  *   expense read/update/addPayment/remove in both directions, and the expense
@@ -2419,7 +2460,9 @@ describePostgres(
  *   PostgreSQL-raised serialization failures.
  * - Reporting aggregates other than `getCashFlow` (financial overview, exports),
  *   and how a report displays a payroll outflow that a correction revised.
- * - Scenario 7 proves an expense can be committed against an inactive label; it
- *   does not measure how wide that window is in production, and it does not prove
- *   which of the two writer windows a real concurrent deactivation will hit.
+ * - Scenario 7 proves the label lock serializes one deactivation ordering; it does
+ *   not measure the width of the remaining windows in production. The writer locks
+ *   the label row only, so a concurrent **group** deactivation is still observed by
+ *   a post-lock read rather than by a lock, and the `Expense` insert's own implicit
+ *   key-share wait is not traced here.
  */

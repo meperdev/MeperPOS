@@ -282,8 +282,10 @@ async function auditCategory(
  *    `Organization` row and then reads or creates the taxonomy.
  * 3. `writePayrollCompletionExpense` writes the `Expense`, `ExpensePayment`,
  *    `AuditLog` and `PayrollObligationExpense` rows. It takes the shared
- *    `Expense ... FOR UPDATE` lock only on the replay path, i.e. after the
- *    organization lock.
+ *    `Expense ... FOR UPDATE` lock only on the replay path, and a tenant-scoped
+ *    `ExpenseLabel ... FOR UPDATE` lock on the bound category before re-reading its
+ *    active flags on a first write, so a concurrent label deactivation either waits
+ *    or is caught fail-closed.
  *
  * So this unit's order is payroll rows → Organization → taxonomy/Expense.
  *
@@ -315,11 +317,12 @@ async function auditCategory(
  * Real PostgreSQL lock-wait, deadlock and rollback behavior remain unverified, and
  * a lock-wait timeout (`P2028`) is not classified here.
  *
- * Also not solved: a concurrent taxonomy deactivation that commits between the
- * association read of this unit and the expense write is only detected by the
- * writer's own bound/active category re-read, not by a taxonomy lock.
- * The tenant row lock makes concurrent taxonomy *structure* changes of this
- * category path serialize, but the expense taxonomy API itself takes no such lock.
+ * Also not solved: a concurrent taxonomy deactivation that commits after the
+ * writer's label lock is released and its re-read has passed is no longer reachable
+ * for the label itself, because that row is locked for the whole write. The
+ * *group* row is still only re-read, not locked, so a concurrent group deactivation
+ * keeps that smaller window. The expense taxonomy API takes no organization lock,
+ * so taxonomy structure changes are not serialized with this category path.
  */
 @Injectable()
 export class PayrollExpenseCategoryService {
