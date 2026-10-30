@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ReportsModule } from '../reports/reports.module';
 import { WhatsAppAdminService } from './whatsapp-admin.service';
 import { WhatsAppCommercialController } from './whatsapp-commercial.controller';
+import { WhatsAppDeliveryController } from './whatsapp-delivery.controller';
 import { WhatsAppDeliveryScheduler } from './whatsapp-delivery.scheduler';
 import { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { WhatsAppIdentityController } from './whatsapp-identity.controller';
@@ -34,6 +35,7 @@ const createWahaAdapter = () =>
   imports: [ReportsModule],
   controllers: [
     WhatsAppCommercialController,
+    WhatsAppDeliveryController,
     WhatsAppIdentityController,
     WhatsAppIntelligenceController,
     WhatsAppWebhookController,

@@ -44,6 +44,13 @@ a single central channel owned by the platform, has no organization scope, and i
 platform `SUPER_ADMIN`; it is deliberately guarded without `OrganizationRequiredGuard`. Neither
 controller accepts a session name from the request.
 
+The delivery routes supervise the daily report. Reads return the calling organization's recent
+attempts, bounded to 30 rows; a delivery row carries no organization of its own, so the tenant comes
+from the connection it ran on, and the central INTELLIGENCE connection's rows are shown only when that
+connection speaks for exactly one organization. The send route delivers to the caller's own verified
+identity and returns the delivery service's outcome; a caller with no verified identity is answered
+with a 409 instead of an error.
+
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/whatsapp/commercial/session | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
@@ -60,6 +67,8 @@ controller accepts a session name from the request.
 | /api/whatsapp/identity | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/identity/challenge | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/identity/:id | DELETE | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
+| /api/whatsapp/deliveries | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-delivery.controller.spec.ts |
+| /api/whatsapp/deliveries/report | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-delivery.controller.spec.ts |
 | /api/whatsapp/webhook | POST | WAHA HMAC | provider-hmac | backend/src/whatsapp/whatsapp-webhook.spec.ts |
 
 ## auth
