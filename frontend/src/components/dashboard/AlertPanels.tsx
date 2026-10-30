@@ -88,7 +88,7 @@ export function AlertPanels() {
                   <span className="text-xs font-medium text-muted-foreground">
                     Total pendiente
                   </span>
-                  <span className="font-mono text-sm font-semibold text-primary tabular-nums">
+                  <span className="font-mono text-sm font-semibold text-primary-text tabular-nums">
                     {formatCurrency(totalPending)}
                   </span>
                 </div>
@@ -111,7 +111,7 @@ export function AlertPanels() {
               <button
                 type="button"
                 onClick={() => router.push("/expenses")}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
+                className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
               >
                 Ver gastos
                 <ArrowRight className="h-3 w-3" aria-hidden="true" />
@@ -151,7 +151,7 @@ export function AlertPanels() {
                           {task.status === "IN_PROGRESS" ? "En progreso" : "Pendiente"}
                         </Badge>
                         {task.dueDate && (
-                          <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
                             {formatDate(task.dueDate)}
                           </span>
                         )}

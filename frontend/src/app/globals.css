@@ -9,9 +9,11 @@
     color-scheme: light;
     --background: #FAF8FF;
     --foreground: #131B2E;
-    --primary: #C25E36;
-    --primary-dark: #A84D28;
+    --primary: #B0522E;
+    --primary-dark: #96421F;
     --primary-light: #FAECE5;
+    /* Text-on-surface variant: the fill colour fails 4.5:1 as a link/label. */
+    --primary-text: #A84D28;
     --accent: #C25E36;
     --accent-light: #FAECE5;
     --terracotta: #C25E36;
@@ -21,7 +23,7 @@
     --border: #C7C4D7;
     --border-subtle: #E2E8F0;
     --muted: #F2F3FF;
-    --muted-foreground: #767586;
+    --muted-foreground: #6B6A76;
     --success: #16A34A;
     --warning: #D97706;
     --danger: #D0453F;
@@ -44,6 +46,7 @@
     --primary: #C25E36;
     --primary-dark: #A84D28;
     --primary-light: #2C1D18;
+    --primary-text: #E58A63;
     --accent: #C25E36;
     --accent-light: #2C1D18;
     --terracotta: #E0764C;
@@ -75,6 +78,7 @@
     --color-foreground: var(--foreground);
     --color-primary: var(--primary);
     --color-primary-dark: var(--primary-dark);
+    --color-primary-text: var(--primary-text);
     --color-primary-light: var(--primary-light);
     --color-accent: var(--accent);
     --color-accent-light: var(--accent-light);
@@ -94,6 +98,11 @@
 }
 
 /* ─── Base ─────────────────────────────────────────────── */
+/* Keyboard focus must stay visible even where a component forgets its ring. */
+:where(a, button, input, select, textarea, [role="button"]):focus-visible {
+    outline: 2px solid var(--primary-text);
+    outline-offset: 2px;
+}
 * {
     box-sizing: border-box;
 }

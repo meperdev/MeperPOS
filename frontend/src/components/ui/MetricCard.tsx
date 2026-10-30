@@ -37,7 +37,7 @@ const toneCardClasses: Record<MetricCardTone, string> = {
 const toneValueClasses: Record<MetricCardTone, string> = {
   primary: "text-foreground",
   accent: "text-foreground",
-  rose: "text-rose-600 dark:text-rose-400",
+  rose: "text-rose-700 dark:text-rose-400",
   green: "text-foreground",
   blue: "text-foreground",
 };
@@ -53,7 +53,7 @@ const toneSparkColor: Record<MetricCardTone, string> = {
 const toneActionClasses: Record<MetricCardTone, string> = {
   primary: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
   accent: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
-  rose: "border-rose-500/35 bg-rose-500/[0.06] text-rose-600 dark:text-rose-400 hover:bg-rose-500/12",
+  rose: "border-rose-500/35 bg-rose-500/[0.06] text-rose-700 dark:text-rose-400 hover:bg-rose-500/12",
   green: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
   blue: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
 };
@@ -178,7 +178,7 @@ export function MetricCard({
           type="button"
           onClick={action.onClick}
           className={cn(
-            "mt-3 inline-flex items-center gap-1 self-start rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+            "mt-3 inline-flex min-h-7 items-center gap-1 self-start rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
             tone
               ? toneActionClasses[tone]
               : "border-border/70 bg-muted/40 text-foreground hover:bg-muted",
