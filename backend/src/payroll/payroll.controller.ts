@@ -24,7 +24,6 @@ import { OrganizationRequiredGuard } from '../common/guards/organization-require
 import { OrganizationStatusGuard } from '../common/guards/organization-status.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
-import { PrismaService } from '../prisma/prisma.service';
 import { CorrectPayrollPeriodInstallmentDto } from './dto/correct-payroll-period-installment.dto';
 import { CreatePayrollGroupDto } from './dto/create-payroll-group.dto';
 import { CreatePayrollGroupInstallmentDto } from './dto/create-payroll-group-installment.dto';
@@ -32,6 +31,7 @@ import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
 import { CreatePayrollPeriodInstallmentDto } from './dto/create-payroll-period-installment.dto';
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
 import { PayrollGroupsService } from './payroll-groups.service';
+import { PayrollObligationsService } from './payroll-obligations.service';
 import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-installment-correction.service';
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
@@ -77,7 +77,7 @@ export class PayrollController {
     private readonly periodInstallments: PayrollPeriodInstallmentsService,
     private readonly groupInstallments: PayrollGroupInstallmentsService,
     private readonly corrections: PayrollPeriodInstallmentCorrectionService,
-    private readonly prisma: PrismaService,
+    private readonly obligations: PayrollObligationsService,
   ) {}
 
   // Tenant and role come from the authenticated request only. The payroll
@@ -134,64 +134,15 @@ export class PayrollController {
     return this.corrections.correct(dto, this.tenant(user), user);
   }
 
-  // Read-only projection: persisted payroll facts (amounts, dates, version) and
-  // their cash outflows. No writer, planner or expense service is invoked here;
-  // balance presentation is derived by the caller from these stored amounts.
+  // Read-only projection: persisted payroll facts (amounts, dates, version), their
+  // cash outflows and a server-computed paid/balance/completion summary. The
+  // numbers a user sees as money are never summed by the client, and no writer,
+  // planner or expense service is invoked here.
   @Get('obligations')
   findObligations(
     @Query() query: QueryPayrollObligationsHttpDto,
     @CurrentUser() user: RequestUser,
   ) {
-    const organizationId = this.tenant(user);
-    return this.prisma.payrollObligation.findMany({
-      where: {
-        organizationId,
-        ...(query.employeeId ? { employeeId: query.employeeId } : {}),
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        employeeId: true,
-        kind: true,
-        status: true,
-        version: true,
-        periodStart: true,
-        periodEnd: true,
-        periodAmount: true,
-        // The stored per-payment expense decision, so a UI can show it.
-        expenseEnabled: true,
-        selectedExpenseDate: true,
-        createdAt: true,
-        updatedAt: true,
-        installments: {
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          select: {
-            id: true,
-            outflowId: true,
-            createdAt: true,
-            outflow: {
-              select: {
-                id: true,
-                amount: true,
-                date: true,
-                method: true,
-                createdAt: true,
-              },
-            },
-          },
-        },
-        shiftMemberships: {
-          orderBy: [{ shiftId: 'asc' }],
-          select: {
-            id: true,
-            shiftId: true,
-            releasedAt: true,
-            shift: {
-              select: { id: true, date: true, kind: true, amount: true },
-            },
-          },
-        },
-      },
-    });
+    return this.obligations.findAll(this.tenant(user), query.employeeId);
   }
 }

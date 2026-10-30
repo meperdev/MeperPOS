@@ -24,6 +24,7 @@ import { PayrollExpenseCategoryService } from './payroll-expense-category.servic
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
 import { PayrollGroupsService } from './payroll-groups.service';
 import { PayrollModule } from './payroll.module';
+import { PayrollObligationsService } from './payroll-obligations.service';
 import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-installment-correction.service';
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
@@ -417,7 +418,19 @@ describe('payroll HTTP boundary', () => {
     const response = await get(
       '/api/payroll/obligations?employeeId=emp-a',
     ).expect(200);
-    expect(response.body).toEqual(rows);
+    // Every field the route returned before is still returned unchanged; the
+    // paid/balance/completion numbers are added by the server, never the client.
+    expect(response.body).toEqual(
+      rows.map((row) => ({
+        ...row,
+        summary: {
+          total: '1500000.00',
+          paid: '100.00',
+          balance: '1499900.00',
+          status: 'pending',
+        },
+      })),
+    );
     expect(prisma.payrollObligation.findMany).toHaveBeenCalledWith({
       where: { organizationId: 'org-a', employeeId: 'emp-a' },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -472,6 +485,7 @@ describe('payroll module wiring', () => {
       PayrollPeriodInstallmentsService,
       PayrollGroupInstallmentsService,
       PayrollPeriodInstallmentCorrectionService,
+      PayrollObligationsService,
     ]) {
       expect(providers).toContain(service);
       expect(moduleRef.get(service)).toBeInstanceOf(service);

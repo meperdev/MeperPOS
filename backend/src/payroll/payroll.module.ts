@@ -8,6 +8,7 @@ import { EmployeeShiftsService } from './employee-shifts.service';
 import { PayrollController } from './payroll.controller';
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
 import { PayrollGroupsService } from './payroll-groups.service';
+import { PayrollObligationsService } from './payroll-obligations.service';
 import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-installment-correction.service';
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
@@ -29,6 +30,9 @@ import { PayrollPeriodsService } from './payroll-periods.service';
     PayrollPeriodInstallmentsService,
     PayrollGroupInstallmentsService,
     PayrollPeriodInstallmentCorrectionService,
+    // Read-only: the obligations route projects persisted facts and the
+    // server-computed paid/balance/completion summary. It writes nothing.
+    PayrollObligationsService,
     OrganizationRequiredGuard,
     OrganizationStatusGuard,
   ],
