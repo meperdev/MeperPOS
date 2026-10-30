@@ -27,15 +27,12 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-3 overflow-x-hidden lg:space-y-4">
+      <div className="space-y-4 overflow-x-hidden">
         {/* Page Header */}
         <div className="animate-fade-in-up">
-          <div className="flex items-center gap-3">
-            <div className="w-1 h-7 rounded-full bg-primary shrink-0" />
-            <h1 className="text-2xl lg:text-4xl font-bold text-foreground">
-              Bienvenido, {user?.name?.split(" ")[0]}
-            </h1>
-          </div>
+          <h1 className="text-xl lg:text-2xl font-semibold tracking-tight text-foreground">
+            Bienvenido, {user?.name?.split(" ")[0]}
+          </h1>
         </div>
 
         {/* 8 KPI cards — two rows of four (day KPIs + accumulated totals) */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Sale, PaginatedResponse, CartItem, SaleFilters } from "@/types";
 
@@ -16,6 +16,9 @@ export function useSales(params?: SaleFilters) {
         .then(
         (res) => res.data
       ),
+    // A fitted table size changes the key right after mount; showing the rows we
+    // already have keeps the list mounted so it can be re-measured in place.
+    placeholderData: keepPreviousData,
   });
 }
 

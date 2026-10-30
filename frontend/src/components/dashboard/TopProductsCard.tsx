@@ -25,7 +25,7 @@ export function TopProductsCard({
       data-testid="top-products-card"
       className="flex h-full min-h-0 flex-col"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+      <p className="text-sm font-semibold tracking-tight text-foreground">
         Top productos
       </p>
 
@@ -39,20 +39,20 @@ export function TopProductsCard({
             <li
               key={product.productId}
               data-testid="top-product-row"
-              className="flex items-center gap-3 text-xs"
+              className="flex items-center gap-2.5 text-xs"
             >
               <span
                 data-testid="top-product-rank"
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-bold text-primary"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground tabular-nums"
               >
                 {index + 1}
               </span>
               <span className="min-w-0 flex-1 truncate font-medium text-foreground">
                 {product.productName}
               </span>
-              <span className="shrink-0 font-mono text-[11px] font-bold text-foreground tabular-nums">
+              <span className="shrink-0 font-mono text-[11px] font-semibold text-foreground tabular-nums">
                 <span data-testid="top-product-quantity">{product.quantity}</span>
-                <span className="ml-1 font-sans font-medium text-muted-foreground">
+                <span className="ml-1 font-sans font-normal text-muted-foreground">
                   u
                 </span>
               </span>
