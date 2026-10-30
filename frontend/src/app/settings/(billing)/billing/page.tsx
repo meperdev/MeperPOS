@@ -9,6 +9,7 @@ import {
   useRegisterPayment,
 } from "@/hooks/useBilling";
 import { Button } from "@/components/ui/Button";
+import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -123,7 +124,7 @@ export default function BillingSettingsPage() {
 
   if (isLoading) {
     return (
-      <LoadingState icon={<CreditCard className="w-5 h-5 text-primary/50" />} message="Cargando información de suscripción..." />
+      <LoadingState icon={<CreditCard className="w-4 h-4 text-muted-foreground" />} message="Cargando información de suscripción..." />
     );
   }
 
@@ -138,47 +139,57 @@ export default function BillingSettingsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-1 h-6 rounded-full bg-primary shrink-0" />
-        <h2 className="text-xl font-bold text-foreground">Suscripción</h2>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
+          Suscripción
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Plan, límites de uso e historial de pagos
+        </p>
       </div>
 
       {/* Plan Card */}
-      <div className="rounded-3xl border border-primary/30 bg-primary/10 overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-primary/20">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Shield className="w-4 h-4 text-primary" />
-          </div>
-          <h3 className="text-sm font-semibold text-foreground">Plan Actual</h3>
+      <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
+        <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-border/60">
+          <Shield className="w-4 h-4 text-muted-foreground shrink-0" />
+          <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+            Plan actual
+          </h3>
         </div>
-        <div className="p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Plan</p>
-              <p className={cn("text-xl font-bold", planConfig[billingStatus.plan]?.color)}>
+              <p className="text-xs font-medium text-muted-foreground">Plan</p>
+              <p
+                className={cn(
+                  "mt-0.5 text-base sm:text-lg font-semibold tracking-tight",
+                  planConfig[billingStatus.plan]?.color,
+                )}
+              >
                 {planConfig[billingStatus.plan]?.label ?? billingStatus.plan}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Estado</p>
-              <Badge variant={statusConfig[billingStatus.status].variant} className="mt-1">
-                <span className="flex items-center gap-1">
-                  {statusConfig[billingStatus.status].icon}
-                  {statusConfig[billingStatus.status].label}
-                </span>
+              <p className="text-xs font-medium text-muted-foreground">Estado</p>
+              <Badge
+                variant={statusConfig[billingStatus.status].variant}
+                dot
+                className="mt-1"
+              >
+                {statusConfig[billingStatus.status].label}
               </Badge>
             </div>
           </div>
 
           {billingStatus?.trialEndsAt && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
               <span>
                 Fin de prueba:{" "}
-                <strong className="text-foreground">
+                <span className="font-mono font-semibold text-foreground tabular-nums">
                   {formatDate(billingStatus.trialEndsAt)}
-                </strong>
+                </span>
               </span>
             </div>
           )}
@@ -187,20 +198,18 @@ export default function BillingSettingsPage() {
 
       {/* Downgrade Banner */}
       {downgradeFlags && (
-        <div className="rounded-3xl border border-amber-500/30 bg-amber-500/10 overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-amber-500/20">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-300" />
-            </div>
-            <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 overflow-hidden">
+          <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-amber-500/20">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold text-amber-900 dark:text-amber-100">
               Ajuste de plan requerido
             </h3>
           </div>
-          <div className="p-5 space-y-2">
-            <p className="text-sm text-amber-800 dark:text-amber-200">
-              Tu plan cambió a <strong>Básico</strong> y algunos recursos exceden los nuevos límites:
+          <div className="p-4 space-y-2">
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              Tu plan cambió a <span className="font-semibold">Básico</span> y algunos recursos exceden los nuevos límites:
             </p>
-            <ul className="text-sm text-amber-800 dark:text-amber-200 space-y-1 list-disc list-inside">
+            <ul className="text-xs text-amber-800 dark:text-amber-200 space-y-1 list-disc list-inside">
               {downgradeFlags.usersOverLimit && <li>Usuarios sobre el límite</li>}
               {downgradeFlags.productsOverLimit && <li>Productos sobre el límite</li>}
               {downgradeFlags.customersOverLimit && <li>Clientes sobre el límite</li>}
@@ -216,14 +225,14 @@ export default function BillingSettingsPage() {
       )}
 
       {/* Limits Card */}
-      <div className="rounded-3xl border border-accent/30 bg-accent/10 overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-accent/20">
-          <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center">
-            <TrendingUp className="w-4 h-4 text-accent" />
-          </div>
-          <h3 className="text-sm font-semibold text-foreground">Uso y Límites</h3>
+      <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
+        <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-border/60">
+          <TrendingUp className="w-4 h-4 text-muted-foreground shrink-0" />
+          <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+            Uso y Límites
+          </h3>
         </div>
-        <div className="p-5 space-y-3">
+        <div className="p-4 sm:p-5 space-y-3">
           {isLimitsError && !planLimits ? (
             <ErrorState
               message="No se pudo cargar los límites del plan."
@@ -235,24 +244,35 @@ export default function BillingSettingsPage() {
             planLimits?.limits.map((limit) => {
               const pct = limit.limit > 0 ? (limit.current / limit.limit) * 100 : 0;
               const isUnlimited = limit.limit === -1;
-              const isWarning = !limit.exceeded && limit.current >= limit.warningAt && !isUnlimited;
-              const isExceeded = limit.exceeded && !isUnlimited;
+              // The API reports `exceeded` from `current >= limit` so the guard can
+              // block the next creation; presentation separates "no capacity left"
+              // from "past the limit".
+              const isOverLimit = !isUnlimited && limit.current > limit.limit;
+              const isAtLimit = !isUnlimited && !isOverLimit && limit.current === limit.limit;
+              const isWarning =
+                !isUnlimited &&
+                !isOverLimit &&
+                !isAtLimit &&
+                limit.current >= limit.warningAt;
 
               return (
                 <div key={limit.type} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-1.5 text-foreground">
-                      {typeIcons[limit.type]}
+                      <span className="text-muted-foreground [&_svg]:w-3.5 [&_svg]:h-3.5">
+                        {typeIcons[limit.type]}
+                      </span>
                       {typeLabels[limit.type]}
                     </span>
-                    <span className="font-mono text-xs">
+                    <span className="font-mono text-xs tabular-nums">
                       {isUnlimited ? (
-                        <span className="text-accent">Ilimitado</span>
+                        <span className="text-muted-foreground">Ilimitado</span>
                       ) : (
                         <span
                           className={cn(
-                            isExceeded && "text-red-600 dark:text-red-400 font-semibold",
-                            isWarning && "text-amber-700 dark:text-amber-400 font-semibold"
+                            "text-foreground",
+                            isOverLimit && "text-rose-600 dark:text-rose-400 font-semibold",
+                            (isAtLimit || isWarning) && "text-amber-600 dark:text-amber-400 font-semibold"
                           )}
                         >
                           {limit.current} / {limit.limit}
@@ -261,15 +281,15 @@ export default function BillingSettingsPage() {
                     </span>
                   </div>
                   {!isUnlimited && (
-                    <div className="h-2 rounded-full bg-background/60 overflow-hidden">
+                    <div className="h-2 rounded-[3px] bg-muted/60 overflow-hidden">
                       <div
                         className={cn(
-                          "h-full rounded-full transition-all",
-                          isExceeded
-                            ? "bg-red-500"
-                            : isWarning
+                          "h-full rounded-[3px] transition-all duration-150",
+                          isOverLimit
+                            ? "bg-rose-500"
+                            : isAtLimit || isWarning
                             ? "bg-amber-500"
-                            : "bg-accent"
+                            : "bg-foreground/80"
                         )}
                         style={{ width: `${Math.min(pct, 100)}%` }}
                       />
@@ -283,13 +303,13 @@ export default function BillingSettingsPage() {
       </div>
 
       {/* Payments History */}
-      <div className="rounded-3xl border border-border bg-card overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-              <CreditCard className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <h3 className="text-sm font-semibold text-foreground">Historial de Pagos</h3>
+      <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/60">
+          <div className="flex items-center gap-2.5">
+            <CreditCard className="w-4 h-4 text-muted-foreground shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+              Historial de pagos
+            </h3>
           </div>
           {isSuperAdmin && (
             <Button
@@ -303,7 +323,7 @@ export default function BillingSettingsPage() {
         </div>
 
         {showPaymentForm && isSuperAdmin && (
-          <div className="p-5 border-b border-border bg-muted/30">
+          <div className="p-4 border-b border-border/60 bg-muted/20">
             <form onSubmit={handleRegisterPayment} className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Input
@@ -315,25 +335,21 @@ export default function BillingSettingsPage() {
                     setPaymentForm({ ...paymentForm, amount: e.target.value })
                   }
                 />
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Método
-                  </label>
-                  <select
-                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    value={paymentForm.method}
-                    onChange={(e) =>
-                      setPaymentForm({
-                        ...paymentForm,
-                        method: e.target.value as "CASH" | "CARD" | "TRANSFER",
-                      })
-                    }
-                  >
-                    <option value="CASH">Efectivo</option>
-                    <option value="CARD">Tarjeta</option>
-                    <option value="TRANSFER">Transferencia</option>
-                  </select>
-                </div>
+                <BentoSelect
+                  label="Método"
+                  value={paymentForm.method}
+                  onChange={(value) =>
+                    setPaymentForm({
+                      ...paymentForm,
+                      method: value as "CASH" | "CARD" | "TRANSFER",
+                    })
+                  }
+                  options={[
+                    { value: "CASH", label: "Efectivo" },
+                    { value: "CARD", label: "Tarjeta" },
+                    { value: "TRANSFER", label: "Transferencia" },
+                  ]}
+                />
                 <Input
                   label="Fecha"
                   type="date"
@@ -346,16 +362,16 @@ export default function BillingSettingsPage() {
               </div>
               <div className="flex justify-end">
                 <Button type="submit" loading={registerPayment.isPending} size="sm">
-                  Guardar Pago
+                  Guardar pago
                 </Button>
               </div>
             </form>
           </div>
         )}
 
-        <div className="p-5">
+        <div className="p-4">
           {paymentsLoading ? (
-            <p className="text-sm text-muted-foreground">Cargando pagos...</p>
+            <p className="text-xs text-muted-foreground">Cargando pagos...</p>
           ) : isPaymentsError && !payments ? (
             <ErrorState
               message="No se pudo cargar el historial de pagos."
@@ -364,7 +380,7 @@ export default function BillingSettingsPage() {
               className="min-h-0"
             />
           ) : !payments ? null : payments.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
+            <p className="text-xs text-muted-foreground text-center py-4">
               No hay pagos registrados.
             </p>
           ) : (
@@ -372,22 +388,23 @@ export default function BillingSettingsPage() {
               {payments.map((payment) => (
                 <div
                   key={payment.id}
-                  className="flex items-center justify-between rounded-xl border border-border bg-muted/30 px-4 py-3"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3.5 py-2.5"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <CreditCard className="w-4 h-4 text-primary" />
+                    <div className="w-8 h-8 rounded-lg bg-muted/60 border border-border/70 flex items-center justify-center shrink-0">
+                      <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-foreground">
+                      <p className="font-mono text-xs font-semibold text-foreground tabular-nums">
                         {formatCurrency(Number(payment.amount))}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="font-mono text-[11px] text-muted-foreground tabular-nums">
                         {formatDate(payment.date)}
                       </p>
                     </div>
                   </div>
                   <Badge
+                    dot
                     variant={
                       payment.status === "PAID"
                         ? "success"

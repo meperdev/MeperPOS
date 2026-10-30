@@ -33,7 +33,7 @@ export default function GeneralSettingsPage() {
   if (isLoading || !settings) {
     return (
       <LoadingState
-        icon={<Building2 className="w-5 h-5 text-primary/50" />}
+        icon={<Building2 className="w-4 h-4 text-muted-foreground" />}
         message="Cargando configuración..."
       />
     );
@@ -63,16 +63,20 @@ export default function GeneralSettingsPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-1 h-6 rounded-full bg-primary shrink-0" />
-        <h2 className="text-xl font-bold text-foreground">General</h2>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
+          General
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Identidad visual y datos básicos del negocio
+        </p>
       </div>
 
       <SettingsCard
         title="Información del negocio"
         description="Nombre y logo que aparecen en los comprobantes"
-        icon={<Building2 className="w-4 h-4 text-primary" />}
+        icon={<Building2 className="w-4 h-4" />}
       >
         <div className="space-y-6">
           <form onSubmit={handleNameSubmit} className="space-y-3">
@@ -93,24 +97,24 @@ export default function GeneralSettingsPage() {
             </div>
           </form>
 
-          <div className="pt-4 border-t border-black/5 dark:border-white/5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-foreground mb-3">
+          <div className="pt-4 border-t border-border/60">
+            <p className="text-xs font-medium text-muted-foreground mb-2.5">
               Logo del negocio
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3.5">
               {settings.organization.logoUrl ? (
-                <div className="relative w-16 h-16 rounded-2xl border border-primary/30 overflow-hidden bg-background/60">
+                <div className="relative w-14 h-14 rounded-xl border border-border/70 overflow-hidden bg-muted/30">
                   <Image
                     src={settings.organization.logoUrl}
                     alt="Logo del negocio"
                     fill
-                    sizes="64px"
-                    className="object-contain"
+                    sizes="56px"
+                    className="object-contain p-1"
                   />
                 </div>
               ) : (
-                <div className="w-16 h-16 rounded-2xl border border-dashed border-primary/30 bg-background/60 flex items-center justify-center">
-                  <ImageIcon className="w-5 h-5 text-primary/50" />
+                <div className="w-14 h-14 rounded-xl border border-dashed border-border/70 bg-muted/20 flex items-center justify-center">
+                  <ImageIcon className="w-5 h-5 text-muted-foreground" />
                 </div>
               )}
               <input

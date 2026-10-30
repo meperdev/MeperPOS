@@ -54,31 +54,33 @@ export function ImportSheetProgress({
         return (
           <div
             key={sheet.sheetId}
-            className="rounded-2xl border border-accent/20 bg-background/40 p-3 space-y-2"
+            className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-2.5"
           >
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold text-foreground">
+              <span className="text-xs sm:text-sm font-semibold text-foreground">
                 {sheetLabel(sheet.sheetId)}
               </span>
-              <Badge variant={statusVariant[sheet.status]}>{sheet.status}</Badge>
+              <Badge variant={statusVariant[sheet.status]} dot>
+                {sheet.status}
+              </Badge>
             </div>
 
             <div>
-              <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <div className="flex justify-between font-mono text-xs text-muted-foreground tabular-nums mb-1">
                 <span>
                   {sheet.processedRows} / {sheet.totalRows} filas
                 </span>
-                <span className="font-semibold">{percent}%</span>
+                <span className="font-semibold text-foreground">{percent}%</span>
               </div>
-              <div className="w-full h-2 rounded-full bg-accent/10 overflow-hidden">
+              <div className="w-full h-2 rounded-[3px] bg-muted/60 overflow-hidden">
                 <div
-                  className="h-2 rounded-full bg-gradient-to-r from-accent to-accent/60 transition-all duration-300"
+                  className="h-full rounded-[3px] bg-foreground/80 transition-all duration-150"
                   style={{ width: `${percent}%` }}
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono tabular-nums">
               <Badge variant="secondary" className="justify-center">
                 Importados: {sheet.imported}
               </Badge>

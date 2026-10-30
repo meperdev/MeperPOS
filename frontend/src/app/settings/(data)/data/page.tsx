@@ -100,10 +100,10 @@ function ExportTile({ type, title, description, hasDates }: ExportTileDefinition
   return (
     <div
       data-testid={`export-tile-${type}`}
-      className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4"
+      className="flex flex-col justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 p-3.5 transition-colors hover:border-border"
     >
       <div>
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <h3 className="text-xs sm:text-sm font-semibold text-foreground">{title}</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
       </div>
 
@@ -218,16 +218,20 @@ export default function ImportDataSettingsPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-1 h-6 rounded-full bg-primary shrink-0" />
-        <h2 className="text-xl font-bold text-foreground">Importar y exportar datos</h2>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
+          Importar y exportar datos
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Carga masiva en Excel y descarga de respaldos operativos
+        </p>
       </div>
 
       <SettingsCard
         title="Importación Multi-Hoja"
         description="Importa productos, clientes, proveedores y usuarios desde un archivo (.xlsx)"
-        icon={<Database className="w-4 h-4 text-primary" />}
+        icon={<Database className="w-4 h-4" />}
       >
         <div className="space-y-4">
           {!hasStarted && (
@@ -256,23 +260,28 @@ export default function ImportDataSettingsPage() {
 
           {hasStarted && (
             <>
-              <div className="rounded-2xl border border-accent/20 bg-background/40 p-3 space-y-3">
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
+                    <p className="text-xs font-medium text-muted-foreground">
                       Archivo
                     </p>
-                    <p className="text-sm font-medium text-foreground truncate">
-                       {selectedFile?.name ?? "Importacion en curso"}
+                    <p className="text-xs sm:text-sm font-semibold text-foreground truncate mt-0.5">
+                      {selectedFile?.name ?? "Importacion en curso"}
                     </p>
                   </div>
 
-                  <Badge variant={isProcessing ? "warning" : isFinished ? "success" : "primary"}>
+                  <Badge
+                    variant={
+                      isProcessing ? "warning" : isFinished ? "success" : "primary"
+                    }
+                    dot
+                  >
                     {status?.status ?? "PARSING"}
                   </Badge>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono tabular-nums">
                   <Badge variant="secondary" className="justify-center">
                     Procesados: {status?.processedRows ?? 0}
                   </Badge>
@@ -320,8 +329,8 @@ export default function ImportDataSettingsPage() {
             </>
           )}
 
-          <div className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            <FileSpreadsheet className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+            <FileSpreadsheet className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
             <span>
               El archivo debe contener las hojas Productos, Clientes, Proveedores y
               Usuarios. Descarga la plantilla para conocer las columnas requeridas.
@@ -333,21 +342,22 @@ export default function ImportDataSettingsPage() {
       <SettingsCard
         title="Exportar datos"
         description="Descarga los datos del negocio en formato Excel o CSV"
-        icon={<Download className="w-4 h-4 text-primary" />}
+        icon={<Download className="w-4 h-4" />}
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="max-w-xl text-sm text-muted-foreground">
+            <p className="max-w-xl text-xs sm:text-sm text-muted-foreground">
               Exporta productos, ventas, clientes, movimientos, gastos y el reporte
               económico consolidado.
             </p>
             <Button
-              variant="ghost"
+              variant="secondary"
+              size="sm"
               type="button"
               onClick={() => setShowExportSection((current) => !current)}
               className="w-full sm:w-auto shrink-0"
             >
-              <Download className="h-4 w-4" aria-hidden="true" />
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
               {showExportSection ? "Ocultar exportación" : "Exportar datos"}
             </Button>
           </div>

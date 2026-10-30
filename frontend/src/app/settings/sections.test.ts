@@ -8,6 +8,7 @@ describe("settings sections registry", () => {
       "invoicing",
       "team",
       "data",
+      "billing",
     ]);
   });
 
