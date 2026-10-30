@@ -245,6 +245,26 @@ function buildFinancialComparisonPeriod(
   };
 }
 
+/**
+ * Inclusive filter for a `@db.Date` column inside a Bogotá period.
+ *
+ * `PayrollCashOutflow.date` is a DATE column, so Prisma represents every day as
+ * its UTC midnight. The Bogotá timestamp window (`gte` 05:00 UTC of the first
+ * day, `lte` 04:59:59.999 UTC of the day after the last one) can never match
+ * those values: it drops the whole first requested day and pulls in the day
+ * after the last one. This recovers the same calendar days from the Bogotá
+ * bounds and compares them at UTC midnight, which is what a DATE column stores.
+ */
+function buildDateOnlyWindow(dateFilter: DateFilter): DateFilter {
+  const atUtcMidnight = (value: Date) =>
+    new Date(`${formatDateInBogota(value)}T00:00:00.000Z`);
+
+  return {
+    gte: dateFilter.gte ? atUtcMidnight(dateFilter.gte) : undefined,
+    lte: dateFilter.lte ? atUtcMidnight(dateFilter.lte) : undefined,
+  };
+}
+
 function calculatePercentageChange(
   currentValue: number,
   previousValue: number,
@@ -291,15 +311,16 @@ function aggregateCashPayments(
   }
 
   return {
-    total: Array.from(byMethod.values()).reduce(
-      (sum, entry) => sum.add(entry.total),
-      new Prisma.Decimal(0),
-    ).toFixed(2),
-    byPaymentMethod: Array.from(byMethod.entries()).map(([paymentMethod, entry]) => ({
-      paymentMethod,
-      total: entry.total.toFixed(2),
-      count: entry.count,
-    })),
+    total: Array.from(byMethod.values())
+      .reduce((sum, entry) => sum.add(entry.total), new Prisma.Decimal(0))
+      .toFixed(2),
+    byPaymentMethod: Array.from(byMethod.entries()).map(
+      ([paymentMethod, entry]) => ({
+        paymentMethod,
+        total: entry.total.toFixed(2),
+        count: entry.count,
+      }),
+    ),
   };
 }
 
@@ -326,11 +347,14 @@ function aggregatePaymentGroups(
   return { total: total.toFixed(2), byPaymentMethod };
 }
 
-function isInDateFilter(date: Date | null | undefined, filter: DateFilter): boolean {
+function isInDateFilter(
+  date: Date | null | undefined,
+  filter: DateFilter,
+): boolean {
   return Boolean(
     date &&
-      (!filter.gte || date >= filter.gte) &&
-      (!filter.lte || date <= filter.lte),
+    (!filter.gte || date >= filter.gte) &&
+    (!filter.lte || date <= filter.lte),
   );
 }
 
@@ -343,7 +367,9 @@ function signedSale(
     (sum, item) => sum.add(item.subtotal),
     new Prisma.Decimal(0),
   );
-  const ratio = sale.subtotal.isZero() ? new Prisma.Decimal(1) : itemSubtotal.div(sale.subtotal);
+  const ratio = sale.subtotal.isZero()
+    ? new Prisma.Decimal(1)
+    : itemSubtotal.div(sale.subtotal);
 
   return {
     subtotal: sale.subtotal.mul(sign).mul(ratio),
@@ -358,7 +384,10 @@ function signedSale(
   };
 }
 
-function expandFinancialSale(sale: FinancialSaleRecord, dateFilter: DateFilter): FinancialSale[] {
+function expandFinancialSale(
+  sale: FinancialSaleRecord,
+  dateFilter: DateFilter,
+): FinancialSale[] {
   const records: FinancialSale[] = [];
 
   if (isInDateFilter(sale.createdAt, dateFilter)) {
@@ -372,7 +401,10 @@ function expandFinancialSale(sale: FinancialSaleRecord, dateFilter: DateFilter):
   if (sale.status !== 'CANCELLED') {
     const returnedByProduct = new Map<string, number>();
     for (const movement of sale.inventoryMovements) {
-      if (movement.type === 'RETURN' && isInDateFilter(movement.createdAt, dateFilter)) {
+      if (
+        movement.type === 'RETURN' &&
+        isInDateFilter(movement.createdAt, dateFilter)
+      ) {
         returnedByProduct.set(
           movement.productId,
           (returnedByProduct.get(movement.productId) ?? 0) + movement.quantity,
@@ -461,6 +493,9 @@ export class ReportsService {
     const orgId = this.requireOrganizationId(organizationId);
     validateDateRange(startDate, endDate);
     const period = buildFinancialComparisonPeriod(startDate, endDate);
+    // Payroll cash is stored as a DATE, so it needs the DATE-column window of the
+    // same Bogotá days instead of the timestamp window used by the other reads.
+    const payrollCashDayWindow = buildDateOnlyWindow(period.current);
     const [paymentGroups, expensePayments, payrollCashOutflows] =
       await Promise.all([
         this.prisma.payment.groupBy({
@@ -492,7 +527,7 @@ export class ReportsService {
         // (S8), so the outflows come from the cash facts themselves, on the day
         // they happened, and are merged into the same aggregate.
         this.prisma.payrollCashOutflow.findMany({
-          where: { organizationId: orgId, date: period.current },
+          where: { organizationId: orgId, date: payrollCashDayWindow },
           select: { amount: true, method: true },
         }),
       ]);
@@ -614,14 +649,21 @@ export class ReportsService {
     return organizationId;
   }
 
-  private async findFinancialSales(organizationId: string, dateFilter: DateFilter) {
+  private async findFinancialSales(
+    organizationId: string,
+    dateFilter: DateFilter,
+  ) {
     const sales = await this.prisma.sale.findMany({
       where: {
         organizationId,
         OR: [
           { createdAt: dateFilter },
           { cancelledAt: dateFilter },
-          { inventoryMovements: { some: { type: 'RETURN', createdAt: dateFilter } } },
+          {
+            inventoryMovements: {
+              some: { type: 'RETURN', createdAt: dateFilter },
+            },
+          },
         ],
       },
       select: {
@@ -638,12 +680,19 @@ export class ReportsService {
             subtotal: true,
             discountAmount: true,
             costPriceSnapshot: true,
-            product: { select: { name: true, category: { select: { name: true } } } },
+            product: {
+              select: { name: true, category: { select: { name: true } } },
+            },
           },
         },
         inventoryMovements: {
           where: { type: 'RETURN', createdAt: dateFilter },
-          select: { type: true, quantity: true, productId: true, createdAt: true },
+          select: {
+            type: true,
+            quantity: true,
+            productId: true,
+            createdAt: true,
+          },
         },
       },
     });

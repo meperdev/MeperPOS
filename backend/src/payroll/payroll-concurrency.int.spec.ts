@@ -1364,6 +1364,31 @@ describePostgres(
       ]);
       expect(cashFlow.collections.total).toBe('0.00');
 
+      // A DATE-only payroll outflow must appear on its actual Bogotá calendar
+      // day, including when that day is both edges of the requested range.
+      const singleDay = await reports.getCashFlow(
+        orgId,
+        DATE_CASH_FLOW,
+        DATE_CASH_FLOW,
+      );
+      expect(singleDay.expensePayments.total).toBe(CASH_FLOW_TOTAL);
+      expect(singleDay.expensePayments.byPaymentMethod).toEqual([
+        { paymentMethod: PaymentMethod.CASH, total: CASH_FLOW_TOTAL, count: 1 },
+      ]);
+      const precedingDay = await reports.getCashFlow(
+        orgId,
+        '2026-06-09',
+        '2026-06-09',
+      );
+      expect(precedingDay.expensePayments.total).toBe(CONTROL_EXPENSE_TOTAL);
+      expect(precedingDay.expensePayments.byPaymentMethod).toEqual([
+        {
+          paymentMethod: PaymentMethod.CASH,
+          total: CONTROL_EXPENSE_TOTAL,
+          count: 1,
+        },
+      ]);
+
       // The mirror really exists in the same window; only the report predicate
       // excludes it, so this is not a "nothing was written" accident.
       const mirrored = await prisma.expensePayment.findMany({
