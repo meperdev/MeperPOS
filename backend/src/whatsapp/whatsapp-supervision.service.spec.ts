@@ -582,9 +582,7 @@ describe('WhatsAppSupervisionService', () => {
       await expect(
         service.history(ORGANIZATION_ID, 'theirs'),
       ).resolves.toBeNull();
-      await expect(
-        service.history('org-empty', 'theirs'),
-      ).resolves.toBeNull();
+      await expect(service.history('org-empty', 'theirs')).resolves.toBeNull();
       // The owning organization is served, so the refusals above are scoping and
       // not a method that always answers null.
       expect(prisma.whatsAppMessage.findMany).not.toHaveBeenCalled();

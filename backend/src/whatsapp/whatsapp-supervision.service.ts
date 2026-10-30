@@ -15,8 +15,6 @@ export const HISTORY_DEFAULT_LIMIT = 30;
 /** Hard ceiling for a single thread's messages. */
 export const HISTORY_MAX_LIMIT = 100;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
  * Reduce an untrusted page size to something a single query can answer.
  *
