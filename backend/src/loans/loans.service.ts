@@ -55,7 +55,13 @@ const loanSelect = {
   supplier: { select: personSelect },
   employee: { select: personSelect },
   createdBy: { select: personSelect },
-  posLoanSaleIntent: { select: { id: true, finalSaleId: true } },
+  posLoanSaleIntent: {
+    select: {
+      id: true,
+      finalSaleId: true,
+      finalSale: { select: { saleNumber: true } },
+    },
+  },
 } satisfies Prisma.MoneyLoanSelect;
 const eventSelect = {
   id: true,
@@ -103,6 +109,7 @@ function present(loan: Loan) {
       ? {
           intentId: posLoanSaleIntent.id,
           finalSaleId: posLoanSaleIntent.finalSaleId,
+          finalSaleNumber: posLoanSaleIntent.finalSale?.saleNumber ?? null,
         }
       : null,
   };
