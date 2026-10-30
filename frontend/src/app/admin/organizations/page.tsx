@@ -184,7 +184,7 @@ export default function OrganizationsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Crear Organización"
+        title="Crear organización"
         size="md"
       >
         <form onSubmit={handleSubmit} className="space-y-4">

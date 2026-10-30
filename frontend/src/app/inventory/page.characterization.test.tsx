@@ -343,7 +343,7 @@ describe("Inventory page — characterization (current behavior)", () => {
 });
 
 describe("Inventory page — create action is gated by the role hierarchy", () => {
-  it("shows Nuevo Producto for OWNER", () => {
+  it("shows Nuevo producto for OWNER", () => {
     authState.role = "OWNER";
 
     render(<InventoryPage />);
@@ -351,7 +351,7 @@ describe("Inventory page — create action is gated by the role hierarchy", () =
     expect(screen.getByRole("button", { name: /nuevo producto/i })).toBeInTheDocument();
   });
 
-  it("shows Nuevo Producto for SUPER_ADMIN", () => {
+  it("shows Nuevo producto for SUPER_ADMIN", () => {
     authState.role = "SUPER_ADMIN";
 
     render(<InventoryPage />);
@@ -359,7 +359,7 @@ describe("Inventory page — create action is gated by the role hierarchy", () =
     expect(screen.getByRole("button", { name: /nuevo producto/i })).toBeInTheDocument();
   });
 
-  it("hides Nuevo Producto for CASHIER", () => {
+  it("hides Nuevo producto for CASHIER", () => {
     authState.role = "CASHIER";
 
     render(<InventoryPage />);
@@ -367,7 +367,7 @@ describe("Inventory page — create action is gated by the role hierarchy", () =
     expect(screen.queryByRole("button", { name: /nuevo producto/i })).not.toBeInTheDocument();
   });
 
-  it("hides Nuevo Producto for MEMBER", () => {
+  it("hides Nuevo producto for MEMBER", () => {
     authState.role = "MEMBER";
 
     render(<InventoryPage />);

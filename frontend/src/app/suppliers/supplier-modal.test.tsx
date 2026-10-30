@@ -197,7 +197,7 @@ describe("Suppliers page — create action is gated by the role hierarchy", () =
     cleanup();
   });
 
-  it("shows Nuevo Proveedor for OWNER", () => {
+  it("shows Nuevo proveedor for OWNER", () => {
     authState.role = "OWNER";
 
     render(<SuppliersPage />);
@@ -205,7 +205,7 @@ describe("Suppliers page — create action is gated by the role hierarchy", () =
     expect(screen.getByRole("button", { name: /nuevo proveedor/i })).toBeTruthy();
   });
 
-  it("shows Nuevo Proveedor for SUPER_ADMIN", () => {
+  it("shows Nuevo proveedor for SUPER_ADMIN", () => {
     authState.role = "SUPER_ADMIN";
 
     render(<SuppliersPage />);
@@ -213,7 +213,7 @@ describe("Suppliers page — create action is gated by the role hierarchy", () =
     expect(screen.getByRole("button", { name: /nuevo proveedor/i })).toBeTruthy();
   });
 
-  it("hides Nuevo Proveedor for CASHIER", () => {
+  it("hides Nuevo proveedor for CASHIER", () => {
     authState.role = "CASHIER";
 
     render(<SuppliersPage />);
@@ -221,7 +221,7 @@ describe("Suppliers page — create action is gated by the role hierarchy", () =
     expect(screen.queryByRole("button", { name: /nuevo proveedor/i })).toBeNull();
   });
 
-  it("hides Nuevo Proveedor for MEMBER", () => {
+  it("hides Nuevo proveedor for MEMBER", () => {
     authState.role = "MEMBER";
 
     render(<SuppliersPage />);

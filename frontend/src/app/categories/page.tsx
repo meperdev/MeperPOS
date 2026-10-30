@@ -178,7 +178,7 @@ export default function CategoriesPage() {
           }
           actions={
             <Button onClick={handleCreate} className="w-full sm:w-auto">
-              <Plus className="w-4 h-4" /> Nueva Categoría
+              <Plus className="w-4 h-4" /> Nueva categoría
             </Button>
           }
         />
@@ -468,7 +468,7 @@ export default function CategoriesPage() {
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        title={editingCategory ? "Editar Categoría" : "Nueva Categoría"}
+        title={editingCategory ? "Editar categoría" : "Nueva categoría"}
         size="md"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -562,7 +562,7 @@ export default function CategoriesPage() {
         isOpen={showConfirmModal}
         onClose={() => setShowConfirmModal(false)}
         onConfirm={confirmDelete}
-        title="Eliminar Categoría"
+        title="Eliminar categoría"
         message="¿Estás seguro? Esta acción no se puede deshacer."
         confirmText="Eliminar"
         cancelText="Cancelar"

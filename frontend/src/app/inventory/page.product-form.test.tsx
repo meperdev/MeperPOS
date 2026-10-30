@@ -94,12 +94,12 @@ function product(overrides: Record<string, unknown> = {}) {
 }
 
 const openCreate = () => {
-  fireEvent.click(screen.getByRole("button", { name: "Nuevo Producto" }));
-  return screen.getByRole("dialog", { name: "Nuevo Producto" });
+  fireEvent.click(screen.getByRole("button", { name: "Nuevo producto" }));
+  return screen.getByRole("dialog", { name: "Nuevo producto" });
 };
 const openEdit = () => {
   fireEvent.click(screen.getByRole("button", { name: "Panela" }));
-  return screen.getByRole("dialog", { name: "Editar Producto" });
+  return screen.getByRole("dialog", { name: "Editar producto" });
 };
 const selectImage = (dialog: HTMLElement) => {
   const fileInput = within(dialog).getByTestId("product-image").querySelector<HTMLInputElement>('input[type="file"]');
@@ -226,10 +226,10 @@ describe("inventory product modal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar" }));
     fireEvent.keyDown(window, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Leche" }));
-    fireEvent.click(screen.getByRole("button", { name: "Nuevo Producto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo producto" }));
     fireEvent.submit(within(dialog).getByRole("button", { name: "Actualizar" }).closest("form")!);
     expect(uploadImage).toHaveBeenCalledOnce();
-    expect(screen.getByRole("dialog", { name: "Editar Producto" })).toBe(dialog);
+    expect(screen.getByRole("dialog", { name: "Editar producto" })).toBe(dialog);
     expect(within(dialog).getByLabelText("Nombre")).toHaveValue("Panela orgánica");
     const name = within(dialog).getByLabelText("Nombre");
     expect(name).toBeDisabled();
@@ -247,11 +247,11 @@ describe("inventory product modal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leche" }));
     fireEvent.submit(within(dialog).getByRole("button", { name: "Actualizar" }).closest("form")!);
     expect(update).toHaveBeenCalledOnce();
-    expect(screen.getByRole("dialog", { name: "Editar Producto" })).toBe(dialog);
+    expect(screen.getByRole("dialog", { name: "Editar producto" })).toBe(dialog);
     expect(uploadImageById).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Leche" })).toHaveAttribute("data-image-url", "/images/leche.jpg");
     await act(async () => { resolveUpdate({}); });
-    expect(screen.queryByRole("dialog", { name: "Editar Producto" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Editar producto" })).not.toBeInTheDocument();
   });
 
   it("discards a selected edit image on Cancel and restores the existing preview on reopen", () => {
@@ -335,7 +335,7 @@ describe("inventory product modal", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     fireEvent.submit(within(dialog).getByRole("button", { name: "Actualizar" }).closest("form")!);
     expect(update).toHaveBeenCalledOnce();
-    expect(screen.getByRole("dialog", { name: "Editar Producto" })).toBe(dialog);
+    expect(screen.getByRole("dialog", { name: "Editar producto" })).toBe(dialog);
     await act(async () => { rejectUpdate(new Error("Save failed")); });
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancelar" })).toBeEnabled());
     expect(within(dialog).getByRole("img", { name: "Preview" })).toHaveAttribute("src", expect.stringContaining("panela-new.jpg"));
@@ -343,7 +343,7 @@ describe("inventory product modal", () => {
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     expect(uploadImage).toHaveBeenCalledTimes(1);
     expect(update.mock.calls[1][0].data.imageUrl).toBe("/images/panela-new.jpg");
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Editar Producto" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Editar producto" })).not.toBeInTheDocument());
   });
 
   it("defaults new products to tracked inventory with stock inputs", () => {
@@ -485,7 +485,7 @@ describe("inventory product modal", () => {
     cleanup();
     role = "CASHIER";
     render(<InventoryPage />);
-    expect(screen.queryByRole("button", { name: "Nuevo Producto" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nuevo producto" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Panela" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

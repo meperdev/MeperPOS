@@ -151,7 +151,7 @@ export function PaymentConfirmationModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Confirmar Pago" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Confirmar pago" size="xl">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
           <div>
@@ -393,7 +393,7 @@ export function PaymentConfirmationModal({
               loading={loading}
             >
               <Check className="w-5 h-5 mr-2" />
-              Confirmar Pago
+              Confirmar pago
             </Button>
           </div>
         </div>
