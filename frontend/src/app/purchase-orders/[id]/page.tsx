@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ReceiveItemsModal } from "@/components/purchase-orders/ReceiveItemsModal";
 import { CancelPurchaseOrderModal } from "@/components/purchase-orders/CancelPurchaseOrderModal";
 import { EditDraftModal } from "@/components/purchase-orders/EditDraftModal";
@@ -27,7 +28,7 @@ import {
   UserRound,
   Pencil,
 } from "lucide-react";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
@@ -79,7 +80,7 @@ export default function PurchaseOrderDetailPage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <LoadingState icon={<ClipboardList className="w-4 h-4 text-primary/50" />} message="Cargando orden..." />
+        <LoadingState icon={<ClipboardList className="w-4 h-4 text-muted-foreground" />} message="Cargando orden..." />
       </DashboardLayout>
     );
   }
@@ -87,7 +88,7 @@ export default function PurchaseOrderDetailPage() {
   if (errorMessage || !order) {
     return (
       <DashboardLayout>
-        <div className="rounded-2xl border border-border/60 bg-card p-8 text-center space-y-4">
+        <div className="rounded-xl border border-border/70 bg-card p-8 text-center space-y-4 shadow-2xs">
           <div className="space-y-1.5">
             <h1 className="text-lg font-semibold text-foreground">
               No se pudo abrir la orden
@@ -118,25 +119,24 @@ export default function PurchaseOrderDetailPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 lg:space-y-7">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+      <div className="space-y-4 lg:space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3">
             <Link
               href="/purchase-orders"
-              className="inline-flex items-center gap-1 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-primary mt-1"
+              className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border hover:bg-muted hover:text-foreground mt-0.5"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> Volver
             </Link>
             <div>
-              <div className="flex items-center gap-3 mb-1 flex-wrap">
-                <div className="w-1 h-7 rounded-full bg-primary shrink-0" />
-                <h1 className="text-2xl lg:text-3xl font-bold text-foreground font-mono">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-semibold text-foreground font-mono tracking-tight tabular-nums">
                   OC-{order.orderNumber}
                 </h1>
                 <PurchaseOrderStatusBadge status={order.status} />
               </div>
-              <p className="text-sm text-muted-foreground ml-4">
-                Detalle de la orden de compra
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Detalle y seguimiento de la orden de compra
               </p>
             </div>
           </div>
@@ -152,7 +152,6 @@ export default function PurchaseOrderDetailPage() {
                 <Button
                   onClick={handleConfirm}
                   loading={confirmOrder.isPending}
-                  variant="success"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Confirmar OC
                 </Button>
@@ -172,20 +171,21 @@ export default function PurchaseOrderDetailPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 space-y-5">
-            <div className="rounded-2xl border border-border/60 bg-card p-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
+          <div className="lg:col-span-2 space-y-4">
+            <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <InfoField
                   icon={<Building2 className="w-3.5 h-3.5" />}
                   label="Proveedor"
                   value={order.supplier?.name ?? "—"}
-                  sub={order.supplier?.documentNumber}
+                  sub={order.supplier?.documentNumber ? `NIT · ${order.supplier.documentNumber}` : undefined}
                 />
                 <InfoField
                   icon={<CalendarDays className="w-3.5 h-3.5" />}
                   label="Fecha de creación"
                   value={formatDateTime(order.createdAt)}
+                  isDate
                 />
                 <InfoField
                   icon={<UserRound className="w-3.5 h-3.5" />}
@@ -194,104 +194,106 @@ export default function PurchaseOrderDetailPage() {
                 />
                 {order.confirmedAt && (
                   <InfoField
-                    icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                    icon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                     label="Confirmada"
                     value={formatDateTime(order.confirmedAt)}
+                    isDate
                   />
                 )}
                 {order.receivedAt && (
                   <InfoField
-                    icon={<PackageCheck className="w-3.5 h-3.5" />}
+                    icon={<PackageCheck className="w-3.5 h-3.5 text-emerald-500" />}
                     label="Recibida"
                     value={formatDateTime(order.receivedAt)}
+                    isDate
                   />
                 )}
                 {order.cancelledAt && (
                   <InfoField
-                    icon={<XCircle className="w-3.5 h-3.5" />}
+                    icon={<XCircle className="w-3.5 h-3.5 text-rose-500" />}
                     label="Cancelada"
                     value={formatDateTime(order.cancelledAt)}
                     sub={order.cancelReason ?? undefined}
+                    isDate
                   />
                 )}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/60 bg-card overflow-hidden">
-              <div className="px-5 py-3 border-b border-border/60">
-                <h2 className="text-sm font-semibold text-foreground">Items</h2>
+            <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
+              <div className="px-4 py-3 border-b border-border/60">
+                <h2 className="text-xs font-semibold text-foreground">
+                  Productos en la orden
+                </h2>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
-                  <thead>
-                    <tr className="bg-muted/40 border-b border-border/60">
-                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Producto
-                      </th>
-                      <th className="text-right py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Recibido / Ordenado
-                      </th>
-                      <th className="text-right py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Costo unit.
-                      </th>
-                      <th className="text-right py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        IVA %
-                      </th>
-                      <th className="text-right py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Subtotal
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(order.items ?? []).map((it) => (
-                      <tr
-                        key={it.id}
-                        className="border-b border-border/40 last:border-b-0"
-                      >
-                        <td className="py-2.5 px-4">
-                          <p className="text-sm font-medium text-foreground truncate max-w-[240px]">
-                            {it.product?.name ?? "Producto eliminado"}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground font-mono">
-                            {it.product?.sku}
-                          </p>
-                        </td>
-                        <td className="py-2.5 px-3 text-right text-sm font-mono">
-                          <span
-                            className={
-                              it.qtyReceived >= it.qtyOrdered
-                                ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                                : it.qtyReceived > 0
-                                  ? "text-amber-600 dark:text-amber-400 font-semibold"
-                                  : "text-muted-foreground"
-                            }
-                          >
-                            {it.qtyReceived} / {it.qtyOrdered}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right text-sm text-foreground font-mono">
-                          {formatCurrency(it.unitCost)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right text-sm text-muted-foreground font-mono">
-                          {it.taxRate}%
-                        </td>
-                        <td className="py-2.5 px-4 text-right text-sm font-semibold text-foreground whitespace-nowrap">
-                          {formatCurrency(it.subtotal + it.taxAmount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <Table className="min-w-[560px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableCell as="th">Producto</TableCell>
+                    <TableCell as="th" className="text-right">
+                      Recibido / Ordenado
+                    </TableCell>
+                    <TableCell as="th" className="text-right">
+                      Costo unit.
+                    </TableCell>
+                    <TableCell as="th" className="text-right">
+                      IVA
+                    </TableCell>
+                    <TableCell as="th" className="text-right">
+                      Subtotal
+                    </TableCell>
+                  </TableRow>
+                </TableHeader>
+                <tbody>
+                  {(order.items ?? []).map((it) => (
+                    <TableRow key={it.id}>
+                      <TableCell>
+                        <p className="text-xs font-semibold text-foreground truncate max-w-[240px]">
+                          {it.product?.name ?? "Producto eliminado"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                          {it.product?.sku}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs tabular-nums">
+                        <span
+                          className={
+                            it.qtyReceived >= it.qtyOrdered
+                              ? "text-emerald-600 dark:text-emerald-400 font-semibold"
+                              : it.qtyReceived > 0
+                                ? "text-amber-600 dark:text-amber-400 font-semibold"
+                                : "text-muted-foreground"
+                          }
+                        >
+                          {it.qtyReceived} / {it.qtyOrdered}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-foreground font-mono tabular-nums">
+                        {formatCurrency(it.unitCost)}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground font-mono tabular-nums">
+                        {it.taxRate}%
+                      </TableCell>
+                      <TableCell className="text-right text-xs font-mono font-semibold text-foreground tabular-nums whitespace-nowrap">
+                        {formatCurrency(it.subtotal + it.taxAmount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </tbody>
+                </Table>
               </div>
             </div>
 
             {order.notes && (
-              <div className="rounded-2xl border border-border/60 bg-card p-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <StickyNote className="w-4 h-4 text-muted-foreground" />
-                  <h2 className="text-sm font-semibold text-foreground">Notas</h2>
+              <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <StickyNote className="w-3.5 h-3.5 text-muted-foreground" />
+                  <h2 className="text-xs font-semibold text-foreground">
+                    Observaciones
+                  </h2>
                 </div>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
                   {order.notes}
                 </p>
               </div>
@@ -299,33 +301,35 @@ export default function PurchaseOrderDetailPage() {
           </div>
 
           <aside>
-            <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 space-y-3 sticky top-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Totales
+            <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs sticky top-4">
+              <h3 className="text-xs font-semibold text-foreground">
+                Resumen de costos
               </h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
+              <div className="space-y-2 pt-1">
+                <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium text-foreground">
+                  <span className="font-mono text-foreground tabular-nums">
                     {formatCurrency(order.subtotal)}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Impuestos</span>
-                  <span className="font-medium text-foreground">
+                  <span className="font-mono text-foreground tabular-nums">
                     {formatCurrency(order.taxAmount)}
                   </span>
                 </div>
-                <div className="flex justify-between items-center pt-2 border-t border-primary/20">
-                  <span className="font-bold text-foreground">Total</span>
-                  <span className="stat-number text-xl font-bold text-primary">
+                <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
+                  <span className="text-xs font-semibold text-foreground">
+                    Total
+                  </span>
+                  <span className="font-mono text-base font-semibold text-foreground tabular-nums">
                     {formatCurrency(order.total)}
                   </span>
                 </div>
               </div>
 
               {(isReceived || isCancelled) && (
-                <p className="text-[11px] text-muted-foreground pt-2 border-t border-primary/20">
+                <p className="text-[11px] text-muted-foreground pt-2 border-t border-border/60">
                   Esta orden es de solo lectura.
                 </p>
               )}
@@ -365,18 +369,27 @@ function InfoField({
   label,
   value,
   sub,
+  isDate,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub?: string;
+  isDate?: boolean;
 }) {
   return (
-    <div className="p-3 rounded-xl bg-muted/30 border border-border/40">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
-        {icon} {label}
+    <div className="p-3 rounded-lg bg-muted/30 border border-border/60">
+      <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+        {icon} <span>{label}</span>
       </p>
-      <p className="text-sm font-semibold text-foreground">{value}</p>
+      <p
+        className={cn(
+          "text-sm font-semibold text-foreground",
+          isDate && "font-mono tabular-nums text-xs",
+        )}
+      >
+        {value}
+      </p>
       {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
