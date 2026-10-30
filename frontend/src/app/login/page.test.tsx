@@ -44,23 +44,13 @@ describe("LoginPage Redesign", () => {
     currentTheme = "light";
   });
 
-  it("renders the left-aligned header and operational showcase", () => {
+  it("renders the centred access form with the MeperSoft lockup", () => {
     render(<LoginPage />);
 
     expect(screen.getByText("Acceso al Sistema")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Iniciar sesión" })
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Control contable, existencias y caja para tu negocio/i)
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Bucaramanga • es-CO/i)).toBeInTheDocument();
-    expect(screen.queryByTestId("login-hero-emblem")).not.toBeInTheDocument();
-    expect(screen.getByTestId("pos-isometric-showcase")).toBeInTheDocument();
-    expect(screen.getByText(/Reportes & Margen Real/i)).toBeInTheDocument();
-    expect(screen.getByText(/Préstamos/i)).toBeInTheDocument();
-    expect(screen.getByText(/Gastos & Salidas/i)).toBeInTheDocument();
-    expect(screen.getByText(/Tareas en Equipo/i)).toBeInTheDocument();
     expect(screen.getByTestId("login-form-emblem")).toBeInTheDocument();
     expect(
       screen.getByAltText(/MeperPOS emblema oficial Lucky/i)
@@ -69,6 +59,14 @@ describe("LoginPage Redesign", () => {
     expect(
       screen.getAllByRole("link", { name: /folio\.mepersoft\.app/i }).length
     ).toBeGreaterThanOrEqual(1);
+
+    // The marketing column is gone: no showcase and no operational footer.
+    expect(screen.queryByTestId("pos-isometric-showcase")).toBeNull();
+    expect(
+      screen.queryByText(/Control contable, existencias y caja/i)
+    ).toBeNull();
+    expect(screen.queryByText(/Bucaramanga • es-CO/i)).toBeNull();
+    expect(screen.queryByText(/Tareas en Equipo/i)).toBeNull();
   });
 
   it("toggles password visibility with the eye icon", async () => {
