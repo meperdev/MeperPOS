@@ -20,6 +20,7 @@
     "test:debug": "dotenv -e .env.development -- node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "dotenv -e .env.development -- jest --config ./test/jest-e2e.json",
     "seed": "dotenv -e .env.development -- ts-node prisma/seed.ts",
+    "seed:activity": "dotenv -e .env.development -- ts-node prisma/seed-demo-activity.ts",
     "fixtures:receipts": "dotenv -e .env.development -- ts-node test/fixtures/receipts/regenerate-fixtures.ts",
     "fixtures:reports-golden": "dotenv -e .env.development -- ts-node test/fixtures/reports-golden/capture-goldens.ts",
     "fixtures:reports-timing": "dotenv -e .env.development -- ts-node test/fixtures/reports-golden/run-reports-timing.ts",
