@@ -140,7 +140,17 @@ function noWrites(tx: ReturnType<typeof setup>['tx']) {
   expect(tx.payrollObligationExpense.create).not.toHaveBeenCalled();
 }
 
+// The correction day is derived from the clock, so the completion-day tests pin it.
+function at(instant: string) {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date(instant));
+}
+
 describe('pending fixed-period cash correction (mock transactions only)', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it.each(['OWNER', 'ADMIN'])(
     'revises undelivered cash in place with immutable evidence for %s',
     async (role) => {
@@ -298,6 +308,8 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
     it('completes the payment and applies the expense choice', async () => {
       const { service, tx, period, transaction } = setup();
       period.expenseEnabled = true;
+      // Same Bogotá day as the outflow, so the fixture keeps one expected date.
+      at('2024-02-29T15:00:00.000Z');
 
       await expect(
         service.correct({ ...input, amount: '100' }, 'org', actor),
@@ -396,6 +408,12 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
         }),
         data: { status: 'COMPLETED', version: { increment: 1 } },
       });
+      // Completing by correction never moves the cash date: only the amount is
+      // revised, and the compare-and-swap still guards the original date.
+      expect(tx.payrollCashOutflow.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({ id: 'cash', date }),
+        data: { amount: new Prisma.Decimal('100') },
+      });
       expect(tx.expense.create.mock.invocationCallOrder[0]).toBeLessThan(
         tx.payrollObligation.updateMany.mock.invocationCallOrder[0],
       );
@@ -408,13 +426,45 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
       const { service, tx, period } = setup();
       period.expenseEnabled = true;
       period.selectedExpenseDate = new Date('2024-03-05T00:00:00.000Z');
+      // A correction made on another day must not override the stored selection.
+      at('2024-03-10T15:00:00.000Z');
 
       await service.correct({ ...input, amount: '100' }, 'org', actor);
 
-      expect(
-        (tx.expense.create.mock.calls[0][0] as { data: { date: Date } }).data
-          .date,
-      ).toEqual(new Date('2024-03-05T05:00:00.000Z'));
+      const created = (
+        tx.expense.create.mock.calls[0][0] as {
+          data: { date: Date; payments: { create: Array<{ date: Date }> } };
+        }
+      ).data;
+      expect(created.date).toEqual(new Date('2024-03-05T05:00:00.000Z'));
+      // The stored selection changes the expense date only, never the cash date.
+      expect(created.payments.create[0].date).toEqual(
+        new Date('2024-02-29T05:00:00.000Z'),
+      );
+    });
+
+    it('dates the expense on the Bogotá correction day when none was selected', async () => {
+      const { service, tx, period } = setup();
+      period.expenseEnabled = true;
+      // 02:30Z on 2024-03-05 is still 2024-03-04 in Bogotá (UTC-5), so the
+      // correction day differs from both the UTC day and the outflow day.
+      at('2024-03-05T02:30:00.000Z');
+
+      await expect(
+        service.correct({ ...input, amount: '100' }, 'org', actor),
+      ).resolves.toMatchObject({ status: 'COMPLETED' });
+
+      const created = (
+        tx.expense.create.mock.calls[0][0] as {
+          data: { date: Date; payments: { create: Array<{ date: Date }> } };
+        }
+      ).data;
+      // The expense inherits the completion day, as the Bogotá start of that day.
+      expect(created.date).toEqual(new Date('2024-03-04T05:00:00.000Z'));
+      // The cash outflow it mirrors keeps its own original date.
+      expect(created.payments.create[0].date).toEqual(
+        new Date('2024-02-29T05:00:00.000Z'),
+      );
     });
 
     it.each([
@@ -498,6 +548,7 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
     it('writes no expense when the corrected amount still leaves a balance', async () => {
       const { service, tx, period } = setup();
       period.expenseEnabled = true;
+      at('2024-03-05T02:30:00.000Z');
 
       await expect(
         service.correct({ ...input, amount: '90' }, 'org', actor),
@@ -506,6 +557,12 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
       expect(tx.expense.create).not.toHaveBeenCalled();
       expect(tx.payrollExpenseCategory.findUnique).not.toHaveBeenCalled();
       expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
+      // A correction that does not complete revises the amount only: the cash row
+      // keeps its original date, so no completion day is written anywhere.
+      expect(tx.payrollCashOutflow.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({ id: 'cash', date }),
+        data: { amount: new Prisma.Decimal('90') },
+      });
       expect(tx.payrollObligation.updateMany).toHaveBeenCalledWith({
         where: expect.objectContaining({ status: 'PENDING', version: 7 }),
         data: { status: 'PENDING', version: { increment: 1 } },

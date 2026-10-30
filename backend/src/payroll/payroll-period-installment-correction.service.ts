@@ -13,6 +13,7 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
+import { formatDateInBogota } from '../common/utils/bogota-date';
 import { PrismaService } from '../prisma/prisma.service';
 import { writePayrollCompletionExpense } from './payroll-completed-expense-writer';
 import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.service';
@@ -70,6 +71,10 @@ export class PayrollPeriodInstallmentCorrectionService {
     const amount = new Prisma.Decimal(dto.amount);
 
     return this.prisma.$transaction(async (tx) => {
+      // S5/S6: a correction introduces no new cash date, so the day this correction
+      // is made is the completion day of the payment it may complete. It is read
+      // once, in the Bogotá calendar, so every effect of one correction agrees.
+      const correctionDay = formatDateInBogota(new Date());
       const employees = await tx.$queryRaw<{ id: string }[]>`
         SELECT "id" FROM "Employee" WHERE "id" = ${dto.employeeId}
         AND "organizationId" = ${organizationId} FOR UPDATE`;
@@ -239,9 +244,12 @@ export class PayrollPeriodInstallmentCorrectionService {
             // A null choice is unspecified, never "no expense".
             expenseChoice: period.expenseEnabled ?? null,
             // A correction introduces no new cash date: the corrected outflow is
-            // updated in place and keeps its date (S3/S6), so that stored date is
-            // also the default expense date. An explicit stored selection wins.
-            completionDate: current.outflow.date.toISOString().slice(0, 10),
+            // updated in place and keeps its date (S3/S6), so its stored date
+            // cannot be the completion day. The completion day is the Bogotá day
+            // the correction is made, expressed the way the expense writer parses
+            // dates, so the expense inherits it when no date was selected. An
+            // explicit stored selection still wins.
+            completionDate: correctionDay,
             selectedExpenseDate: period.selectedExpenseDate
               ? period.selectedExpenseDate.toISOString().slice(0, 10)
               : null,
