@@ -27,7 +27,7 @@ function StockBadge({ product }: { product: Product }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded-md font-mono text-[10px] font-bold border shrink-0",
+        "inline-flex items-center px-2.5 py-1 rounded-md font-mono text-[11px] font-semibold border tabular-nums shrink-0",
         service
           ? "bg-muted/60 text-muted-foreground border-border/60"
           : isOutOfStock
@@ -48,12 +48,12 @@ function ProductRow({ product }: { product: Product }) {
   return (
     <li
       className={cn(
-        "grid min-w-0 grid-cols-[48px_minmax(0,1fr)] items-start gap-x-3 gap-y-2 rounded-xl border border-border/50 bg-card p-2.5 transition-colors hover:border-primary/30",
+        "grid min-w-0 grid-cols-[48px_minmax(0,1fr)] items-start gap-x-3 gap-y-2 rounded-xl border border-border/70 bg-card p-3 transition-colors hover:border-border",
         isInactive && "opacity-60",
       )}
     >
       {/* Thumbnail */}
-      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/40 bg-muted/20">
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/30">
         {product.imageUrl ? (
           <Image
             src={product.imageUrl}
@@ -71,15 +71,15 @@ function ProductRow({ product }: { product: Product }) {
 
       {/* Info */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <p className="[overflow-wrap:anywhere] text-[13px] font-semibold text-foreground">
+        <p className="[overflow-wrap:anywhere] text-[13px] font-semibold text-foreground leading-snug">
           {product.name}
         </p>
         <div className="flex flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
-          <span className="font-mono text-[10px] font-medium text-muted-foreground">
+          <span className="font-mono text-[11px] font-medium text-muted-foreground">
             {product.sku}
           </span>
           {isInactive && (
-            <span className="font-mono text-[10px] font-semibold text-muted-foreground">
+            <span className="font-mono text-[11px] font-semibold text-muted-foreground">
               · Inactivo
             </span>
           )}
@@ -87,8 +87,8 @@ function ProductRow({ product }: { product: Product }) {
       </div>
 
       {/* Price + stock */}
-      <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-2.5 [overflow-wrap:anywhere]">
-        <span className="font-mono text-[13px] font-bold text-foreground">
+      <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-border/50 [overflow-wrap:anywhere]">
+        <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
           {formatCurrency(product.salePrice)}
         </span>
         <StockBadge product={product} />
@@ -174,27 +174,29 @@ function CategoryPage({ category, onClose }: { category: Category; onClose: () =
   return (
     <Modal isOpen onClose={onClose} title={`Productos · ${category.name}`} size="lg" scrollContent={false}>
       <div ref={bodyRef} className="flex min-w-0 flex-col gap-3">
-        <div ref={countRef} className="text-xs font-semibold text-primary" aria-live="polite">
+        <div ref={countRef} className="inline-flex w-fit items-center rounded-md border border-border/60 bg-muted/50 px-2.5 py-0.5 font-mono text-xs font-medium text-muted-foreground tabular-nums" aria-live="polite">
           {current && !clamping ? `${total} ${total === 1 ? "producto" : "productos"}` : "Productos"}
         </div>
         {pending ? (
-          <LoadingState className="min-h-0 py-2" icon={<Package className="w-4 h-4 text-primary/50" />} message="Cargando productos..." />
+          <LoadingState className="min-h-0 py-2" icon={<Package className="w-4 h-4 text-muted-foreground" />} message="Cargando productos..." />
         ) : isError ? (
-          <EmptyState className="min-h-0 py-2" icon={<PackageX className="w-6 h-6 text-muted-foreground/30" />} title="No se pudieron cargar los productos" subtitle="Intenta de nuevo más tarde" />
+          <EmptyState className="min-h-0 py-2" icon={<PackageX className="w-5 h-5 text-muted-foreground" />} title="No se pudieron cargar los productos" subtitle="Intenta de nuevo más tarde" />
         ) : products.length === 0 ? (
-          <EmptyState className="min-h-0 py-2" icon={<PackageX className="w-6 h-6 text-muted-foreground/30" />} title="No hay productos en esta categoría" subtitle={total === 0 ? "Aún no se han asignado productos" : undefined} />
+          <EmptyState className="min-h-0 py-2" icon={<PackageX className="w-5 h-5 text-muted-foreground" />} title="No hay productos en esta categoría" subtitle={total === 0 ? "Aún no se han asignado productos" : undefined} />
         ) : (
-          <ul ref={listRef} className={cn("grid items-start gap-2", geometry.width >= 640 ? "grid-cols-2" : "grid-cols-1")}>
+          <ul ref={listRef} className={cn("grid items-start gap-2.5", geometry.width >= 640 ? "grid-cols-2" : "grid-cols-1")}>
             {products.map(product => <ProductRow key={product.id} product={product} />)}
           </ul>
         )}
-        <nav ref={pagerRef} aria-label="Paginación de productos" className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs">
-          <span aria-live="polite" className="w-full text-muted-foreground">
+        <nav ref={pagerRef} aria-label="Paginación de productos" className="flex flex-wrap items-center justify-between gap-2.5 border-t border-border/60 pt-3 text-xs">
+          <span aria-live="polite" className="mr-auto font-mono text-[11px] text-muted-foreground tabular-nums">
             {current && !clamping ? `Mostrando ${start}–${end} de ${total}` : "Esperando productos"}
           </span>
-          <button type="button" aria-label="Página anterior" disabled={pending || isError || page === 1} onClick={() => setPaging({ limit, page: page - 1 })} className="rounded-lg border border-border px-3 py-2 disabled:opacity-40">Anterior</button>
-          <span aria-live="polite">Página {page}{current && !clamping ? ` de ${totalPages}` : ""}</span>
-          <button type="button" aria-label="Página siguiente" disabled={pending || isError || !current || page >= totalPages} onClick={() => setPaging({ limit, page: page + 1 })} className="rounded-lg border border-border px-3 py-2 disabled:opacity-40">Siguiente</button>
+          <div className="flex items-center gap-2">
+            <button type="button" aria-label="Página anterior" disabled={pending || isError || page === 1} onClick={() => setPaging({ limit, page: page - 1 })} className="rounded-lg border border-border/70 bg-muted/30 px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:pointer-events-none">Anterior</button>
+            <span aria-live="polite" className="px-1 font-mono text-xs font-medium text-muted-foreground tabular-nums">Página {page}{current && !clamping ? ` de ${totalPages}` : ""}</span>
+            <button type="button" aria-label="Página siguiente" disabled={pending || isError || !current || page >= totalPages} onClick={() => setPaging({ limit, page: page + 1 })} className="rounded-lg border border-border/70 bg-muted/30 px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:pointer-events-none">Siguiente</button>
+          </div>
         </nav>
       </div>
     </Modal>

@@ -49,7 +49,7 @@ export class CategoriesController {
   }
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Get all categories with pagination' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
