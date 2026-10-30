@@ -506,7 +506,11 @@ describe('LoansService tenant reads', () => {
         amount: new Prisma.Decimal('120.25'),
         status: 'OPEN',
         events: [],
-        posLoanSaleIntent: { id: 'intent', finalSaleId },
+        posLoanSaleIntent: {
+          id: 'intent',
+          finalSaleId,
+          finalSale: finalSaleId ? { saleNumber: 427 } : null,
+        },
       };
       const expected = {
         id: 'loan',
@@ -516,7 +520,11 @@ describe('LoansService tenant reads', () => {
         balance: '120.25',
         collected: '0.00',
         paymentStatus: 'UNPAID',
-        posFinancing: { intentId: 'intent', finalSaleId },
+        posFinancing: {
+          intentId: 'intent',
+          finalSaleId,
+          finalSaleNumber: finalSaleId ? 427 : null,
+        },
       };
       tx.moneyLoan.findFirst.mockResolvedValue(loan);
       tx.moneyLoan.findMany.mockResolvedValue([loan]);
@@ -532,7 +540,13 @@ describe('LoansService tenant reads', () => {
       expect(tx.moneyLoan.findMany).toHaveBeenCalledWith(
         objectContaining({
           select: objectContaining({
-            posLoanSaleIntent: { select: { id: true, finalSaleId: true } },
+            posLoanSaleIntent: {
+              select: {
+                id: true,
+                finalSaleId: true,
+                finalSale: { select: { saleNumber: true } },
+              },
+            },
           }),
         }),
       );
