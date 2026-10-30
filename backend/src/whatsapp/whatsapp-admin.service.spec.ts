@@ -3,6 +3,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { DailyReportService } from '../reports/daily-report.service';
 import type { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
+import type { WhatsAppSupervisionService } from './whatsapp-supervision.service';
 import {
   normaliseCommand,
   WhatsAppAdminService,
@@ -111,12 +112,26 @@ const report = {
   ],
 };
 
+/**
+ * The aggregate read model the supervision tool must forward untouched. It has no
+ * field that could carry a phone, a body or a customer, which is exactly the
+ * property the gate inherits by returning it as-is.
+ */
+const supervisionSummary = {
+  totalConversations: 4,
+  byState: { AUTOMATED: 2, HUMAN: 1, SUSPENDED: 1 },
+  byContactKind: { CLIENT: 2, INTERNAL: 1, UNKNOWN: 1 },
+  pendingAnswerCount: 1,
+  firstResponse: { sampleCount: 3, medianMs: 3000 },
+};
+
 function setup(
   options: {
     identities?: IdentityRow[];
     memberships?: MembershipRow[];
     generate?: jest.Mock;
     onDemand?: jest.Mock;
+    supervisionSummary?: jest.Mock;
   } = {},
 ) {
   const identities = options.identities ?? [];
@@ -175,15 +190,26 @@ function setup(
         .mockResolvedValue({ status: 'sent', providerMessageId: 'wamid-1' }),
   };
 
+  // Read-only double for the supervision read model. The fixture is deliberately
+  // boring: what the gate must prove is that it forwards this shape untouched and
+  // asks for the identity's organization.
+  const supervision = {
+    summary:
+      options.supervisionSummary ??
+      jest.fn().mockResolvedValue(supervisionSummary),
+  };
+
   return {
     prisma,
     reports,
     delivery,
+    supervision,
     service: new WhatsAppAdminService(
       prisma as unknown as PrismaService,
       new WhatsAppIdentityService(prisma as unknown as PrismaService),
       reports as unknown as DailyReportService,
       delivery as unknown as WhatsAppDeliveryService,
+      supervision as unknown as WhatsAppSupervisionService,
     ),
   };
 }
@@ -580,6 +606,155 @@ describe('WhatsAppAdminService', () => {
         service.answer({ status: 'unlinked' }, 'resumen'),
       ).resolves.toEqual({ status: 'refused', reason: 'unlinked' });
       expect(reports.generate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the supervision tool', () => {
+    const authorized = {
+      status: 'authorized' as const,
+      userId: USER_ID,
+      organizationId: ORGANIZATION_ID,
+      role: 'ADMIN' as const,
+      phone: PHONE,
+    };
+
+    it('answers every accepted phrasing with the aggregate summary', async () => {
+      const { service, supervision } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+      });
+
+      for (const text of [
+        'atencion',
+        'Atención',
+        'conversaciones',
+        'como va la atencion',
+        '  Cómo va la atención  ',
+        'estado de las conversaciones',
+        'supervision',
+      ]) {
+        await expect(service.answer(authorized, text)).resolves.toEqual({
+          status: 'answered',
+          tool: 'supervision_summary',
+          organizationId: ORGANIZATION_ID,
+          supervision: supervisionSummary,
+        });
+      }
+
+      expect(supervision.summary).toHaveBeenCalledWith(ORGANIZATION_ID);
+    });
+
+    it('carries counts, a pending figure and a median, and nothing else', async () => {
+      const { service } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+      });
+
+      const answer = await service.answer(authorized, 'atencion');
+
+      expect(answer).toEqual({
+        status: 'answered',
+        tool: 'supervision_summary',
+        organizationId: ORGANIZATION_ID,
+        supervision: {
+          totalConversations: 4,
+          byState: { AUTOMATED: 2, HUMAN: 1, SUSPENDED: 1 },
+          byContactKind: { CLIENT: 2, INTERNAL: 1, UNKNOWN: 1 },
+          pendingAnswerCount: 1,
+          firstResponse: { sampleCount: 3, medianMs: 3000 },
+        },
+      });
+
+      // No phone, no body and no customer name can travel, because the answer
+      // has no field for one.
+      const payload = JSON.stringify(answer);
+      for (const secret of [
+        PHONE,
+        '573009998877',
+        'Ana Cliente',
+        '1020304050',
+        'mensaje del cliente',
+      ]) {
+        expect(payload).not.toContain(secret);
+      }
+    });
+
+    it('scopes the read to the identity organization, never to the text', async () => {
+      const { service, supervision } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+      });
+
+      // The command is matched exactly after normalisation, so an appended
+      // organization id or phone is not a widened command: it is not a command.
+      await expect(
+        service.answer(
+          authorized,
+          `atencion ${OTHER_ORGANIZATION_ID} 573009998877`,
+        ),
+      ).resolves.toEqual({ status: 'unsupported' });
+
+      await service.answer(authorized, 'conversaciones');
+
+      expect(supervision.summary).toHaveBeenCalledTimes(1);
+      expect(supervision.summary).toHaveBeenCalledWith(ORGANIZATION_ID);
+    });
+
+    it('refuses an unauthorized sender without consulting the read model', async () => {
+      const { service, supervision } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('MEMBER')],
+      });
+
+      const forbidden = await service.authorize(PHONE);
+      expect(forbidden).toEqual({ status: 'forbidden' });
+      await expect(service.answer(forbidden, 'atencion')).resolves.toEqual({
+        status: 'refused',
+        reason: 'forbidden',
+      });
+      await expect(
+        service.answer({ status: 'unlinked' }, 'atencion'),
+      ).resolves.toEqual({ status: 'refused', reason: 'unlinked' });
+      await expect(
+        service.answer({ status: 'forbidden' }, 'conversaciones'),
+      ).resolves.toEqual({ status: 'refused', reason: 'forbidden' });
+
+      expect(supervision.summary).not.toHaveBeenCalled();
+    });
+
+    it('refuses rather than throwing when the read model fails', async () => {
+      const { service } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+        supervisionSummary: jest.fn().mockRejectedValue(new Error('db down')),
+      });
+
+      await expect(service.answer(authorized, 'atencion')).resolves.toEqual({
+        status: 'refused',
+        reason: 'unavailable',
+      });
+    });
+
+    it('leaves the daily summary and the PDF commands untouched', async () => {
+      const { service, reports, supervision, delivery } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+      });
+
+      await expect(service.answer(authorized, 'resumen')).resolves.toEqual(
+        expect.objectContaining({ status: 'answered', tool: 'daily_summary' }),
+      );
+      await expect(service.answer(authorized, 'manda el pdf')).resolves.toEqual(
+        expect.objectContaining({ status: 'delivered', tool: 'daily_report_pdf' }),
+      );
+      await expect(service.answer(authorized, 'borra todo')).resolves.toEqual({
+        status: 'unsupported',
+      });
+
+      expect(reports.generate).toHaveBeenCalledWith(ORGANIZATION_ID);
+      expect(delivery.onDemand).toHaveBeenCalledTimes(1);
+      // Only the supervision phrasing reaches the supervision read model.
+      expect(supervision.summary).not.toHaveBeenCalled();
     });
   });
 

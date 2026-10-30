@@ -889,6 +889,12 @@ enum PurchaseOrderStatus {
 /// Provider session bound to one channel. COMMERCIAL belongs to one
 /// organization; INTELLIGENCE is a single central channel shared across
 /// organizations and owned by the platform (organizationId stays null).
+///
+/// `retentionDays` is the channel's message-retention policy. It is never null:
+/// the channel always has a policy, and the purge job reads it from here rather
+/// than from configuration, so changing it is one row update. The migration adds
+/// a CHECK (retentionDays >= 1) as NOT VALID, which keeps a row an operator may
+/// have corrupted from blocking the deploy.
 model WhatsAppConnection {
   id              String                @id @default(uuid())
   provider        String                @default("WAHA")
@@ -898,6 +904,7 @@ model WhatsAppConnection {
   status          WhatsAppSessionStatus @default(STOPPED)
   statusUpdatedAt DateTime?
   accountId       String?
+  retentionDays   Int                   @default(30)
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 

@@ -17,6 +17,9 @@ import { WhatsAppEventsService } from './whatsapp-events.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
 import { WhatsAppIngestionService } from './whatsapp-ingestion.service';
 import { WHATSAPP_FILE_SENDER, WHATSAPP_PROVIDER } from './whatsapp-provider';
+import { WhatsAppRetentionScheduler } from './whatsapp-retention.scheduler';
+import { WhatsAppRetentionService } from './whatsapp-retention.service';
+import { WhatsAppSupervisionService } from './whatsapp-supervision.service';
 import { WahaAdapter } from './waha-adapter';
 
 /**
@@ -46,9 +49,12 @@ const createWahaAdapter = () =>
     WhatsAppEventsService,
     WhatsAppIdentityService,
     WhatsAppIngestionService,
+    WhatsAppSupervisionService,
     WhatsAppAdminService,
     WhatsAppDeliveryService,
     WhatsAppDeliveryScheduler,
+    WhatsAppRetentionService,
+    WhatsAppRetentionScheduler,
     {
       provide: WAHA_WEBHOOK_KEY,
       useFactory: () => process.env.WAHA_WEBHOOK_HMAC_KEY,

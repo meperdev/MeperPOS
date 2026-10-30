@@ -8,6 +8,10 @@ import {
 import { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { normaliseContactPhone } from './whatsapp-ingestion.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
+import {
+  WhatsAppSupervisionService,
+  type WhatsAppSupervisionSummary,
+} from './whatsapp-supervision.service';
 
 /**
  * Roles that may read administrative figures from a chat window. Anything else
@@ -54,6 +58,24 @@ const DAILY_PDF_COMMANDS: ReadonlySet<string> = new Set([
   'mandame el reporte',
   'envia el reporte',
   'manda el pdf',
+]);
+
+/**
+ * Phrasing that asks how the commercial channel is doing. The answer is the
+ * aggregate supervision read model and nothing else: counts per state and per
+ * contact kind, how many threads are waiting for an answer, and the median
+ * first-response time. No phone, no body, no customer, no document number.
+ *
+ * Closed like the other lists, and exact after normalisation, so "atencion"
+ * reaches the tool while "atencion del cliente 573001112233" does not.
+ */
+const SUPERVISION_COMMANDS: ReadonlySet<string> = new Set([
+  'atencion',
+  'conversaciones',
+  'como va la atencion',
+  'como va la atencion hoy',
+  'estado de las conversaciones',
+  'supervision',
 ]);
 
 /**
@@ -129,6 +151,13 @@ export type WhatsAppAdminAnswer =
       /** What the delivery attempt concluded; no provider text is included. */
       delivery: 'sent' | 'already_attempted' | 'failed' | 'no_identity';
     }
+  | {
+      status: 'answered';
+      tool: 'supervision_summary';
+      organizationId: string;
+      /** Counts and one duration: the shape is defined by the read model. */
+      supervision: WhatsAppSupervisionSummary;
+    }
   | { status: 'refused'; reason: 'unlinked' | 'forbidden' | 'unavailable' }
   | { status: 'unsupported' };
 
@@ -160,14 +189,16 @@ function countOf(value: unknown): number {
  *     that does not exist, is `forbidden`.
  *
  * Two invariants hold for every method here:
- *  - **The allowlist is closed, and only one entry writes.** The summary tool is
- *    a pure read: this class queries `whatsAppIdentity.findFirst` and
- *    `organizationUser.findFirst` and nothing else. The report-PDF command is the
- *    single exception, and the only write it can reach is a `WhatsAppDelivery`
- *    row created by `WhatsAppDeliveryService` — a row whose recipient is the
- *    sender's own verified phone, never an address taken from the message. No
- *    other command sends anything, and no command can edit a sale, a product, an
- *    expense or a membership.
+ *  - **The allowlists are closed, and only one entry writes.** Two tools read:
+ *    the daily summary over `DailyReportService` and the supervision summary over
+ *    `WhatsAppSupervisionService` (aggregate counts and one median). This class
+ *    itself queries `whatsAppIdentity.findFirst` and `organizationUser.findFirst`
+ *    and nothing else. The report-PDF command is the single exception, and the
+ *    only write it can reach is a `WhatsAppDelivery` row created by
+ *    `WhatsAppDeliveryService` — a row whose recipient is the sender's own
+ *    verified phone, never an address taken from the message. No other command
+ *    sends anything, and no command can edit a sale, a product, an expense or a
+ *    membership.
  *  - **Nothing identifiable is logged.** No method logs the phone, the message
  *    body, the identity, a customer, a document number or a figure. The only
  *    log lines are identifier-free outcome markers.
@@ -192,6 +223,7 @@ export class WhatsAppAdminService {
     private readonly identity: WhatsAppIdentityService,
     private readonly reports: DailyReportService,
     private readonly delivery: WhatsAppDeliveryService,
+    private readonly supervision: WhatsAppSupervisionService,
   ) {}
 
   /**
@@ -238,8 +270,9 @@ export class WhatsAppAdminService {
    * Answer one message. `context` is what `authorize` returned, so this method
    * cannot be reached with an organization that did not come from a verified
    * identity, and the only address a delivery can use is `context.phone` — the
-   * sender's own verified number. Everything outside the two closed allowlists is
-   * `unsupported` without touching the reports or delivery services at all.
+   * sender's own verified number. Everything outside the three closed allowlists
+   * is `unsupported` without touching the reports, supervision or delivery
+   * services at all.
    */
   async answer(
     context: WhatsAppAdminAuthorization,
@@ -257,6 +290,10 @@ export class WhatsAppAdminService {
       return this.sendDailyReportPdf(context);
     }
 
+    if (SUPERVISION_COMMANDS.has(command)) {
+      return this.supervisionAnswer(context);
+    }
+
     if (!DAILY_SUMMARY_COMMANDS.has(command)) {
       return { status: 'unsupported' };
     }
@@ -270,6 +307,37 @@ export class WhatsAppAdminService {
       organizationId: context.organizationId,
       summary,
     };
+  }
+
+  /**
+   * The supervision tool: the aggregate read model of this organization's
+   * commercial threads. The organization comes from the verified identity, never
+   * from the message, so a text that names another organization cannot widen the
+   * answer. Nothing identifiable can travel because the read model has no field
+   * for a phone, a body or a customer: the reduction happens before this method
+   * sees the data, not here.
+   */
+  private async supervisionAnswer(
+    context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
+  ): Promise<WhatsAppAdminAnswer> {
+    try {
+      const supervision = await this.supervision.summary(
+        context.organizationId,
+      );
+      return {
+        status: 'answered',
+        tool: 'supervision_summary',
+        organizationId: context.organizationId,
+        supervision,
+      };
+    } catch (error) {
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'supervision_failed',
+        reason: error instanceof Error ? error.name : 'unknown',
+      });
+      return { status: 'refused', reason: 'unavailable' };
+    }
   }
 
   /**
