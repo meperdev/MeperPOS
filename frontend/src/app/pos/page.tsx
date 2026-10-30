@@ -11,6 +11,7 @@ import {
 import Image from "next/image";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useProducts, useQuickSearchProduct } from "@/hooks/useProducts";
+import { useCategories } from "@/hooks/useCategories";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useCreateSale } from "@/hooks/useSales";
 import { useCreatePosLoan } from "@/hooks/useLoans";
@@ -20,6 +21,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Button } from "@/components/ui/Button";
+import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Badge } from "@/components/ui/Badge";
 import { Stepper } from "@/components/ui/Stepper";
 import { Modal } from "@/components/ui/Modal";
@@ -51,7 +53,7 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency, safeGetItem, safeSetItem } from "@/lib/utils";
 import { effectiveStock } from "@/lib/product-type";
-import type { CartItem, PosLoanInitiation, Product, Sale } from "@/types";
+import type { CartItem, Product, Sale } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAnyRole } from "@/lib/auth";
@@ -142,6 +144,7 @@ interface ScanFeedback {
 }
 
 const FAVORITE_PRODUCTS_KEY = "pos_favorite_product_ids";
+const SERVICE_FILTER_VALUE = "__SERVICE__";
 const DEFAULT_SCAN_FEEDBACK: ScanFeedback = { tone: "idle", message: "" };
 
 /**
@@ -186,7 +189,7 @@ export default function POSPage() {
   const scannerInputRef = useRef<HTMLInputElement | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [showServicesOnly, setShowServicesOnly] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<string>("");
   const [favoriteProductIds, setFavoriteProductIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     const saved = safeGetItem(FAVORITE_PRODUCTS_KEY);
@@ -202,6 +205,7 @@ export default function POSPage() {
     }
   });
   const [selectedCustomer, setSelectedCustomer] = useState<string>("");
+  const [customerSearch, setCustomerSearch] = useState("");
   const [discountAmount, setDiscountAmount] = useState(0);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
     "CASH" | "CARD" | "TRANSFER"
@@ -267,17 +271,21 @@ export default function POSPage() {
     page: currentPage,
     limit: pageSize,
     search: debouncedSearch || undefined,
-    type: showServicesOnly ? "SERVICE" : undefined,
+    categoryId:
+      selectedFilter && selectedFilter !== SERVICE_FILTER_VALUE
+        ? selectedFilter
+        : undefined,
+    type: selectedFilter === SERVICE_FILTER_VALUE ? "SERVICE" : undefined,
     ids: showFavoritesOnly ? favoriteProductIds : undefined,
     available: true,
   });
+  const { data: categoriesData } = useCategories({ limit: 100 });
   const { data: customersData } = useCustomers();
   const { data: settings } = useSettings();
   const { pausedSales, pauseSale, resumeSale, deletePausedSale } =
     usePausedSales();
   const createSale = useCreateSale();
   const createPosLoan = useCreatePosLoan();
-  const [posLoan, setPosLoan] = useState<PosLoanInitiation | null>(null);
   // An attempt is pinned to the exact payload it was minted for: a retry of the
   // same request reuses its key, while any change to the cart, customer or
   // discount mints a new one. Cleared on success so the next financing starts
@@ -286,6 +294,9 @@ export default function POSPage() {
   // Set synchronously around the request so the locks never depend on a
   // query's pending flag flushing before the response resolves.
   const financingRef = useRef(false);
+  // Set when an initiation succeeded: the dialog's own close must not reopen
+  // the mobile cart (the sale is done and the cart is now empty).
+  const financeCompletedRef = useRef(false);
   const cartLocked = financing || createPosLoan.isPending;
   // A financing in flight owns the payload it will report back: while it is
   // pending nothing may edit the cart, the customer or the discount, or the
@@ -305,7 +316,38 @@ export default function POSPage() {
   // A previous page/geometry must not advertise stale totals or overflow the
   // newly sized area while its replacement is loading.
   const productsData = isPlaceholderData || productsFailed ? undefined : queryProductsData;
-  const customers = customersData?.data || [];
+  const categories = useMemo(
+    () => categoriesData?.data ?? [],
+    [categoriesData?.data],
+  );
+  const filterOptions = useMemo(
+    () => [
+      { value: "", label: "Todas las categorías" },
+      {
+        value: SERVICE_FILTER_VALUE,
+        label: "Servicios",
+        icon: <Wrench className="w-3.5 h-3.5" />,
+      },
+      ...categories.map((cat) => ({
+        value: cat.id,
+        label: cat.name,
+      })),
+    ],
+    [categories],
+  );
+  const customers = useMemo(
+    () => customersData?.data ?? [],
+    [customersData?.data],
+  );
+  const filteredCustomers = useMemo(() => {
+    const query = customerSearch.trim().toLowerCase();
+    if (!query) return customers;
+    return customers.filter(
+      (customer) =>
+        customer.name.toLowerCase().includes(query) ||
+        (customer.documentNumber ?? "").toLowerCase().includes(query),
+    );
+  }, [customers, customerSearch]);
   const totalPages = Math.max(productsData?.meta?.totalPages ?? 1, 1);
   const totalProducts = productsData?.meta?.total ?? 0;
   const products = useMemo(
@@ -768,21 +810,26 @@ export default function POSPage() {
         ...request,
         requestKey: attempt.key,
       });
+      const financedTotal = formatCurrency(
+        Number(result.agreedCustomerTotal),
+      );
       if (posLoanAttemptRef.current === attempt) posLoanAttemptRef.current = null;
       if (financeSignatureRef.current !== signature) {
         // The financed payload is no longer the sale on screen: report the
         // financing instead of claiming its amount for a different cart.
-        toast.success(
-          `Venta financiada iniciada por ${formatCurrency(
-            Number(result.agreedCustomerTotal),
-          )}`,
-        );
+        toast.success(`Venta financiada por ${financedTotal}`);
+        setOpenedFromMobileCart(false);
+        financeCompletedRef.current = true;
         return;
       }
-      setPosLoan(result);
       setCart([]);
       setDiscountAmount(0);
       setSelectedCustomer("");
+      setOpenedFromMobileCart(false);
+      financeCompletedRef.current = true;
+      toast.success(
+        `Venta financiada por ${financedTotal}. Puedes verla en Préstamos.`,
+      );
     } catch (error) {
       toast.error(
         getApiErrorMessage(error, "Error al iniciar la venta financiada"),
@@ -913,30 +960,27 @@ export default function POSPage() {
 
   return (
     <DashboardLayout>
-      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-12 lg:gap-5", cart.length > 0 && "pb-28 lg:pb-0")}>
+      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-12 lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
-        <div className="flex min-h-0 flex-col lg:col-span-8 lg:h-full">
-          <div className="flex h-[calc(100dvh-8rem)] min-h-[580px] flex-col rounded-3xl border border-primary/30 bg-primary/10 sm:min-h-[500px] lg:h-full">
+        <div className="flex min-h-0 flex-col lg:col-span-7 lg:h-full">
+          <div className="flex h-[calc(100dvh-8rem)] min-h-[580px] flex-col rounded-2xl border border-border/70 bg-card sm:min-h-[500px] lg:h-full">
             {/* Products Header */}
-            <div className="flex shrink-0 items-center justify-between px-5 py-3.5 border-b border-primary/20">
-              <div className="flex items-center gap-3">
-                <div className="w-1 h-6 rounded-full bg-primary shrink-0" />
-                <h2 className="text-base font-semibold text-foreground">
-                  Productos
-                </h2>
-              </div>
+            <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-border/60">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                Productos
+              </h2>
               <div className="flex items-center gap-2">
                 {cart.length > 0 && (
-                  <Badge variant="default" className="font-mono">
+                  <span className="font-mono text-xs text-muted-foreground tabular-nums">
                     {cart.length} en carrito
-                  </Badge>
+                  </span>
                 )}
               </div>
             </div>
 
             {/* Unified search & scanner — types to filter the grid, Enter scans/adds */}
-            <div className="flex shrink-0 flex-col gap-2.5 p-4 border-b border-primary/20 bg-background/40">
-              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+            <div className="flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -951,38 +995,42 @@ export default function POSPage() {
                     }}
                     onKeyDown={handleScannerKeyDown}
                     disabled={isScannerBlocked || quickSearchProduct.isPending}
-                    className="pl-9 h-9 text-sm"
+                    className="pl-9 h-[38px] rounded-lg text-sm"
                   />
                 </div>
                 <Button
                   type="button"
-                  variant={showFavoritesOnly ? "primary" : "secondary"}
-                  size="sm"
+                  variant="secondary"
+                  aria-pressed={showFavoritesOnly}
+                  size="md"
                   onClick={() => {
                     setShowFavoritesOnly((c) => !c);
                     setCurrentPage(1);
                   }}
-                  className="shrink-0"
+                  className={cn(
+                    "shrink-0 rounded-lg",
+                    showFavoritesOnly &&
+                      "border-emerald-600/50 dark:border-emerald-500/50 bg-emerald-500/[0.08] dark:bg-emerald-500/[0.10] text-foreground hover:border-emerald-600/60 dark:hover:border-emerald-500/60 hover:bg-emerald-500/[0.12] hover:text-foreground",
+                  )}
                 >
                   <Star
-                    className={`w-3.5 h-3.5 ${showFavoritesOnly ? "fill-current" : ""}`}
+                    className={cn(
+                      "w-3.5 h-3.5",
+                      showFavoritesOnly && "fill-amber-500 text-amber-500 dark:fill-amber-400 dark:text-amber-400",
+                    )}
                   />
-                  {showFavoritesOnly ? "Favoritos" : "Todos"}
+                  Favoritos
                 </Button>
-                <Button
-                  type="button"
-                  variant={showServicesOnly ? "primary" : "secondary"}
-                  aria-pressed={showServicesOnly}
-                  size="sm"
-                  onClick={() => {
-                    setShowServicesOnly((c) => !c);
+                <BentoSelect
+                  value={selectedFilter}
+                  onChange={(value) => {
+                    setSelectedFilter(value);
                     setCurrentPage(1);
                   }}
-                  className="shrink-0"
-                >
-                  <Wrench className="w-3.5 h-3.5" />
-                  Servicios
-                </Button>
+                  className="w-full sm:w-48 shrink-0"
+                  placeholder="Todas las categorías"
+                  options={filterOptions}
+                />
               </div>
               {scanFeedback.message && (
                 <p
@@ -1008,7 +1056,7 @@ export default function POSPage() {
                 ref={productGridRef}
                 style={{ gridTemplateColumns: POS_GRID_TEMPLATE_COLUMNS }}
                 className={cn(
-                  "grid auto-rows-[248px] gap-3 transition-opacity duration-150 [&>div]:aspect-auto [&>div]:h-full [&>div]:min-h-0 [&>div]:max-h-none",
+                  "grid h-full auto-rows-[248px] grid-rows-[repeat(auto-fill,minmax(248px,1fr))] gap-3 transition-opacity duration-150 [&>div]:aspect-auto [&>div]:h-full [&>div]:min-h-0 [&>div]:max-h-none",
                   isFetching && !searching ? "opacity-60" : "opacity-100",
                 )}
               >
@@ -1020,7 +1068,7 @@ export default function POSPage() {
                     onRetry={() => void refetchProducts()}
                   />
                 ) : searching || isPlaceholderData ? (
-                  <LoadingState icon={<Package className="w-4 h-4 text-primary/50" />} message="Buscando productos..." />
+                  <LoadingState icon={<Package className="w-4 h-4 text-muted-foreground" />} message="Buscando productos..." />
                 ) : visibleProducts.length > 0 ? (
                   visibleProducts.map((product) => (
                     <ProductCard
@@ -1051,7 +1099,7 @@ export default function POSPage() {
             </div>
 
             {/* Always reserve the pager area so counts cannot resize the grid. */}
-            <div data-testid="pos-pager" className="flex min-h-[88px] shrink-0 items-center border-t border-primary/20 px-4 py-3">
+            <div data-testid="pos-pager" className="flex min-h-[64px] shrink-0 items-center border-t border-border/60 px-4 py-2.5">
               {totalPages > 1 && (
                 <div className="w-full">
                   <Pagination
@@ -1071,53 +1119,52 @@ export default function POSPage() {
         </div>
 
         {/* Cart Panel (Desktop) */}
-        <div className="hidden lg:flex min-h-0 lg:col-span-4 lg:h-full flex-col">
-          <div className="h-auto min-h-0 overflow-hidden rounded-3xl border border-accent/30 bg-accent/10 lg:h-full flex flex-col">
+        <div className="hidden lg:flex min-h-0 lg:col-span-5 lg:h-full flex-col">
+          <div className="h-auto min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-card lg:h-full flex flex-col">
             {/* Cart Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-accent/20">
-              <div className="flex items-center gap-3">
-                <div className="w-1 h-6 rounded-full bg-accent shrink-0" />
-                <h2 className="text-base font-semibold text-foreground">
-                  Carrito
-                </h2>
-              </div>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                Carrito
+              </h2>
               {cart.length > 0 && (
-                <Badge variant="warning">{cart.length}</Badge>
+                <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                  {cart.length}
+                </span>
               )}
             </div>
 
             {/* Cart Items */}
-            <div className="scrollbar-app max-h-[55vh] overflow-y-auto p-3 space-y-2 lg:flex-1 lg:min-h-0 lg:max-h-none">
+            <div className="scrollbar-app max-h-[55vh] overflow-y-auto p-4 space-y-2.5 lg:flex-1 lg:min-h-0 lg:max-h-none">
               {cart.length === 0 ? (
                 <EmptyState icon={<ShoppingCart className="w-6 h-6 text-muted-foreground/30" />} title="Carrito vacío" subtitle="Agrega productos para comenzar" />
               ) : (
                 cart.map((item) => (
                   <div
                     key={item.productId}
-                    className="flex items-start gap-2.5 p-3 bg-background/40 rounded-2xl border border-accent/20 hover:border-accent/40 transition-colors"
+                    className="flex items-stretch gap-3.5 p-3 bg-muted/20 rounded-xl border border-border/60 hover:border-border transition-colors duration-150"
                   >
-                    <div className="relative w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="relative w-20 self-stretch min-h-[4.5rem] bg-muted/60 border border-border/50 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
                       {item.product.imageUrl ? (
                         <Image
                           src={item.product.imageUrl}
                           alt={item.product.name}
                           fill
-                          sizes="40px"
+                          sizes="80px"
                           className="object-cover"
                         />
                       ) : (
-                        <Package className="w-5 h-5 text-primary/60" />
+                        <Package className="w-6 h-6 text-muted-foreground/50" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-foreground line-clamp-1 mb-1">
+                      <p className="text-sm font-medium text-foreground line-clamp-1 mb-1">
                         {item.product.name}
                       </p>
-                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground mb-1.5">
+                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-muted-foreground tabular-nums mb-2">
                         {cartItemOffer(item) && (
                           <Badge
                             variant="danger"
-                            className="shrink-0 text-[9px] px-1.5 py-0 font-mono uppercase"
+                            className="shrink-0 text-[10px] px-1.5 py-0.5 font-mono uppercase rounded-md"
                           >
                             Oferta -{cartItemOffer(item)!.percent}%
                           </Badge>
@@ -1126,7 +1173,7 @@ export default function POSPage() {
                           <span data-testid="price-overridden" className="shrink-0">
                             <Badge
                               variant="warning"
-                              className="text-[9px] px-1.5 py-0 font-mono uppercase"
+                              className="text-[10px] px-1.5 py-0.5 font-mono uppercase rounded-md"
                             >
                               Precio ajustado
                             </Badge>
@@ -1159,7 +1206,7 @@ export default function POSPage() {
                           </span>
                         )}
                       </p>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <Stepper
                           value={item.quantity}
                           min={0}
@@ -1170,30 +1217,30 @@ export default function POSPage() {
                           }
                         />
                         {item.quantity >= item.availableStock && (
-                          <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
                             máx.
                           </span>
                         )}
                         <button
                           type="button"
                           onClick={() => openDiscountModal(item.productId)}
-                          className="p-1 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors duration-150"
                           title="Descuento"
                         >
-                          <Percent className="w-3.5 h-3.5" />
+                          <Percent className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
                           onClick={() => removeFromCart(item.productId)}
-                          className="p-1 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors duration-150"
                           title="Eliminar"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="stat-number text-sm font-bold text-foreground">
+                    <div className="flex flex-col items-end justify-center">
+                      <span className="stat-number text-base font-semibold text-foreground tabular-nums">
                         {formatCurrency(
                           item.quantity * item.unitPrice - item.discountAmount,
                         )}
@@ -1205,51 +1252,55 @@ export default function POSPage() {
             </div>
 
             {/* Cart Footer */}
-            <div className="p-4 border-t border-border/80 bg-muted/10 space-y-3 shrink-0">
+            <div className="p-4 border-t border-border/60 bg-muted/10 space-y-3 shrink-0">
               {/* Customer Selector */}
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                <p className="text-[13px] font-normal text-muted-foreground mb-1.5">
                   Cliente (opcional)
                 </p>
                 <button
                   type="button"
                   onClick={() => setShowCustomerModal(true)}
-                  className="flex items-center gap-2 w-full h-9 px-3 rounded-xl border border-border/80 bg-background text-sm text-foreground hover:border-primary/50 transition-colors overflow-hidden"
+                  className="flex items-center gap-2.5 w-full h-9 px-3 rounded-lg border border-border/70 bg-background/60 text-sm text-foreground hover:border-border transition-colors duration-150 overflow-hidden"
                 >
-                  <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="truncate text-xs font-semibold">
+                  <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="truncate text-[13px] font-medium">
                     {selectedCustomerName || "Sin cliente"}
                   </span>
                 </button>
               </div>
 
+              {/* Financed sale: quiet secondary action, far from the checkout button */}
+              <button
+                type="button"
+                onClick={() => setShowFinanceConfirm(true)}
+                disabled={cart.length === 0 || !selectedCustomer || cartLocked}
+                title={
+                  !selectedCustomer
+                    ? "Selecciona un cliente para financiar"
+                    : undefined
+                }
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+              >
+                <HandCoins className="w-3.5 h-3.5" />
+                Financiar a crédito
+              </button>
+
               {/* Totals Breakdown */}
-              <div className="space-y-1 rounded-2xl bg-muted/30 p-2.5 border border-border/60">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Subtotal</span>
-                  <span className="font-medium text-foreground">
-                    {formatCurrency(subtotal)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Impuestos</span>
-                  <span className="font-medium text-foreground">
-                    {formatCurrency(taxAmount)}
-                  </span>
-                </div>
+              <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
                 {discountAmount > 0 && (
-                  <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400">
+                  <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
                     <span>Descuento</span>
                     <span className="font-medium">
                       -{formatCurrency(discountAmount)}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between items-center pt-1.5 border-t border-border/40">
-                  <span className="text-xs font-bold text-foreground">
+                <div className="flex justify-between items-center">
+                  <span className="text-[13px] font-medium text-muted-foreground">
                     Total
                   </span>
-                  <span className="stat-number text-lg font-bold text-primary">
+                  <span className="stat-number text-xl font-semibold tracking-tight text-primary tabular-nums">
                     {formatCurrency(total)}
                   </span>
                 </div>
@@ -1261,7 +1312,7 @@ export default function POSPage() {
                   variant="secondary"
                   size="sm"
                   onClick={() => setShowPausedSalesModal(true)}
-                  className="flex-1 text-xs"
+                  className="flex-1 h-9 rounded-lg text-xs font-medium"
                 >
                   <Play className="w-3.5 h-3.5" />
                   Reanudar ({pausedSales.length})
@@ -1271,7 +1322,7 @@ export default function POSPage() {
                   size="sm"
                   onClick={handlePauseSale}
                   disabled={cart.length === 0}
-                  className="flex-1 text-xs"
+                  className="flex-1 h-9 rounded-lg text-xs font-medium"
                 >
                   <Pause className="w-3.5 h-3.5" />
                   Pausar
@@ -1284,43 +1335,17 @@ export default function POSPage() {
                 onMethodChange={setSelectedPaymentMethod}
               />
 
-              {/* Financed sale / Checkout */}
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  className="flex-1 h-11 text-sm font-bold"
-                  size="lg"
-                  onClick={() => setShowFinanceConfirm(true)}
-                  disabled={
-                    cart.length === 0 || !selectedCustomer || cartLocked
-                  }
-                  loading={createPosLoan.isPending}
-                >
-                  <HandCoins className="w-4 h-4 mr-2" />
-                  Financiar
-                </Button>
-                <Button
-                  className="flex-1 h-11 text-sm font-bold shadow-md shadow-primary/20"
-                  size="lg"
-                  onClick={openPaymentModal}
-                  disabled={cart.length === 0 || cartLocked}
-                  loading={createSale.isPending}
-                >
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  Finalizar Venta
-                </Button>
-              </div>
-
-              {posLoan && (
-                <div className="rounded-2xl border border-primary/40 bg-primary/10 p-2.5">
-                  <p className="text-xs font-semibold text-muted-foreground">
-                    Venta financiada iniciada
-                  </p>
-                  <p className="stat-number text-lg font-bold text-primary">
-                    {formatCurrency(Number(posLoan.agreedCustomerTotal))}
-                  </p>
-                </div>
-              )}
+              {/* Checkout */}
+              <Button
+                className="w-full h-10 rounded-lg text-sm font-semibold"
+                size="lg"
+                onClick={openPaymentModal}
+                disabled={cart.length === 0 || cartLocked}
+                loading={createSale.isPending}
+              >
+                <ShoppingCart className="w-4 h-4 mr-1.5" />
+                Finalizar Venta
+              </Button>
             </div>
           </div>
         </div>
@@ -1369,6 +1394,13 @@ export default function POSPage() {
             setIsMobileCartOpen(false);
             openPaymentModal();
           }}
+          onFinance={() => {
+            setOpenedFromMobileCart(true);
+            setIsMobileCartOpen(false);
+            setShowFinanceConfirm(true);
+          }}
+          canFinance={Boolean(selectedCustomer) && !cartLocked}
+          isFinancing={createPosLoan.isPending}
           isPending={createSale.isPending}
         />
       )}
@@ -1378,58 +1410,98 @@ export default function POSPage() {
         isOpen={showCustomerModal}
         onClose={() => {
           setShowCustomerModal(false);
+          setCustomerSearch("");
           if (openedFromMobileCart) {
             setIsMobileCartOpen(true);
             setOpenedFromMobileCart(false);
           }
         }}
         title="Seleccionar Cliente"
-        size="sm"
+        size="md"
       >
         <div className="space-y-3">
-          <Input placeholder="Buscar cliente..." className="w-full" />
-          <div className="scrollbar-app max-h-80 overflow-y-auto space-y-1.5">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cliente por nombre o documento..."
+              value={customerSearch}
+              onChange={(e) => setCustomerSearch(e.target.value)}
+              className="w-full pl-9 h-9 rounded-lg text-sm"
+            />
+          </div>
+          <div className="scrollbar-app max-h-[26rem] overflow-y-auto space-y-1.5 pr-1">
             <div
-              className={`p-3 rounded-2xl cursor-pointer transition-colors border ${selectedCustomer === "" ? "bg-primary/20 border-primary/40 text-foreground" : "bg-background/40 border-primary/20 hover:bg-primary/10 hover:border-primary/30"}`}
+              className={cn(
+                "flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg cursor-pointer transition-colors duration-150 border",
+                selectedCustomer === ""
+                  ? "border-emerald-600/50 dark:border-emerald-500/50 bg-emerald-500/[0.08] dark:bg-emerald-500/[0.10] text-foreground"
+                  : "border-border/70 bg-muted/20 dark:bg-background/40 hover:border-foreground/25 hover:bg-muted/50",
+              )}
               onClick={() => {
                 if (cartLockedRef.current) return;
                 setSelectedCustomer("");
                 setShowCustomerModal(false);
+                setCustomerSearch("");
                 if (openedFromMobileCart) {
                   setIsMobileCartOpen(true);
                   setOpenedFromMobileCart(false);
                 }
               }}
             >
-              <p className="text-sm font-semibold text-foreground">
-                Cliente General
-              </p>
-              <p className="text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  Cliente General
+                </p>
+                {selectedCustomer === "" && (
+                  <span
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600 dark:bg-emerald-400"
+                  />
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground shrink-0">
                 Sin cliente asignado
               </p>
             </div>
-            {customers.map((customer) => (
-              <div
-                key={customer.id}
-                className={`p-3 rounded-2xl cursor-pointer transition-colors border ${selectedCustomer === customer.id ? "bg-primary/20 border-primary/40" : "bg-background/40 border-primary/20 hover:bg-primary/10 hover:border-primary/30"}`}
-                onClick={() => {
-                  if (cartLockedRef.current) return;
-                  setSelectedCustomer(customer.id);
-                  setShowCustomerModal(false);
-                  if (openedFromMobileCart) {
-                    setIsMobileCartOpen(true);
-                    setOpenedFromMobileCart(false);
-                  }
-                }}
-              >
-                <p className="text-sm font-semibold text-foreground">
-                  {customer.name}
-                </p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  {customer.documentNumber}
-                </p>
-              </div>
-            ))}
+            {filteredCustomers.map((customer) => {
+              const isSelected = selectedCustomer === customer.id;
+              return (
+                <div
+                  key={customer.id}
+                  className={cn(
+                    "flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg cursor-pointer transition-colors duration-150 border",
+                    isSelected
+                      ? "border-emerald-600/50 dark:border-emerald-500/50 bg-emerald-500/[0.08] dark:bg-emerald-500/[0.10] text-foreground"
+                      : "border-border/70 bg-muted/20 dark:bg-background/40 hover:border-foreground/25 hover:bg-muted/50",
+                  )}
+                  onClick={() => {
+                    if (cartLockedRef.current) return;
+                    setSelectedCustomer(customer.id);
+                    setShowCustomerModal(false);
+                    setCustomerSearch("");
+                    if (openedFromMobileCart) {
+                      setIsMobileCartOpen(true);
+                      setOpenedFromMobileCart(false);
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {customer.name}
+                    </p>
+                    {isSelected && (
+                      <span
+                        aria-hidden="true"
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600 dark:bg-emerald-400"
+                      />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono tabular-nums shrink-0">
+                    {customer.documentNumber}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </Modal>
@@ -1672,7 +1744,7 @@ export default function POSPage() {
               {pausedSales.map((sale) => (
                 <div
                   key={sale.id}
-                  className="p-4 rounded-2xl bg-background/40 border border-primary/20"
+                  className="p-4 rounded-xl bg-background/40 border border-border/70"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -1727,6 +1799,14 @@ export default function POSPage() {
           // on its way and the debt may exist without the cart that started it.
           if (financingRef.current) return;
           setShowFinanceConfirm(false);
+          if (financeCompletedRef.current) {
+            financeCompletedRef.current = false;
+            return;
+          }
+          if (openedFromMobileCart) {
+            setIsMobileCartOpen(true);
+            setOpenedFromMobileCart(false);
+          }
         }}
         onConfirm={handleFinanceSale}
         title="Confirmar venta financiada"
