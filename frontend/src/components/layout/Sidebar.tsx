@@ -32,6 +32,7 @@ import {
   PanelLeftOpen,
   HandCoins,
 } from "lucide-react";
+import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn, safeGetItem, safeSetItem, safeRemoveItem } from "@/lib/utils";
@@ -269,6 +270,27 @@ export function Sidebar() {
         .toUpperCase()
     : "?";
 
+  // The account actions live in one menu so the footer stays quiet.
+  const accountItems: RowActionItem[] = [
+    {
+      label:
+        theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro",
+      icon:
+        theme === "dark" ? (
+          <Sun className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Moon className="h-3.5 w-3.5" aria-hidden="true" />
+        ),
+      onSelect: toggleTheme,
+    },
+    {
+      label: "Cerrar sesión",
+      icon: <LogOut className="h-3.5 w-3.5" aria-hidden="true" />,
+      onSelect: logout,
+      destructive: true,
+    },
+  ];
+
   const formattedDate = new Intl.DateTimeFormat("es-CO", {
     day: "numeric",
     month: "long",
@@ -501,37 +523,12 @@ export function Sidebar() {
                 </span>
               </div>
 
-              <button
-                type="button"
-                onClick={toggleTheme}
-                aria-label={
-                  theme === "dark"
-                    ? "Cambiar a modo claro"
-                    : "Cambiar a modo oscuro"
-                }
-                title={
-                  theme === "dark"
-                    ? "Cambiar a modo claro"
-                    : "Cambiar a modo oscuro"
-                }
-                className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8"
-              >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Moon className="h-4 w-4" />
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={logout}
-                className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 lg:h-8 lg:w-8"
-                aria-label="Cerrar sesión"
-                title="Cerrar sesión"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
+              <RowActions
+                label="Opciones de cuenta"
+                triggerClassName="h-11 w-11 lg:h-8 lg:w-8"
+                menuOffset={24}
+                items={accountItems}
+              />
 
               <div className="w-full border-t border-border/60 pt-1.5 flex justify-center">
                 <button
@@ -582,37 +579,13 @@ export function Sidebar() {
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={toggleTheme}
-                  aria-label={
-                    theme === "dark"
-                      ? "Cambiar a modo claro"
-                      : "Cambiar a modo oscuro"
-                  }
-                  title={
-                    theme === "dark"
-                      ? "Cambiar a modo claro"
-                      : "Cambiar a modo oscuro"
-                  }
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                >
-                  {theme === "dark" ? (
-                    <Sun className="h-3.5 w-3.5" />
-                  ) : (
-                    <Moon className="h-3.5 w-3.5" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"
-                  aria-label="Cerrar sesión"
-                  title="Cerrar sesión"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                </button>
+                <RowActions
+                  label="Opciones de cuenta"
+                  className="shrink-0"
+                  triggerClassName="h-7 w-7"
+                  menuOffset={24}
+                  items={accountItems}
+                />
               </div>
 
               {user.isSuperAdmin ? (
