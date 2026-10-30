@@ -14,9 +14,28 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
+import { writePayrollCompletionExpense } from './payroll-completed-expense-writer';
+import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.service';
+import type { PayrollObligationCompletionFacts } from './payroll-obligation-completion';
+import { planPayrollObligationCompletion } from './payroll-obligation-completion';
 import { CorrectPayrollPeriodInstallmentDto } from './dto/correct-payroll-period-installment.dto';
 
-// Unwired: completion/expense policy and real database verification are pending.
+/**
+ * Corrects the cash amount of a still-pending fixed-period installment in place
+ * (S6), preserving append-only revision evidence and the original cash identity.
+ *
+ * A correction that reaches the exact outstanding total completes the payment and
+ * applies the obligation's stored expense choice (S4, S5); a correction above it
+ * is rejected. The completion seam is the same one the wired period-installments
+ * path uses: the planner classifies completion and expense choice from the facts
+ * of the corrected outflow set, the category is resolved in this transaction only
+ * when an expense will be written, the writer runs before the obligation status
+ * update, and an expense above Decimal(12,2) fails the whole completion with the
+ * approved limit error.
+ *
+ * Real PostgreSQL locking, rollback and concurrency stay unverified: the mocked
+ * tests here prove requested effects and ordering only.
+ */
 @Injectable()
 export class PayrollPeriodInstallmentCorrectionService {
   constructor(private readonly prisma: PrismaService) {}
@@ -179,20 +198,57 @@ export class PayrollPeriodInstallmentCorrectionService {
       const nextPaid = paid
         .minus(current.outflow.amount.toFixed(2))
         .plus(dto.amount);
-      if (paid.gte(total) || nextPaid.gte(total))
-        throw new ConflictException('Corrección alcanza o excede el saldo');
+      // Stored history must be a consistent partial payment: it is locked as
+      // PENDING, so a paid amount already at the total is a corrupt history.
+      if (paid.gte(total))
+        throw new ConflictException('Saldo de pago inconsistente');
+      // Only an amount that would EXCEED the total is rejected; reaching it
+      // exactly is an approved completion (S4).
+      if (nextPaid.gt(total))
+        throw new ConflictException('Corrección excede el saldo disponible');
       if (current.outflow.amount.eq(amount))
         throw new ConflictException('El importe no cambió');
-      const updated = await tx.payrollObligation.updateMany({
-        where: {
-          ...where,
-          kind: PayrollObligationKind.FIXED_PERIOD,
-          status: PayrollObligationStatus.PENDING,
-          version: period.version,
-        },
-        data: { version: { increment: 1 } },
-      });
-      if (updated.count !== 1) throw new ConflictException('Pago modificado');
+      const completes = nextPaid.eq(total);
+      // S4/S5: when the corrected amount completes the payment, the stored expense
+      // choice is applied inside this transaction, before this transaction writes
+      // the obligation status. The planner owns completion, choice and the approved
+      // over-limit rule, so an over-limit completion fails here with no cash,
+      // revision, status or expense write requested at all.
+      if (completes)
+        await this.writeCompletionExpense(
+          tx,
+          {
+            organizationId,
+            actor,
+            employeeId: dto.employeeId,
+            obligationId: dto.obligationId,
+          },
+          {
+            total,
+            // Facts describe the post-correction state: the corrected outflow is
+            // reported with its new amount and keeps its own date and method.
+            outflows: period.installments.map((item) => ({
+              id: item.outflowId,
+              amount:
+                item.id === current.id
+                  ? amount.toFixed(2)
+                  : item.outflow.amount.toFixed(2),
+              date: item.outflow.date.toISOString().slice(0, 10),
+              method: item.outflow.method,
+            })),
+            // A null choice is unspecified, never "no expense".
+            expenseChoice: period.expenseEnabled ?? null,
+            // A correction introduces no new cash date: the corrected outflow is
+            // updated in place and keeps its date (S3/S6), so that stored date is
+            // also the default expense date. An explicit stored selection wins.
+            completionDate: current.outflow.date.toISOString().slice(0, 10),
+            selectedExpenseDate: period.selectedExpenseDate
+              ? period.selectedExpenseDate.toISOString().slice(0, 10)
+              : null,
+            // No separate correction facts are needed: the outflow amount is
+            // revised in place, so the amounts above are the effective cash.
+          },
+        );
       const cash = await tx.payrollCashOutflow.updateMany({
         where: {
           id: current.outflowId,
@@ -221,12 +277,72 @@ export class PayrollPeriodInstallmentCorrectionService {
           originalMethod: current.outflow.method,
         },
       });
+      const status = completes
+        ? PayrollObligationStatus.COMPLETED
+        : period.status;
+      // The status transition is the last effect, so the expense it belongs to is
+      // already written when it happens.
+      const updated = await tx.payrollObligation.updateMany({
+        where: {
+          ...where,
+          kind: PayrollObligationKind.FIXED_PERIOD,
+          status: PayrollObligationStatus.PENDING,
+          version: period.version,
+        },
+        data: { status, version: { increment: 1 } },
+      });
+      if (updated.count !== 1) throw new ConflictException('Pago modificado');
       return {
         revision,
         paid: nextPaid.toFixed(2),
         balance: new Decimal(total).minus(nextPaid).toFixed(2),
-        status: period.status,
+        status,
       };
     });
+  }
+
+  /**
+   * Writes the optional completion expense of a payment this correction completes.
+   *
+   * This mirrors the wired `PayrollPeriodInstallmentsService` seam: the same
+   * transaction client is reused, the planner decides first, the category is
+   * resolved in this transaction only when an expense will be written, and the
+   * writer writes the expense, its payment mirrors, its audit row and the
+   * obligation/expense link. A disabled or unspecified choice neither resolves nor
+   * creates a category, and an over-limit completion fails with the approved limit
+   * error before any category or expense work.
+   *
+   * The category resolution locks `Organization` after the payroll locks, so the
+   * lock order stays employee → obligation → cash → organization → taxonomy/expense.
+   * Mocks prove this ordering only; real PostgreSQL locking and rollback stay
+   * unverified.
+   */
+  private async writeCompletionExpense(
+    tx: Prisma.TransactionClient,
+    scope: {
+      organizationId: string;
+      actor: RequestUser;
+      employeeId: string;
+      obligationId: string;
+    },
+    facts: PayrollObligationCompletionFacts,
+  ): Promise<void> {
+    let writesExpense: boolean;
+    try {
+      writesExpense =
+        planPayrollObligationCompletion(facts).expense.kind === 'create';
+    } catch {
+      // Facts come from locked database rows, so this only happens when the
+      // stored history is inconsistent; fail closed instead of writing money.
+      throw new ConflictException('Saldo de pago inconsistente');
+    }
+    const category = writesExpense
+      ? await resolvePayrollExpenseCategoryWithin(
+          tx,
+          scope.organizationId,
+          scope.actor,
+        )
+      : undefined;
+    await writePayrollCompletionExpense(tx, { ...scope, category, facts });
   }
 }
