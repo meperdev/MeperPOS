@@ -50,7 +50,10 @@ function getErrorStatus(error: unknown) {
   return (error as { response?: { status?: number } }).response?.status;
 }
 
-export function useTasks(params?: QueryTasksParams) {
+export function useTasks(
+  params?: QueryTasksParams,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ["tasks", params],
     queryFn: async (): Promise<TaskListResult> => {
@@ -61,6 +64,7 @@ export function useTasks(params?: QueryTasksParams) {
       });
       return { tasks: response.data, source: "remote" };
     },
+    enabled: options?.enabled ?? true,
   });
 }
 
