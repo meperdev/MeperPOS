@@ -16,6 +16,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useEmployeeShifts } from "@/hooks/useEmployeeShifts";
 import { useEmployees, type Employee } from "@/hooks/useEmployees";
 import {
+  useCorrectPayrollPeriodInstallment,
   useCreatePayrollGroup,
   useCreatePayrollGroupInstallment,
   useCreatePayrollPeriod,
@@ -46,6 +47,15 @@ const METHOD_OPTIONS = (["CASH", "CARD", "TRANSFER"] as const).map((value) => ({
 const SHIFT_KIND_LABELS = { FULL_DAY: "Día completo", PARTIAL_DAY: "Día parcial" } as const;
 
 const EXPENSE_TOGGLE_LABEL = "Generar gasto al completar el pago";
+
+// S6: a correction is not an edit of the payment. It fixes an amount that was
+// recorded wrongly, so the cash row keeps the date and method it already had and
+// the server — not this form — decides the expense date. Reaching the exact
+// outstanding total is a completion, not a pending payment, so the dialog says so.
+const CORRECTION_INTRO =
+  "Corrige un abono registrado con un importe equivocado. El movimiento de caja conserva su fecha y su método de pago; la fecha del gasto la decide el servidor.";
+const CORRECTION_COMPLETION_NOTICE =
+  "Si el importe corregido iguala el saldo pendiente, el pago se completa y se aplica la opción de gasto elegida.";
 
 // The server owns every amount and sends it as a decimal string. The client only
 // formats it for display; it never adds, splits or re-derives a money value.
@@ -369,16 +379,110 @@ function InstallmentDialog({ obligation, onClose }: { obligation: PayrollObligat
   );
 }
 
+function CorrectionDialog({ obligation, onClose }: { obligation: PayrollObligation; onClose: () => void }) {
+  const correction = useCorrectPayrollPeriodInstallment();
+  const toast = useToast();
+  const [installmentId, setInstallmentId] = useState(obligation.installments[0]?.id ?? "");
+  const [amount, setAmount] = useState("");
+  const [saving, setSaving] = useState(false);
+  // The route refuses an over-total correction, an unchanged amount, a frozen or
+  // modified payment and an over-limit completion expense; show it verbatim.
+  const [error, setError] = useState<string | null>(null);
+
+  const selected = obligation.installments.find((item) => item.id === installmentId);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (saving || !selected) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await correction.mutateAsync({
+        employeeId: obligation.employeeId,
+        obligationId: obligation.id,
+        installmentId: selected.id,
+        amount,
+      });
+      toast.success("Abono corregido");
+      onClose();
+    } catch (submitError) {
+      setError(getApiErrorMessage(submitError, "No se pudo corregir el abono"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <PayrollDialog title="Corregir abono" onClose={() => { if (!saving) onClose(); }}>
+      <form onSubmit={submit}>
+        <fieldset disabled={saving} className="grid gap-3">
+          <Select
+            label="Abono a corregir"
+            required
+            value={installmentId}
+            onChange={(event) => {
+              setInstallmentId(event.target.value);
+              setError(null);
+            }}
+            options={obligation.installments.map((item) => ({
+              value: item.id,
+              label: `${day(item.outflow.date)} · ${money(item.outflow.amount)}`,
+            }))}
+          />
+          {selected && (
+            <dl className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Importe registrado</dt>
+                <dd data-testid="correction-current-amount" className="font-mono tabular-nums">
+                  {money(selected.outflow.amount)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Fecha del movimiento</dt>
+                <dd data-testid="correction-current-date" className="font-mono tabular-nums">
+                  {day(selected.outflow.date)}
+                </dd>
+              </div>
+            </dl>
+          )}
+          <Input
+            label="Importe corregido"
+            type="number"
+            required
+            min="0.01"
+            max="9999999999.99"
+            step="0.01"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">{CORRECTION_INTRO}</p>
+          <p className="text-xs text-muted-foreground">{CORRECTION_COMPLETION_NOTICE}</p>
+          <FormError message={error} />
+          <div>
+            <Button type="submit" disabled={saving}>Guardar corrección</Button>
+          </div>
+        </fieldset>
+      </form>
+    </PayrollDialog>
+  );
+}
+
 function ObligationCard({
   obligation,
   employeeName,
   onRegisterInstallment,
+  onCorrectInstallment,
 }: {
   obligation: PayrollObligation;
   employeeName: string;
   onRegisterInstallment: (obligation: PayrollObligation) => void;
+  onCorrectInstallment: (obligation: PayrollObligation) => void;
 }) {
   const completed = obligation.summary.status === "completed";
+  // S6: only a wrongly recorded fixed-period installment can be corrected, and
+  // only while the payment is pending; a completed payment and its expense are
+  // frozen. The correction route has no shift-group equivalent.
+  const canCorrect = obligation.kind === "FIXED_PERIOD" && obligation.installments.length > 0;
   return (
     <article className="rounded-xl border border-border bg-card p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -423,9 +527,16 @@ function ObligationCard({
         )}
       </div>
       {!completed && (
-        <Button variant="outline" onClick={() => onRegisterInstallment(obligation)} aria-label={`Registrar abono ${employeeName}`}>
-          Registrar abono
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => onRegisterInstallment(obligation)} aria-label={`Registrar abono ${employeeName}`}>
+            Registrar abono
+          </Button>
+          {canCorrect && (
+            <Button variant="outline" onClick={() => onCorrectInstallment(obligation)} aria-label={`Corregir abono ${employeeName}`}>
+              Corregir abono
+            </Button>
+          )}
+        </div>
       )}
     </article>
   );
@@ -441,6 +552,7 @@ export default function PayrollPage() {
   const [periodOpen, setPeriodOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [installmentFor, setInstallmentFor] = useState<PayrollObligation | null>(null);
+  const [correctionFor, setCorrectionFor] = useState<PayrollObligation | null>(null);
 
   const activeEmployees = (employees.data ?? []).filter((employee) => employee.active);
   const employeeName = (employeeId: string) =>
@@ -478,6 +590,7 @@ export default function PayrollPage() {
                   obligation={obligation}
                   employeeName={employeeName(obligation.employeeId)}
                   onRegisterInstallment={setInstallmentFor}
+                  onCorrectInstallment={setCorrectionFor}
                 />
               ))}
             </div>
@@ -488,6 +601,7 @@ export default function PayrollPage() {
             <GroupDialog employees={activeEmployees} usedShiftIds={usedShiftIds} onClose={() => setGroupOpen(false)} />
           )}
           {installmentFor && <InstallmentDialog obligation={installmentFor} onClose={() => setInstallmentFor(null)} />}
+          {correctionFor && <CorrectionDialog obligation={correctionFor} onClose={() => setCorrectionFor(null)} />}
         </div>
       )}
     </DashboardLayout>

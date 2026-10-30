@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   createGroup: (() => undefined) as unknown,
   createPeriodInstallment: (() => undefined) as unknown,
   createGroupInstallment: (() => undefined) as unknown,
+  correctPeriodInstallment: (() => undefined) as unknown,
 }));
 
 vi.mock("@/components/layout/DashboardLayout", () => ({
@@ -41,6 +42,7 @@ vi.mock("@/hooks/usePayroll", () => ({
   useCreatePayrollGroup: () => ({ mutateAsync: state.createGroup }),
   useCreatePayrollPeriodInstallment: () => ({ mutateAsync: state.createPeriodInstallment }),
   useCreatePayrollGroupInstallment: () => ({ mutateAsync: state.createGroupInstallment }),
+  useCorrectPayrollPeriodInstallment: () => ({ mutateAsync: state.correctPeriodInstallment }),
 }));
 
 const employees = [
@@ -120,6 +122,7 @@ beforeEach(() => {
   state.createGroup = vi.fn().mockResolvedValue({});
   state.createPeriodInstallment = vi.fn().mockResolvedValue({});
   state.createGroupInstallment = vi.fn().mockResolvedValue({});
+  state.correctPeriodInstallment = vi.fn().mockResolvedValue({});
 });
 
 afterEach(cleanup);
@@ -346,6 +349,170 @@ it("requires at least one shift before creating a group payment", async () => {
 
   expect(within(dialog).getByRole("alert")).toHaveTextContent("Selecciona al menos una jornada");
   expect(state.createGroup).not.toHaveBeenCalled();
+});
+
+it("corrects a wrongly recorded installment without resending its date, method or expense choice", async () => {
+  const user = userEvent.setup();
+  const secondInstallment = {
+    id: "inst-2",
+    outflowId: "out-2",
+    createdAt: "2025-01-25T12:00:00.000Z",
+    outflow: {
+      id: "out-2",
+      amount: "30000.00",
+      date: "2025-01-25T00:00:00.000Z",
+      method: "TRANSFER",
+      createdAt: "2025-01-25T12:00:00.000Z",
+    },
+  };
+  state.obligations.data = [
+    { ...periodObligation, installments: [installment, secondInstallment] },
+  ];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Corregir abono Ana Gómez" }));
+  const dialog = screen.getByRole("dialog", { name: "Corregir abono" });
+
+  // The wrongly recorded cash row is shown read-only: the correction never picks
+  // a new date or method, and the server decides the expense date.
+  expect(within(dialog).getByTestId("correction-current-amount")).toHaveTextContent("$ 111.111,00");
+  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("2025-01-15");
+  expect(within(dialog).queryByLabelText(/Fecha/)).not.toBeInTheDocument();
+  expect(within(dialog).queryByLabelText(/Método/)).not.toBeInTheDocument();
+
+  await user.selectOptions(within(dialog).getByLabelText("Abono a corregir"), "inst-2");
+  expect(within(dialog).getByTestId("correction-current-amount")).toHaveTextContent("$ 30.000,00");
+  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("2025-01-25");
+
+  // The number input normalizes the typed decimal, so the route receives the
+  // exact value the browser holds; the backend accepts 1-2 decimal places.
+  await user.type(within(dialog).getByLabelText(/Importe corregido/), "180000.5");
+  await user.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
+
+  await waitFor(() =>
+    expect(state.correctPeriodInstallment).toHaveBeenCalledWith({
+      employeeId: "emp-1",
+      obligationId: "ob-period",
+      installmentId: "inst-2",
+      amount: "180000.5",
+    }),
+  );
+  // The corrected row keeps its stored date and method and gains no expense date.
+  expect(state.correctPeriodInstallment).toHaveBeenCalledWith(
+    expect.not.objectContaining({ date: expect.anything() }),
+  );
+  expect(state.correctPeriodInstallment).toHaveBeenCalledWith(
+    expect.not.objectContaining({ method: expect.anything() }),
+  );
+  expect(state.correctPeriodInstallment).toHaveBeenCalledWith(
+    expect.not.objectContaining({ selectedExpenseDate: expect.anything() }),
+  );
+  // A correction is its own route: it must not look like a new abono.
+  expect(state.createPeriodInstallment).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+});
+
+it("corrects the installment of the payment whose dialog was opened", async () => {
+  const user = userEvent.setup();
+  state.obligations.data = [
+    periodObligation,
+    {
+      ...periodObligation,
+      id: "ob-other",
+      employeeId: "emp-2",
+      installments: [
+        {
+          ...installment,
+          id: "inst-other",
+          outflowId: "out-other",
+          outflow: { ...installment.outflow, id: "out-other", amount: "70000.00", date: "2025-01-09T00:00:00.000Z" },
+        },
+      ],
+    },
+  ];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Corregir abono Luis Prado" }));
+  const dialog = screen.getByRole("dialog", { name: "Corregir abono" });
+  expect(within(dialog).getByTestId("correction-current-amount")).toHaveTextContent("$ 70.000,00");
+  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("2025-01-09");
+
+  await user.type(within(dialog).getByLabelText(/Importe corregido/), "90000");
+  await user.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
+
+  await waitFor(() =>
+    expect(state.correctPeriodInstallment).toHaveBeenCalledWith({
+      employeeId: "emp-2",
+      obligationId: "ob-other",
+      installmentId: "inst-other",
+      amount: "90000",
+    }),
+  );
+});
+
+it("describes the correction as an amount fix that may still complete the payment", async () => {
+  const user = userEvent.setup();
+  state.obligations.data = [periodObligation];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Corregir abono Ana Gómez" }));
+  const dialog = screen.getByRole("dialog", { name: "Corregir abono" });
+
+  expect(dialog).toHaveTextContent(
+    "El movimiento de caja conserva su fecha y su método de pago; la fecha del gasto la decide el servidor.",
+  );
+  // A correction that reaches the exact outstanding total completes the payment,
+  // so the dialog must not promise the payment stays pending.
+  expect(dialog).toHaveTextContent(
+    "Si el importe corregido iguala el saldo pendiente, el pago se completa y se aplica la opción de gasto elegida.",
+  );
+});
+
+it("surfaces the correction error verbatim and keeps the dialog open", async () => {
+  const user = userEvent.setup();
+  state.correctPeriodInstallment = vi.fn().mockRejectedValue(
+    Object.assign(new Error("Request failed"), {
+      isAxiosError: true,
+      response: { data: { message: "Corrección excede el saldo disponible" } },
+    }),
+  );
+  state.obligations.data = [periodObligation];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Corregir abono Ana Gómez" }));
+  const dialog = screen.getByRole("dialog", { name: "Corregir abono" });
+  await user.type(within(dialog).getByLabelText(/Importe corregido/), "9999999");
+  await user.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
+
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+    "Corrección excede el saldo disponible",
+  );
+  expect(screen.getByRole("dialog", { name: "Corregir abono" })).toBeInTheDocument();
+});
+
+it("offers no correction on a completed payment or on a shift-group payment", () => {
+  state.obligations.data = [
+    {
+      ...periodObligation,
+      status: "COMPLETED",
+      summary: { total: "2000000.00", paid: "2000000.00", balance: "0.00", status: "completed" },
+    },
+    groupObligation,
+  ];
+  render(<PayrollPage />);
+
+  expect(screen.queryByRole("button", { name: "Corregir abono Ana Gómez" })).not.toBeInTheDocument();
+  // The correction route only exists for fixed-period installments.
+  expect(screen.queryByRole("button", { name: "Corregir abono Luis Prado" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Registrar abono Luis Prado" })).toBeInTheDocument();
+});
+
+it("offers no correction while the payment has no installment to fix", () => {
+  state.obligations.data = [{ ...periodObligation, installments: [] }];
+  render(<PayrollPage />);
+
+  expect(screen.queryByRole("button", { name: "Corregir abono Ana Gómez" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Registrar abono Ana Gómez" })).toBeInTheDocument();
 });
 
 it("does not expose payroll to roles other than OWNER and ADMIN", () => {

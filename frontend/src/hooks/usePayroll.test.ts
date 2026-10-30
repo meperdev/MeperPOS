@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AxiosHeaders, type AxiosResponse } from "axios";
 import {
+  useCorrectPayrollPeriodInstallment,
   useCreatePayrollGroup,
   useCreatePayrollGroupInstallment,
   useCreatePayrollPeriod,
@@ -111,6 +112,46 @@ it("routes each installment to the endpoint that matches its obligation kind", a
   expect(api.post).toHaveBeenCalledWith("/payroll/period-installments", periodData);
   expect(api.post).toHaveBeenCalledWith("/payroll/group-installments", groupData);
   expect(client.getQueryState(OBLIGATIONS_KEY)?.isInvalidated).toBe(true);
+});
+
+it("posts the corrected amount of one installment and refreshes the obligation list", async () => {
+  client.setQueryData(OBLIGATIONS_KEY, []);
+  const { result } = renderHook(() => useCorrectPayrollPeriodInstallment(), { wrapper });
+  // A correction only revises the wrongly recorded amount: the stored cash date
+  // and method stay untouched and the expense date is decided by the server, so
+  // none of them may travel in this payload.
+  const data = {
+    employeeId: "emp-1",
+    obligationId: "period-1",
+    installmentId: "installment-1",
+    amount: "30000.00",
+  };
+
+  await act(async () => {
+    await result.current.mutateAsync(data);
+  });
+
+  expect(api.post).toHaveBeenCalledWith("/payroll/period-installments/correct", data);
+  expect(client.getQueryState(OBLIGATIONS_KEY)?.isInvalidated).toBe(true);
+});
+
+it("does not refresh the obligation list when a correction fails", async () => {
+  client.setQueryData(OBLIGATIONS_KEY, []);
+  vi.mocked(api.post).mockRejectedValue(new Error("conflict"));
+  const { result } = renderHook(() => useCorrectPayrollPeriodInstallment(), { wrapper });
+
+  await act(async () => {
+    await expect(
+      result.current.mutateAsync({
+        employeeId: "emp-1",
+        obligationId: "period-1",
+        installmentId: "installment-1",
+        amount: "30000.00",
+      }),
+    ).rejects.toThrow("conflict");
+  });
+
+  expect(client.getQueryState(OBLIGATIONS_KEY)?.isInvalidated).toBe(false);
 });
 
 it("does not refresh the obligation list when a payment fails", async () => {

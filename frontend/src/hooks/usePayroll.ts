@@ -83,6 +83,17 @@ export interface CreatePayrollInstallmentInput {
   method: PayrollPaymentMethod;
 }
 
+// S6: a correction fixes an amount that was recorded wrongly. It carries no new
+// cash date or method — the outflow keeps its own — and no expense date, because
+// the server decides that date (a stored selection wins, otherwise the correction
+// day). An amount that reaches the exact outstanding total completes the payment.
+export interface CorrectPayrollInstallmentInput {
+  employeeId: string;
+  obligationId: string;
+  installmentId: string;
+  amount: string;
+}
+
 const OBLIGATIONS_KEY = ["payroll-obligations"];
 
 export function usePayrollObligations(enabled: boolean) {
@@ -120,4 +131,8 @@ export function useCreatePayrollPeriodInstallment() {
 
 export function useCreatePayrollGroupInstallment() {
   return usePayrollMutation<CreatePayrollInstallmentInput>("/payroll/group-installments");
+}
+
+export function useCorrectPayrollPeriodInstallment() {
+  return usePayrollMutation<CorrectPayrollInstallmentInput>("/payroll/period-installments/correct");
 }
