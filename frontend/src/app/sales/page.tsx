@@ -1,40 +1,40 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSales } from "@/hooks/useSales";
 import { printReceipt } from "@/hooks/useReceipt";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { FilterBar } from "@/components/ui/FilterBar";
+import {
+  FilterBar,
+  FilterClearButton,
+  FilterGroup,
+  FilterOptionButton,
+} from "@/components/ui/FilterBar";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
+import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
+import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { Download, Eye, Receipt } from "lucide-react";
 import {
-  Eye,
-  FileText,
-  DollarSign,
-  X,
-  Download,
-  CreditCard,
-  Smartphone,
-  Receipt,
-} from "lucide-react";
-import {
+  cn,
   formatCurrency,
   formatDateTime,
   getBogotaDateInputValue,
   shiftDateInputValue,
 } from "@/lib/utils";
-import { chipStyles } from "@/lib/chipStyles";
 import type { Sale } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
+import { PaymentStateBadge, getPaymentState } from "@/components/sales/PaymentState";
 
 function SalesPageContent() {
   const { user: currentUser } = useAuth();
@@ -43,14 +43,35 @@ function SalesPageContent() {
   const toast = useToast();
   const isAdmin = hasAnyRole(currentUser?.role, ["ADMIN"]);
   const [search, setSearch] = useState("");
-  const [status] = useState("");
+  const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = usePersistedViewMode("sales");
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const customerId = searchParams.get("customerId") ?? "";
   const customerLabel = searchParams.get("customerName") ?? "";
+
+  // Table view sizes itself to the box it actually gets, so the last row never
+  // hides behind the paginator and no row is clipped.
+  const listRef = useRef<HTMLDivElement>(null);
+  const [tableRows, setTableRows] = useState(10);
+  const pageSize = viewMode === "grid" ? 9 : tableRows;
+
+  const todayValue = getBogotaDateInputValue();
+  const weekStartValue = shiftDateInputValue(todayValue, -6);
+  const monthStartValue = shiftDateInputValue(todayValue, -29);
+  const isAllDatesActive = !startDate && !endDate;
+  const isTodayActive = startDate === todayValue && endDate === todayValue;
+  const isWeekActive = startDate === weekStartValue && endDate === todayValue;
+  const isMonthActive = startDate === monthStartValue && endDate === todayValue;
+
+  const setAllDates = () => {
+    setPage(1);
+    setStartDate("");
+    setEndDate("");
+  };
 
   const setToday = () => {
     const today = getBogotaDateInputValue();
@@ -66,9 +87,16 @@ function SalesPageContent() {
     setEndDate(today);
   };
 
+  const setLast30Days = () => {
+    const today = getBogotaDateInputValue();
+    setPage(1);
+    setStartDate(shiftDateInputValue(today, -29));
+    setEndDate(today);
+  };
+
   const { data, isLoading } = useSales({
     page,
-    limit: 10,
+    limit: pageSize,
     status: status || undefined,
     startDate: startDate || undefined,
     endDate: endDate || undefined,
@@ -77,6 +105,23 @@ function SalesPageContent() {
   });
   const sales = data?.data ?? [];
   const meta = data?.meta;
+
+  // Table view sizes itself to the box it actually gets, so the last row never
+  // hides behind the paginator and no row is clipped.
+  useEffect(() => {
+    const element = listRef.current;
+    if (!element || viewMode !== "table") return;
+    const observer = new ResizeObserver(() => {
+      const rowHeight =
+        element.querySelector("tbody tr")?.getBoundingClientRect().height || 53;
+      const rows = Math.floor((element.clientHeight - 40) / rowHeight);
+      setTableRows((current) =>
+        current === rows ? current : Math.max(8, Math.min(30, rows)),
+      );
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [viewMode, isLoading]);
 
   useEffect(() => {
     if (meta && meta.totalPages > 0 && page > meta.totalPages) {
@@ -111,61 +156,28 @@ function SalesPageContent() {
     }
   };
 
-  const getPaymentBadge = (
-    payments?: Array<{ method: string; amount: number }>,
-  ) => {
-    if (!payments || payments.length === 0)
-      return <Badge variant="secondary">Sin pago</Badge>;
-    if (payments.length > 1)
-      return (
-        <Badge variant="default">
-          <FileText className="w-3 h-3 mr-1" />
-          Mixto
-        </Badge>
-      );
-    const m = payments[0].method;
-    const icon =
-      {
-        CASH: <DollarSign className="w-3 h-3 mr-1" />,
-        CARD: <CreditCard className="w-3 h-3 mr-1" />,
-        TRANSFER: <Smartphone className="w-3 h-3 mr-1" />,
-      }[m] || null;
-    const label =
-      { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER: "Transferencia" }[m] || m;
-    return (
-      <Badge variant="default">
-        {icon}
-        <span className="hidden sm:inline">{label}</span>
-        <span className="sm:hidden">
-          {m === "CASH" ? "Efec" : m === "CARD" ? "Tarj" : "Trans"}
-        </span>
-      </Badge>
-    );
-  };
+
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 lg:space-y-7">
+      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
         {/* Page Header */}
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-1 h-7 rounded-full bg-primary shrink-0" />
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
-              Ventas
-            </h1>
-            {meta && (
-              <span
-                className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${chipStyles.primary}`}
-              >
-                {meta.total} registros
-              </span>
-            )}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                Ventas
+              </h1>
+              {meta && (
+                <span className="hidden sm:inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
+                  {meta.total} registros
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {isAdmin ? "Historial de transacciones" : "Mis transacciones"}
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground ml-4">
-            {isAdmin
-              ? "Historial de transacciones"
-              : "Mis transacciones"}
-          </p>
         </div>
 
         {/* Filter Bar */}
@@ -178,52 +190,68 @@ function SalesPageContent() {
           searchPlaceholder="Buscar por N° o cliente..."
           preContent={
             customerId ? (
-              <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/40 px-3 py-2">
-                <Badge variant="secondary" className="max-w-full truncate text-xs">
+              <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/35 px-3 py-1.5">
+                <Badge variant="secondary" className="max-w-full truncate">
                   Historial de cliente {customerLabel ? `: ${customerLabel}` : "filtrado"}
                 </Badge>
-                <button
-                  type="button"
+                <FilterClearButton
+                  label="Quitar filtro"
                   onClick={() => {
                     setPage(1);
                     router.replace("/sales");
                   }}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground transition hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" /> Quitar filtro
-                </button>
+                />
               </div>
             ) : undefined
           }
           filterControls={
             <>
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mr-0.5">
-                Período
-              </span>
-              <button
-                onClick={setToday}
-                className="h-7 px-3 rounded-lg text-xs font-semibold bg-muted/40 border border-border/60 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all"
-              >
-                Hoy
-              </button>
-              <button
-                onClick={setThisWeek}
-                className="h-7 px-3 rounded-lg text-xs font-semibold bg-muted/40 border border-border/60 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all whitespace-nowrap"
-              >
-                Esta semana
-              </button>
-              {(startDate || endDate) && (
-                <button
+              <BentoSelect
+                value={status}
+                onChange={(val) => {
+                  setPage(1);
+                  setStatus(val);
+                }}
+                placeholder="Todos los estados"
+                className="w-full sm:w-44 shrink-0"
+                options={[
+                  { value: "", label: "Todos los estados" },
+                  { value: "COMPLETED", label: "Completada" },
+                  { value: "RETURNED_PARTIAL", label: "Parcial" },
+                  { value: "CANCELLED", label: "Cancelada" },
+                ]}
+              />
+              <FilterGroup label="Período">
+                <FilterOptionButton active={isAllDatesActive} onClick={setAllDates}>
+                  Todas
+                </FilterOptionButton>
+                <FilterOptionButton active={isTodayActive} onClick={setToday}>
+                  Hoy
+                </FilterOptionButton>
+                <FilterOptionButton active={isWeekActive} onClick={setThisWeek}>
+                  7D
+                </FilterOptionButton>
+                <FilterOptionButton active={isMonthActive} onClick={setLast30Days}>
+                  30D
+                </FilterOptionButton>
+              </FilterGroup>
+              {(startDate || endDate || status) && (
+                <FilterClearButton
                   onClick={() => {
                     setPage(1);
                     setStartDate("");
                     setEndDate("");
+                    setStatus("");
                   }}
-                  className="ml-auto flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 border border-border/60 transition-colors"
-                >
-                  <X className="w-3 h-3" /> Limpiar
-                </button>
+                />
               )}
+              <ViewModeToggle
+                value={viewMode}
+                onChange={(mode) => {
+                  setPage(1);
+                  setViewMode(mode);
+                }}
+              />
             </>
           }
         />
@@ -233,8 +261,15 @@ function SalesPageContent() {
           <LoadingState icon={<Receipt className="w-4 h-4 text-primary/50" />} message="Cargando ventas..." />
         ) : (
           <>
-            {/* Mobile Cards View */}
-            <div className="md:hidden space-y-3">
+            {/* Cards View */}
+            <div
+              className={cn(
+                "flex-1",
+                viewMode === "grid"
+                  ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 stagger-children content-start"
+                  : "md:hidden space-y-2.5",
+              )}
+            >
               {sales.length === 0 ? (
                 <EmptyState
                   icon={<Receipt className="w-6 h-6 text-muted-foreground/30" />}
@@ -244,25 +279,26 @@ function SalesPageContent() {
                 sales.map((sale) => (
                   <div
                     key={sale.id}
-                    className="rounded-2xl border border-accent/30 bg-card p-4 shadow-xs space-y-3"
+                    onClick={() => handleViewDetails(sale)}
+                    className="cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3 transition-colors hover:border-border"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-sm font-bold text-primary">
+                      <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
                         #{sale.saleNumber}
                       </span>
                       {getStatusBadge(sale.status)}
                     </div>
 
-                    <div className="space-y-1 text-xs">
+                    <div className="space-y-1.5 text-xs">
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>Cliente</span>
-                        <span className="font-semibold text-foreground truncate max-w-[180px]">
+                        <span className="font-medium text-foreground truncate max-w-[180px]">
                           {sale.customer?.name || "General"}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-muted-foreground">
-                        <span>Fecha</span>
-                        <span className="font-mono">{formatDateTime(sale.createdAt)}</span>
+                      <div className="flex justify-between items-start gap-2 text-muted-foreground">
+                        <span className="shrink-0">Fecha</span>
+                        <span className="font-mono text-right leading-tight text-[11px]">{formatDateTime(sale.createdAt)}</span>
                       </div>
                       {isAdmin && sale.user?.name && (
                         <div className="flex justify-between items-center text-muted-foreground">
@@ -270,33 +306,35 @@ function SalesPageContent() {
                           <span className="text-foreground">{sale.user.name}</span>
                         </div>
                       )}
-                      <div className="flex justify-between items-center text-muted-foreground pt-1">
+                      <div className="flex justify-between items-center text-muted-foreground pt-0.5">
                         <span>Método de pago</span>
-                        <div>{getPaymentBadge(sale.payments)}</div>
+                        <div><PaymentStateBadge payments={sale.payments} financed={sale.financed} short /></div>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
                       <div>
-                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Total</p>
-                        <p className="stat-number text-base font-bold text-foreground">
+                        <p className="text-[11px] font-medium text-muted-foreground">Total</p>
+                        <p className="font-mono text-sm font-semibold text-foreground tabular-nums">
                           {formatCurrency(sale.total)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div
+                        className="flex items-center gap-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Button
                           size="sm"
                           variant="secondary"
                           onClick={() => handleViewDetails(sale)}
-                          className="h-8 px-2.5 text-xs"
                         >
-                          <Eye className="w-3.5 h-3.5 mr-1" /> Detalle
+                          <Eye className="w-3.5 h-3.5" /> Detalle
                         </Button>
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="secondary"
                           onClick={() => handlePrintReceipt(sale.id)}
-                          className="h-8 w-8 p-0"
+                          className="w-7 px-0"
                           title="Descargar comprobante"
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -309,35 +347,39 @@ function SalesPageContent() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden md:block rounded-3xl border border-accent/30 bg-accent/10 overflow-hidden">
+            {viewMode === "table" && (
+            <div
+              ref={listRef}
+              className="hidden md:block w-full flex-1 rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden animate-fade-in"
+            >
               <div className="overflow-x-auto">
-                <Table variant="accent" className="min-w-[680px]">
+                <Table variant="default" className="min-w-[680px]">
                   <TableHeader>
                     <TableRow>
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                         N° Venta
                       </TableCell>
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                         Fecha
                       </TableCell>
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                         Cliente
                       </TableCell>
                       {isAdmin && (
-                        <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                           Vendedor
                         </TableCell>
                       )}
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                         Método
                       </TableCell>
-                      <TableCell as="th" className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                         Estado
                       </TableCell>
-                      <TableCell as="th" className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <TableCell as="th" className="text-right text-xs font-medium text-muted-foreground">
                         Total
                       </TableCell>
-                      <TableCell as="th" className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <TableCell as="th" className="text-right text-xs font-medium text-muted-foreground">
                         Acciones
                       </TableCell>
                     </TableRow>
@@ -351,57 +393,65 @@ function SalesPageContent() {
                       </tr>
                     ) : (
                       sales.map((sale) => (
-                        <TableRow key={sale.id}>
+                        <TableRow
+                          key={sale.id}
+                          onClick={() => handleViewDetails(sale)}
+                          className="cursor-pointer"
+                        >
                           <TableCell>
-                            <span className="text-xs font-bold text-primary font-mono">
+                            <span className="text-xs font-semibold text-foreground font-mono tabular-nums">
                               #{sale.saleNumber}
                             </span>
                           </TableCell>
-                          <TableCell className="text-muted-foreground whitespace-nowrap font-mono">
+                          <TableCell className="text-muted-foreground whitespace-nowrap font-mono tabular-nums">
                             {formatDateTime(sale.createdAt)}
                           </TableCell>
-                          <TableCell className="max-w-[130px] truncate">
+                          <TableCell className="max-w-[140px] truncate">
                             {sale.customer?.name ? (
-                              <span className="text-xs font-bold text-foreground">
+                              <span className="text-xs font-medium text-foreground">
                                 {sale.customer.name}
                               </span>
                             ) : (
-                              <span className="text-xs text-muted-foreground font-medium">
+                              <span className="text-xs text-muted-foreground">
                                 General
                               </span>
                             )}
                           </TableCell>
                           {isAdmin && (
-                            <TableCell className="max-w-[120px] truncate">
+                            <TableCell className="max-w-[130px] truncate">
                               {sale.user?.name ? (
-                                <span className="text-xs font-medium text-foreground">
+                                <span className="text-xs text-muted-foreground">
                                   {sale.user.name}
                                 </span>
                               ) : (
-                                <span className="text-xs text-muted-foreground">
+                                <span className="text-xs text-muted-foreground/60">
                                   N/A
                                 </span>
                               )}
                             </TableCell>
                           )}
                           <TableCell>
-                            {getPaymentBadge(sale.payments)}
+                            <PaymentStateBadge payments={sale.payments} financed={sale.financed} short />
                           </TableCell>
                           <TableCell>
                             {getStatusBadge(sale.status)}
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className="stat-number text-sm font-bold text-foreground">
+                            <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
                               {formatCurrency(sale.total)}
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
+                            <div
+                              className="flex items-center justify-end gap-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleViewDetails(sale)}
-                                className="p-1.5 h-7 w-7"
+                                className="p-1.5 h-7 w-7 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                                title="Ver detalle"
                               >
                                 <Eye className="w-3.5 h-3.5" />
                               </Button>
@@ -409,7 +459,8 @@ function SalesPageContent() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handlePrintReceipt(sale.id)}
-                                className="p-1.5 h-7 w-7"
+                                className="p-1.5 h-7 w-7 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                                title="Descargar comprobante"
                               >
                                 <Download className="w-3.5 h-3.5" />
                               </Button>
@@ -422,13 +473,15 @@ function SalesPageContent() {
                 </Table>
               </div>
             </div>
+            )}
 
-            {meta && meta.totalPages > 1 && (
+            {meta && (
               <Pagination
                 currentPage={page}
                 totalPages={meta.totalPages}
                 onPageChange={setPage}
                 totalItems={meta.total}
+                pageSize={pageSize}
                 itemLabel="venta"
               />
             )}
@@ -444,8 +497,8 @@ function SalesPageContent() {
         size="lg"
       >
         {selectedSale && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {[
                 {
                   label: "Cliente",
@@ -458,69 +511,95 @@ function SalesPageContent() {
                 {
                   label: "Fecha",
                   value: formatDateTime(selectedSale.createdAt),
+                  mono: true,
                 },
                 {
                   label: "Estado",
                   value: getStatusBadge(selectedSale.status),
                   isNode: true,
                 },
-              ].map(({ label, value, isNode }) => (
+              ].map(({ label, value, isNode, mono }) => (
                 <div
                   key={label}
-                  className="p-3 rounded-2xl bg-accent/10 border border-accent/20"
+                  className="p-3 rounded-lg bg-muted/30 border border-border/60 min-w-0"
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">
                     {label}
                   </p>
                   {isNode ? (
                     value
                   ) : (
-                    <p className="text-sm font-semibold text-foreground">
+                    <p
+                      className={cn(
+                        "text-xs font-semibold text-foreground truncate",
+                        mono && "font-mono tabular-nums",
+                      )}
+                    >
                       {value as string}
                     </p>
                   )}
                 </div>
               ))}
-              <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                  Método de Pago
+              <div className="col-span-2 sm:col-span-4 p-3 rounded-lg bg-muted/30 border border-border/60">
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                  Método de pago
                 </p>
-                <div className="text-sm font-semibold text-foreground">
-                  {selectedSale.payments?.length
-                    ? selectedSale.payments.map((p, i) => (
-                        <div key={i} className="text-xs">
+                <div className="flex flex-wrap gap-2">
+                  {selectedSale.payments?.length ? (
+                    selectedSale.payments.map((p, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-card px-2.5 py-1 text-xs font-medium text-foreground"
+                      >
+                        <span className={getPaymentState([p]).className}>
                           {{
                             CASH: "Efectivo",
                             CARD: "Tarjeta",
                             TRANSFER: "Transferencia",
                           }[p.method] || p.method}
-                          : {formatCurrency(p.amount)}
-                        </div>
-                      ))
-                    : "Sin pago"}
+                          :
+                        </span>
+                        <span className="font-mono font-semibold tabular-nums">
+                          {formatCurrency(p.amount)}
+                        </span>
+                      </span>
+                    ))
+                  ) : selectedSale.financed ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-600 dark:text-violet-400">
+                      Financiado · el cobro va al préstamo asociado
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sin pago</span>
+                  )}
                 </div>
               </div>
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                Items
-              </p>
-              <div className="space-y-1.5 max-h-56 overflow-y-auto scrollbar-hide">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-foreground">
+                  Items de la venta
+                </p>
+                <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                  {selectedSale.items.length}{" "}
+                  {selectedSale.items.length === 1 ? "producto" : "productos"}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/20 divide-y divide-border/50 max-h-56 overflow-y-auto scrollbar-app">
                 {selectedSale.items.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-background/40 border border-primary/20"
+                    className="flex items-center justify-between px-3.5 py-2.5"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         {item.product?.name || "Producto eliminado"}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[11px] font-mono text-muted-foreground tabular-nums mt-0.5">
                         {formatCurrency(item.unitPrice)} × {item.quantity}
                       </p>
                     </div>
-                    <span className="stat-number text-sm font-bold text-foreground ml-4">
+                    <span className="font-mono text-xs sm:text-sm font-semibold text-foreground tabular-nums ml-4">
                       {formatCurrency(item.total)}
                     </span>
                   </div>
@@ -528,7 +607,7 @@ function SalesPageContent() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-primary/20 space-y-2">
+            <div className="pt-3.5 border-t border-border/60 space-y-1.5">
               {[
                 {
                   label: "Subtotal",
@@ -548,24 +627,45 @@ function SalesPageContent() {
                     ]
                   : []),
               ].map(({ label, value, accent }) => (
-                <div key={label} className="flex justify-between text-sm">
+                <div key={label} className="flex justify-between text-xs">
                   <span className="text-muted-foreground">{label}</span>
                   <span
-                    className={`font-medium ${accent ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}
+                    className={cn(
+                      "font-mono font-medium tabular-nums",
+                      accent
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground",
+                    )}
                   >
                     {value}
                   </span>
                 </div>
               ))}
-              <div className="flex justify-between items-center pt-2 border-t border-primary/20">
-                <span className="font-bold text-foreground">Total</span>
-                <span className="stat-number text-xl font-bold text-primary">
+              <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
+                <span className="text-sm font-semibold text-foreground">Total</span>
+                <span className="font-mono text-lg font-semibold text-foreground tabular-nums">
                   {formatCurrency(selectedSale.total)}
                 </span>
               </div>
+              {selectedSale.amountPaid != null && selectedSale.amountPaid > 0 && (
+                <div className="flex justify-between text-xs pt-1">
+                  <span className="text-muted-foreground">Recibido</span>
+                  <span className="font-mono font-medium text-foreground tabular-nums">
+                    {formatCurrency(selectedSale.amountPaid)}
+                  </span>
+                </div>
+              )}
+              {selectedSale.change != null && selectedSale.change > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Cambio</span>
+                  <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    {formatCurrency(selectedSale.change)}
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-1">
               <Button onClick={() => handlePrintReceipt(selectedSale.id)}>
                 <Download className="w-4 h-4" /> Descargar Comprobante
               </Button>
