@@ -12,6 +12,7 @@ import {
 } from "@/hooks/useSuppliers";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -232,29 +233,22 @@ export default function SuppliersPage() {
     <DashboardLayout>
       <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-                Proveedores
-              </h1>
-              {meta && (
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted/50 text-muted-foreground border border-border/70 tabular-nums">
-                  {meta.total} {meta.total === 1 ? "proveedor" : "proveedores"}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Gestiona tu red de proveedores, contactos comerciales y cuentas de
-              pago
-            </p>
-          </div>
-          {canManage && (
-            <Button onClick={handleCreate} className="w-full sm:w-auto shrink-0">
-              <Plus className="w-4 h-4" /> Nuevo Proveedor
-            </Button>
-          )}
-        </div>
+<PageHeader
+          title="Proveedores"
+          subtitle="Gestiona tu red de proveedores, contactos comerciales y cuentas de pago"
+          count={
+            meta
+              ? `${meta.total} ${meta.total === 1 ? "proveedor" : "proveedores"}`
+              : undefined
+          }
+          actions={
+            canManage ? (
+              <Button onClick={handleCreate} className="w-full sm:w-auto">
+                <Plus className="w-4 h-4" /> Nuevo Proveedor
+              </Button>
+            ) : undefined
+          }
+        />
 
         {/* Filter Bar */}
         <FilterBar

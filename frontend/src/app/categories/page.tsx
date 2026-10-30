@@ -15,6 +15,7 @@ import type {
 } from "@/hooks/useCategories";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { CategoryProductsModal } from "@/components/categories/CategoryProductsModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -167,26 +168,20 @@ export default function CategoriesPage() {
     <DashboardLayout>
       <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-                Categorías
-              </h1>
-              {meta && (
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted/50 text-muted-foreground border border-border/70 tabular-nums">
-                  {meta.total} {meta.total === 1 ? "categoría" : "categorías"}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Organiza tu catálogo de productos e impuestos por defecto
-            </p>
-          </div>
-          <Button onClick={handleCreate} className="w-full sm:w-auto shrink-0">
-            <Plus className="w-4 h-4" /> Nueva Categoría
-          </Button>
-        </div>
+<PageHeader
+          title="Categorías"
+          subtitle="Organiza tu catálogo de productos e impuestos por defecto"
+          count={
+            meta
+              ? `${meta.total} ${meta.total === 1 ? "categoría" : "categorías"}`
+              : undefined
+          }
+          actions={
+            <Button onClick={handleCreate} className="w-full sm:w-auto">
+              <Plus className="w-4 h-4" /> Nueva Categoría
+            </Button>
+          }
+        />
 
         {/* Filter Bar */}
         <FilterBar

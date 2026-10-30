@@ -7,6 +7,7 @@ import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer }
 import type { CustomerPayload } from "@/hooks/useCustomers";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -155,28 +156,18 @@ export default function CustomersPage() {
       <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
 
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                Clientes
-              </h1>
-              {meta && (
-                <span className="hidden sm:inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
-                  {meta.total} registros
-                </span>
-              )}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Gestiona tu cartera de clientes
-            </p>
-          </div>
-          {canCreate && (
-            <Button onClick={handleCreate} className="w-full sm:w-auto shrink-0">
-              <Plus className="w-4 h-4" /> Nuevo Cliente
-            </Button>
-          )}
-        </div>
+<PageHeader
+          title="Clientes"
+          subtitle="Gestiona tu cartera de clientes"
+          count={meta ? `${meta.total} registros` : undefined}
+          actions={
+            canCreate ? (
+              <Button onClick={handleCreate} className="w-full sm:w-auto">
+                <Plus className="w-4 h-4" /> Nuevo Cliente
+              </Button>
+            ) : undefined
+          }
+        />
 
         {/* Filter Bar */}
         <FilterBar

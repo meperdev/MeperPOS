@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import {
@@ -212,49 +213,46 @@ export default function ExpensesPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-4">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-                Salidas
-              </h1>
-              {meta && (
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium border tabular-nums bg-muted/50 text-muted-foreground border-border/70">
-                  {meta.total} {meta.total === 1 ? "registro" : "registros"}
-                </span>
+        <PageHeader
+          title="Salidas"
+          subtitle="Registra los gastos y pagos de tu negocio"
+          count={
+            meta
+              ? `${meta.total} ${meta.total === 1 ? "registro" : "registros"}`
+              : undefined
+          }
+          actions={
+            <>
+              {hasAnyRole(user?.role, ["ADMIN"]) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setTaxonomyOpen(true)}
+                  className="flex-1 sm:flex-none"
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                  Gestionar categorías
+                </Button>
               )}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Registra los gastos y pagos de tu negocio
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            {hasAnyRole(user?.role, ["ADMIN"]) && (
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => setShowExportSection((current) => !current)}
+                className="flex-1 sm:flex-none"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {showExportSection ? "Ocultar exportación" : "Exportar"}
+              </Button>
               <Button
                 type="button"
-                variant="secondary"
-                onClick={() => setTaxonomyOpen(true)}
-                className="shrink-0"
+                onClick={openCreate}
+                className="w-full sm:w-auto"
               >
-                <Settings2 className="w-3.5 h-3.5" />
-                Gestionar categorías
+                <Plus className="w-4 h-4" /> Nuevo gasto
               </Button>
-            )}
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => setShowExportSection((current) => !current)}
-              className="shrink-0"
-            >
-              <Download className="w-3.5 h-3.5" />
-              {showExportSection ? "Ocultar exportación" : "Exportar"}
-            </Button>
-            <Button type="button" onClick={openCreate} className="shrink-0">
-              <Plus className="w-4 h-4" /> Nuevo gasto
-            </Button>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* Collapsible Export Section */}
         {showExportSection && (
