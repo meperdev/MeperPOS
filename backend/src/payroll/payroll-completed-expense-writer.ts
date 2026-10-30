@@ -46,17 +46,18 @@ import {
  *   organization lock itself. Payroll row locks are also not taken or validated
  *   here: they are the caller's (`Employee`, then `PayrollObligation`, then the
  *   ordered `EmployeeShift` rows on the group path). A concurrent taxonomy
- *   deactivation is serialized by the label lock this writer takes itself
- *   (`lockCategoryLabel`), not by the caller.
+ *   deactivation — of the bound label or of its **group** — is serialized by the
+ *   taxonomy row locks this writer takes itself (`lockTaxonomyRows`), not by the
+ *   caller.
  *
  * Real order the wired production path takes: payroll row locks → insert the
  * cash outflow, installment and allocations → planner decision in the caller →
  * `resolvePayrollExpenseCategoryWithin` (tenant `Organization` row lock, then
- * taxonomy read/create) → this writer (verified replay lock; for a first write
- * the `ExpenseLabel` taxonomy lock and the post-lock bound/active re-read; then
- * the expense writes) → obligation status CAS → commit or rollback. The category
- * resolver's transaction and this writer's transaction are therefore the same
- * transaction, not two.
+ * taxonomy read/create) → this writer (verified replay lock; for a first write the
+ * `ExpenseGroup` and `ExpenseLabel` taxonomy locks and the post-lock bound/active
+ * re-read; then the expense writes) → obligation status CAS → commit or rollback.
+ * The category resolver's transaction and this writer's transaction are therefore
+ * the same transaction, not two.
  *
  * Order of decisions inside this function, which is part of the contract:
  * 1. structural ids; 2. matching-tenant OWNER/ADMIN authorization, enforced before
@@ -66,8 +67,9 @@ import {
  * with the approved explicit limit error **before any read or write**; 5. for a
  * representable expense, verified replay of an existing link, which takes the
  * shared tenant-scoped `Expense ... FOR UPDATE` lock before it reads that
- * expense; 6. category identity, the tenant-scoped `ExpenseLabel ... FOR UPDATE`
- * taxonomy lock, the post-lock bound/active re-read and the expense writes.
+ * expense; 6. category identity, the tenant-scoped `ExpenseGroup` + `ExpenseLabel`
+ * taxonomy lock statement, the post-lock bound/active re-read and the expense
+ * writes.
  * A first creation needs no pre-lock on the expense row: this transaction creates
  * it, so nothing else can have reached it yet.
  *
@@ -76,38 +78,57 @@ import {
  * lock before their own payroll-link check. Without taking it here first, this unit
  * could verify a linked expense from facts a concurrent expense mutation has
  * already changed, or attach a link to an expense it never proved. This function
- * takes exactly two SQL locks, one per path: that `Expense` row lock on the replay
- * path, and the `ExpenseLabel` row lock immediately below on the first-write path.
- * No payroll, obligation, organization or cash row is locked by this function, and
- * a lock that matches no tenant-scoped row fails closed with ConflictException
- * before any write.
+ * takes exactly one SQL lock statement per path: the `Expense` row lock on the
+ * replay path, and the taxonomy row lock statement immediately below on the
+ * first-write path. No payroll, obligation, organization or cash row is locked by
+ * this function, and a lock that matches no tenant-scoped row fails closed with
+ * ConflictException before any write.
  *
- * The label lock is the taxonomy gate. `ExpenseTaxonomyService` deactivates a label
- * with a plain row update, in no transaction of its own and with no lock, so an
- * unlocked `active` re-read could be stale: a deactivation committed after that
- * re-read and before this transaction commits would leave a committed expense
- * bound to an already inactive label (observed on real PostgreSQL, scenario 7 of
- * `payroll-concurrency.int.spec.ts`). Locking the same label row the taxonomy
- * update writes makes the outcome deterministic instead: either the deactivation
- * waits for this commit and the expense is bound to a label that is still active,
- * or the deactivation committed first and the post-lock re-read fails closed with
- * the existing inactive-category conflict. It introduces no new user-facing error
- * and leaves the active path unchanged.
+ * The taxonomy locks are the taxonomy gate, and they cover both deactivations the
+ * taxonomy API performs. `ExpenseTaxonomyService` deactivates a **label**
+ * (`removeLabel`) and a whole **group** (`removeGroup`) with plain row updates, in
+ * no transaction of its own and with no lock, so an unlocked `active` re-read could
+ * be stale: a deactivation committed after that re-read and before this transaction
+ * commits would leave a committed expense bound to an already inactive label or
+ * group (the label case was observed on real PostgreSQL, scenario 7 of
+ * `payroll-concurrency.int.spec.ts`). Locking the same two rows those updates write
+ * makes the outcome deterministic instead: either the deactivation waits for this
+ * commit and the expense is bound to taxonomy that is still active, or the
+ * deactivation committed first and the post-lock re-read fails closed with the
+ * existing inactive-category conflict. It introduces no new user-facing error and
+ * leaves the active path unchanged.
  *
- * Lock-order safety of the label lock (a static argument, no PostgreSQL trace):
- * nothing else in this repository takes an `ExpenseLabel` lock, so this order is
- * `Organization` → `ExpenseLabel` → `Expense` and no writer holds `ExpenseLabel`
- * while requesting `Organization` or a payroll row. The taxonomy service is safe
- * here only because each of its writes is its own implicit transaction: it commits
- * the label update before its `auditLog` insert takes the `Organization` key-share.
- * A future taxonomy change that batched the label update with that audit would
- * create a real AB-BA cycle against this path and must revisit this lock.
+ * Lock-order safety of the taxonomy locks (a static argument, no PostgreSQL trace):
+ * the group row and the label row are locked by one tenant-scoped join, so the
+ * statement count of the completion transaction does not grow and the label can
+ * never be observed without its group. The relative order in which PostgreSQL locks
+ * the two rows inside that one statement is deliberately not relied on: no other
+ * writer in this repository holds both rows, and every taxonomy writer takes exactly
+ * one of them before touching rows that do not include the other, so no cycle can
+ * form either way. What the unit relies on is that both rows are locked, tenant
+ * scoped and still held when the active flags are re-read and the expense is
+ * written. The taxonomy service is safe here only because each of its writes is its
+ * own implicit transaction: it commits the label or group update, releasing that
+ * row, before its `auditLog` insert takes the `Organization` key-share. A future
+ * taxonomy change that batched a taxonomy update with that audit would deadlock
+ * against this path (this transaction holds `Organization ... FOR UPDATE` and waits
+ * for the taxonomy row, while that one would hold the taxonomy row and wait for
+ * `Organization`) and must revisit this lock order.
  *
  * Fail-closed precedence of step 4: no category, link or persisted-expense state
  * can mask the limit error, and an over-limit selected expense can never complete
  * silently. Because `Expense.total` is `Decimal(12,2)`, an over-limit plan can
  * never be a validly linked expense, so skipping the replay check for it cannot
  * hide an already verified expense.
+ *
+ * Contention this lock adds, stated instead of implied: the caller already holds
+ * the tenant `Organization ... FOR UPDATE` lock before reaching this writer, so two
+ * expense-writing completions of the same business are serialized before either of
+ * them can ask for a taxonomy row; the group lock therefore adds no new contention
+ * between payroll writers. It does briefly block taxonomy work that needs the bound
+ * group: a `createLabel` in that group takes a key-share on the group row for its
+ * foreign key, so it waits for this completion to commit. That writer holds nothing
+ * this transaction waits for, so it cannot deadlock, only wait.
  *
  * Replay is fail-closed and is never decided by link identity alone. A persisted
  * link only reports `already_linked` when its expense is active, tenant-scoped and
@@ -129,10 +150,13 @@ import {
  * mocked call order, not a PostgreSQL trace. Two writers of the same obligation
  * serialize on the caller's `Employee`/`PayrollObligation` locks only because
  * every payroll writer keeps that employee-first order; a future writer that
- * violates it would be a new cycle. The label lock only covers the bound label of
- * the payroll category: the taxonomy API still takes no organization lock, and a
- * concurrent **group** deactivation has the same shape as the label one but is not
- * locked here, so it is only observed by the post-lock group re-read. P2028-style
+ * violates it would be a new cycle. The taxonomy locks cover the bound label and
+ * its group, so neither a label nor a **group** deactivation can land between the
+ * post-lock re-read and the commit: both are serialized on the row they update.
+ * They do not cover anything else the taxonomy API can still do without an
+ * organization lock: a rename, a re-parenting of the label into another group, or a
+ * new label/sibling group is not serialized with this path, and only the `active`
+ * flags of those two bound rows are made deterministic. P2028-style
  * lock-wait/conflict mapping is still missing. Mocks here prove ordering only:
  * they cannot prove that PostgreSQL blocks, that the lock is the same one, or that
  * anything rolls back. Duplicate-key errors are propagated, never retried, so a
@@ -255,8 +279,9 @@ async function assertBoundCategory(
       'La categoría de gasto de nómina no está asignada a esta organización',
     );
 
-  // Lock the taxonomy row before re-reading it, so the read cannot be stale.
-  await lockCategoryLabel(tx, organizationId, category);
+  // Lock the taxonomy rows before re-reading them, so the read cannot be stale.
+  // One statement locks the bound group and label together.
+  await lockTaxonomyRows(tx, organizationId, category);
 
   const label = await tx.expenseLabel.findUnique({
     where: {
@@ -273,38 +298,50 @@ async function assertBoundCategory(
 }
 
 /**
- * Takes the taxonomy lock that actually serializes this writer against a
- * deactivation.
+ * Takes the two taxonomy locks that actually serialize this writer against a
+ * deactivation, in one statement.
  *
- * `ExpenseTaxonomyService` deactivates a label with a plain row update, in no
- * transaction of its own and with no lock, so an unlocked `active` re-read can be
- * stale: a deactivation committed after that read and before this transaction's
- * commit would leave an expense bound to an already inactive label (observed on
- * real PostgreSQL). `ExpenseLabel ... FOR UPDATE` is the same row that update
- * writes, so the two writers serialize and the outcome becomes deterministic:
- * either the deactivation waits for this transaction and the expense commits with
- * a label that is still active, or the deactivation committed first and the
- * re-read below fails closed with the existing conflict.
+ * `ExpenseTaxonomyService` deactivates a label (`removeLabel`) **and** a whole group
+ * (`removeGroup`) with plain row updates, in no transaction of its own and with no
+ * lock, so an unlocked `active` re-read can be stale: a deactivation committed after
+ * that read and before this transaction's commit would leave an expense bound to an
+ * already inactive label or group (the label case was observed on real PostgreSQL).
+ * Locking both rows those updates write makes the outcome deterministic: either the
+ * deactivation waits for this transaction and the expense commits with taxonomy that
+ * is still active, or the deactivation committed first and the re-read below fails
+ * closed with the existing conflict.
  *
- * Tenant and group identity travel in the statement, so a foreign or mismatched
- * label is never locked, and an empty result (no such row for this tenant) fails
- * closed with the same existing conflict instead of writing.
+ * One statement, not two, is deliberate: the completion transaction's statement
+ * count is a property other specs and traces rely on, and a single tenant-scoped
+ * join cannot observe the label and the group in two different lock states. The join
+ * binds the group through the label's own `groupId`, so a label locked for another
+ * group or another tenant returns no row at all instead of locking the wrong one.
  *
- * This lock is only taken for a first write, and it is taken while the caller
- * already holds the payroll rows and the tenant `Organization` lock, so it extends
- * the documented order to ... -> Organization -> ExpenseLabel -> Expense.
+ * Intra-statement lock order is not something this unit depends on, and it states
+ * that instead of pretending otherwise: no other writer in this repository holds
+ * both rows, and each taxonomy writer takes exactly one of them and then only rows
+ * that do not include the other, so no cycle can form whichever row PostgreSQL locks
+ * first. What this unit does rely on is that both rows are locked, tenant-scoped, and
+ * still held when the active flags are re-read and the expense is written.
+ *
+ * These locks are only taken for a first write, and they are taken while the caller
+ * already holds the payroll rows and the tenant `Organization` lock, so they extend
+ * the documented order to ... -> Organization -> {ExpenseGroup, ExpenseLabel} ->
+ * Expense.
  */
-async function lockCategoryLabel(
+async function lockTaxonomyRows(
   tx: Prisma.TransactionClient,
   organizationId: string,
   category: PayrollExpenseCategoryIdentity,
 ): Promise<void> {
   const locked = await tx.$queryRaw<{ id: string }[]>`
-      SELECT "id" FROM "ExpenseLabel"
-      WHERE "id" = ${category.labelId}
-        AND "groupId" = ${category.groupId}
-        AND "organizationId" = ${organizationId}
-      FOR UPDATE`;
+      SELECT l."id" FROM "ExpenseLabel" l
+      JOIN "ExpenseGroup" g ON g."id" = l."groupId"
+      WHERE l."id" = ${category.labelId}
+        AND l."groupId" = ${category.groupId}
+        AND l."organizationId" = ${organizationId}
+        AND g."organizationId" = ${organizationId}
+      FOR UPDATE OF g, l`;
   if (locked.length === 0)
     throw new ConflictException(INACTIVE_CATEGORY_MESSAGE);
 }

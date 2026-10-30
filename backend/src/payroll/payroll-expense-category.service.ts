@@ -282,12 +282,14 @@ async function auditCategory(
  *    `Organization` row and then reads or creates the taxonomy.
  * 3. `writePayrollCompletionExpense` writes the `Expense`, `ExpensePayment`,
  *    `AuditLog` and `PayrollObligationExpense` rows. It takes the shared
- *    `Expense ... FOR UPDATE` lock only on the replay path, and a tenant-scoped
- *    `ExpenseLabel ... FOR UPDATE` lock on the bound category before re-reading its
- *    active flags on a first write, so a concurrent label deactivation either waits
- *    or is caught fail-closed.
+ *    `Expense ... FOR UPDATE` lock only on the replay path, and one tenant-scoped
+ *    statement that locks the bound `ExpenseGroup` row together with its
+ *    `ExpenseLabel` row before re-reading their active flags on a first write, so a
+ *    concurrent label **or group** deactivation either waits or is caught
+ *    fail-closed.
  *
- * So this unit's order is payroll rows → Organization → taxonomy/Expense.
+ * So this unit's order is payroll rows → Organization → {ExpenseGroup,
+ * ExpenseLabel} → Expense.
  *
  * Can that form a cycle with an existing writer, statically speaking (no
  * PostgreSQL proof exists)? No reverse-order writer was found:
@@ -318,11 +320,13 @@ async function auditCategory(
  * a lock-wait timeout (`P2028`) is not classified here.
  *
  * Also not solved: a concurrent taxonomy deactivation that commits after the
- * writer's label lock is released and its re-read has passed is no longer reachable
- * for the label itself, because that row is locked for the whole write. The
- * *group* row is still only re-read, not locked, so a concurrent group deactivation
- * keeps that smaller window. The expense taxonomy API takes no organization lock,
- * so taxonomy structure changes are not serialized with this category path.
+ * writer's taxonomy locks are released and its re-read has passed is no longer
+ * reachable for the bound label or its group, because both rows are locked for the
+ * whole write. What stays unsynchronized is the rest of the taxonomy API, which
+ * takes no organization lock: renames, re-parenting of the label into another group
+ * and creation of new labels or sibling groups are not serialized with this
+ * category path, and the association row itself is only read here (no service
+ * updates or deletes it after creation).
  */
 @Injectable()
 export class PayrollExpenseCategoryService {

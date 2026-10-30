@@ -347,9 +347,12 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
 
       // The category is resolved inside this transaction, after the three payroll
       // locks, so the expense shares the completion's fate.
-      expect(tx.$queryRaw).toHaveBeenCalledTimes(4);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(5);
       expect(tx.$queryRaw.mock.calls[3][0].join('?')).toMatch(
         /FROM "Organization"[\s\S]*FOR UPDATE/,
+      );
+      expect(tx.$queryRaw.mock.calls[4][0].join('?')).toMatch(
+        /FROM "ExpenseLabel"[\s\S]*JOIN "ExpenseGroup"[\s\S]*FOR UPDATE OF g, l/,
       );
       expect(tx.$queryRaw.mock.calls[3].slice(1)).toEqual(['org']);
       expect(tx.payrollExpenseCategory.findUnique).toHaveBeenCalledWith({

@@ -292,9 +292,12 @@ describe('PayrollPeriodInstallmentsService (mock transaction only)', () => {
       // The category resolution reuses this transaction and locks the tenant row
       // after the employee and obligation locks.
       expect(transaction).toHaveBeenCalledTimes(1);
-      expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(4);
       expect(tx.$queryRaw.mock.calls[2][0].join('?')).toMatch(
         /FROM "Organization"[\s\S]*FOR UPDATE/,
+      );
+      expect(tx.$queryRaw.mock.calls[3][0].join('?')).toMatch(
+        /FROM "ExpenseLabel"[\s\S]*JOIN "ExpenseGroup"[\s\S]*FOR UPDATE OF g, l/,
       );
       expect(tx.$queryRaw.mock.calls[2].slice(1)).toEqual(['org']);
       // Employee and obligation locks both precede the tenant lock.

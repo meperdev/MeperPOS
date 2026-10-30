@@ -49,12 +49,12 @@ import { PayrollPeriodsService } from './payroll-periods.service';
  * 6. what actually happens when a lock waiter outlives Prisma's interactive
  *    transaction timeout: the observed error code, nothing written, and a clean
  *    retry afterwards;
- * 7. the taxonomy-deactivation race the writer documents: a deactivation
- *    committed between the category read and the expense write fails the
- *    completion closed, and a deactivation that is already in flight when the
- *    writer takes its `ExpenseLabel ... FOR UPDATE` lock serializes with it, so
- *    the completion fails closed instead of committing an expense bound to an
- *    inactive label;
+ * 7. the taxonomy-deactivation race the writer documents, for both taxonomy rows
+ *    it now locks: a label or group deactivation committed between the category
+ *    read and the expense write fails the completion closed, and a deactivation
+ *    that is already in flight when the writer asks for its `ExpenseGroup` +
+ *    `ExpenseLabel ... FOR UPDATE` lock statement serializes with it, so the completion
+ *    fails closed instead of committing an expense bound to inactive taxonomy;
  * 8. cross-tenant isolation between two namespaced fixture organizations for
  *    the obligation, installment, cash and expense rows these paths own.
  *
@@ -69,7 +69,8 @@ import { PayrollPeriodsService } from './payroll-periods.service';
  *   deleted by `organizationId`/`userId` only, never by a table-wide delete;
  * - cleanup runs in one transaction with `session_replication_role = replica`
  *   because the payroll history tables carry append-only BEFORE UPDATE/DELETE
- *   triggers. Foreign keys still fire, so the delete order is the real one;
+ *   triggers, including foreign-key constraint triggers; cleanup is scoped to
+ *   fixture organization IDs and uses children-first order;
  * - pre-existing row counts are captured before the fixtures and compared after
  *   cleanup: nothing may disappear.
  *
@@ -109,6 +110,7 @@ const INTRUDER_TOTAL = '90.00';
 const TIMEOUT_TOTAL = '10.00';
 const TAXONOMY_TOTAL_BEFORE_WRITE = '40.00';
 const TAXONOMY_TOTAL_AFTER_WRITE = '30.00';
+const TAXONOMY_TOTAL_AFTER_GROUP_WRITE = '20.00';
 const ISOLATION_TOTAL_A = '60.00';
 const ISOLATION_TOTAL_B_PENDING = '100.00';
 const ISOLATION_PAID_B = '40.00';
@@ -118,6 +120,7 @@ const ISOLATION_TOTAL_B_COMPLETED = '50.00';
 // of scenario 7. They are never persisted as a `PayrollCashOutflow`.
 const TEST_OWNED_OUTFLOW_A = 'test-owned-outflow-taxonomy-before-write';
 const TEST_OWNED_OUTFLOW_B = 'test-owned-outflow-taxonomy-after-write';
+const TEST_OWNED_OUTFLOW_C = 'test-owned-outflow-taxonomy-after-group-write';
 
 interface DatabaseIdentity {
   db: string;
@@ -324,6 +327,7 @@ describePostgres(
 
     let labelId: string;
     let controlLabelId: string;
+    let expenseGroupId: string;
     let labelBId: string;
     let expenseGroupBId: string;
 
@@ -336,6 +340,7 @@ describePostgres(
     let timeoutObligationId: string;
     let taxonomyBeforeWriteObligationId: string;
     let taxonomyAfterWriteObligationId: string;
+    let taxonomyGroupObligationId: string;
     let crossTenantObligationAId: string;
 
     let concurrentExpenseId: string;
@@ -480,6 +485,7 @@ describePostgres(
           name: 'Nómina',
         },
       });
+      expenseGroupId = expenseGroup.id;
       labelId = payrollLabel.id;
       const controlLabel = await prisma.expenseLabel.create({
         data: {
@@ -643,6 +649,13 @@ describePostgres(
       taxonomyAfterWriteObligationId = (
         await createPeriod(employeeTaxonomyId, TAXONOMY_TOTAL_AFTER_WRITE, true)
       ).id;
+      taxonomyGroupObligationId = (
+        await createPeriod(
+          employeeTaxonomyId,
+          TAXONOMY_TOTAL_AFTER_GROUP_WRITE,
+          true,
+        )
+      ).id;
       crossTenantObligationAId = (
         await createPeriod(employeeCrossTenantId, ISOLATION_TOTAL_A, false)
       ).id;
@@ -795,10 +808,10 @@ describePostgres(
           await prisma.$transaction(
             async (tx) => {
               // The payroll history tables reject ordinary UPDATE and DELETE with
-              // BEFORE triggers. Replica mode disables exactly those user triggers
-              // for this transaction; foreign-key triggers still fire, so the
-              // delete order below is the real dependency order. The preflight
-              // check guarantees the role may do this.
+              // BEFORE triggers. Replica mode disables user and foreign-key
+              // constraint triggers for this transaction. Every deletion must
+              // therefore stay scoped to the newly created fixture organizations.
+              // The preflight check guarantees the role may do this.
               await tx.$executeRawUnsafe(
                 'SET LOCAL session_replication_role = replica',
               );
@@ -1884,7 +1897,7 @@ describePostgres(
       ).resolves.toBe(1);
     }, 90000);
 
-    it('7. taxonomy deactivation race: forced between the category read and the expense write, and forced to compete for the writer label lock', async () => {
+    it('7. taxonomy deactivation race: forced between the category read and the expense write, and forced to compete for the writer group and label locks', async () => {
       const expensesBeforePhaseA = await prisma.expense.count({
         where: { organizationId: orgId },
       });
@@ -2062,7 +2075,114 @@ describePostgres(
         where: { id: labelId },
         data: { active: true },
       });
-    }, 60000);
+
+      // Phase C: the *group* deactivation race. `ExpenseTaxonomyService.removeGroup`
+      // deactivates the whole group with a plain row update as well, so the label
+      // lock alone never covered this ordering: a group deactivation committed
+      // after the post-lock re-read and before the commit could bind an expense to
+      // an already inactive group. The writer now locks the parent `ExpenseGroup`
+      // row in the same tenant-scoped statement as the label, so the two writers
+      // serialize on the group row itself.
+      let groupDeactivationHoldsLock = (): void => {};
+      const groupDeactivationLocked = new Promise<void>((resolve) => {
+        groupDeactivationHoldsLock = resolve;
+      });
+      let releaseGroupDeactivation = (): void => {};
+      const groupDeactivationGate = new Promise<void>((resolve) => {
+        releaseGroupDeactivation = resolve;
+      });
+
+      const groupDeactivation = prismaSecond.$transaction(
+        async (tx) => {
+          await tx.expenseGroup.update({
+            where: { id: expenseGroupId },
+            data: { active: false },
+          });
+          groupDeactivationHoldsLock();
+          await groupDeactivationGate;
+          return 'group-deactivated' as const;
+        },
+        { timeout: 30000, maxWait: 30000 },
+      );
+      await groupDeactivationLocked;
+
+      let writerAtGroupCategory = (): void => {};
+      const writerReachedGroupCategory = new Promise<void>((resolve) => {
+        writerAtGroupCategory = resolve;
+      });
+
+      const phaseC = prisma
+        .$transaction(
+          async (tx) => {
+            const category = await resolvePayrollExpenseCategoryWithin(
+              tx,
+              orgId,
+              actor,
+            );
+            writerAtGroupCategory();
+            return writePayrollCompletionExpense(tx, {
+              organizationId: orgId as string,
+              employeeId: employeeTaxonomyId,
+              obligationId: taxonomyGroupObligationId,
+              actor,
+              category,
+              facts: completionFacts(
+                TAXONOMY_TOTAL_AFTER_GROUP_WRITE,
+                DATE_TAXONOMY,
+                TEST_OWNED_OUTFLOW_C,
+              ),
+            });
+          },
+          { timeout: 30000, maxWait: 30000 },
+        )
+        .then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => ({ ok: false as const, error }),
+        );
+
+      await writerReachedGroupCategory;
+      // PostgreSQL reports the writer blocked on the `ExpenseGroup` row the
+      // deactivation holds: the parent lock is real and it is that same row, not
+      // only the label one phase B proves.
+      await waitForLockWaiter(prismaProbe, '%"ExpenseGroup"%', 10000);
+      releaseGroupDeactivation();
+      await expect(groupDeactivation).resolves.toBe('group-deactivated');
+
+      const phaseCResult = await phaseC;
+      if (phaseCResult.ok)
+        throw new Error(
+          `The writer committed an expense after the group deactivation: ${phaseCResult.value.kind}`,
+        );
+      console.log(
+        `[payroll-pg-int] group deactivation serialized with the writer group lock: ${describeDatabaseError(phaseCResult.error)}`,
+      );
+      expect(phaseCResult.error).toBeInstanceOf(ConflictException);
+      const deactivatedGroup = await prisma.expenseGroup.findUniqueOrThrow({
+        where: { id: expenseGroupId },
+      });
+      // Fail-closed, and no residue: the group deactivation is the state the
+      // writer observed after its lock was granted, so nothing was written.
+      expect(deactivatedGroup.active).toBe(false);
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBeforePhaseA);
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: { obligationId: taxonomyGroupObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: taxonomyGroupObligationId },
+          select: { status: true, version: true },
+        }),
+      ).resolves.toEqual({ status: 'PENDING', version: 0 });
+
+      await prisma.expenseGroup.update({
+        where: { id: expenseGroupId },
+        data: { active: true },
+      });
+    }, 90000);
 
     it('8. cross-tenant isolation: tenant A can neither read nor mutate tenant B obligations, installments, cash or expenses', async () => {
       const tenantSnapshot = async (targetOrgId: string) => {
@@ -2420,15 +2540,19 @@ describePostgres(
  *   scenario 6 is the expense insert, the rollback provably discards cash,
  *   installment and expense work the transaction had already done, and the retry
  *   completes;
- * - the taxonomy-deactivation race the writer documents: a deactivation committed
- *   between the category read and the expense write fails the completion closed
- *   (409, no expense, no link). A deactivation that is already in flight when the
- *   writer asks for its `ExpenseLabel ... FOR UPDATE` lock really waits: Prisma's
- *   transaction blocks, `pg_locks` shows the waiting statement on `ExpenseLabel`,
- *   and once the deactivation commits the writer's post-lock re-read observes it
- *   and the completion fails closed, so a committed expense bound to an inactive
- *   label is no longer reachable through this ordering. The lock is the writer's
- *   own (`lockCategoryLabel`); no test-only lock is involved;
+ * - the taxonomy-deactivation race the writer documents, for both taxonomy rows it
+ *   locks: a deactivation committed between the category read and the expense write
+ *   fails the completion closed (409, no expense, no link). A deactivation that is
+ *   already in flight when the writer asks for its `ExpenseLabel ... FOR UPDATE`
+ *   lock really waits: Prisma's transaction blocks, `pg_locks` shows the waiting
+ *   statement on `ExpenseLabel`, and once the deactivation commits the writer's
+ *   post-lock re-read observes it and the completion fails closed, so a committed
+ *   expense bound to an inactive label is no longer reachable through this
+ *   ordering. The same is proven for the parent row: a *group* deactivation in
+ *   flight makes the writer wait on `ExpenseGroup` in the same lock statement that
+ *   also covers the label, so the completion fails closed instead of binding an
+ *   expense to a dead group. Both locks are the writer's own (`lockTaxonomyRows`);
+ *   no test-only lock is involved;
  * - cross-tenant isolation of these paths between two namespaced organizations:
  *   reads never cross, and twelve reads/mutations (period installment, correction,
  *   expense read/update/addPayment/remove in both directions, and the expense

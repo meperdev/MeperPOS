@@ -691,20 +691,28 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
     });
   });
 
-  describe('category label row lock', () => {
-    // The expense taxonomy API deactivates a label through a plain row update with
-    // no surrounding transaction and no lock, so the writer takes the tenant label
-    // row `FOR UPDATE` and only then re-reads its `active` flags. That serializes
-    // the two taxonomy writers: a concurrent deactivation either waits for this
-    // transaction or committed first and makes this call fail closed. Mocks prove
-    // the order of the statements, not that PostgreSQL blocks.
-    const labelLockParams = (tx: Tx) => tx.$queryRaw.mock.calls[0].slice(1);
+  describe('category taxonomy row locks', () => {
+    // The expense taxonomy API deactivates a label **or a whole group** through a
+    // plain row update, with no surrounding transaction and no lock, so the writer
+    // locks both bound taxonomy rows `FOR UPDATE` in one tenant-scoped statement and
+    // only then re-reads their `active` flags. That serializes both deactivations:
+    // each one either waits for this transaction or committed first and makes this
+    // call fail closed. One statement, not two, so the number of round-trips the
+    // completion transaction issues does not grow. Mocks prove the statement text
+    // and its order, not that PostgreSQL blocks.
     const lockSql = (tx: Tx) =>
       (tx.$queryRaw.mock.calls[0][0] as TemplateStringsArray).join('?');
+    const lockParams = (tx: Tx) => tx.$queryRaw.mock.calls[0].slice(1);
     const INACTIVE_CATEGORY =
       'La categoría de gasto de nómina está inactiva o no pertenece a esta organización';
 
-    it('locks the tenant label row before re-reading its active flags and writing', async () => {
+    const expectNoWrites = (tx: Tx) => {
+      expect(tx.expense.create).not.toHaveBeenCalled();
+      expect(tx.auditLog.create).not.toHaveBeenCalled();
+      expect(tx.payrollObligationExpense.create).not.toHaveBeenCalled();
+    };
+
+    it('locks the tenant group and label rows in one statement before re-reading and writing', async () => {
       const tx = setup();
       const order: string[] = [];
       tx.payrollExpenseCategory.findUnique.mockImplementation(async () => {
@@ -712,7 +720,7 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
         return { labelId: 'label-1', groupId: 'group-1' };
       });
       tx.$queryRaw.mockImplementation(async () => {
-        order.push('lock-label');
+        order.push('lock-taxonomy');
         return [{ id: 'label-1' }];
       });
       tx.expenseLabel.findUnique.mockImplementation(async () => {
@@ -725,33 +733,55 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
       });
 
       expect(await write(tx)).toMatchObject({ kind: 'created' });
+      // One lock statement, before the active re-read and the write.
       expect(order).toEqual([
         'association',
-        'lock-label',
+        'lock-taxonomy',
         'read-label',
         'create-expense',
       ]);
       expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+      // Both the parent group row and the child label row are locked, so a label
+      // deactivation and a group deactivation both serialize with this write.
       expect(lockSql(tx)).toContain('FROM "ExpenseLabel"');
+      expect(lockSql(tx)).toContain('"ExpenseGroup"');
       expect(lockSql(tx)).toContain('FOR UPDATE');
-      // Tenant identity and group identity travel in the same statement, so a
-      // foreign or mismatched label can never be locked.
+      // Tenant identity travels for both rows, and the group is bound through the
+      // label's own group, so a foreign or mismatched row can never be locked.
       expect(lockSql(tx)).toContain('"organizationId"');
       expect(lockSql(tx)).toContain('"groupId"');
-      expect(labelLockParams(tx)).toEqual(['label-1', 'group-1', 'org-1']);
+      expect(lockParams(tx)).toEqual(['label-1', 'group-1', 'org-1', 'org-1']);
       expect(tx.$transaction).not.toHaveBeenCalled();
     });
 
-    it('fails closed with the existing inactive-category conflict when the label row is not lockable', async () => {
+    it('fails closed with the existing inactive-category conflict when the taxonomy rows are not lockable', async () => {
       const tx = setup();
+      // The label or group is gone, belongs to another tenant, or was reassigned.
       tx.$queryRaw.mockResolvedValue([]);
 
-      await expect(write(tx)).rejects.toThrow(INACTIVE_CATEGORY);
-      await expect(write(tx)).rejects.toBeInstanceOf(ConflictException);
+      // One attempt only: a repeated call would add statements and hide a second lock.
+      const attempt = write(tx);
+      await expect(attempt).rejects.toThrow(INACTIVE_CATEGORY);
+      await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+      // No active re-read and no write after a failed taxonomy lock.
       expect(tx.expenseLabel.findUnique).not.toHaveBeenCalled();
-      expect(tx.expense.create).not.toHaveBeenCalled();
-      expect(tx.auditLog.create).not.toHaveBeenCalled();
-      expect(tx.payrollObligationExpense.create).not.toHaveBeenCalled();
+      expectNoWrites(tx);
+    });
+
+    it('fails closed when a group deactivation won the lock and the group is inactive after the lock', async () => {
+      const tx = setup();
+      // The lock succeeds, but the locked group row is already inactive: this is
+      // exactly what a serialized group deactivation looks like to the writer.
+      tx.expenseLabel.findUnique.mockResolvedValue({
+        active: true,
+        group: { active: false },
+      });
+
+      await expect(write(tx)).rejects.toThrow(INACTIVE_CATEGORY);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(lockSql(tx)).toContain('"ExpenseGroup"');
+      expectNoWrites(tx);
     });
 
     it('fails closed when the deactivation won the lock and the label is inactive after the lock', async () => {
@@ -766,12 +796,10 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
       await expect(write(tx)).rejects.toThrow(INACTIVE_CATEGORY);
       expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
       expect(lockSql(tx)).toContain('FROM "ExpenseLabel"');
-      expect(tx.expense.create).not.toHaveBeenCalled();
-      expect(tx.auditLog.create).not.toHaveBeenCalled();
-      expect(tx.payrollObligationExpense.create).not.toHaveBeenCalled();
+      expectNoWrites(tx);
     });
 
-    it('takes no label lock when the choice writes no expense', async () => {
+    it('takes no taxonomy lock when the choice writes no expense', async () => {
       const tx = setup();
 
       expect(
@@ -785,7 +813,7 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
       expect(tx.expense.create).not.toHaveBeenCalled();
     });
 
-    it('takes no label lock when it replays a verified link', async () => {
+    it('takes no taxonomy lock when it replays a verified link', async () => {
       const tx = setup();
       tx.payrollObligationExpense.findUnique.mockResolvedValue({
         expenseId: 'expense-existing',
@@ -798,7 +826,9 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
       });
       expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
       expect(lockSql(tx)).toContain('FROM "Expense"');
+      // Neither taxonomy row is locked, read or needed by a replay.
       expect(lockSql(tx)).not.toContain('ExpenseLabel');
+      expect(lockSql(tx)).not.toContain('ExpenseGroup');
       expect(tx.expenseLabel.findUnique).not.toHaveBeenCalled();
     });
   });
@@ -867,9 +897,10 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
       const tx = setup();
 
       expect(await write(tx)).toMatchObject({ kind: 'created' });
-      // The only lock of a first creation is the category label lock.
+      // A first creation takes exactly one lock statement: the two taxonomy rows.
       expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
       expect(lockSql(tx)).toContain('FROM "ExpenseLabel"');
+      expect(lockSql(tx)).toContain('"ExpenseGroup"');
       expect(lockSql(tx)).not.toContain('FROM "Expense"');
       expect(tx.expense.create).toHaveBeenCalledTimes(1);
       expect(tx.payrollObligationExpense.create).toHaveBeenCalledTimes(1);
