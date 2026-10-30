@@ -40,10 +40,15 @@ export function RowActions({
   items,
   label = "Más acciones",
   className,
+  triggerClassName,
+  menuOffset = 8,
 }: {
   items: RowActionItem[];
   label?: string;
   className?: string;
+  triggerClassName?: string;
+  /** Extra distance between the menu and the trigger, per side. */
+  menuOffset?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<CSSProperties | null>(null);
@@ -68,27 +73,54 @@ export function RowActions({
     }
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const left = Math.max(
-      8,
-      Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8),
-    );
+    setOpen(true);
+    const EDGE = 8;
+    const alignRight = rect.right - MENU_WIDTH;
     const spaceBelow = window.innerHeight - rect.bottom;
+
+    // A rail (collapsed sidebar) leaves no room to align right edges: the menu
+    // opens beside the trigger instead, top aligned, so it clears the stack of
+    // controls above it.
+    if (alignRight < EDGE) {
+      setPosition({
+        position: "fixed",
+        left: Math.min(rect.right + EDGE, window.innerWidth - MENU_WIDTH - EDGE),
+        top: rect.top,
+        width: MENU_WIDTH,
+      });
+      return;
+    }
+
     setPosition({
       position: "fixed",
-      left,
+      left: Math.min(alignRight, window.innerWidth - MENU_WIDTH - EDGE),
       width: MENU_WIDTH,
       ...(spaceBelow < 200
-        ? { bottom: window.innerHeight - rect.top + 4 }
-        : { top: rect.bottom + 4 }),
+        ? { bottom: window.innerHeight - rect.top + menuOffset }
+        : { top: rect.bottom + menuOffset }),
     });
-    setOpen(true);
   };
 
   useEffect(() => {
     if (!open) return;
 
     const focusFirst = window.requestAnimationFrame(() => {
-      menuRef.current
+      const menu = menuRef.current;
+      if (menu) {
+        const rect = menu.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight - 8) {
+          setPosition((current) =>
+            current
+              ? {
+                  ...current,
+                  top: Math.max(8, window.innerHeight - rect.height - 8),
+                  bottom: undefined,
+                }
+              : current,
+          );
+        }
+      }
+      menu
         ?.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')
         ?.focus();
     });
@@ -149,7 +181,10 @@ export function RowActions({
         aria-label={label}
         title={label}
         onClick={toggle}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground"
+        className={cn(
+          "inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground",
+          triggerClassName,
+        )}
       >
         <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
