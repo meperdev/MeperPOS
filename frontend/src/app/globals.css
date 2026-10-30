@@ -346,6 +346,14 @@ h4 {
     .animate-toast-progress {
         display: none;
     }
+
+    /* Transitions are decoration too: state changes land immediately. */
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 /* ─── Sidebar Styles ───────────────────────────────────── */

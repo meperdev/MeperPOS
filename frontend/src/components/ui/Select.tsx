@@ -138,7 +138,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           <ChevronDown
             className={cn(
               "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-              isOpen && "rotate-180 text-primary",
+              isOpen && "rotate-180 text-primary-text",
             )}
           />
         </button>
@@ -161,13 +161,13 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                     className={cn(
                       "w-full px-3 py-2 text-xs text-left rounded-lg transition-colors flex items-center justify-between gap-2",
                       isSelected
-                        ? "bg-primary-light text-primary font-bold"
+                        ? "bg-primary-light text-primary-text font-bold"
                         : "text-foreground hover:bg-muted font-medium",
                     )}
                   >
                     <span className="truncate">{option.label}</span>
                     {isSelected && (
-                      <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      <Check className="h-3.5 w-3.5 shrink-0 text-primary-text" />
                     )}
                   </button>
                 );

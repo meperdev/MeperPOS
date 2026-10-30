@@ -180,7 +180,7 @@ export function OrganizationSwitcher({
                       : "border-border/60 bg-card hover:bg-muted"
                   )}
                 >
-                  <Building2 className="h-4 w-4 shrink-0 text-primary" />
+                  <Building2 className="h-4 w-4 shrink-0 text-primary-text" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{org.name}</p>
                     <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -191,7 +191,7 @@ export function OrganizationSwitcher({
                     </p>
                   </div>
                   {switchingId === org.id && (
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <Loader2 className="h-4 w-4 animate-spin text-primary-text" />
                   )}
                 </button>
               ))}
@@ -264,7 +264,7 @@ export function OrganizationSwitcher({
                   : "border-border/60 bg-card hover:bg-muted"
               )}
             >
-              <Globe className="h-4 w-4 shrink-0 text-primary" />
+              <Globe className="h-4 w-4 shrink-0 text-primary-text" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">Todas las organizaciones</p>
                 <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -286,7 +286,7 @@ export function OrganizationSwitcher({
                     : "border-border/60 bg-card hover:bg-muted"
                 )}
               >
-                <Building2 className="h-4 w-4 shrink-0 text-primary" />
+                <Building2 className="h-4 w-4 shrink-0 text-primary-text" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{org.name}</p>
                   <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -297,7 +297,7 @@ export function OrganizationSwitcher({
                   </p>
                 </div>
                 {switchingId === org.id && (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <Loader2 className="h-4 w-4 animate-spin text-primary-text" />
                 )}
               </button>
             ))}

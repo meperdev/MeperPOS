@@ -60,7 +60,7 @@ export default function AdminPage() {
         {cards.map((card) => (
           <Card key={card.title} className="flex items-center gap-4 p-6">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted">
-              <card.icon className="h-6 w-6 text-primary" />
+              <card.icon className="h-6 w-6 text-primary-text" />
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">{card.title}</p>

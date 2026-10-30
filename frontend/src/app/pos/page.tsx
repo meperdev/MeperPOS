@@ -1301,7 +1301,7 @@ export default function POSPage() {
                   <span className="text-[13px] font-medium text-muted-foreground">
                     Total
                   </span>
-                  <span className="stat-number text-xl font-semibold tracking-tight text-primary tabular-nums">
+                  <span className="stat-number text-xl font-semibold tracking-tight text-primary-text tabular-nums">
                     {formatCurrency(total)}
                   </span>
                 </div>
@@ -1591,7 +1591,7 @@ export default function POSPage() {
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                   Total
                 </p>
-                <p className="stat-number text-lg font-bold text-primary">
+                <p className="stat-number text-lg font-bold text-primary-text">
                   {formatCurrency(lastSale.total)}
                 </p>
               </div>
@@ -1754,7 +1754,7 @@ export default function POSPage() {
                         {new Date(sale.pausedAt).toLocaleString("es-CO")}
                       </p>
                     </div>
-                    <span className="stat-number text-base font-bold text-primary">
+                    <span className="stat-number text-base font-bold text-primary-text">
                       {formatCurrency(
                         sale.cart.reduce(
                           (sum, item) =>

@@ -355,7 +355,7 @@ export function PaymentConfirmationModal({
             </div>
             <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
               <span className="text-foreground">Total</span>
-              <span className="text-primary">{formatCurrency(total)}</span>
+              <span className="text-primary-text">{formatCurrency(total)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Pagado</span>

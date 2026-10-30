@@ -90,7 +90,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background selection:bg-primary/20 selection:text-primary">
+    <div className="flex min-h-screen w-full flex-col bg-background selection:bg-primary/20 selection:text-primary-text">
       {/* Barra superior: ecosistema MeperSoft + tema */}
       <header className="flex items-center justify-between px-6 pt-6 sm:px-10 sm:pt-8">
         <div className="flex items-center gap-2.5">
@@ -273,7 +273,7 @@ export default function LoginPage() {
       >
         <div className="space-y-4 text-xs sm:text-sm text-foreground p-1">
           <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-muted/40 border border-border/70">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary-text flex items-center justify-center shrink-0 mt-0.5">
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div className="text-xs text-muted-foreground leading-relaxed">
@@ -289,7 +289,7 @@ export default function LoginPage() {
 
           <div className="space-y-1.5">
             <h4 className="font-bold text-foreground flex items-center gap-1.5 text-xs sm:text-sm">
-              <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-primary-text shrink-0" />
               ¿Cómo obtengo credenciales de acceso?
             </h4>
             <p className="text-muted-foreground text-xs leading-relaxed">
@@ -301,7 +301,7 @@ export default function LoginPage() {
 
           <div className="space-y-1.5">
             <h4 className="font-bold text-foreground flex items-center gap-1.5 text-xs sm:text-sm">
-              <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-primary-text shrink-0" />
               ¿Olvidaste tu contraseña?
             </h4>
             <p className="text-muted-foreground text-xs leading-relaxed">
@@ -315,7 +315,7 @@ export default function LoginPage() {
               ¿Eres propietario y requieres habilitar tu negocio?
             </p>
             <p>Escribe directamente al equipo de aprovisionamiento de MeperPOS:</p>
-            <p className="font-mono text-primary font-bold text-xs pt-0.5">
+            <p className="font-mono text-primary-text font-bold text-xs pt-0.5">
               soporte@meperpos.com
             </p>
             <div className="pt-1.5 border-t border-border/60 text-[11px] flex items-center gap-1 text-muted-foreground">
@@ -324,7 +324,7 @@ export default function LoginPage() {
                 href="https://folio.mepersoft.app/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+                className="text-primary-text font-medium hover:underline inline-flex items-center gap-1"
               >
                 folio.mepersoft.app
                 <ExternalLink className="w-2.5 h-2.5" />
