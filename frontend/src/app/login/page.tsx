@@ -103,7 +103,7 @@ export default function LoginPage() {
             priority
           />
           <span className="text-sm font-semibold tracking-tight text-foreground">
-            Meper<span className="text-[#00B392]">Soft</span>
+            Meper<span className="text-[#0F766E] dark:text-[#00B392]">Soft</span>
           </span>
         </div>
 
@@ -113,7 +113,7 @@ export default function LoginPage() {
           aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
           title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
           suppressHydrationWarning
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-muted/40 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border/70 bg-muted/40 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           {isDark ? (
             <Sun className="h-4 w-4" />
@@ -139,7 +139,7 @@ export default function LoginPage() {
               priority
             />
             <div className="text-4xl font-semibold leading-none tracking-tight text-foreground sm:text-[42px]">
-              Meper<span className="text-[#FF9933]">POS</span>
+              Meper<span className="text-[#B45309] dark:text-[#FF9933]">POS</span>
             </div>
             <div className="mt-3 h-1.5 w-11 rounded-full bg-[#FF9933]" />
           </div>
@@ -148,7 +148,7 @@ export default function LoginPage() {
           <div className="mb-6 space-y-1.5">
             <div className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               <ShieldCheck className="h-4 w-4" />
-              <span>Acceso al Sistema</span>
+              <span>Acceso al sistema</span>
             </div>
             <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
               Iniciar sesión
@@ -198,7 +198,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((p) => !p)}
-                  className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
+                  className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   aria-label={
                     showPassword ? "Ocultar contraseña" : "Ver contraseña"
                   }
@@ -223,7 +223,7 @@ export default function LoginPage() {
               {!loading && (
                 <span className="flex items-center gap-1.5 opacity-90">
                   <ArrowRight className="h-4 w-4" />
-                  <kbd className="hidden items-center rounded bg-white/20 px-1.5 py-0.5 font-mono text-[10px] leading-none text-white dark:bg-black/20 sm:inline-flex">
+                  <kbd className="hidden items-center rounded bg-white/20 px-1.5 py-0.5 font-mono text-[11px] leading-none text-white dark:bg-black/20 sm:inline-flex">
                     ↵ Enter
                   </kbd>
                 </span>
@@ -238,7 +238,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowSupportModal(true)}
-              className="inline-flex items-center gap-1 font-semibold text-primary underline underline-offset-2 transition-colors hover:text-primary-dark"
+              className="inline-flex min-h-7 items-center gap-1 font-semibold text-primary-text underline underline-offset-2 transition-colors hover:text-primary-dark"
             >
               <HelpCircle className="h-3.5 w-3.5" />
               <span>Ayuda y soporte</span>
@@ -256,7 +256,7 @@ export default function LoginPage() {
             href="https://folio.mepersoft.app/"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 font-medium text-primary/90 underline underline-offset-2 transition-colors hover:text-primary"
+            className="inline-flex min-h-7 items-center gap-1 font-medium text-primary-text underline underline-offset-2 transition-colors hover:text-primary-dark"
           >
             <span>folio.mepersoft.app</span>
             <ExternalLink className="h-3 w-3" />

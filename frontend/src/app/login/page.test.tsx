@@ -47,7 +47,7 @@ describe("LoginPage Redesign", () => {
   it("renders the centred access form with the MeperSoft lockup", () => {
     render(<LoginPage />);
 
-    expect(screen.getByText("Acceso al Sistema")).toBeInTheDocument();
+    expect(screen.getByText("Acceso al sistema")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Iniciar sesión" })
     ).toBeInTheDocument();

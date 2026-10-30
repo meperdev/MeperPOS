@@ -316,7 +316,7 @@ export function Sidebar() {
             )}
           >
             Meper
-            <span className="text-[#FF9933] underline decoration-[#FF9933] decoration-[3.5px] underline-offset-[6px]">
+            <span className="text-[#B45309] underline decoration-[#B45309] decoration-[3.5px] underline-offset-[6px] dark:text-[#FF9933] dark:decoration-[#FF9933]">
               POS
             </span>
           </p>
@@ -440,8 +440,8 @@ export function Sidebar() {
                     className={cn(
                       "sidebar-item flex items-center rounded-md text-[13px] font-medium select-none transition-colors duration-150",
                       isCollapsed
-                        ? "mx-auto h-8 w-8 justify-center"
-                        : "h-8 w-full gap-2.5 px-2",
+                        ? "mx-auto h-9 w-9 justify-center"
+                        : "h-11 w-full gap-2.5 px-2 lg:h-9",
                       isActive
                         ? "active bg-muted/70 text-foreground"
                         : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -514,7 +514,7 @@ export function Sidebar() {
                     ? "Cambiar a modo claro"
                     : "Cambiar a modo oscuro"
                 }
-                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8"
               >
                 {theme === "dark" ? (
                   <Sun className="h-4 w-4" />
@@ -526,7 +526,7 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={logout}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"
+                className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 lg:h-8 lg:w-8"
                 aria-label="Cerrar sesión"
                 title="Cerrar sesión"
               >
@@ -537,7 +537,7 @@ export function Sidebar() {
                 <button
                   type="button"
                   onClick={toggleCollapse}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                  className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8"
                   aria-label="Cambiar organizacion (expandir)"
                   title="Cambiar organizacion (expandir barra)"
                 >
@@ -648,7 +648,7 @@ export function Sidebar() {
         <div className="flex min-w-0 items-center gap-1.5">
           <button
             onClick={toggleMobileMenu}
-            className="-ml-1.5 shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="-ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label={isMobileMenuOpen ? "Cerrar menu" : "Abrir menu"}
             aria-expanded={isMobileMenuOpen}
           >
@@ -663,7 +663,7 @@ export function Sidebar() {
           />
           <span className="truncate text-lg font-black tracking-tight text-foreground">
             Meper
-            <span className="text-[#FF9933] underline decoration-[#FF9933] decoration-2 underline-offset-4">
+            <span className="text-[#B45309] underline decoration-[#B45309] decoration-2 underline-offset-4 dark:text-[#FF9933] dark:decoration-[#FF9933]">
               POS
             </span>
           </span>

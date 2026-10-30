@@ -174,7 +174,7 @@ export function AlertCenter({
         }
         title="Alertas"
         className={cn(
-          "relative flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground",
+          "relative flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8",
           collapsed && "mx-auto",
         )}
       >
@@ -209,7 +209,7 @@ export function AlertCenter({
                 <Bell className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <h2 className="text-xs font-semibold text-foreground">Alertas</h2>
                 {openedUnread.length > 0 && (
-                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground tabular-nums">
+                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
                     {openedUnread.length}
                   </span>
                 )}
