@@ -9,6 +9,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import {
   PAYROLL_EXPENSE_CATEGORY_NAME,
   PayrollExpenseCategoryService,
+  resolvePayrollExpenseCategoryWithin,
 } from './payroll-expense-category.service';
 
 const admin = {
@@ -419,5 +420,152 @@ describe('PayrollExpenseCategoryService', () => {
     transaction.mockRejectedValueOnce(failure);
     await expect(service.resolve('org', admin)).rejects.toBe(failure);
     expect(transaction).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The transaction-scoped entry point exists so a payroll completion can resolve
+// the category inside the transaction that already holds its payroll locks. These
+// mocks prove ordering and that no nested transaction is opened; they cannot prove
+// PostgreSQL locking or rollback.
+describe('transaction-scoped category resolution', () => {
+  it.each([
+    ['a missing actor', undefined],
+    ['an actor without a user', { ...admin, userId: '' }],
+    [
+      'an actor from another organization',
+      { ...admin, organizationId: 'org-2' },
+    ],
+    ['a MEMBER actor', { ...admin, role: 'MEMBER' }],
+    ['a CASHIER actor', { ...admin, role: 'CASHIER' }],
+    ['an INVENTORY_USER actor', { ...admin, role: 'INVENTORY_USER' }],
+  ])(
+    'rejects %s before touching the caller transaction',
+    async (_case, who) => {
+      const { tx } = setup();
+      await expect(
+        resolvePayrollExpenseCategoryWithin(
+          tx as unknown as Prisma.TransactionClient,
+          'org',
+          who as RequestUser | undefined,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(tx.$queryRaw).not.toHaveBeenCalled();
+      expect(tx.payrollExpenseCategory.findUnique).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a missing organization before touching the caller transaction', async () => {
+    const { tx } = setup();
+    await expect(
+      resolvePayrollExpenseCategoryWithin(
+        tx as unknown as Prisma.TransactionClient,
+        undefined,
+        admin,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('locks the organization row in the caller transaction without opening another one', async () => {
+    const { tx, transaction } = setup({
+      association,
+      group: activeGroup,
+      label: activeLabel,
+    });
+    await expect(
+      resolvePayrollExpenseCategoryWithin(
+        tx as unknown as Prisma.TransactionClient,
+        'org',
+        admin,
+      ),
+    ).resolves.toEqual({
+      organizationId: 'org',
+      groupId: 'group-id',
+      labelId: 'label-id',
+    });
+    expect(transaction).not.toHaveBeenCalled();
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw.mock.calls[0][0].join('?')).toMatch(
+      /FROM "Organization"[\s\S]*FOR UPDATE/,
+    );
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.payrollExpenseCategory.findUnique.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('creates the missing category inside the caller transaction', async () => {
+    const { tx, transaction } = setup({
+      organizationRows: [{ id: 'org' }],
+      association: null,
+      existingGroup: null,
+    });
+    await expect(
+      resolvePayrollExpenseCategoryWithin(
+        tx as unknown as Prisma.TransactionClient,
+        'org',
+        admin,
+      ),
+    ).resolves.toEqual({
+      organizationId: 'org',
+      groupId: 'grp',
+      labelId: 'lbl',
+    });
+    expect(transaction).not.toHaveBeenCalled();
+    expect(tx.payrollExpenseCategory.create).toHaveBeenCalledWith({
+      data: { organizationId: 'org', groupId: 'grp', labelId: 'lbl' },
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects an unknown organization without writing taxonomy', async () => {
+    const { tx } = setup({ organizationRows: [] });
+    await expect(
+      resolvePayrollExpenseCategoryWithin(
+        tx as unknown as Prisma.TransactionClient,
+        'org',
+        admin,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(tx.expenseGroup.create).not.toHaveBeenCalled();
+    expect(tx.expenseLabel.create).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['P2002', 'P2034'])(
+    'maps a %s conflict from the caller transaction without retrying',
+    async (code) => {
+      const { tx } = setup({ association: null, existingGroup: null });
+      tx.payrollExpenseCategory.create.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('race', {
+          code,
+          clientVersion: 'test',
+        }),
+      );
+      await expect(
+        resolvePayrollExpenseCategoryWithin(
+          tx as unknown as Prisma.TransactionClient,
+          'org',
+          admin,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(tx.payrollExpenseCategory.create).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('propagates an audit failure from the caller transaction unchanged', async () => {
+    const { tx } = setup({ association: null, existingGroup: null });
+    const failure = new Prisma.PrismaClientKnownRequestError('audit', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    tx.auditLog.create.mockRejectedValueOnce(failure);
+    await expect(
+      resolvePayrollExpenseCategoryWithin(
+        tx as unknown as Prisma.TransactionClient,
+        'org',
+        admin,
+      ),
+    ).rejects.toBe(failure);
+    expect(tx.expenseLabel.create).not.toHaveBeenCalled();
   });
 });

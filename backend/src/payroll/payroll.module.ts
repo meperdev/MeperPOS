@@ -12,11 +12,12 @@ import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-inst
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
 
-// Payroll expense foundation stays unwired on purpose: PayrollExpenseCategoryService,
-// planPayrollObligationCompletion and writePayrollCompletionExpense have no route
-// and no provider until cash-report deduplication lands. Wiring them here (or
-// exposing them from PayrollController) would let a completion record cash that
-// reports still count twice.
+// The completion expense is now written inside the installment transactions, and
+// cash-flow reports exclude linked expense payments while counting payroll
+// outflows, so no double count remains. PayrollExpenseCategoryService and the
+// completion planner stay off the provider list on purpose: the category logic is
+// reached through the transaction-scoped resolver and the planner through the
+// expense writer. Real PostgreSQL concurrency and rollback proof is still pending.
 @Module({
   imports: [PrismaModule],
   controllers: [EmployeesController, PayrollController],

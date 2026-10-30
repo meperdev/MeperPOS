@@ -95,11 +95,10 @@ import {
  * back. Duplicate-key errors are propagated, never retried, so a lost race
  * surfaces as a failure instead of a false success.
  *
- * Reporting is not integrated: cash-flow reports currently count
- * `ExpensePayment` and ignore `PayrollCashOutflow`, so creating these payments
- * without a report change would double count payroll cash. This unit therefore
- * must stay unwired until reports explicitly exclude linked expense payments and
- * include payroll outflows even when the expense is disabled.
+ * Reporting is integrated: cash-flow reports exclude expense payments of linked
+ * expenses and count `PayrollCashOutflow` on its own date, so these mirror
+ * payments are not double counted. Real PostgreSQL concurrency and rollback
+ * behavior is still unproven.
  */
 export interface PayrollCompletionExpenseWriteInput {
   organizationId: string;

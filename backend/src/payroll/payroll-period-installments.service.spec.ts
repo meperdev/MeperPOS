@@ -18,32 +18,63 @@ const input = {
 };
 
 function setup() {
+  const period = {
+    id: 'period',
+    kind: 'FIXED_PERIOD',
+    status: 'PENDING',
+    periodAmount: new Prisma.Decimal('100'),
+    // Null is the unspecified stored choice, never "disabled".
+    expenseEnabled: null as boolean | null,
+    selectedExpenseDate: null as Date | null,
+    installments: [
+      {
+        outflow: {
+          id: 'old-cash',
+          amount: new Prisma.Decimal('30'),
+          date: new Date('2024-01-15T00:00:00.000Z'),
+          method: 'CASH',
+          _count: { installments: 1 },
+        },
+      },
+    ],
+  };
   const tx = {
     $queryRaw: jest
       .fn()
       .mockResolvedValueOnce([{ id: 'emp' }])
-      .mockResolvedValueOnce([{ id: 'period' }]),
+      .mockResolvedValueOnce([{ id: 'period' }])
+      // Third lookup is the Organization lock of the category resolution.
+      .mockResolvedValue([{ id: 'org' }]),
     payrollObligation: {
-      findFirst: jest.fn().mockResolvedValue({
-        id: 'period',
-        kind: 'FIXED_PERIOD',
-        status: 'PENDING',
-        periodAmount: new Prisma.Decimal('100'),
-        installments: [
-          {
-            outflow: {
-              amount: new Prisma.Decimal('30'),
-              _count: { installments: 1 },
-            },
-          },
-        ],
-      }),
+      findFirst: jest.fn().mockResolvedValue(period),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     payrollCashOutflow: { create: jest.fn().mockResolvedValue({ id: 'cash' }) },
     payrollInstallment: {
       create: jest.fn().mockResolvedValue({ id: 'installment' }),
     },
+    payrollExpenseCategory: {
+      findUnique: jest
+        .fn()
+        .mockResolvedValue({ labelId: 'lbl', groupId: 'grp' }),
+    },
+    expenseGroup: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'grp', active: true }),
+    },
+    expenseLabel: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'lbl',
+        groupId: 'grp',
+        active: true,
+        group: { active: true },
+      }),
+    },
+    payrollObligationExpense: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({}),
+    },
+    expense: { create: jest.fn().mockResolvedValue({ id: 'expense' }) },
+    auditLog: { create: jest.fn().mockResolvedValue({ id: 'audit' }) },
   };
   const transaction = jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
     fn(tx),
@@ -242,5 +273,192 @@ describe('PayrollPeriodInstallmentsService (mock transaction only)', () => {
       service.create(input, 'org', { ...actor, role: 'MEMBER' } as RequestUser),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(transaction).not.toHaveBeenCalled();
+  });
+
+  // S5/S8: the optional expense is written inside the completing transaction,
+  // after the payroll locks and the tenant lock of the category resolution.
+  // These mocks prove ordering and requested effects only; real rollback and
+  // PostgreSQL locking stay unverified.
+  describe('completion expense', () => {
+    it('creates the expense, its payment mirrors and the payroll link in the same transaction', async () => {
+      const { tx, transaction, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.expenseEnabled = true;
+
+      await expect(
+        service.create({ ...input, amount: '70' }, 'org', actor),
+      ).resolves.toMatchObject({ status: 'COMPLETED' });
+
+      // The category resolution reuses this transaction and locks the tenant row
+      // after the employee and obligation locks.
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
+      expect(tx.$queryRaw.mock.calls[2][0].join('?')).toMatch(
+        /FROM "Organization"[\s\S]*FOR UPDATE/,
+      );
+      expect(tx.$queryRaw.mock.calls[2].slice(1)).toEqual(['org']);
+      // Employee and obligation locks both precede the tenant lock.
+      expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.$queryRaw.mock.invocationCallOrder[2],
+      );
+      expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+        tx.$queryRaw.mock.invocationCallOrder[2],
+      );
+      expect(tx.payrollExpenseCategory.findUnique).toHaveBeenCalledWith({
+        where: { organizationId: 'org' },
+      });
+
+      // Tenant and actor come from the validated request, never from the input.
+      expect(tx.expense.create).toHaveBeenCalledTimes(1);
+      expect(tx.expense.create).toHaveBeenCalledWith({
+        data: {
+          organizationId: 'org',
+          labelId: 'lbl',
+          description: null,
+          date: new Date('2024-02-29T05:00:00.000Z'),
+          total: new Prisma.Decimal('100.00'),
+          status: 'PAID',
+          createdById: 'u',
+          payments: {
+            create: [
+              {
+                organizationId: 'org',
+                amount: new Prisma.Decimal('30.00'),
+                method: 'CASH',
+                date: new Date('2024-01-15T05:00:00.000Z'),
+              },
+              {
+                organizationId: 'org',
+                amount: new Prisma.Decimal('70.00'),
+                method: 'CASH',
+                date: new Date('2024-02-29T05:00:00.000Z'),
+              },
+            ],
+          },
+        },
+        select: { id: true },
+      });
+      expect(tx.payrollObligationExpense.create).toHaveBeenCalledWith({
+        data: {
+          obligationId: 'period',
+          organizationId: 'org',
+          employeeId: 'emp',
+          expenseId: 'expense',
+        },
+      });
+      expect(tx.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'u',
+            organizationId: 'org',
+            action: 'EXPENSE_CREATED',
+            resource: 'Expense',
+            resourceId: 'expense',
+          }),
+        }),
+      );
+      // The expense is written before the status transition it belongs to.
+      expect(tx.expense.create.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.payrollObligation.updateMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('uses the stored expense date when the payment selected one', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.expenseEnabled = true;
+      period.selectedExpenseDate = new Date('2024-03-05T00:00:00.000Z');
+
+      await service.create({ ...input, amount: '70' }, 'org', actor);
+
+      expect(
+        (tx.expense.create.mock.calls[0][0] as { data: { date: Date } }).data
+          .date,
+      ).toEqual(new Date('2024-03-05T05:00:00.000Z'));
+    });
+
+    it.each([
+      ['disabled', false],
+      ['unknown', null],
+    ])(
+      'writes no expense and resolves no category when the choice is %s',
+      async (_case, choice) => {
+        const { tx, service } = setup();
+        const period = await tx.payrollObligation.findFirst();
+        period.expenseEnabled = choice;
+
+        await expect(
+          service.create({ ...input, amount: '70' }, 'org', actor),
+        ).resolves.toMatchObject({ status: 'COMPLETED' });
+
+        expect(tx.expense.create).not.toHaveBeenCalled();
+        expect(tx.payrollObligationExpense.create).not.toHaveBeenCalled();
+        // No category work at all: only the employee and obligation locks ran.
+        expect(tx.payrollExpenseCategory.findUnique).not.toHaveBeenCalled();
+        expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+        expect(tx.payrollObligation.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ status: 'COMPLETED' }),
+          }),
+        );
+      },
+    );
+
+    it('writes no expense while the payment is not completed', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.expenseEnabled = true;
+
+      await expect(service.create(input, 'org', actor)).resolves.toMatchObject({
+        status: 'PENDING',
+      });
+
+      expect(tx.expense.create).not.toHaveBeenCalled();
+      expect(tx.payrollExpenseCategory.findUnique).not.toHaveBeenCalled();
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails closed with no expense or status writes when the payroll category is inactive', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.expenseEnabled = true;
+      tx.expenseGroup.findUnique.mockResolvedValueOnce({
+        id: 'grp',
+        active: false,
+      });
+
+      await expect(
+        service.create({ ...input, amount: '70' }, 'org', actor),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(tx.expense.create).not.toHaveBeenCalled();
+      expect(tx.payrollObligationExpense.create).not.toHaveBeenCalled();
+      expect(tx.payrollObligation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('fails the whole completion above the expense limit without expense or status writes', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.expenseEnabled = true;
+      period.periodAmount = new Prisma.Decimal('10000000000');
+      period.installments.length = 0;
+
+      await expect(
+        service.create({ ...input, amount: '10000000000' }, 'org', actor),
+      ).rejects.toThrow(
+        'El gasto de nómina supera $9.999.999.999,99; el pago no se puede completar con gasto',
+      );
+
+      // The limit is decided before any category or expense work.
+      expect(tx.payrollExpenseCategory.findUnique).not.toHaveBeenCalled();
+      expect(tx.expense.create).not.toHaveBeenCalled();
+      expect(tx.payrollObligationExpense.create).not.toHaveBeenCalled();
+      expect(tx.auditLog.create).not.toHaveBeenCalled();
+      expect(tx.payrollObligation.updateMany).not.toHaveBeenCalled();
+      // The mock has no rollback: it only proves the failed completion never
+      // requests the later writes. Real rollback of the outflow/installment needs
+      // PostgreSQL.
+      expect(tx.payrollCashOutflow.create).toHaveBeenCalledTimes(1);
+    });
   });
 });
