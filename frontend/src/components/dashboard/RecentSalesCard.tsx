@@ -5,7 +5,8 @@ import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { useSales } from "@/hooks/useSales";
-import { formatCurrency, formatDateTime, formatPaymentMethod } from "@/lib/utils";
+import { getPaymentState } from "@/components/sales/PaymentState";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import type { Sale } from "@/types";
 
 /** The card is a compact peek at the last sales; it never asks for more. */
@@ -24,12 +25,6 @@ function getStatusBadge(status: Sale["status"]) {
   }
 }
 
-/** Mirrors the payment convention already used by `/sales`. */
-function getPaymentLabel(payments?: Sale["payments"]) {
-  if (!payments || payments.length === 0) return "Sin pago";
-  if (payments.length > 1) return "Mixto";
-  return formatPaymentMethod(payments[0].method);
-}
 
 /**
  * Compact "Ventas recientes" peek: the last few sales in a minimum-column
@@ -43,15 +38,15 @@ export function RecentSalesCard() {
   return (
     <section
       data-testid="recent-sales-card"
-      className="min-w-0 rounded-3xl border border-primary/20 bg-card p-4 text-foreground transition-colors hover:border-primary/35 sm:p-6"
+      className="min-w-0 rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border sm:p-5"
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <p className="text-sm font-semibold tracking-tight text-foreground">
           Ventas recientes
         </p>
         <Link
           href="/sales"
-          className="inline-flex items-center gap-1 text-[12px] font-bold text-primary hover:text-primary/80"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
         >
           Ver todas
           <ArrowRight className="h-3 w-3" aria-hidden="true" />
@@ -63,26 +58,26 @@ export function RecentSalesCard() {
           Sin ventas recientes
         </p>
       ) : (
-        <div className="mt-3">
-          <Table variant="primary">
+        <div className="mt-3 overflow-x-auto">
+          <Table variant="default" className="min-w-[440px]">
             <TableHeader>
               <TableRow>
-                <TableCell as="th" className="px-2 py-2 text-left">
+                <TableCell as="th" className="px-2 py-2 text-left font-medium text-muted-foreground">
                   #
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-left">
+                <TableCell as="th" className="px-2 py-2 text-left font-medium text-muted-foreground">
                   Hora
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-left">
+                <TableCell as="th" className="px-2 py-2 text-left font-medium text-muted-foreground">
                   Cliente
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-left">
+                <TableCell as="th" className="px-2 py-2 text-left font-medium text-muted-foreground">
                   Pago
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-right">
+                <TableCell as="th" className="px-2 py-2 text-right font-medium text-muted-foreground">
                   Total
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-right">
+                <TableCell as="th" className="px-2 py-2 text-right font-medium text-muted-foreground">
                   Estado
                 </TableCell>
               </TableRow>
@@ -90,19 +85,19 @@ export function RecentSalesCard() {
             <tbody>
               {sales.map((sale) => (
                 <TableRow key={sale.id} data-testid="recent-sale-row">
-                  <TableCell className="px-2 py-2 font-mono font-bold">
+                  <TableCell className="px-2 py-2 font-mono font-semibold tabular-nums">
                     {sale.saleNumber}
                   </TableCell>
-                  <TableCell className="px-2 py-2 text-muted-foreground">
+                  <TableCell className="px-2 py-2 text-muted-foreground tabular-nums">
                     {formatDateTime(sale.createdAt)}
                   </TableCell>
                   <TableCell className="max-w-[12rem] truncate px-2 py-2">
                     {sale.customer?.name ?? "Cliente general"}
                   </TableCell>
                   <TableCell className="px-2 py-2">
-                    {getPaymentLabel(sale.payments)}
+                    <span className={getPaymentState(sale.payments, sale.financed).className}>{getPaymentState(sale.payments, sale.financed).label}</span>
                   </TableCell>
-                  <TableCell className="px-2 py-2 text-right font-mono font-bold tabular-nums">
+                  <TableCell className="px-2 py-2 text-right font-mono font-semibold tabular-nums">
                     {formatCurrency(sale.total)}
                   </TableCell>
                   <TableCell className="px-2 py-2 text-right">
