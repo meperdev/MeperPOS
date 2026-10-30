@@ -1592,7 +1592,7 @@ describe('SalesService.generateReceipt delegation', () => {
     );
     expect(settingsServiceMock.find).toHaveBeenCalledWith('org-1');
     expect(receiptsServiceMock.generateSaleReceiptPdf).toHaveBeenCalledWith(
-      receiptSale,
+      { ...receiptSale, financed: false },
       receiptSettings,
     );
     expect(response.sent).toBe(pdf);
