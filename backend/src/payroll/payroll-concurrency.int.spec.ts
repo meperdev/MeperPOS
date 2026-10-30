@@ -1,4 +1,8 @@
-import { ConflictException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   EmployeeShiftKind,
   OrgRole,
@@ -16,8 +20,12 @@ import { ExpensesService } from '../expenses/expenses.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReportsService } from '../reports/reports.service';
 import { writePayrollCompletionExpense } from './payroll-completed-expense-writer';
+import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.service';
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
 import { PayrollGroupsService } from './payroll-groups.service';
+import type { PayrollObligationCompletionFacts } from './payroll-obligation-completion';
+import { PayrollObligationsService } from './payroll-obligations.service';
+import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-installment-correction.service';
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
 
@@ -33,7 +41,21 @@ import { PayrollPeriodsService } from './payroll-periods.service';
  *    lock the completion's replay verification holds, then refuses the edit, and
  *    never allows an edit afterwards;
  * 4. cash-flow aggregation counts a payroll outflow once and excludes its
- *    mirrored `ExpensePayment`.
+ *    mirrored `ExpensePayment`;
+ * 5. the production employee-first lock order cannot form an AB-BA cycle with
+ *    itself, while an intentional reverse-order AB-BA is a real PostgreSQL
+ *    deadlock (40P01) that Prisma surfaces; the victim leaves no partial cash,
+ *    expense or link and the payment still commits exactly once;
+ * 6. what actually happens when a lock waiter outlives Prisma's interactive
+ *    transaction timeout: the observed error code, nothing written, and a clean
+ *    retry afterwards;
+ * 7. the taxonomy-deactivation race the writer comment admits: a deactivation
+ *    committed between the category read and the expense write fails the
+ *    completion closed, and a deactivation committed after the writer's last
+ *    re-read still leaves an expense bound to an inactive label (observed and
+ *    reported here, not fixed: no production code is changed by this suite);
+ * 8. cross-tenant isolation between two namespaced fixture organizations for
+ *    the obligation, installment, cash and expense rows these paths own.
  *
  * Opt-in on purpose: ordinary `npm test` runs must never touch a database.
  * The suite is skipped unless `PAYROLL_PG_INT=1`.
@@ -50,8 +72,8 @@ import { PayrollPeriodsService } from './payroll-periods.service';
  * - pre-existing row counts are captured before the fixtures and compared after
  *   cleanup: nothing may disappear.
  *
- * What this file still cannot prove is listed at the bottom of the spec
- * (`REMAINING GAPS`) and repeated in the handoff.
+ * What this file proves, and what it still cannot, is stated at the bottom of the
+ * spec and repeated in the handoff.
  */
 const ENABLED = process.env.PAYROLL_PG_INT === '1';
 const describePostgres = ENABLED ? describe : describe.skip;
@@ -71,6 +93,30 @@ const PERIOD_TOTAL = '100.00';
 const GROUP_TOTAL = '300.00';
 const CASH_FLOW_TOTAL = '50.00';
 const CONTROL_EXPENSE_TOTAL = '20.00';
+
+// Scenarios 5-8 keep their own dates and amounts, so each one's rows are
+// identifiable and disjoint from the scenarios above.
+const DATE_DEADLOCK = '2026-08-10';
+const DATE_INTRUDER = '2026-08-11';
+const DATE_TIMEOUT = '2026-09-10';
+const DATE_TAXONOMY = '2026-07-10';
+const DATE_ISOLATION = '2026-10-05';
+
+const DEADLOCK_TOTAL_A = '70.00';
+const DEADLOCK_TOTAL_B = '80.00';
+const INTRUDER_TOTAL = '90.00';
+const TIMEOUT_TOTAL = '10.00';
+const TAXONOMY_TOTAL_BEFORE_WRITE = '40.00';
+const TAXONOMY_TOTAL_AFTER_WRITE = '30.00';
+const ISOLATION_TOTAL_A = '60.00';
+const ISOLATION_TOTAL_B_PENDING = '100.00';
+const ISOLATION_PAID_B = '40.00';
+const ISOLATION_TOTAL_B_COMPLETED = '50.00';
+// The writer never validates the ids inside the facts it is handed (a documented
+// precondition), so these two opaque placeholders identify the test-owned facts
+// of scenario 7. They are never persisted as a `PayrollCashOutflow`.
+const TEST_OWNED_OUTFLOW_A = 'test-owned-outflow-taxonomy-before-write';
+const TEST_OWNED_OUTFLOW_B = 'test-owned-outflow-taxonomy-after-write';
 
 interface DatabaseIdentity {
   db: string;
@@ -156,6 +202,95 @@ async function waitForExpenseLockWaiter(
   }
 }
 
+/**
+ * Same evidence for any payroll row: an ungranted `transactionid` lock on a
+ * backend whose current statement names the given relation. The relation is
+ * passed as a LIKE pattern so the caller states exactly what it waits for.
+ */
+async function waitForLockWaiter(
+  probe: PrismaService,
+  relationPattern: string,
+  timeoutMs: number,
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const rows = await probe.$queryRaw<{ waiters: number }[]>`
+      SELECT count(*)::int AS waiters
+      FROM pg_locks l
+      JOIN pg_stat_activity a ON a.pid = l.pid
+      WHERE NOT l.granted
+        AND l.locktype = 'transactionid'
+        AND a.datname = current_database()
+        AND a.state = 'active'
+        AND a.wait_event_type = 'Lock'
+        AND a.query LIKE ${relationPattern}`;
+    const waiters = Number(rows[0]?.waiters ?? 0);
+    if (waiters > 0) return waiters;
+    if (Date.now() > deadline)
+      throw new Error(
+        `No PostgreSQL lock wait matching ${relationPattern} within ${timeoutMs}ms`,
+      );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/**
+ * The fields Prisma actually attaches to a failed query, printed verbatim. The
+ * reported code has to be the observed one, never an assumption about which
+ * error Prisma uses for a deadlock or for an expired interactive transaction.
+ */
+function describeDatabaseError(error: unknown): string {
+  if (!(error instanceof Error)) return `non-Error: ${String(error)}`;
+  const record = error as Error & {
+    code?: unknown;
+    meta?: unknown;
+    clientVersion?: unknown;
+  };
+  return [
+    `name=${error.constructor.name}`,
+    `code=${String(record.code)}`,
+    `meta=${JSON.stringify(record.meta)}`,
+    `clientVersion=${String(record.clientVersion)}`,
+    `message=${error.message}`,
+  ].join(' | ');
+}
+
+/** Narrow an unknown rejection to an Error so it can be rethrown as itself. */
+function asError(error: unknown, fallback: string): Error {
+  return error instanceof Error ? error : new Error(fallback);
+}
+
+/** Every field a PostgreSQL deadlock can reach the caller through. */
+function deadlockEvidence(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const record = error as Error & { code?: unknown; meta?: unknown };
+  return [String(record.code), JSON.stringify(record.meta), error.message]
+    .map((part) => String(part))
+    .join(' ');
+}
+
+/**
+ * Test-owned completion facts: one cash outflow that exactly covers the total, an
+ * enabled expense choice and a completion date, so the planner classifies
+ * completion and the writer writes the expense. Used only where this suite
+ * deliberately drives the production seam directly (scenarios 7 and 8).
+ */
+function completionFacts(
+  total: string,
+  date: string,
+  outflowId: string,
+): PayrollObligationCompletionFacts {
+  return {
+    total,
+    outflows: [
+      { id: outflowId, amount: total, date, method: PaymentMethod.CASH },
+    ],
+    expenseChoice: true,
+    completionDate: date,
+    selectedExpenseDate: null,
+  };
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -180,20 +315,51 @@ describePostgres(
     let employeePeriodId: string;
     let employeeGroupId: string;
     let employeeCashFlowId: string;
+    let employeeDeadlockId: string;
+    let employeeIntruderId: string;
+    let employeeTimeoutId: string;
+    let employeeTaxonomyId: string;
+    let employeeCrossTenantId: string;
 
     let labelId: string;
     let controlLabelId: string;
+    let labelBId: string;
+    let expenseGroupBId: string;
 
     let concurrentObligationId: string;
     let rollbackObligationId: string;
     let cashFlowObligationId: string;
+    let deadlockObligationAId: string;
+    let deadlockObligationBId: string;
+    let intruderObligationId: string;
+    let timeoutObligationId: string;
+    let taxonomyBeforeWriteObligationId: string;
+    let taxonomyAfterWriteObligationId: string;
+    let crossTenantObligationAId: string;
 
     let concurrentExpenseId: string;
     let concurrentOutflowId: string;
 
+    // Second namespaced tenant of scenario 8. It owns its own user, category,
+    // employee, obligations, cash and expense, so any leak between the two is
+    // visible as a changed row instead of a shared fixture.
+    let orgBId: string | undefined;
+    let userBId: string | undefined;
+    let actorB: RequestUser;
+    let employeeTenantBId: string;
+    let tenantBPendingObligationId: string;
+    let tenantBPendingOutflowId: string;
+    let tenantBPendingInstallmentId: string;
+    let tenantBCompletedObligationId: string;
+    let tenantBCompletedOutflowId: string;
+    let tenantBCompletedInstallmentId: string;
+    let tenantBExpenseId: string;
+
     let periodInstallments: PayrollPeriodInstallmentsService;
     let periodInstallmentsSecond: PayrollPeriodInstallmentsService;
     let groupInstallments: PayrollGroupInstallmentsService;
+    let correction: PayrollPeriodInstallmentCorrectionService;
+    let obligations: PayrollObligationsService;
     let expenses: ExpensesService;
     let reports: ReportsService;
 
@@ -407,22 +573,224 @@ describePostgres(
         prismaSecond,
       );
       groupInstallments = new PayrollGroupInstallmentsService(prisma);
+      correction = new PayrollPeriodInstallmentCorrectionService(prisma);
+      obligations = new PayrollObligationsService(prisma);
       expenses = new ExpensesService(prisma, {} as never);
       reports = new ReportsService(prisma, new CacheService());
+
+      // ---------------------------------------------------------------------
+      // Scenarios 5-8. Every scenario owns its employees, so its payroll row set
+      // is disjoint from the scenarios above and their assertions stay valid.
+      // ---------------------------------------------------------------------
+      const scenarioEmployees = await Promise.all(
+        ['deadlock', 'intruder', 'timeout', 'taxonomy', 'isolation'].map(
+          (suffix) =>
+            prisma.employee.create({
+              data: {
+                organizationId: organization.id,
+                name: `Payroll PG ${runId} ${suffix}`,
+                identification: `${runId}-${suffix}`,
+                active: true,
+              },
+            }),
+        ),
+      );
+      employeeDeadlockId = scenarioEmployees[0].id;
+      employeeIntruderId = scenarioEmployees[1].id;
+      employeeTimeoutId = scenarioEmployees[2].id;
+      employeeTaxonomyId = scenarioEmployees[3].id;
+      employeeCrossTenantId = scenarioEmployees[4].id;
+
+      // Same period window on purpose: the payroll period path stores no
+      // uniqueness over it, and each payment belongs to its own employee.
+      const createPeriod = (
+        employeeId: string,
+        periodAmount: string,
+        expenseEnabled: boolean,
+      ) =>
+        periods.create(
+          {
+            employeeId,
+            periodStart: '2026-08-01',
+            periodEnd: '2026-08-31',
+            periodAmount,
+            expenseEnabled,
+          },
+          organization.id,
+          actor,
+        );
+
+      deadlockObligationAId = (
+        await createPeriod(employeeDeadlockId, DEADLOCK_TOTAL_A, true)
+      ).id;
+      deadlockObligationBId = (
+        await createPeriod(employeeDeadlockId, DEADLOCK_TOTAL_B, true)
+      ).id;
+      intruderObligationId = (
+        await createPeriod(employeeIntruderId, INTRUDER_TOTAL, true)
+      ).id;
+      timeoutObligationId = (
+        await createPeriod(employeeTimeoutId, TIMEOUT_TOTAL, true)
+      ).id;
+      taxonomyBeforeWriteObligationId = (
+        await createPeriod(
+          employeeTaxonomyId,
+          TAXONOMY_TOTAL_BEFORE_WRITE,
+          true,
+        )
+      ).id;
+      taxonomyAfterWriteObligationId = (
+        await createPeriod(employeeTaxonomyId, TAXONOMY_TOTAL_AFTER_WRITE, true)
+      ).id;
+      crossTenantObligationAId = (
+        await createPeriod(employeeCrossTenantId, ISOLATION_TOTAL_A, false)
+      ).id;
+
+      // The second tenant: its own user, its own payroll category, its own
+      // obligation with real partial cash and its own completed payment with a
+      // real linked expense.
+      const organizationB = await prisma.organization.create({
+        data: {
+          name: `Payroll PG isolation ${runId}`,
+          slug: `${runId}-b`,
+          plan: PlanType.BASIC,
+          active: true,
+        },
+      });
+      orgBId = organizationB.id;
+      const userB = await prisma.user.create({
+        data: {
+          email: `${runId}-b@example.invalid`,
+          password: 'not-a-real-hash',
+          name: 'Payroll PG isolation owner',
+        },
+      });
+      userBId = userB.id;
+      await prisma.organizationUser.create({
+        data: {
+          userId: userB.id,
+          organizationId: organizationB.id,
+          role: OrgRole.OWNER,
+          isPrimaryOwner: true,
+        },
+      });
+      actorB = {
+        userId: userB.id,
+        email: userB.email,
+        organizationId: organizationB.id,
+        role: OrgRole.OWNER,
+        tokenVersion: 0,
+        isSuperAdmin: false,
+      };
+
+      const expenseGroupB = await prisma.expenseGroup.create({
+        data: { organizationId: organizationB.id, name: 'Nómina' },
+      });
+      expenseGroupBId = expenseGroupB.id;
+      const labelB = await prisma.expenseLabel.create({
+        data: {
+          organizationId: organizationB.id,
+          groupId: expenseGroupB.id,
+          name: 'Nómina',
+        },
+      });
+      labelBId = labelB.id;
+      await prisma.payrollExpenseCategory.create({
+        data: {
+          organizationId: organizationB.id,
+          groupId: expenseGroupB.id,
+          labelId: labelB.id,
+        },
+      });
+      const employeeB = await prisma.employee.create({
+        data: {
+          organizationId: organizationB.id,
+          name: `Payroll PG ${runId} isolation B`,
+          identification: `${runId}-isolation-b`,
+          active: true,
+        },
+      });
+      employeeTenantBId = employeeB.id;
+
+      const periodBPending = await periods.create(
+        {
+          employeeId: employeeB.id,
+          periodStart: '2026-10-01',
+          periodEnd: '2026-10-31',
+          periodAmount: ISOLATION_TOTAL_B_PENDING,
+          expenseEnabled: true,
+        },
+        organizationB.id,
+        actorB,
+      );
+      tenantBPendingObligationId = periodBPending.id;
+      const partialB = await periodInstallments.create(
+        {
+          employeeId: employeeB.id,
+          obligationId: periodBPending.id,
+          amount: ISOLATION_PAID_B,
+          date: DATE_ISOLATION,
+          method: PaymentMethod.CASH,
+        },
+        organizationB.id,
+        actorB,
+      );
+      tenantBPendingOutflowId = partialB.outflow.id;
+      tenantBPendingInstallmentId = partialB.installment.id;
+
+      const periodBCompleted = await periods.create(
+        {
+          employeeId: employeeB.id,
+          periodStart: '2026-11-01',
+          periodEnd: '2026-11-30',
+          periodAmount: ISOLATION_TOTAL_B_COMPLETED,
+          expenseEnabled: true,
+        },
+        organizationB.id,
+        actorB,
+      );
+      tenantBCompletedObligationId = periodBCompleted.id;
+      const completionB = await periodInstallments.create(
+        {
+          employeeId: employeeB.id,
+          obligationId: periodBCompleted.id,
+          amount: ISOLATION_TOTAL_B_COMPLETED,
+          date: DATE_ISOLATION,
+          method: PaymentMethod.CASH,
+        },
+        organizationB.id,
+        actorB,
+      );
+      tenantBCompletedOutflowId = completionB.outflow.id;
+      tenantBCompletedInstallmentId = completionB.installment.id;
+      const linkB = await prisma.payrollObligationExpense.findFirstOrThrow({
+        where: {
+          organizationId: organizationB.id,
+          obligationId: periodBCompleted.id,
+        },
+      });
+      tenantBExpenseId = linkB.expenseId;
 
       console.log(
         `[payroll-pg-int] fixtures created: org=${organization.id} slug=${runId} employees=3 obligations=3 shifts=2`,
       );
+      console.log(
+        `[payroll-pg-int] scenario 5-8 fixtures: org=${organization.id} employees=5 obligations=7 tenantB=${organizationB.id} tenantB_obligations=2 tenantB_outflows=2 tenantB_expenses=1`,
+      );
     }, 60000);
 
     afterAll(async () => {
-      const createdOrgId = orgId;
-      const createdUserId = userId;
+      const createdUserIds = [userId, userBId].filter(
+        (value): value is string => typeof value === 'string',
+      );
+      const createdOrgIds = [orgId, orgBId].filter(
+        (value): value is string => typeof value === 'string',
+      );
       let afterCounts: Record<string, number> | undefined;
       let cleanupError: Error | undefined;
 
       try {
-        if (createdOrgId) {
+        if (createdOrgIds.length > 0) {
           await prisma.$transaction(
             async (tx) => {
               // The payroll history tables reject ordinary UPDATE and DELETE with
@@ -433,88 +801,102 @@ describePostgres(
               await tx.$executeRawUnsafe(
                 'SET LOCAL session_replication_role = replica',
               );
-              // Children first, then parents.
-              await tx.payrollAllocationVoid.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.payrollAllocation.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.payrollCashRevision.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.payrollObligationExpense.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.payrollInstallment.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.payrollCashOutflow.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.payrollShiftMembership.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.payrollObligation.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.employeeShift.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.employee.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.expensePayment.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.expense.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.payrollExpenseCategory.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.expenseLabel.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.expenseGroup.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.auditLog.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
-              await tx.organizationUser.deleteMany({
-                where: { organizationId: createdOrgId },
-              });
+              for (const createdOrgId of createdOrgIds) {
+                // Children first, then parents.
+                await tx.payrollAllocationVoid.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollAllocation.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollCashRevision.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollObligationExpense.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollInstallment.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollCashOutflow.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollShiftMembership.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollObligation.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.employeeShift.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.employee.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.expensePayment.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.expense.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollExpenseCategory.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.expenseLabel.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.expenseGroup.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.auditLog.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.organizationUser.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+              }
             },
             { timeout: 30000, maxWait: 30000 },
           );
 
-          // Outside replica mode: the user and the tenant go through their normal
+          // Outside replica mode: the users and the tenants go through their normal
           // constraints, so a missed child row fails loudly instead of being hidden.
-          if (createdUserId)
-            await prisma.user.deleteMany({ where: { id: createdUserId } });
-          await prisma.organization.deleteMany({ where: { id: createdOrgId } });
+          if (createdUserIds.length > 0)
+            await prisma.user.deleteMany({
+              where: { id: { in: createdUserIds } },
+            });
+          for (const createdOrgId of createdOrgIds)
+            await prisma.organization.deleteMany({
+              where: { id: createdOrgId },
+            });
 
-          const remaining = await prisma.payrollCashOutflow.count({
-            where: { organizationId: createdOrgId },
-          });
-          const remainingLinks = await prisma.payrollObligationExpense.count({
-            where: { organizationId: createdOrgId },
-          });
-          const remainingExpenses = await prisma.expense.count({
-            where: { organizationId: createdOrgId },
-          });
-          const remainingOrg = await prisma.organization.count({
-            where: { id: createdOrgId },
-          });
-          if (
-            remaining !== 0 ||
-            remainingLinks !== 0 ||
-            remainingExpenses !== 0 ||
-            remainingOrg !== 0
-          )
+          const leftovers: string[] = [];
+          for (const createdOrgId of createdOrgIds) {
+            const remaining = await prisma.payrollCashOutflow.count({
+              where: { organizationId: createdOrgId },
+            });
+            const remainingLinks = await prisma.payrollObligationExpense.count({
+              where: { organizationId: createdOrgId },
+            });
+            const remainingExpenses = await prisma.expense.count({
+              where: { organizationId: createdOrgId },
+            });
+            const remainingOrg = await prisma.organization.count({
+              where: { id: createdOrgId },
+            });
+            if (
+              remaining !== 0 ||
+              remainingLinks !== 0 ||
+              remainingExpenses !== 0 ||
+              remainingOrg !== 0
+            )
+              leftovers.push(
+                `org=${createdOrgId} outflows=${remaining} links=${remainingLinks} expenses=${remainingExpenses} organizations=${remainingOrg}`,
+              );
+          }
+          if (leftovers.length > 0)
             throw new Error(
-              `Fixture cleanup left rows behind: outflows=${remaining} links=${remainingLinks} expenses=${remainingExpenses} organizations=${remainingOrg}`,
+              `Fixture cleanup left rows behind: ${leftovers.join('; ')}`,
             );
 
           afterCounts = await tableCounts(prisma);
@@ -527,7 +909,7 @@ describePostgres(
             );
 
           console.log(
-            `[payroll-pg-int] fixtures removed for org=${createdOrgId}: outflows=0 links=0 expenses=0 organizations=0`,
+            `[payroll-pg-int] fixtures removed for ${createdOrgIds.length} organizations: outflows=0 links=0 expenses=0 organizations=0`,
           );
           console.log(
             `[payroll-pg-int] pre-existing rows preserved (before -> after): ${Object.keys(
@@ -1001,27 +1383,1043 @@ describePostgres(
       expect(outflows[0].amount.toFixed(2)).toBe(CASH_FLOW_TOTAL);
       expect(outflows[0].employeeId).toBe(employeeCashFlowId);
     }, 60000);
+
+    it('5. production lock order cannot cycle by itself; an intentional reverse-order AB-BA is a real deadlock that leaves no partial money behind', async () => {
+      // (a) Production-only attempt at an AB-BA. Two real completions share the
+      // Employee row and are started at the same time in opposite order. Every
+      // payroll writer takes that employee lock first, so PostgreSQL serialises
+      // them instead of forming a cycle.
+      const productionOnly = await Promise.all([
+        periodInstallments.create(
+          {
+            employeeId: employeeDeadlockId,
+            obligationId: deadlockObligationAId,
+            amount: DEADLOCK_TOTAL_A,
+            date: DATE_DEADLOCK,
+            method: PaymentMethod.CASH,
+          },
+          orgId,
+          actor,
+        ),
+        periodInstallmentsSecond.create(
+          {
+            employeeId: employeeDeadlockId,
+            obligationId: deadlockObligationBId,
+            amount: DEADLOCK_TOTAL_B,
+            date: DATE_DEADLOCK,
+            method: PaymentMethod.CASH,
+          },
+          orgId,
+          actor,
+        ),
+      ]);
+      expect(productionOnly.map((result) => result.status)).toEqual([
+        'COMPLETED',
+        'COMPLETED',
+      ]);
+      console.log(
+        '[payroll-pg-int] production-order attempt: two concurrent completions on one employee serialised, no deadlock and no lost payment',
+      );
+
+      const deadlockObligations = await prisma.payrollObligation.findMany({
+        where: { organizationId: orgId, employeeId: employeeDeadlockId },
+        orderBy: { periodAmount: 'asc' },
+      });
+      expect(deadlockObligations.map((row) => row.status)).toEqual([
+        'COMPLETED',
+        'COMPLETED',
+      ]);
+      expect(deadlockObligations.map((row) => row.version)).toEqual([1, 1]);
+      const deadlockOutflows = await prisma.payrollCashOutflow.findMany({
+        where: { organizationId: orgId, employeeId: employeeDeadlockId },
+        orderBy: { amount: 'asc' },
+      });
+      expect(deadlockOutflows.map((row) => row.amount.toFixed(2))).toEqual([
+        DEADLOCK_TOTAL_A,
+        DEADLOCK_TOTAL_B,
+      ]);
+      const deadlockLinks = await prisma.payrollObligationExpense.findMany({
+        where: { organizationId: orgId, employeeId: employeeDeadlockId },
+      });
+      expect(deadlockLinks).toHaveLength(2);
+      expect(new Set(deadlockLinks.map((row) => row.expenseId)).size).toBe(2);
+
+      // (b) A genuine AB-BA needs an order the production code never uses:
+      // obligation first, employee second. The intruder takes the obligation,
+      // the production completion takes the employee and blocks on the
+      // obligation, and the intruder then asks for the employee.
+      let releaseIntruder = (): void => {};
+      const intruderMayProceed = new Promise<void>((resolve) => {
+        releaseIntruder = resolve;
+      });
+      let intruderHoldsObligation = (): void => {};
+      const intruderLockedObligation = new Promise<void>((resolve) => {
+        intruderHoldsObligation = resolve;
+      });
+
+      const intruder = prismaSecond.$transaction(
+        async (tx) => {
+          const locked = await tx.$queryRaw<{ id: string }[]>`
+            SELECT "id" FROM "PayrollObligation"
+            WHERE "id" = ${intruderObligationId}
+            AND "organizationId" = ${orgId} FOR UPDATE`;
+          if (!locked.length) throw new Error('Intruder could not lock');
+          intruderHoldsObligation();
+          await intruderMayProceed;
+          await tx.$queryRaw<{ id: string }[]>`
+            SELECT "id" FROM "Employee"
+            WHERE "id" = ${employeeIntruderId}
+            AND "organizationId" = ${orgId} FOR UPDATE`;
+          return 'intruder survived';
+        },
+        { timeout: 30000, maxWait: 30000 },
+      );
+      const settledIntruder = intruder.then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+
+      await intruderLockedObligation;
+      const completion = periodInstallments.create(
+        {
+          employeeId: employeeIntruderId,
+          obligationId: intruderObligationId,
+          amount: INTRUDER_TOTAL,
+          date: DATE_INTRUDER,
+          method: PaymentMethod.CASH,
+        },
+        orgId,
+        actor,
+      );
+      const settledCompletion = completion.then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+
+      let waited = 0;
+      let waitFailure: unknown;
+      try {
+        // PostgreSQL reports the production backend blocked on the obligation
+        // row before the intruder closes the cycle.
+        waited = await waitForLockWaiter(
+          prismaProbe,
+          '%"PayrollObligation"%',
+          15000,
+        );
+      } catch (error) {
+        waitFailure = error;
+      } finally {
+        // Never leave a transaction holding a row lock into the next scenario.
+        releaseIntruder();
+      }
+
+      const intruderResult = await settledIntruder;
+      const completionResult = await settledCompletion;
+      if (waitFailure) throw asError(waitFailure, 'Lock wait probe failed');
+      expect(waited).toBeGreaterThan(0);
+
+      // PostgreSQL resolves the cycle by killing one participant. Which one is
+      // PostgreSQL's choice, not this suite's, so the exact victim is reported
+      // and asserted instead of assumed. In every observed run it killed the
+      // blocked production completion and the reverse-order intruder survived,
+      // so both outcomes are handled and only one of them may happen.
+      const failures: { side: string; error: unknown }[] = [];
+      if (!intruderResult.ok)
+        failures.push({
+          side: 'reverse-order intruder',
+          error: intruderResult.error,
+        });
+      if (!completionResult.ok)
+        failures.push({
+          side: 'production completion',
+          error: completionResult.error,
+        });
+      expect(failures).toHaveLength(1);
+      const victim = failures[0];
+      console.log(
+        `[payroll-pg-int] PostgreSQL deadlock victim: ${victim.side} -> ${describeDatabaseError(victim.error)}`,
+      );
+      // The observed evidence has to be PostgreSQL's own deadlock, not a
+      // client-side transaction or lock-wait timeout.
+      expect(deadlockEvidence(victim.error)).toMatch(/40P01|deadlock/i);
+      expect(deadlockEvidence(victim.error)).not.toMatch(/P2028/);
+
+      const request = {
+        employeeId: employeeIntruderId,
+        obligationId: intruderObligationId,
+        amount: INTRUDER_TOTAL,
+        date: DATE_INTRUDER,
+        method: PaymentMethod.CASH,
+      };
+      const afterDeadlock = await prisma.payrollObligation.findUniqueOrThrow({
+        where: { id: intruderObligationId },
+      });
+      const afterDeadlockOutflows = await prisma.payrollCashOutflow.count({
+        where: { organizationId: orgId, employeeId: employeeIntruderId },
+      });
+      const afterDeadlockLinks = await prisma.payrollObligationExpense.count({
+        where: { organizationId: orgId, obligationId: intruderObligationId },
+      });
+      if (!completionResult.ok) {
+        // The production transaction was the victim: nothing of it survived,
+        // and the retry below is what has to commit consistently.
+        expect(afterDeadlock.status).toBe('PENDING');
+        expect(afterDeadlock.version).toBe(0);
+        expect(afterDeadlockOutflows).toBe(0);
+        expect(afterDeadlockLinks).toBe(0);
+        const retried = await periodInstallments.create(request, orgId, actor);
+        expect(retried.status).toBe('COMPLETED');
+        console.log(
+          '[payroll-pg-int] deadlock victim was the production completion: its retry committed',
+        );
+      } else {
+        expect(completionResult.value.status).toBe('COMPLETED');
+        console.log(
+          '[payroll-pg-int] deadlock survivor: the production completion committed',
+        );
+      }
+
+      // Whatever PostgreSQL killed, the committed state is consistent: one cash
+      // outflow, one installment, no duplicate expense, one link and a valid
+      // obligation status.
+      const survivorObligation =
+        await prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: intruderObligationId },
+        });
+      expect(survivorObligation.status).toBe('COMPLETED');
+      expect(survivorObligation.version).toBe(1);
+      const survivorOutflows = await prisma.payrollCashOutflow.findMany({
+        where: { organizationId: orgId, employeeId: employeeIntruderId },
+      });
+      expect(survivorOutflows).toHaveLength(1);
+      expect(survivorOutflows[0].amount.toFixed(2)).toBe(INTRUDER_TOTAL);
+      expect(survivorOutflows[0].method).toBe(PaymentMethod.CASH);
+      const survivorInstallments = await prisma.payrollInstallment.findMany({
+        where: {
+          organizationId: orgId,
+          obligationId: intruderObligationId,
+        },
+      });
+      expect(survivorInstallments).toHaveLength(1);
+      expect(survivorInstallments[0].outflowId).toBe(survivorOutflows[0].id);
+      const survivorLinks = await prisma.payrollObligationExpense.findMany({
+        where: {
+          organizationId: orgId,
+          obligationId: intruderObligationId,
+        },
+      });
+      expect(survivorLinks).toHaveLength(1);
+      const survivorExpense = await prisma.expense.findUniqueOrThrow({
+        where: { id: survivorLinks[0].expenseId },
+        include: { payments: true },
+      });
+      expect(survivorExpense.total.toFixed(2)).toBe(INTRUDER_TOTAL);
+      expect(survivorExpense.payments).toHaveLength(1);
+      expect(survivorExpense.payments[0].amount.toFixed(2)).toBe(
+        INTRUDER_TOTAL,
+      );
+      expect(
+        await prisma.payrollObligationExpense.count({
+          where: {
+            organizationId: orgId,
+            expenseId: survivorExpense.id,
+          },
+        }),
+      ).toBe(1);
+      // No duplicate expense: the victim wrote none and the survivor wrote one,
+      // which is the only 90.00 expense of this tenant.
+      await expect(
+        prisma.expense.count({
+          where: {
+            organizationId: orgId,
+            total: new Prisma.Decimal(INTRUDER_TOTAL),
+          },
+        }),
+      ).resolves.toBe(1);
+      const survivorAudits = await prisma.auditLog.count({
+        where: {
+          organizationId: orgId,
+          resource: 'Expense',
+          resourceId: survivorExpense.id,
+        },
+      });
+      expect(survivorAudits).toBe(1);
+    }, 90000);
+
+    it('6. a lock waiter that outlives Prisma interactive transaction timeout: real error, nothing written, clean retry', async () => {
+      // (a) Controlled probe: an interactive transaction with an explicit 750 ms
+      // budget, blocked on a real row lock held by another transaction.
+      let releaseRowHolder = (): void => {};
+      const rowHolderMayFinish = new Promise<void>((resolve) => {
+        releaseRowHolder = resolve;
+      });
+      let rowHolderHoldsLock = (): void => {};
+      const rowHolderLocked = new Promise<void>((resolve) => {
+        rowHolderHoldsLock = resolve;
+      });
+
+      const rowHolder = prismaSecond.$transaction(
+        async (tx) => {
+          const locked = await tx.$queryRaw<{ id: string }[]>`
+            SELECT "id" FROM "PayrollObligation"
+            WHERE "id" = ${timeoutObligationId}
+            AND "organizationId" = ${orgId} FOR UPDATE`;
+          if (!locked.length) throw new Error('Holder could not lock');
+          rowHolderHoldsLock();
+          await rowHolderMayFinish;
+          return 'holder committed';
+        },
+        { timeout: 60000, maxWait: 30000 },
+      );
+      const settledRowHolder = rowHolder.then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      await rowHolderLocked;
+
+      const shortWait = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw<{ id: string }[]>`
+            SELECT "id" FROM "PayrollObligation"
+            WHERE "id" = ${timeoutObligationId}
+            AND "organizationId" = ${orgId} FOR UPDATE`;
+          return 'acquired';
+        },
+        { timeout: 750, maxWait: 2000 },
+      );
+      const settledShortWait = shortWait.then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      let shortWaited = 0;
+      let shortWaitFailure: unknown;
+      try {
+        shortWaited = await waitForLockWaiter(
+          prismaProbe,
+          '%"PayrollObligation"%',
+          5000,
+        );
+      } catch (error) {
+        shortWaitFailure = error;
+      }
+
+      // Does the client-side budget settle the promise while the statement is
+      // still blocked in PostgreSQL? Observed, not assumed.
+      const shortRaced = await Promise.race([
+        settledShortWait.then((result) => ({ settled: true as const, result })),
+        delay(2500).then(() => ({ settled: false as const })),
+      ]);
+      console.log(
+        `[payroll-pg-int] an expired 750 ms interactive transaction settled while its statement was still blocked: ${String(shortRaced.settled)}`,
+      );
+      // Observed behaviour, asserted: the client-side budget does not interrupt a
+      // statement that is already blocked in PostgreSQL.
+      expect(shortRaced.settled).toBe(false);
+      // Release and settle unconditionally, so this scenario can never leak a
+      // held row lock into the next one.
+      releaseRowHolder();
+      const rowHolderResult = await settledRowHolder;
+      const shortResult = shortRaced.settled
+        ? shortRaced.result
+        : await settledShortWait;
+      if (shortWaitFailure)
+        throw asError(shortWaitFailure, 'Lock wait probe failed');
+      expect(shortWaited).toBeGreaterThan(0);
+      expect(rowHolderResult.ok).toBe(true);
+      if (shortResult.ok)
+        throw new Error('An expired interactive transaction reported success');
+      console.log(
+        `[payroll-pg-int] 750 ms interactive transaction after release: ${describeDatabaseError(shortResult.error)}`,
+      );
+      expect(deadlockEvidence(shortResult.error)).toMatch(/P2028/);
+
+      // (b) The production completion, with Prisma's default interactive
+      // transaction budget, blocked at the very last foreign key of the flow:
+      // the payroll label is held FOR UPDATE, so the cash outflow, the
+      // installment and the expense payments of the transaction are already
+      // written when the deadline passes. This is the money-relevant case: the
+      // expired transaction must not leave that work behind.
+      let releaseLabelHolder = (): void => {};
+      const labelHolderMayFinish = new Promise<void>((resolve) => {
+        releaseLabelHolder = resolve;
+      });
+      let labelHolderHoldsLock = (): void => {};
+      const labelHolderLocked = new Promise<void>((resolve) => {
+        labelHolderHoldsLock = resolve;
+      });
+      const labelHolder = prismaSecond.$transaction(
+        async (tx) => {
+          const locked = await tx.$queryRaw<{ id: string }[]>`
+            SELECT "id" FROM "ExpenseLabel"
+            WHERE "id" = ${labelId}
+            AND "organizationId" = ${orgId} FOR UPDATE`;
+          if (!locked.length) throw new Error('Label holder could not lock');
+          labelHolderHoldsLock();
+          await labelHolderMayFinish;
+          return 'label holder committed';
+        },
+        { timeout: 60000, maxWait: 30000 },
+      );
+      const settledLabelHolder = labelHolder.then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      await labelHolderLocked;
+
+      const interrupted = periodInstallments.create(
+        {
+          employeeId: employeeTimeoutId,
+          obligationId: timeoutObligationId,
+          amount: TIMEOUT_TOTAL,
+          date: DATE_TIMEOUT,
+          method: PaymentMethod.CASH,
+        },
+        orgId,
+        actor,
+      );
+      const settledInterrupted = interrupted.then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      // The blocked statement is the `Expense` insert; the foreign-key wait on
+      // the label row itself is not visible as a statement in pg_stat_activity.
+      let interruptedWaited = 0;
+      let interruptedWaitFailure: unknown;
+      try {
+        interruptedWaited = await waitForLockWaiter(
+          prismaProbe,
+          '%"Expense"%',
+          5000,
+        );
+      } catch (error) {
+        interruptedWaitFailure = error;
+      }
+      const interruptedRaced = await Promise.race([
+        settledInterrupted.then((result) => ({
+          settled: true as const,
+          result,
+        })),
+        delay(6500).then(() => ({ settled: false as const })),
+      ]);
+      console.log(
+        `[payroll-pg-int] the production completion settled while its expense insert was still blocked: ${String(interruptedRaced.settled)}`,
+      );
+      expect(interruptedRaced.settled).toBe(false);
+      releaseLabelHolder();
+      const labelHolderResult = await settledLabelHolder;
+      const interruptedResult = interruptedRaced.settled
+        ? interruptedRaced.result
+        : await settledInterrupted;
+      if (interruptedWaitFailure)
+        throw asError(interruptedWaitFailure, 'Lock wait probe failed');
+      expect(interruptedWaited).toBeGreaterThan(0);
+      expect(labelHolderResult.ok).toBe(true);
+      console.log(
+        `[payroll-pg-int] production completion after its interactive transaction expired: ${interruptedResult.ok ? 'unexpectedly fulfilled' : describeDatabaseError(interruptedResult.error)}`,
+      );
+      if (interruptedResult.ok)
+        throw new Error(
+          'The completion must not report success after its transaction budget expired',
+        );
+      // The real code, and the proof that it is the transaction being closed
+      // after the deadline rather than an interrupted statement.
+      expect(deadlockEvidence(interruptedResult.error)).toMatch(/P2028/);
+      expect(deadlockEvidence(interruptedResult.error)).toMatch(
+        /however \d+ ms passed since the start of the transaction/,
+      );
+
+      // Nothing of the expired completion may survive, including the cash and the
+      // installment it had already inserted before the block.
+      await delay(500);
+      const timeoutObligation =
+        await prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: timeoutObligationId },
+        });
+      expect(timeoutObligation.status).toBe('PENDING');
+      expect(timeoutObligation.version).toBe(0);
+      await expect(
+        prisma.payrollCashOutflow.count({
+          where: { organizationId: orgId, employeeId: employeeTimeoutId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollInstallment.count({
+          where: { organizationId: orgId, obligationId: timeoutObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: { organizationId: orgId, obligationId: timeoutObligationId },
+        }),
+      ).resolves.toBe(0);
+
+      // Recovery: the same request succeeds once the lock is free, so both
+      // expired attempts left nothing that blocks or duplicates the payment.
+      const retried = await periodInstallments.create(
+        {
+          employeeId: employeeTimeoutId,
+          obligationId: timeoutObligationId,
+          amount: TIMEOUT_TOTAL,
+          date: DATE_TIMEOUT,
+          method: PaymentMethod.CASH,
+        },
+        orgId,
+        actor,
+      );
+      expect(retried.status).toBe('COMPLETED');
+      const finalObligation = await prisma.payrollObligation.findUniqueOrThrow({
+        where: { id: timeoutObligationId },
+      });
+      expect(finalObligation.version).toBe(1);
+      await expect(
+        prisma.payrollCashOutflow.count({
+          where: { organizationId: orgId, employeeId: employeeTimeoutId },
+        }),
+      ).resolves.toBe(1);
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: { organizationId: orgId, obligationId: timeoutObligationId },
+        }),
+      ).resolves.toBe(1);
+    }, 90000);
+
+    it('7. taxonomy deactivation race: forced between the category read and the expense write, and forced after the writer re-read', async () => {
+      const expensesBeforePhaseA = await prisma.expense.count({
+        where: { organizationId: orgId },
+      });
+
+      // Phase A: the deactivation commits between the production category read
+      // and the production expense write, inside one real transaction that holds
+      // the tenant organization lock. No taxonomy lock stops the deactivation.
+      const phaseA = await prisma
+        .$transaction(
+          async (tx) => {
+            const category = await resolvePayrollExpenseCategoryWithin(
+              tx,
+              orgId,
+              actor,
+            );
+            await prismaSecond.expenseLabel.update({
+              where: { id: labelId },
+              data: { active: false },
+            });
+            return writePayrollCompletionExpense(tx, {
+              organizationId: orgId as string,
+              employeeId: employeeTaxonomyId,
+              obligationId: taxonomyBeforeWriteObligationId,
+              actor,
+              category,
+              facts: completionFacts(
+                TAXONOMY_TOTAL_BEFORE_WRITE,
+                DATE_TAXONOMY,
+                TEST_OWNED_OUTFLOW_A,
+              ),
+            });
+          },
+          { timeout: 30000, maxWait: 30000 },
+        )
+        .then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => ({ ok: false as const, error }),
+        );
+      if (phaseA.ok)
+        throw new Error(
+          'The deactivation between the category read and the expense write was not detected',
+        );
+      console.log(
+        `[payroll-pg-int] deactivation between the category read and the expense write: ${phaseA.error instanceof Error ? phaseA.error.constructor.name : 'non-Error'}: ${phaseA.error instanceof Error ? phaseA.error.message : String(phaseA.error)}`,
+      );
+      expect(phaseA.error).toBeInstanceOf(ConflictException);
+      const deactivatedLabel = await prisma.expenseLabel.findUniqueOrThrow({
+        where: { id: labelId },
+      });
+      expect(deactivatedLabel.active).toBe(false);
+      // The completion is fail-closed: no expense and no link survive.
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBeforePhaseA);
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: { obligationId: taxonomyBeforeWriteObligationId },
+        }),
+      ).resolves.toBe(0);
+
+      await prisma.expenseLabel.update({
+        where: { id: labelId },
+        data: { active: true },
+      });
+
+      // Phase B: the deactivation commits after the writer's last bound/active
+      // re-read and before the completion commits. The writer takes no lock on
+      // the label, so this window is the one its own comment leaves open.
+      let writerFinished = (): void => {};
+      const writerDone = new Promise<void>((resolve) => {
+        writerFinished = resolve;
+      });
+      let releaseCommit = (): void => {};
+      const commitGate = new Promise<void>((resolve) => {
+        releaseCommit = resolve;
+      });
+
+      const phaseB = prisma.$transaction(
+        async (tx) => {
+          const category = await resolvePayrollExpenseCategoryWithin(
+            tx,
+            orgId,
+            actor,
+          );
+          const written = await writePayrollCompletionExpense(tx, {
+            organizationId: orgId as string,
+            employeeId: employeeTaxonomyId,
+            obligationId: taxonomyAfterWriteObligationId,
+            actor,
+            category,
+            facts: completionFacts(
+              TAXONOMY_TOTAL_AFTER_WRITE,
+              DATE_TAXONOMY,
+              TEST_OWNED_OUTFLOW_B,
+            ),
+          });
+          writerFinished();
+          await commitGate;
+          return written;
+        },
+        { timeout: 30000, maxWait: 30000 },
+      );
+
+      await writerDone;
+      await prismaSecond.expenseLabel.update({
+        where: { id: labelId },
+        data: { active: false },
+      });
+      releaseCommit();
+      const phaseBResult = await phaseB;
+      if (phaseBResult.kind !== 'created')
+        throw new Error(
+          `The writer did not create the expense: ${phaseBResult.kind}`,
+        );
+      const boundLabel = await prisma.expenseLabel.findUniqueOrThrow({
+        where: { id: labelId },
+      });
+      const boundExpense = await prisma.expense.findUniqueOrThrow({
+        where: { id: phaseBResult.expenseId },
+        include: { payments: true, payrollObligationExpense: true },
+      });
+      console.log(
+        `[payroll-pg-int] deactivation after the writer re-read: expense=${boundExpense.id} labelActive=${String(boundLabel.active)} linked=${String(boundExpense.payrollObligationExpense !== null)}`,
+      );
+      // Observed residual race, reported and not fixed here: because the label row
+      // is not locked until commit, a completion can commit an expense whose
+      // label is already inactive. The writer's re-read only closes the earlier
+      // window (phase A).
+      expect(boundLabel.active).toBe(false);
+      expect(boundExpense.active).toBe(true);
+      expect(boundExpense.payrollObligationExpense?.obligationId).toBe(
+        taxonomyAfterWriteObligationId,
+      );
+      expect(boundExpense.payments).toHaveLength(1);
+
+      await prisma.expenseLabel.update({
+        where: { id: labelId },
+        data: { active: true },
+      });
+    }, 60000);
+
+    it('8. cross-tenant isolation: tenant A can neither read nor mutate tenant B obligations, installments, cash or expenses', async () => {
+      const tenantSnapshot = async (targetOrgId: string) => {
+        const [
+          obligationRows,
+          installmentRows,
+          outflowRows,
+          expenseRows,
+          linkRows,
+        ] = await Promise.all([
+          prisma.payrollObligation.findMany({
+            where: { organizationId: targetOrgId },
+            orderBy: { id: 'asc' },
+            select: {
+              id: true,
+              employeeId: true,
+              status: true,
+              version: true,
+              periodAmount: true,
+            },
+          }),
+          prisma.payrollInstallment.findMany({
+            where: { organizationId: targetOrgId },
+            orderBy: { id: 'asc' },
+            select: { id: true, obligationId: true, outflowId: true },
+          }),
+          prisma.payrollCashOutflow.findMany({
+            where: { organizationId: targetOrgId },
+            orderBy: { id: 'asc' },
+            select: {
+              id: true,
+              employeeId: true,
+              amount: true,
+              date: true,
+              method: true,
+            },
+          }),
+          prisma.expense.findMany({
+            where: { organizationId: targetOrgId },
+            orderBy: { id: 'asc' },
+            select: {
+              id: true,
+              total: true,
+              date: true,
+              active: true,
+              status: true,
+              labelId: true,
+              description: true,
+              payments: {
+                orderBy: { id: 'asc' },
+                select: { id: true, amount: true, date: true, method: true },
+              },
+            },
+          }),
+          prisma.payrollObligationExpense.findMany({
+            where: { organizationId: targetOrgId },
+            orderBy: { obligationId: 'asc' },
+          }),
+        ]);
+        return JSON.parse(
+          JSON.stringify({
+            obligations: obligationRows,
+            installments: installmentRows,
+            outflows: outflowRows,
+            expenses: expenseRows,
+            links: linkRows,
+          }),
+        ) as unknown;
+      };
+
+      const tenantABefore = await tenantSnapshot(orgId as string);
+      const tenantBBefore = await tenantSnapshot(orgBId as string);
+
+      // Read isolation: A's projection never carries B's obligations or cash, and
+      // filtering by B's employee inside A's tenant yields nothing.
+      const readA = await obligations.findAll(orgId);
+      const obligationIdsA = readA.map((row) => row.id);
+      expect(obligationIdsA).not.toContain(tenantBPendingObligationId);
+      expect(obligationIdsA).not.toContain(tenantBCompletedObligationId);
+      const outflowIdsA = readA.flatMap((row) =>
+        row.installments.map((installment) => installment.outflow.id),
+      );
+      expect(outflowIdsA).not.toContain(tenantBPendingOutflowId);
+      expect(outflowIdsA).not.toContain(tenantBCompletedOutflowId);
+      await expect(
+        obligations.findAll(orgId, employeeTenantBId),
+      ).resolves.toEqual([]);
+      await expect(obligations.findAll(undefined)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      await expect(obligations.findAll('')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      const readB = await obligations.findAll(orgBId);
+      expect(readB.map((row) => row.id)).toEqual(
+        expect.arrayContaining([
+          tenantBPendingObligationId,
+          tenantBCompletedObligationId,
+        ]),
+      );
+      const installmentIdsB = readB.flatMap((row) =>
+        row.installments.map((installment) => installment.id),
+      );
+      expect(installmentIdsB).toEqual(
+        expect.arrayContaining([
+          tenantBPendingInstallmentId,
+          tenantBCompletedInstallmentId,
+        ]),
+      );
+      expect(
+        readB.find((row) => row.id === tenantBPendingObligationId)?.summary,
+      ).toMatchObject({
+        total: ISOLATION_TOTAL_B_PENDING,
+        paid: ISOLATION_PAID_B,
+        status: 'pending',
+      });
+
+      // Mutations in both directions. Each one has to be refused by the
+      // tenant-scoped lookup or by the actor/organization match, before any
+      // payroll, cash or expense row is reached.
+      const crossTenantAttempts = [
+        {
+          label: "A tenant with B's obligation",
+          expected: NotFoundException,
+          run: () =>
+            periodInstallments.create(
+              {
+                employeeId: employeeTenantBId,
+                obligationId: tenantBPendingObligationId,
+                amount: '10.00',
+                date: DATE_ISOLATION,
+                method: PaymentMethod.CASH,
+              },
+              orgId,
+              actor,
+            ),
+        },
+        {
+          label: "A actor on B's organization",
+          expected: ForbiddenException,
+          run: () =>
+            periodInstallments.create(
+              {
+                employeeId: employeeTenantBId,
+                obligationId: tenantBPendingObligationId,
+                amount: '10.00',
+                date: DATE_ISOLATION,
+                method: PaymentMethod.CASH,
+              },
+              orgBId,
+              actor,
+            ),
+        },
+        {
+          label: "A employee with B's obligation",
+          expected: NotFoundException,
+          run: () =>
+            periodInstallments.create(
+              {
+                employeeId: employeeCrossTenantId,
+                obligationId: tenantBPendingObligationId,
+                amount: '10.00',
+                date: DATE_ISOLATION,
+                method: PaymentMethod.CASH,
+              },
+              orgId,
+              actor,
+            ),
+        },
+        {
+          label: "correction aiming at B's installment from A",
+          expected: NotFoundException,
+          run: () =>
+            correction.correct(
+              {
+                employeeId: employeeCrossTenantId,
+                obligationId: crossTenantObligationAId,
+                installmentId: tenantBPendingInstallmentId,
+                amount: '20.00',
+              },
+              orgId,
+              actor,
+            ),
+        },
+        {
+          label: "A actor correcting inside B's tenant",
+          expected: ForbiddenException,
+          run: () =>
+            correction.correct(
+              {
+                employeeId: employeeTenantBId,
+                obligationId: tenantBPendingObligationId,
+                installmentId: tenantBPendingInstallmentId,
+                amount: '20.00',
+              },
+              orgBId,
+              actor,
+            ),
+        },
+        {
+          label: 'read a B expense',
+          expected: NotFoundException,
+          run: () => expenses.findOne(tenantBExpenseId, orgId),
+        },
+        {
+          label: 'update a B expense',
+          expected: NotFoundException,
+          run: () =>
+            expenses.update(
+              tenantBExpenseId,
+              { description: 'mutado por el otro tenant' },
+              userId as string,
+              orgId,
+            ),
+        },
+        {
+          label: 'pay a B expense',
+          expected: NotFoundException,
+          run: () =>
+            expenses.addPayment(
+              tenantBExpenseId,
+              {
+                amount: 1,
+                method: PaymentMethod.CASH,
+                date: DATE_ISOLATION,
+              },
+              userId as string,
+              orgId,
+            ),
+        },
+        {
+          label: 'remove a B expense',
+          expected: NotFoundException,
+          run: () => expenses.remove(tenantBExpenseId, userId as string, orgId),
+        },
+        {
+          label: 'B mutating an A linked expense',
+          expected: NotFoundException,
+          run: () =>
+            expenses.update(
+              concurrentExpenseId,
+              { description: 'mutado por el otro tenant' },
+              userBId as string,
+              orgBId,
+            ),
+        },
+        {
+          label: "writer with B's tenant and A's actor",
+          expected: ForbiddenException,
+          run: () =>
+            prismaSecond.$transaction((tx) =>
+              writePayrollCompletionExpense(tx, {
+                organizationId: orgBId as string,
+                employeeId: employeeTenantBId,
+                obligationId: tenantBPendingObligationId,
+                actor,
+                category: {
+                  organizationId: orgBId as string,
+                  groupId: expenseGroupBId,
+                  labelId: labelBId,
+                },
+                facts: completionFacts(
+                  ISOLATION_TOTAL_B_PENDING,
+                  DATE_ISOLATION,
+                  TEST_OWNED_OUTFLOW_A,
+                ),
+              }),
+            ),
+        },
+        {
+          label: "writer with A's tenant and B's category",
+          expected: ConflictException,
+          run: () =>
+            prismaSecond.$transaction((tx) =>
+              writePayrollCompletionExpense(tx, {
+                organizationId: orgId as string,
+                employeeId: employeeTaxonomyId,
+                obligationId: taxonomyBeforeWriteObligationId,
+                actor,
+                category: {
+                  organizationId: orgBId as string,
+                  groupId: expenseGroupBId,
+                  labelId: labelBId,
+                },
+                facts: completionFacts(
+                  TAXONOMY_TOTAL_BEFORE_WRITE,
+                  DATE_TAXONOMY,
+                  TEST_OWNED_OUTFLOW_B,
+                ),
+              }),
+            ),
+        },
+      ];
+
+      const refused: string[] = [];
+      for (const attempt of crossTenantAttempts) {
+        let failure: unknown;
+        try {
+          await attempt.run();
+        } catch (error) {
+          failure = error;
+        }
+        expect(failure).toBeInstanceOf(attempt.expected);
+        refused.push(
+          `${attempt.label} -> ${
+            failure instanceof Error ? failure.message : 'non-Error failure'
+          }`,
+        );
+      }
+      console.log(
+        `[payroll-pg-int] ${refused.length} cross-tenant attempts refused: ${refused.join(' / ')}`,
+      );
+
+      // The only way to a cash row is through a tenant-scoped installment lookup,
+      // so B's cash stayed exactly where it was, as did both tenants' rows.
+      const tenantBCash = await prisma.payrollCashOutflow.findMany({
+        where: { organizationId: orgBId },
+        orderBy: { amount: 'asc' },
+      });
+      expect(tenantBCash.map((row) => row.amount.toFixed(2))).toEqual([
+        ISOLATION_PAID_B,
+        ISOLATION_TOTAL_B_COMPLETED,
+      ]);
+      expect(tenantBCash.map((row) => row.id).sort()).toEqual(
+        [tenantBPendingOutflowId, tenantBCompletedOutflowId].sort(),
+      );
+      await expect(tenantSnapshot(orgId as string)).resolves.toEqual(
+        tenantABefore,
+      );
+      await expect(tenantSnapshot(orgBId as string)).resolves.toEqual(
+        tenantBBefore,
+      );
+    }, 60000);
   },
 );
 
 /**
+ * WHAT IS NOW PROVEN HERE, AND WHAT IS STILL NOT
+ *
+ * Proven by this file against real PostgreSQL (opt-in, see the header):
+ * - concurrent completing installments, expense-write rollback, the expense guard
+ *   contending on the same row lock, and cash counted once;
+ * - the employee-first production order cannot cycle with itself (two real
+ *   completions on one employee serialise), while an intentional reverse-order
+ *   AB-BA is a real PostgreSQL deadlock: Prisma surfaces it as
+ *   `PrismaClientKnownRequestError` code `P2010` with `meta.code = '40P01'` and
+ *   `deadlock detected` in the message. PostgreSQL picks the victim (in the
+ *   observed runs the blocked production completion), so the deadlock victim
+ *   leaves no cash, no expense, no link and a still-valid obligation row, and the
+ *   retry commits exactly once;
+ * - a lock waiter that outlives Prisma's interactive transaction budget is NOT
+ *   interrupted: the promise stays pending while the statement is blocked in
+ *   PostgreSQL and only rejects (P2028, "Transaction already closed ... however N
+ *   ms passed") after the statement returns. Because the bound statement of
+ *   scenario 6 is the expense insert, the rollback provably discards cash,
+ *   installment and expense work the transaction had already done, and the retry
+ *   completes;
+ * - the taxonomy-deactivation race the writer documents: a deactivation committed
+ *   between the category read and the expense write fails the completion closed
+ *   (409, no expense, no link); a deactivation committed after the writer's last
+ *   bound/active re-read and before commit DOES leave a committed expense bound to
+ *   a label that is inactive at commit time. That second window is a reported
+ *   residual race, not a behaviour this suite blesses: if production later locks
+ *   the label for the write, the phase B assertion has to be inverted;
+ * - cross-tenant isolation of these paths between two namespaced organizations:
+ *   reads never cross, and twelve reads/mutations (period installment, correction,
+ *   expense read/update/addPayment/remove in both directions, and the expense
+ *   writer with a foreign tenant or a foreign category identity) are refused
+ *   before any row is touched, with both tenants' snapshots identical afterwards.
+ *
  * REMAINING GAPS — assertions this suite does not, and cannot, prove:
  *
  * - Lock ordering against writers it does not exercise: the shift-date
  *   correction, the pending-installment correction, the expense taxonomy API,
  *   settings/billing organization writes. Only the two installment paths, the
- *   completion expense writer and the expense mutation guard are traced here.
- * - The guard scenario holds the completion's row lock from the real writer's
- *   replay verification inside a test-owned transaction, not from an in-flight
- *   completion request: a completion can only reach that lock while its payment is
- *   still pending, and a completed payment cannot be completed again. The lock
- *   statement, the row and the writer are the production ones; the surrounding
- *   request is not.
- * - Deadlock detection: a genuine AB-BA cycle is not constructed, so PostgreSQL
- *   deadlock (40P01) and Prisma P2028 lock-wait classification remain unproven.
- * - Isolation beyond the Prisma default (READ COMMITTED) and any retry semantics.
- * - The taxonomy deactivation race the writer's own comment admits (a deactivation
- *   committing between the category read and the expense write) is not forced.
- * - Cross-tenant isolation of these paths: the fixtures are single-tenant.
- * - Reporting aggregates other than `getCashFlow` (financial overview, exports).
+ *   completion expense writer, the correction path (cross-tenant refusals only)
+ *   and the expense mutation guard are traced here.
+ * - No genuine AB-BA exists between the production payroll writers as written:
+ *   every one of them takes the `Employee` row lock first and then only rows of
+ *   that same employee, so the cycle in scenario 5 has to be built by a deliberate
+ *   reverse-order transaction. A future writer that locked `Organization`, an
+ *   `Expense` row or another employee's rows before the employee would create a
+ *   real cycle, and this suite would not detect it.
+ * - The guard and the writer scenarios take their locks through the real writer
+ *   inside a test-owned transaction, not from an in-flight HTTP request: a
+ *   completion can only reach those locks while its payment is still pending. The
+ *   lock statements, the rows and the writers are the production ones; the
+ *   surrounding request is not.
+ * - No HTTP or auth layer is exercised: the tenant is the parameter these services
+ *   receive, so a controller taking the tenant from the request body would not be
+ *   caught here.
+ * - Isolation beyond the Prisma default (READ COMMITTED), statement retries, and
+ *   PostgreSQL-raised serialization failures.
+ * - Reporting aggregates other than `getCashFlow` (financial overview, exports),
+ *   and how a report displays a payroll outflow that a correction revised.
+ * - Scenario 7 proves an expense can be committed against an inactive label; it
+ *   does not measure how wide that window is in production, and it does not prove
+ *   which of the two writer windows a real concurrent deactivation will hit.
  */
