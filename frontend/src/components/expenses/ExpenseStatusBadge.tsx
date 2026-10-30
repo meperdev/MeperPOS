@@ -5,7 +5,7 @@ export function ExpenseStatusBadge({ status }: { status: ExpenseStatus }) {
   const isPaid = status === "PAID";
 
   return (
-    <Badge variant={isPaid ? "success" : "warning"}>
+    <Badge variant={isPaid ? "success" : "warning"} dot>
       {isPaid ? "Pagado" : "Parcial"}
     </Badge>
   );
