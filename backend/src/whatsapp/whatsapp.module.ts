@@ -5,6 +5,8 @@ import {
   WAHA_WEBHOOK_KEY,
 } from './whatsapp-webhook.controller';
 import { WhatsAppSessionService } from './whatsapp-session.service';
+import { WhatsAppConnectionsService } from './whatsapp-connections.service';
+import { WhatsAppEventsService } from './whatsapp-events.service';
 import { WHATSAPP_PROVIDER } from './whatsapp-provider';
 import { WahaAdapter } from './waha-adapter';
 
@@ -12,6 +14,8 @@ import { WahaAdapter } from './waha-adapter';
   controllers: [WhatsAppController, WhatsAppWebhookController],
   providers: [
     WhatsAppSessionService,
+    WhatsAppConnectionsService,
+    WhatsAppEventsService,
     {
       provide: WAHA_WEBHOOK_KEY,
       useFactory: () => process.env.WAHA_WEBHOOK_HMAC_KEY,

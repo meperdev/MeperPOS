@@ -1,6 +1,6 @@
 import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
-import { createHash } from 'crypto';
 import { WAHA_WEBHOOK_KEY } from './whatsapp-webhook.controller';
+import { commercialSessionName } from './whatsapp-connections.service';
 import { WHATSAPP_PROVIDER } from './whatsapp-provider';
 import type {
   WhatsAppProvider,
@@ -17,7 +17,7 @@ export class WhatsAppSessionService {
 
   private session(organizationId: string | undefined): string {
     if (!organizationId) throw new ForbiddenException();
-    return `meper-${createHash('sha256').update(organizationId).digest('hex')}`;
+    return commercialSessionName(organizationId);
   }
   /**
    * Each organization's session is created with its own derived webhook key, so

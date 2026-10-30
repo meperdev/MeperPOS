@@ -27,7 +27,7 @@ describe('WhatsAppSessionService', () => {
     await service.qr('org-a');
     await service.qr('org-b');
     const a = (provider.ensureStarted as jest.Mock).mock.calls[0][0] as string;
-    expect(a).toMatch(/^meper-[0-9a-f]{64}$/);
+    expect(a).toMatch(/^meper-commercial-[0-9a-f]{32}$/);
     expect(provider.status).toHaveBeenCalledWith(a);
     expect((provider.qr as jest.Mock).mock.calls[0][0]).toBe(a);
     expect((provider.qr as jest.Mock).mock.calls[1][0]).not.toBe(a);
