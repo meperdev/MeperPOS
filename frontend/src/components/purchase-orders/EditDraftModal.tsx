@@ -196,7 +196,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                           {p.sku}
                         </p>
                       </div>
-                      <Plus className="w-4 h-4 text-primary" />
+                      <Plus className="w-4 h-4 text-primary-text" />
                     </button>
                   ))
                 )}
@@ -207,19 +207,19 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
             <table className="w-full min-w-[560px]">
               <thead>
                 <tr className="bg-muted/35 border-b border-border/60">
-                  <th className="text-left py-2.5 px-3 text-xs font-medium text-muted-foreground">
+                  <th scope="col" className="text-left py-2.5 px-3 text-xs font-medium text-muted-foreground">
                     Producto
                   </th>
-                  <th className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
+                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
                     Cant.
                   </th>
-                  <th className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-28">
+                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-28">
                     Costo
                   </th>
-                  <th className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
+                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
                     IVA %
                   </th>
-                  <th className="w-8" />
+                  <th scope="col" className="w-8" />
                 </tr>
               </thead>
               <tbody>

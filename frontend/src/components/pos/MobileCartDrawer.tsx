@@ -275,7 +275,7 @@ export function MobileCartDrawer({
             )}
             <div className="flex justify-between items-center">
               <span className="text-xs font-medium text-muted-foreground">Total</span>
-              <span className="stat-number text-lg font-semibold text-primary tabular-nums">
+              <span className="stat-number text-lg font-semibold text-primary-text tabular-nums">
                 {formatCurrency(total)}
               </span>
             </div>

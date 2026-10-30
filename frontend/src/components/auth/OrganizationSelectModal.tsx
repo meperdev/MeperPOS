@@ -64,7 +64,7 @@ export function OrganizationSelectModal({
                 "focus:outline-none focus:ring-2 focus:ring-primary/50"
               )}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-text">
                 <Building2 className="h-5 w-5" />
               </div>
 

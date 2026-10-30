@@ -215,7 +215,7 @@ export default function OrganizationsPage() {
               id="hasAdmin"
               checked={formData.hasAdmin}
               onChange={(e) => setFormData({ ...formData, hasAdmin: e.target.checked })}
-              className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              className="h-4 w-4 rounded border-border text-primary-text focus:ring-primary"
             />
             <label htmlFor="hasAdmin" className="text-sm font-medium text-foreground">
               Crear administrador inicial

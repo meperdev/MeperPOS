@@ -49,7 +49,7 @@ import { getApiErrorMessage } from "@/lib/api";
 
 /** Category identity tones: brand hues only, cycled by position. */
 const CATEGORY_ICON_TONES = [
-  "border-primary/30 bg-primary/10 text-primary",
+  "border-primary/30 bg-primary/10 text-primary-text",
   "border-accent/30 bg-accent/10 text-accent",
   "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -520,7 +520,7 @@ export default function CategoriesPage() {
                     className={cn(
                       "rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium transition-colors tabular-nums",
                       isSelected
-                        ? "border-primary/40 bg-primary/15 text-primary"
+                        ? "border-primary/40 bg-primary/15 text-primary-text"
                         : "border-border/70 bg-muted/40 text-muted-foreground hover:border-border hover:text-foreground",
                     )}
                   >

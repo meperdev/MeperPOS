@@ -746,7 +746,7 @@ export default function LoansPage() {
                   <span>No se pudo cargar el historial.</span>
                   <button
                     type="button"
-                    className="font-medium text-foreground underline hover:text-primary"
+                    className="font-medium text-foreground underline hover:text-primary-text"
                     onClick={() => void historyQuery.refetch()}
                   >
                     Reintentar

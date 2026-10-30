@@ -129,7 +129,7 @@ export function BentoSelect({
         <ChevronDown
           className={cn(
             "w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200",
-            isOpen && "rotate-180 text-primary"
+            isOpen && "rotate-180 text-primary-text"
           )}
         />
       </button>
@@ -153,7 +153,7 @@ export function BentoSelect({
                 className={cn(
                   "flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium cursor-pointer transition-all duration-150",
                   isSelected
-                    ? "bg-primary-light text-primary font-bold"
+                    ? "bg-primary-light text-primary-text font-bold"
                     : "text-foreground hover:bg-muted/70"
                 )}
               >
@@ -177,7 +177,7 @@ export function BentoSelect({
                     </span>
                   )}
                   {isSelected && (
-                    <Check className="w-3.5 h-3.5 text-primary stroke-[3]" />
+                    <Check className="w-3.5 h-3.5 text-primary-text stroke-[3]" />
                   )}
                 </div>
               </div>

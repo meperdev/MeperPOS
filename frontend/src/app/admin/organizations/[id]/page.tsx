@@ -193,7 +193,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             <div className="flex items-center gap-4 text-sm border-t border-border pt-4">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                  <Building2 className="h-4 w-4 text-primary" />
+                  <Building2 className="h-4 w-4 text-primary-text" />
                 </div>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">Estado</p>
@@ -204,7 +204,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                  <CreditCard className="h-4 w-4 text-primary" />
+                  <CreditCard className="h-4 w-4 text-primary-text" />
                 </div>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">Plan</p>
@@ -271,7 +271,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
+              <Users className="h-5 w-5 text-primary-text" />
               <h3 className="text-lg font-semibold text-foreground">Usuarios de la organización</h3>
             </div>
             <Button
@@ -294,11 +294,11 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <table className="w-full text-sm">
                 <thead className="border-b border-border bg-muted/50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Nombre</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Email</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Rol</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Owner</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Acciones</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Nombre</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Email</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Rol</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Owner</th>
+                    <th scope="col" className="px-4 py-3 text-left font-semibold text-foreground">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">

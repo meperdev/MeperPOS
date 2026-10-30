@@ -225,7 +225,7 @@ export default function NewPurchaseOrderPage() {
                               {p.sku} · Costo {formatCurrency(p.costPrice)}
                             </p>
                           </div>
-                          <Plus className="w-4 h-4 text-primary shrink-0 ml-2" />
+                          <Plus className="w-4 h-4 text-primary-text shrink-0 ml-2" />
                         </button>
                       ))
                     )}
