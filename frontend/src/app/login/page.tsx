@@ -110,8 +110,6 @@ export default function LoginPage() {
         />
 
         {/* Gradientes ambientales sutiles de fondo */}
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-terracotta/10 blur-3xl pointer-events-none" />
 
         {/* Marca superior: Ecosistema MeperSoft (Kiroi) */}
         <div className="relative z-10 flex items-center gap-3">
@@ -123,7 +121,7 @@ export default function LoginPage() {
             className="w-10 h-10 xl:w-11 xl:h-11 shrink-0 object-contain drop-shadow-xs"
             priority
           />
-          <span className="text-xl xl:text-2xl font-black tracking-tight text-foreground leading-none">
+          <span className="text-xl xl:text-2xl font-semibold tracking-tight text-foreground leading-none">
             Meper
             <span className="text-[#00B392] underline decoration-[#00B392] decoration-[2.5px] underline-offset-[5px]">
               Soft
@@ -140,28 +138,28 @@ export default function LoginPage() {
               Control contable, existencias y caja para tu negocio.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] font-mono text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/70 bg-background/60">
-                <Receipt className="w-3.5 h-3.5 text-primary" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border/70 bg-background/60">
+                <Receipt className="w-3.5 h-3.5 text-muted-foreground" />
                 POS & Tirilla
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/70 bg-background/60">
-                <Package className="w-3.5 h-3.5 text-terracotta" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border/70 bg-background/60">
+                <Package className="w-3.5 h-3.5 text-muted-foreground" />
                 Stock & Lotes
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/70 bg-background/60">
-                <TrendingUp className="w-3.5 h-3.5 text-primary" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border/70 bg-background/60">
+                <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
                 Reportes & Margen Real
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/70 bg-background/60">
-                <HandCoins className="w-3.5 h-3.5 text-terracotta" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border/70 bg-background/60">
+                <HandCoins className="w-3.5 h-3.5 text-muted-foreground" />
                 Préstamos
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/70 bg-background/60">
-                <Wallet className="w-3.5 h-3.5 text-primary" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border/70 bg-background/60">
+                <Wallet className="w-3.5 h-3.5 text-muted-foreground" />
                 Gastos & Salidas
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/70 bg-background/60">
-                <ClipboardCheck className="w-3.5 h-3.5 text-terracotta" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border/70 bg-background/60">
+                <ClipboardCheck className="w-3.5 h-3.5 text-muted-foreground" />
                 Tareas en Equipo
               </span>
             </div>
@@ -192,7 +190,7 @@ export default function LoginPage() {
               className="w-9 h-9 shrink-0 object-contain drop-shadow-xs"
               priority
             />
-            <span className="text-xl font-black tracking-tight text-foreground leading-none">
+            <span className="text-xl font-semibold tracking-tight text-foreground leading-none">
               Meper
               <span className="text-[#00B392] underline decoration-[#00B392] decoration-[2.5px] underline-offset-[4px]">
                 Soft
@@ -211,12 +209,12 @@ export default function LoginPage() {
               isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"
             }
             suppressHydrationWarning
-            className="p-2 rounded-xl text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted border border-border/60 transition-colors"
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted border border-border/60 transition-colors"
           >
             {isDark ? (
-              <Sun className="w-4 h-4 text-primary" />
+              <Sun className="w-4 h-4" />
             ) : (
-              <Moon className="w-4 h-4 text-primary" />
+              <Moon className="w-4 h-4" />
             )}
           </button>
         </div>
@@ -236,7 +234,7 @@ export default function LoginPage() {
               className="w-28 h-28 sm:w-32 sm:h-32 object-contain drop-shadow-lg mb-3.5"
               priority
             />
-            <div className="text-4xl sm:text-[42px] font-black tracking-tight text-foreground leading-none">
+            <div className="text-4xl sm:text-[42px] font-semibold tracking-tight text-foreground leading-none">
               Meper<span className="text-[#FF9933]">POS</span>
             </div>
             <div className="w-11 h-1.5 rounded-full bg-[#FF9933] mt-2.5" />
@@ -244,11 +242,11 @@ export default function LoginPage() {
 
           {/* Encabezado del formulario */}
           <div className="space-y-1.5 mb-6 text-left">
-            <div className="flex items-center gap-1.5 text-primary font-mono text-xs font-bold uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 text-muted-foreground font-mono text-xs font-semibold uppercase tracking-wider">
               <ShieldCheck className="w-4 h-4" />
               <span>Acceso al Sistema</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight leading-none">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight leading-none">
               Iniciar sesión
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pt-0.5">
@@ -260,9 +258,9 @@ export default function LoginPage() {
             {error && (
               <div
                 role="alert"
-                className="p-3.5 rounded-xl text-xs font-medium bg-red-500/10 border border-red-500/25 text-red-600 dark:text-red-400 flex items-start gap-2.5 animate-in fade-in-0 duration-200"
+                className="p-3.5 rounded-lg text-xs font-medium bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300 flex items-start gap-2.5"
               >
-                <AlertCircle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">{error}</span>
               </div>
             )}

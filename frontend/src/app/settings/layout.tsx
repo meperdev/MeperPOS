@@ -15,25 +15,22 @@ export default function SettingsLayout({
 
   return (
     <DashboardLayout>
-      <div className="space-y-5">
-        <div className="animate-fade-in-up">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-1 h-7 rounded-full bg-primary shrink-0" />
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
-              Configuración
-            </h1>
-          </div>
-          <p className="text-sm text-muted-foreground ml-4">
+      <div className="space-y-4 lg:space-y-5">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+            Configuración
+          </h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Ajusta la configuración del sistema
           </p>
         </div>
 
-        <div className="flex flex-col lg:flex-row lg:gap-8">
+        <div className="flex flex-col lg:flex-row lg:gap-6">
           <nav
             aria-label="Secciones de configuración"
-            className="lg:w-60 lg:shrink-0"
+            className="lg:w-56 lg:shrink-0"
           >
-            <ul className="flex items-center gap-2 overflow-x-auto scrollbar-hide lg:sticky lg:top-8 lg:flex-col lg:items-stretch lg:gap-1">
+            <ul className="flex flex-wrap items-center gap-1.5 lg:sticky lg:top-6 lg:flex-col lg:items-stretch lg:gap-1">
               {settingsSections.map((section) => {
                 const isActive =
                   pathname === section.href ||
@@ -47,15 +44,20 @@ export default function SettingsLayout({
                       scroll={false}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "inline-flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-xs font-semibold whitespace-nowrap",
-                        "transition-all duration-150",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2",
+                        "inline-flex lg:flex h-9 items-center gap-2.5 rounded-lg px-3 text-xs whitespace-nowrap transition-colors duration-150",
+                        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
                         isActive
-                          ? "bg-primary-light text-primary border border-primary/30 shadow-xs"
-                          : "text-muted-foreground border border-transparent hover:text-foreground hover:bg-muted/60"
+                          ? "bg-muted/70 text-foreground font-semibold border border-border/70 shadow-2xs"
+                          : "text-muted-foreground font-medium border border-transparent hover:text-foreground hover:bg-muted/40",
                       )}
                     >
-                      <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                      <Icon
+                        className={cn(
+                          "w-4 h-4 shrink-0",
+                          isActive ? "text-foreground" : "text-muted-foreground",
+                        )}
+                        aria-hidden="true"
+                      />
                       <span>{section.label}</span>
                     </Link>
                   </li>
