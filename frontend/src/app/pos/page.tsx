@@ -19,6 +19,7 @@ import { usePausedSales } from "@/hooks/usePausedSales";
 import { printReceipt, printThermalReceipt } from "@/hooks/useReceipt";
 import { useSettings } from "@/hooks/useSettings";
 import { Input } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Button } from "@/components/ui/Button";
 import { BentoSelect } from "@/components/ui/BentoSelect";
@@ -1420,15 +1421,12 @@ export default function POSPage() {
         size="md"
       >
         <div className="space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar cliente por nombre o documento..."
-              value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              className="w-full pl-9 h-9 rounded-lg text-sm"
-            />
-          </div>
+          <SearchField
+            value={customerSearch}
+            onChange={setCustomerSearch}
+            placeholder="Buscar cliente por nombre o documento..."
+            inputClassName="h-9 text-sm"
+          />
           <div className="scrollbar-app max-h-[26rem] overflow-y-auto space-y-1.5 pr-1">
             <div
               className={cn(
