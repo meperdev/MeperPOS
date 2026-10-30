@@ -12,6 +12,7 @@ import {
   useLoans,
 } from "@/hooks/useLoans";
 import { Badge } from "@/components/ui/Badge";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Button } from "@/components/ui/Button";
@@ -286,23 +287,15 @@ export default function LoansPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                Préstamos
-              </h1>
-              {loansQuery.data?.total !== undefined && (
-                <span className="hidden sm:inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
-                  {loansQuery.data.total} registros
-                </span>
-              )}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Obligaciones activas y ventas financiadas desde caja
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          title="Préstamos"
+          subtitle="Obligaciones activas y ventas financiadas desde caja"
+          count={
+            loansQuery.data?.total !== undefined
+              ? `${loansQuery.data.total} registros`
+              : undefined
+          }
+        />
 
         <FilterBar
           searchValue={search}
