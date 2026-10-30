@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { formatDateInBogota } from '../common/utils/bogota-date';
 import {
@@ -12,12 +16,17 @@ describe('ExpensesService', () => {
   const userId = 'user-1';
 
   const txMock = {
+    $queryRaw: jest.fn(),
     expense: {
       create: jest.fn(),
       update: jest.fn(),
+      findFirst: jest.fn(),
     },
     expensePayment: {
       create: jest.fn(),
+    },
+    payrollObligationExpense: {
+      findFirst: jest.fn(),
     },
     auditLog: {
       create: jest.fn(),
@@ -70,9 +79,17 @@ describe('ExpensesService', () => {
     }) as unknown as Express.Multer.File;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof txMock) => unknown) => callback(txMock),
+    );
+    // Default transactional scaffolding for the payroll-owned expense guard:
+    // the row lock succeeds and the expense is not linked to any obligation, so
+    // the pre-existing unlinked expectations below stay unchanged.
+    txMock.$queryRaw.mockResolvedValue([{ id: 'exp-1' }]);
+    txMock.payrollObligationExpense.findFirst.mockResolvedValue(null);
+    txMock.expense.findFirst.mockImplementation((args: unknown) =>
+      prismaMock.expense.findFirst(args),
     );
     service = new ExpensesService(
       prismaMock as never,
@@ -111,7 +128,11 @@ describe('ExpensesService', () => {
 
   describe('create', () => {
     it('creates a PAID expense when the first payment equals the total', async () => {
-      prismaMock.expenseLabel.findFirst.mockResolvedValue({ id: 'label-1', active: true, group: { organizationId: orgId, active: true } });
+      prismaMock.expenseLabel.findFirst.mockResolvedValue({
+        id: 'label-1',
+        active: true,
+        group: { organizationId: orgId, active: true },
+      });
       prismaMock.supplier.findFirst.mockResolvedValue({ id: 'sup-1' });
       prismaMock.purchaseOrder.findFirst.mockResolvedValue({ id: 'po-1' });
       txMock.expense.create.mockResolvedValue({ id: 'exp-1', status: 'PAID' });
@@ -127,7 +148,7 @@ describe('ExpensesService', () => {
       expect(createArgs.data.payments.create).toHaveLength(1);
       expect(createArgs.data.payments.create[0]).toMatchObject({
         amount: new Prisma.Decimal(500000),
-      method: 'CASH' as const,
+        method: 'CASH' as const,
         date: new Date('2026-08-15'),
         organizationId: orgId,
       });
@@ -144,7 +165,11 @@ describe('ExpensesService', () => {
     });
 
     it('creates a PARTIAL expense when the first payment is lower than the total', async () => {
-      prismaMock.expenseLabel.findFirst.mockResolvedValue({ id: 'label-1', active: true, group: { organizationId: orgId, active: true } });
+      prismaMock.expenseLabel.findFirst.mockResolvedValue({
+        id: 'label-1',
+        active: true,
+        group: { organizationId: orgId, active: true },
+      });
       prismaMock.supplier.findFirst.mockResolvedValue(null);
       prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
       txMock.expense.create.mockResolvedValue({
@@ -172,7 +197,11 @@ describe('ExpensesService', () => {
     });
 
     it('rejects zero payments with 400 and never opens a transaction', async () => {
-      prismaMock.expenseLabel.findFirst.mockResolvedValue({ id: 'label-1', active: true, group: { organizationId: orgId, active: true } });
+      prismaMock.expenseLabel.findFirst.mockResolvedValue({
+        id: 'label-1',
+        active: true,
+        group: { organizationId: orgId, active: true },
+      });
       prismaMock.supplier.findFirst.mockResolvedValue({ id: 'sup-1' });
       prismaMock.purchaseOrder.findFirst.mockResolvedValue({ id: 'po-1' });
 
@@ -188,7 +217,11 @@ describe('ExpensesService', () => {
     });
 
     it('rejects a payment that exceeds the total with 400', async () => {
-      prismaMock.expenseLabel.findFirst.mockResolvedValue({ id: 'label-1', active: true, group: { organizationId: orgId, active: true } });
+      prismaMock.expenseLabel.findFirst.mockResolvedValue({
+        id: 'label-1',
+        active: true,
+        group: { organizationId: orgId, active: true },
+      });
       prismaMock.supplier.findFirst.mockResolvedValue({ id: 'sup-1' });
       prismaMock.purchaseOrder.findFirst.mockResolvedValue({ id: 'po-1' });
 
@@ -215,7 +248,11 @@ describe('ExpensesService', () => {
     });
 
     it('rejects a supplier that does not belong to the organization with 404', async () => {
-      prismaMock.expenseLabel.findFirst.mockResolvedValue({ id: 'label-1', active: true, group: { organizationId: orgId, active: true } });
+      prismaMock.expenseLabel.findFirst.mockResolvedValue({
+        id: 'label-1',
+        active: true,
+        group: { organizationId: orgId, active: true },
+      });
       prismaMock.supplier.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -224,7 +261,11 @@ describe('ExpensesService', () => {
     });
 
     it('rejects a purchase order that does not belong to the organization with 404', async () => {
-      prismaMock.expenseLabel.findFirst.mockResolvedValue({ id: 'label-1', active: true, group: { organizationId: orgId, active: true } });
+      prismaMock.expenseLabel.findFirst.mockResolvedValue({
+        id: 'label-1',
+        active: true,
+        group: { organizationId: orgId, active: true },
+      });
       prismaMock.supplier.findFirst.mockResolvedValue({ id: 'sup-1' });
       prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 
@@ -256,7 +297,11 @@ describe('ExpensesService', () => {
           active: true,
           date: { gte: start, lte: end },
         },
-        select: { total: true, purchaseOrderId: true, label: { select: { name: true, group: { select: { name: true } } } } },
+        select: {
+          total: true,
+          purchaseOrderId: true,
+          label: { select: { name: true, group: { select: { name: true } } } },
+        },
       });
       expect(result).toEqual([
         { total: new Prisma.Decimal('25.00'), purchaseOrderId: null },
@@ -296,7 +341,11 @@ describe('ExpensesService', () => {
         skip: 10,
         take: 10,
         orderBy: { date: 'desc' },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
       expect(prismaMock.expense.count).toHaveBeenCalledWith({
         where: expect.objectContaining({ organizationId: orgId, active: true }),
@@ -375,7 +424,11 @@ describe('ExpensesService', () => {
       expect(txMock.expense.update).toHaveBeenCalledWith({
         where: { id: 'exp-1' },
         data: expect.objectContaining({ status: 'PARTIAL' }),
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
       expect(txMock.auditLog.create).toHaveBeenCalledTimes(1);
       expect(txMock.auditLog.create.mock.calls[0][0].data).toMatchObject({
@@ -472,7 +525,11 @@ describe('ExpensesService', () => {
           purchaseOrderId: null,
           description: null,
         }),
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
       expect(result).toMatchObject({
         supplierId: null,
@@ -525,7 +582,11 @@ describe('ExpensesService', () => {
       expect(txMock.expense.update).toHaveBeenCalledWith({
         where: { id: 'exp-1' },
         data: { status: 'PAID' },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
       expect(txMock.auditLog.create).toHaveBeenCalledTimes(1);
       expect(txMock.auditLog.create.mock.calls[0][0].data).toMatchObject({
@@ -611,8 +672,18 @@ describe('ExpensesService', () => {
         { labelId: 'label-1', _sum: { total: new Prisma.Decimal(1000000) } },
       ]);
       prismaMock.expenseLabel.findMany.mockResolvedValue([
-        { id: 'label-1', name: 'Arriendo', groupId: 'group-1', group: { id: 'group-1', name: 'Gastos del local' } },
-        { id: 'label-2', name: 'Caja menor', groupId: 'group-2', group: { id: 'group-2', name: 'Caja menor' } },
+        {
+          id: 'label-1',
+          name: 'Arriendo',
+          groupId: 'group-1',
+          group: { id: 'group-1', name: 'Gastos del local' },
+        },
+        {
+          id: 'label-2',
+          name: 'Caja menor',
+          groupId: 'group-2',
+          group: { id: 'group-2', name: 'Caja menor' },
+        },
       ]);
 
       const result = await service.getMonthlySummary('2026-08', orgId);
@@ -631,14 +702,41 @@ describe('ExpensesService', () => {
       });
       expect(prismaMock.expenseLabel.findMany).toHaveBeenCalledWith({
         where: { id: { in: ['label-2', 'label-1'] } },
-        select: { id: true, name: true, groupId: true, group: { select: { id: true, name: true } } },
+        select: {
+          id: true,
+          name: true,
+          groupId: true,
+          group: { select: { id: true, name: true } },
+        },
       });
       expect(result).toEqual({
         month: '2026-08',
         total: new Prisma.Decimal(1500000),
         groups: [
-          { groupId: 'group-1', name: 'Gastos del local', total: new Prisma.Decimal(1000000), labels: [{ labelId: 'label-1', name: 'Arriendo', total: new Prisma.Decimal(1000000) }] },
-          { groupId: 'group-2', name: 'Caja menor', total: new Prisma.Decimal(500000), labels: [{ labelId: 'label-2', name: 'Caja menor', total: new Prisma.Decimal(500000) }] },
+          {
+            groupId: 'group-1',
+            name: 'Gastos del local',
+            total: new Prisma.Decimal(1000000),
+            labels: [
+              {
+                labelId: 'label-1',
+                name: 'Arriendo',
+                total: new Prisma.Decimal(1000000),
+              },
+            ],
+          },
+          {
+            groupId: 'group-2',
+            name: 'Caja menor',
+            total: new Prisma.Decimal(500000),
+            labels: [
+              {
+                labelId: 'label-2',
+                name: 'Caja menor',
+                total: new Prisma.Decimal(500000),
+              },
+            ],
+          },
         ],
       });
     });
@@ -676,7 +774,7 @@ describe('ExpensesService', () => {
       id: 'exp-1',
       organizationId: orgId,
       active: true,
-       labelId: 'label-1',
+      labelId: 'label-1',
       supplierId: 'sup-1',
       purchaseOrderId: 'po-1',
       description: 'Arriendo agosto',
@@ -866,7 +964,11 @@ describe('ExpensesService', () => {
       expect(txMock.expense.update).toHaveBeenCalledWith({
         where: { id: 'exp-1' },
         data: { receiptUrl: 'https://cloud.example/expense-receipts/r1.jpg' },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
       expect(txMock.auditLog.create).toHaveBeenCalledTimes(1);
       expect(txMock.auditLog.create.mock.calls[0][0].data).toMatchObject({
@@ -989,6 +1091,304 @@ describe('ExpensesService', () => {
       await expect(service.remove('exp-x', userId, orgId)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('payroll-linked expense guard', () => {
+    const linkRow = { obligationId: 'obl-1' };
+
+    const buildExpense = (overrides: Record<string, unknown> = {}) => ({
+      id: 'exp-1',
+      organizationId: orgId,
+      active: true,
+      labelId: 'label-1',
+      total: new Prisma.Decimal(500000),
+      status: 'PARTIAL',
+      description: 'Arriendo agosto',
+      date: new Date('2026-08-15T00:00:00.000Z'),
+      payments: [{ id: 'pay-1', amount: new Prisma.Decimal(200000) }],
+      ...overrides,
+    });
+
+    const paymentDto = () => ({
+      amount: 50000,
+      method: 'CASH' as const,
+      date: '2026-08-20',
+    });
+
+    const recordTransactionOrder = () => {
+      const order: string[] = [];
+      txMock.$queryRaw.mockImplementation(async () => {
+        order.push('lock-expense');
+        return [{ id: 'exp-1' }];
+      });
+      txMock.payrollObligationExpense.findFirst.mockImplementation(async () => {
+        order.push('link');
+        return null;
+      });
+      txMock.expense.findFirst.mockImplementation(async (args: unknown) => {
+        order.push('reread');
+        return prismaMock.expense.findFirst(args);
+      });
+      return order;
+    };
+
+    const lockSql = () => {
+      const [call] = txMock.$queryRaw.mock.calls[0];
+      return (call as TemplateStringsArray).join('?');
+    };
+
+    it('rejects update of a payroll-linked expense with 409 after the lock and link check, without writing', async () => {
+      const order = recordTransactionOrder();
+      txMock.payrollObligationExpense.findFirst.mockImplementation(async () => {
+        order.push('link');
+        return linkRow;
+      });
+      txMock.expense.update.mockImplementation(async () => {
+        order.push('write');
+        return buildExpense();
+      });
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+
+      await expect(
+        service.update('exp-1', { description: 'Nuevo' }, userId, orgId),
+      ).rejects.toThrow(ConflictException);
+
+      expect(order).toEqual(['lock-expense', 'link']);
+      expect(txMock.expense.update).not.toHaveBeenCalled();
+      expect(txMock.auditLog.create).not.toHaveBeenCalled();
+      expect(txMock.payrollObligationExpense.findFirst).toHaveBeenCalledWith({
+        where: { expenseId: 'exp-1', organizationId: orgId },
+        select: { obligationId: true },
+      });
+    });
+
+    it('rejects addPayment on a payroll-linked expense with 409 before creating the payment', async () => {
+      const order = recordTransactionOrder();
+      txMock.payrollObligationExpense.findFirst.mockImplementation(async () => {
+        order.push('link');
+        return linkRow;
+      });
+      txMock.expensePayment.create.mockImplementation(async () => {
+        order.push('write');
+        return { id: 'pay-3' };
+      });
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+
+      await expect(
+        service.addPayment('exp-1', paymentDto(), userId, orgId),
+      ).rejects.toThrow(ConflictException);
+
+      expect(order).toEqual(['lock-expense', 'link']);
+      expect(txMock.expensePayment.create).not.toHaveBeenCalled();
+      expect(txMock.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects remove of a payroll-linked expense with 409 before soft-deleting it', async () => {
+      const order = recordTransactionOrder();
+      txMock.payrollObligationExpense.findFirst.mockImplementation(async () => {
+        order.push('link');
+        return linkRow;
+      });
+      txMock.expense.update.mockImplementation(async () => {
+        order.push('write');
+        return buildExpense({ active: false });
+      });
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+
+      await expect(service.remove('exp-1', userId, orgId)).rejects.toThrow(
+        ConflictException,
+      );
+
+      expect(order).toEqual(['lock-expense', 'link']);
+      expect(txMock.expense.update).not.toHaveBeenCalled();
+      expect(txMock.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps the unlinked update path writing after lock then link then a fresh reread', async () => {
+      const order = recordTransactionOrder();
+      txMock.expense.update.mockImplementation(async () => {
+        order.push('write');
+        return buildExpense();
+      });
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+
+      await service.update('exp-1', { description: 'Nuevo' }, userId, orgId);
+
+      expect(order).toEqual(['lock-expense', 'link', 'reread', 'write']);
+      expect(txMock.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(lockSql()).toContain('FROM "Expense"');
+      expect(lockSql()).toContain('"organizationId"');
+      expect(lockSql()).toContain('FOR UPDATE');
+      // The expense unit never takes payroll or cash locks.
+      expect(lockSql()).not.toMatch(/Payroll|Employee/);
+      expect(txMock.auditLog.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('decides the update from the post-lock reread instead of the pre-transaction facts', async () => {
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+      txMock.expense.findFirst.mockResolvedValue(
+        buildExpense({
+          payments: [{ id: 'pay-1', amount: new Prisma.Decimal(500000) }],
+        }),
+      );
+
+      await expect(
+        service.update('exp-1', { total: 450000 }, userId, orgId),
+      ).rejects.toThrow(
+        'El nuevo total no puede ser menor que la suma de los pagos registrados',
+      );
+
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(txMock.expense.findFirst).toHaveBeenCalledTimes(1);
+      expect(txMock.expense.update).not.toHaveBeenCalled();
+    });
+
+    it('derives the update status from the post-lock payments, not from the pre-transaction sum', async () => {
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+      txMock.expense.findFirst.mockResolvedValue(
+        buildExpense({
+          payments: [{ id: 'pay-1', amount: new Prisma.Decimal(500000) }],
+        }),
+      );
+      txMock.expense.update.mockResolvedValue(buildExpense({ status: 'PAID' }));
+
+      await service.update('exp-1', { description: 'Nuevo' }, userId, orgId);
+
+      expect(txMock.expense.update.mock.calls[0][0].data.status).toBe('PAID');
+      const auditArgs = txMock.auditLog.create.mock.calls[0][0];
+      expect(auditArgs.data.metadata.after.status).toBe('PAID');
+    });
+
+    it('rejects a payment that only exceeds the total under the post-lock reread', async () => {
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+      txMock.expense.findFirst.mockResolvedValue(
+        buildExpense({
+          payments: [{ id: 'pay-1', amount: new Prisma.Decimal(480000) }],
+        }),
+      );
+
+      await expect(
+        service.addPayment('exp-1', paymentDto(), userId, orgId),
+      ).rejects.toThrow(
+        'La suma de los pagos no puede superar el total de la salida',
+      );
+
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(txMock.expensePayment.create).not.toHaveBeenCalled();
+      expect(txMock.expense.update).not.toHaveBeenCalled();
+    });
+
+    it('derives the payment status from the post-lock payments and keeps the unlinked write', async () => {
+      const order = recordTransactionOrder();
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+      txMock.expense.findFirst.mockImplementation(async (args: unknown) => {
+        order.push('reread');
+        expect(args).toEqual({
+          where: { id: 'exp-1', organizationId: orgId },
+          include: { payments: true },
+        });
+        return buildExpense({
+          payments: [{ id: 'pay-1', amount: new Prisma.Decimal(450000) }],
+        });
+      });
+      txMock.expensePayment.create.mockImplementation(async () => {
+        order.push('payment-write');
+        return { id: 'pay-3' };
+      });
+      txMock.expense.update.mockImplementation(async () => {
+        order.push('status-write');
+        return buildExpense({ status: 'PAID' });
+      });
+
+      await service.addPayment('exp-1', paymentDto(), userId, orgId);
+
+      expect(order).toEqual([
+        'lock-expense',
+        'link',
+        'reread',
+        'payment-write',
+        'status-write',
+      ]);
+      expect(txMock.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(lockSql()).toContain('FOR UPDATE');
+      expect(lockSql()).not.toMatch(/Payroll|Employee/);
+      expect(txMock.expense.update.mock.calls[0][0].data).toEqual({
+        status: 'PAID',
+      });
+      const auditArgs = txMock.auditLog.create.mock.calls[0][0];
+      expect(auditArgs.data.metadata).toMatchObject({
+        beforeStatus: 'PARTIAL',
+        afterStatus: 'PAID',
+      });
+    });
+
+    it('keeps the unlinked remove path soft-deleting after lock then link then reread', async () => {
+      const order = recordTransactionOrder();
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+      txMock.expense.update.mockImplementation(async () => {
+        order.push('write');
+        return buildExpense({ active: false });
+      });
+
+      await service.remove('exp-1', userId, orgId);
+
+      expect(order).toEqual(['lock-expense', 'link', 'reread', 'write']);
+      expect(txMock.expense.update).toHaveBeenCalledWith({
+        where: { id: 'exp-1' },
+        data: { active: false },
+      });
+      expect(txMock.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(lockSql()).not.toMatch(/Payroll|Employee/);
+    });
+
+    it('does not reject an expense whose payroll link belongs to another tenant', async () => {
+      interface LinkQueryArgs {
+        where: { expenseId: string; organizationId: string };
+      }
+
+      prismaMock.expense.findFirst.mockResolvedValue(
+        buildExpense({ organizationId: 'org-2' }),
+      );
+      txMock.payrollObligationExpense.findFirst.mockImplementation(
+        async (args: LinkQueryArgs) =>
+          args.where.expenseId === 'exp-1' &&
+          args.where.organizationId === orgId
+            ? linkRow
+            : null,
+      );
+      txMock.expense.update.mockResolvedValue(buildExpense());
+
+      await service.update('exp-1', { description: 'Nuevo' }, userId, 'org-2');
+
+      expect(txMock.payrollObligationExpense.findFirst).toHaveBeenCalledWith({
+        where: { expenseId: 'exp-1', organizationId: 'org-2' },
+        select: { obligationId: true },
+      });
+      expect(txMock.expense.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws NotFoundException without link or write when the tenant lock finds no expense row', async () => {
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+      txMock.$queryRaw.mockResolvedValue([]);
+
+      await expect(service.remove('exp-1', userId, orgId)).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(txMock.payrollObligationExpense.findFirst).not.toHaveBeenCalled();
+      expect(txMock.expense.update).not.toHaveBeenCalled();
+    });
+
+    it('does not guard duplicate or receipt uploads in this unit', async () => {
+      prismaMock.expense.findFirst.mockResolvedValue(buildExpense());
+      txMock.expense.create.mockResolvedValue({ id: 'exp-2', status: 'PAID' });
+
+      await service.duplicate('exp-1', userId, orgId);
+
+      expect(txMock.$queryRaw).not.toHaveBeenCalled();
+      expect(txMock.payrollObligationExpense.findFirst).not.toHaveBeenCalled();
+      expect(txMock.expense.create).toHaveBeenCalledTimes(1);
     });
   });
 });
