@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   createPeriodInstallment: (() => undefined) as unknown,
   createGroupInstallment: (() => undefined) as unknown,
   correctPeriodInstallment: (() => undefined) as unknown,
+  createCashReturn: (() => undefined) as unknown,
 }));
 
 vi.mock("@/components/layout/DashboardLayout", () => ({
@@ -43,6 +44,7 @@ vi.mock("@/hooks/usePayroll", () => ({
   useCreatePayrollPeriodInstallment: () => ({ mutateAsync: state.createPeriodInstallment }),
   useCreatePayrollGroupInstallment: () => ({ mutateAsync: state.createGroupInstallment }),
   useCorrectPayrollPeriodInstallment: () => ({ mutateAsync: state.correctPeriodInstallment }),
+  useCreatePayrollCashReturn: () => ({ mutateAsync: state.createCashReturn }),
 }));
 
 const employees = [
@@ -123,6 +125,7 @@ beforeEach(() => {
   state.createPeriodInstallment = vi.fn().mockResolvedValue({});
   state.createGroupInstallment = vi.fn().mockResolvedValue({});
   state.correctPeriodInstallment = vi.fn().mockResolvedValue({});
+  state.createCashReturn = vi.fn().mockResolvedValue({});
 });
 
 afterEach(cleanup);
@@ -524,4 +527,132 @@ it("does not expose payroll to roles other than OWNER and ADMIN", () => {
   expect(screen.queryByRole("button", { name: "Nuevo pago fijo" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Nuevo pago por jornadas" })).not.toBeInTheDocument();
   expect(screen.queryByText("Ana Gómez")).not.toBeInTheDocument();
+});
+
+// S7/S8: a real return covers exactly one complete installment (L329), is
+// reflected on the day the money came back (L325) and by the real method it came
+// back by (L330). The amount is never typed: it is the stored installment.
+const completedPeriodObligation = {
+  ...periodObligation,
+  status: "COMPLETED",
+  summary: { total: "2000000.00", paid: "2000000.00", balance: "0.00", status: "completed" },
+};
+
+const unreturnedInstallment = {
+  id: "inst-2",
+  outflowId: "out-2",
+  createdAt: "2025-01-25T12:00:00.000Z",
+  outflow: {
+    id: "out-2",
+    amount: "30000.00",
+    date: "2025-01-25T00:00:00.000Z",
+    method: "TRANSFER",
+    createdAt: "2025-01-25T12:00:00.000Z",
+  },
+};
+
+const returnedInstallment = {
+  ...installment,
+  cashReturn: {
+    id: "ret-1",
+    amount: "111111.00",
+    returnDate: "2025-01-20T00:00:00.000Z",
+    returnMethod: "CARD",
+  },
+};
+
+// The dialog defaults to today in Bogotá, computed independently of the helper
+// the page uses so a wrong default cannot pass by sharing the same code.
+const bogotaToday = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Bogota",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(new Date());
+
+it("offers no return while the payment is still pending", () => {
+  state.obligations.data = [periodObligation];
+  render(<PayrollPage />);
+
+  expect(screen.queryByRole("button", { name: /Registrar devolución/ })).not.toBeInTheDocument();
+  // A pending payment keeps its abono and correction actions instead.
+  expect(screen.getByRole("button", { name: "Registrar abono Ana Gómez" })).toBeInTheDocument();
+});
+
+it("offers a return only on a completed installment that has no return yet", () => {
+  state.obligations.data = [
+    { ...completedPeriodObligation, installments: [returnedInstallment, unreturnedInstallment] },
+  ];
+  render(<PayrollPage />);
+
+  expect(
+    screen.getByRole("button", { name: "Registrar devolución Ana Gómez 2025-01-25" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Registrar devolución Ana Gómez 2025-01-15" }),
+  ).not.toBeInTheDocument();
+  // A completed payment takes no new abono and no correction.
+  expect(screen.queryByRole("button", { name: "Registrar abono Ana Gómez" })).not.toBeInTheDocument();
+});
+
+it("records the real return date and method without sending the amount", async () => {
+  const user = userEvent.setup();
+  state.obligations.data = [completedPeriodObligation];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Registrar devolución Ana Gómez 2025-01-15" }));
+  const dialog = screen.getByRole("dialog", { name: "Registrar devolución" });
+
+  // The returned amount comes from the stored installment and is not editable.
+  expect(within(dialog).getByTestId("cash-return-amount")).toHaveTextContent("$ 111.111,00");
+  expect(within(dialog).queryByRole("spinbutton")).not.toBeInTheDocument();
+  expect(within(dialog).getByLabelText(/Fecha de la devolución/)).toHaveValue(bogotaToday);
+
+  await user.selectOptions(within(dialog).getByLabelText("Método de la devolución"), "CARD");
+  await user.click(within(dialog).getByRole("button", { name: "Guardar devolución" }));
+
+  await waitFor(() =>
+    expect(state.createCashReturn).toHaveBeenCalledWith({
+      employeeId: "emp-1",
+      obligationId: "ob-period",
+      installmentId: "inst-1",
+      returnDate: bogotaToday,
+      returnMethod: "CARD",
+    }),
+  );
+  expect(state.createCashReturn).toHaveBeenCalledWith(
+    expect.not.objectContaining({ amount: expect.anything() }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+});
+
+it("keeps the server error visible when the return is refused", async () => {
+  const user = userEvent.setup();
+  state.createCashReturn = vi.fn().mockRejectedValue(
+    Object.assign(new Error("Request failed"), {
+      isAxiosError: true,
+      response: { data: { message: "El abono ya tiene una devolución registrada" } },
+    }),
+  );
+  state.obligations.data = [completedPeriodObligation];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Registrar devolución Ana Gómez 2025-01-15" }));
+  const dialog = screen.getByRole("dialog", { name: "Registrar devolución" });
+  await user.click(within(dialog).getByRole("button", { name: "Guardar devolución" }));
+
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+    "El abono ya tiene una devolución registrada",
+  );
+  // The dialog stays open on the same installment so the refusal is readable.
+  expect(screen.getByRole("dialog", { name: "Registrar devolución" })).toBeInTheDocument();
+  expect(screen.queryByText(/Devolución registrada/)).not.toBeInTheDocument();
+});
+
+it("shows a returned installment as returned and offers no second return", () => {
+  state.obligations.data = [{ ...completedPeriodObligation, installments: [returnedInstallment] }];
+  render(<PayrollPage />);
+
+  expect(screen.getByText("Devuelto el 2025-01-20 · Tarjeta")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Registrar devolución/ })).not.toBeInTheDocument();
 });

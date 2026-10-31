@@ -27,6 +27,17 @@ export interface PayrollInstallment {
     method: PayrollPaymentMethod;
     createdAt: string;
   };
+  // S7/S8: money an employee actually gave back for a whole paid installment.
+  // It never rewrites the original cash outflow, so a returned installment keeps
+  // its own date and method and adds the day and method the money came back by.
+  cashReturn?: PayrollCashReturn | null;
+}
+
+export interface PayrollCashReturn {
+  id: string;
+  amount: string;
+  returnDate: string;
+  returnMethod: PayrollPaymentMethod;
 }
 
 export interface PayrollShiftMembership {
@@ -94,6 +105,19 @@ export interface CorrectPayrollInstallmentInput {
   amount: string;
 }
 
+// S7/S8: a real return of money the employee had received. The actor states only
+// the two facts the approved decisions leave to a human — the day the money came
+// back (L325) and the real method it came back by (L330). The returned amount is
+// deliberately absent: one return covers exactly one complete installment (L329),
+// so the server takes it from the stored cash outflow.
+export interface CreatePayrollCashReturnInput {
+  employeeId: string;
+  obligationId: string;
+  installmentId: string;
+  returnDate: string;
+  returnMethod: PayrollPaymentMethod;
+}
+
 const OBLIGATIONS_KEY = ["payroll-obligations"];
 
 export function usePayrollObligations(enabled: boolean) {
@@ -135,4 +159,8 @@ export function useCreatePayrollGroupInstallment() {
 
 export function useCorrectPayrollPeriodInstallment() {
   return usePayrollMutation<CorrectPayrollInstallmentInput>("/payroll/period-installments/correct");
+}
+
+export function useCreatePayrollCashReturn() {
+  return usePayrollMutation<CreatePayrollCashReturnInput>("/payroll/cash-returns");
 }

@@ -17,16 +17,18 @@ import { useEmployeeShifts } from "@/hooks/useEmployeeShifts";
 import { useEmployees, type Employee } from "@/hooks/useEmployees";
 import {
   useCorrectPayrollPeriodInstallment,
+  useCreatePayrollCashReturn,
   useCreatePayrollGroup,
   useCreatePayrollGroupInstallment,
   useCreatePayrollPeriod,
   useCreatePayrollPeriodInstallment,
   usePayrollObligations,
+  type PayrollInstallment,
   type PayrollObligation,
   type PayrollPaymentMethod,
 } from "@/hooks/usePayroll";
 import { getApiErrorMessage } from "@/lib/api";
-import { toFiniteNumber } from "@/lib/utils";
+import { getBogotaDateInputValue, toFiniteNumber } from "@/lib/utils";
 
 const KIND_LABELS: Record<PayrollObligation["kind"], string> = {
   FIXED_PERIOD: "Salario fijo",
@@ -56,6 +58,16 @@ const CORRECTION_INTRO =
   "Corrige un abono registrado con un importe equivocado. El movimiento de caja conserva su fecha y su método de pago; la fecha del gasto la decide el servidor.";
 const CORRECTION_COMPLETION_NOTICE =
   "Si el importe corregido iguala el saldo pendiente, el pago se completa y se aplica la opción de gasto elegida.";
+
+// S7/S8: a real return is the money an employee actually gave back, so it is not
+// an amount to type: one return covers exactly one complete installment (L329) and
+// the amount comes from the stored cash outflow. Only the day the money came back
+// (L325) and the real method it came back by (L330) are human choices, and neither
+// the paid installment nor its linked expense is rewritten (L326).
+const CASH_RETURN_INTRO =
+  "Registra el dinero que el empleado devolvió de un abono ya pagado. La devolución cubre el abono completo.";
+const CASH_RETURN_EFFECT_NOTICE =
+  "El abono y su gasto quedan sin cambios; el importe devuelto se descuenta en caja con la fecha y el medio reales.";
 
 // The server owns every amount and sends it as a decimal string. The client only
 // formats it for display; it never adds, splits or re-derives a money value.
@@ -461,16 +473,107 @@ function CorrectionDialog({ obligation, onClose }: { obligation: PayrollObligati
   );
 }
 
+function CashReturnDialog({
+  obligation,
+  installment,
+  onClose,
+}: {
+  obligation: PayrollObligation;
+  installment: PayrollInstallment;
+  onClose: () => void;
+}) {
+  const createReturn = useCreatePayrollCashReturn();
+  const toast = useToast();
+  // The money came back on a calendar day, so the default is today in Bogotá —
+  // never the UTC day, which is already tomorrow for part of the local evening.
+  const [returnDate, setReturnDate] = useState(() => getBogotaDateInputValue());
+  const [returnMethod, setReturnMethod] = useState<PayrollPaymentMethod>("CASH");
+  const [saving, setSaving] = useState(false);
+  // The route refuses a second return, an unpaid installment or a foreign payment;
+  // keep the dialog open so the message can be read and corrected.
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await createReturn.mutateAsync({
+        employeeId: obligation.employeeId,
+        obligationId: obligation.id,
+        installmentId: installment.id,
+        returnDate,
+        returnMethod,
+      });
+      toast.success("Devolución registrada");
+      onClose();
+    } catch (submitError) {
+      setError(getApiErrorMessage(submitError, "No se pudo registrar la devolución"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <PayrollDialog title="Registrar devolución" onClose={() => { if (!saving) onClose(); }}>
+      <form onSubmit={submit}>
+        <fieldset disabled={saving} className="grid gap-3">
+          <dl className="grid grid-cols-1 gap-2 rounded-xl border border-border p-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Abono devuelto
+              </dt>
+              <dd data-testid="cash-return-amount" className="font-mono tabular-nums">
+                {money(installment.outflow.amount)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Pagado el
+              </dt>
+              <dd className="font-mono tabular-nums">
+                {day(installment.outflow.date)} · {PAYMENT_METHODS[installment.outflow.method]}
+              </dd>
+            </div>
+          </dl>
+          <Input
+            label="Fecha de la devolución"
+            type="date"
+            required
+            value={returnDate}
+            onChange={(event) => setReturnDate(event.target.value)}
+          />
+          <Select
+            label="Método de la devolución"
+            value={returnMethod}
+            onChange={(event) => setReturnMethod(event.target.value as PayrollPaymentMethod)}
+            options={METHOD_OPTIONS}
+          />
+          <p className="text-xs text-muted-foreground">{CASH_RETURN_INTRO}</p>
+          <p className="text-xs text-muted-foreground">{CASH_RETURN_EFFECT_NOTICE}</p>
+          <FormError message={error} />
+          <div>
+            <Button type="submit" disabled={saving}>Guardar devolución</Button>
+          </div>
+        </fieldset>
+      </form>
+    </PayrollDialog>
+  );
+}
+
 function ObligationCard({
   obligation,
   employeeName,
   onRegisterInstallment,
   onCorrectInstallment,
+  onRegisterCashReturn,
 }: {
   obligation: PayrollObligation;
   employeeName: string;
   onRegisterInstallment: (obligation: PayrollObligation) => void;
   onCorrectInstallment: (obligation: PayrollObligation) => void;
+  onRegisterCashReturn: (obligation: PayrollObligation, installment: PayrollInstallment) => void;
 }) {
   const completed = obligation.summary.status === "completed";
   // S6: only a wrongly recorded fixed-period installment can be corrected, and
@@ -509,10 +612,28 @@ function ObligationCard({
       <div className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Abonos</h3>
         {obligation.installments.length ? (
-          <ul className="space-y-1 text-sm">
+          <ul className="space-y-2 text-sm">
             {obligation.installments.map((installment) => (
-              <li key={installment.id}>
-                {day(installment.outflow.date)} · {PAYMENT_METHODS[installment.outflow.method]} · {money(installment.outflow.amount)}
+              <li key={installment.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono tabular-nums">
+                  {day(installment.outflow.date)} · {PAYMENT_METHODS[installment.outflow.method]} · {money(installment.outflow.amount)}
+                </span>
+                {/* A returned installment keeps its cash row and shows the real day and
+                    method the money came back by; it never offers a second return. */}
+                {installment.cashReturn ? (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Devuelto el {day(installment.cashReturn.returnDate)} · {PAYMENT_METHODS[installment.cashReturn.returnMethod]}
+                  </span>
+                ) : completed ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onRegisterCashReturn(obligation, installment)}
+                    aria-label={`Registrar devolución ${employeeName} ${day(installment.outflow.date)}`}
+                  >
+                    Registrar devolución
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -547,6 +668,12 @@ export default function PayrollPage() {
   const [groupOpen, setGroupOpen] = useState(false);
   const [installmentFor, setInstallmentFor] = useState<PayrollObligation | null>(null);
   const [correctionFor, setCorrectionFor] = useState<PayrollObligation | null>(null);
+  // A return belongs to one complete installment, not to the payment, so the
+  // dialog keeps both identities.
+  const [cashReturnFor, setCashReturnFor] = useState<{
+    obligation: PayrollObligation;
+    installment: PayrollInstallment;
+  } | null>(null);
 
   const activeEmployees = (employees.data ?? []).filter((employee) => employee.active);
   const employeeName = (employeeId: string) =>
@@ -585,6 +712,7 @@ export default function PayrollPage() {
                   employeeName={employeeName(obligation.employeeId)}
                   onRegisterInstallment={setInstallmentFor}
                   onCorrectInstallment={setCorrectionFor}
+                  onRegisterCashReturn={(obligation, installment) => setCashReturnFor({ obligation, installment })}
                 />
               ))}
             </div>
@@ -596,6 +724,13 @@ export default function PayrollPage() {
           )}
           {installmentFor && <InstallmentDialog obligation={installmentFor} onClose={() => setInstallmentFor(null)} />}
           {correctionFor && <CorrectionDialog obligation={correctionFor} onClose={() => setCorrectionFor(null)} />}
+          {cashReturnFor && (
+            <CashReturnDialog
+              obligation={cashReturnFor.obligation}
+              installment={cashReturnFor.installment}
+              onClose={() => setCashReturnFor(null)}
+            />
+          )}
         </div>
       )}
     </DashboardLayout>
