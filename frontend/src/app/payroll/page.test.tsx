@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import PayrollPage from "./page";
 
 // The screen must read money exactly as the server sent it and never derive it.
@@ -133,6 +133,21 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+// The card hosts one overflow menu per payment; opening it is the only access
+// path to the actions the payment allows in its current state.
+async function openActions(user: UserEvent, employee: string) {
+  await user.click(screen.getByRole("button", { name: `Acciones de ${employee}` }));
+}
+
+// A dialog focuses its first field immediately and again on the next frame, so a
+// test that starts typing as soon as the dialog appears waits that frame out
+// first instead of racing the second focus pass.
+async function settleDialogFocus() {
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
 it("shows loading, error and empty states", () => {
   state.obligations.isLoading = true;
   const view = render(<PayrollPage />);
@@ -164,18 +179,19 @@ it("renders the server summary and cash history exactly as the API returned them
   expect(screen.getByTestId("summary-balance-ob-group")).toHaveTextContent("$ 9.999.999.999,99");
 
   // Installment history keeps the real date, method and amount.
-  expect(screen.getByText("2025-01-15 · Efectivo · $ 111.111,00")).toBeInTheDocument();
+  expect(screen.getByText("15 de enero de 2025 · Efectivo · $ 111.111,00")).toBeInTheDocument();
   expect(screen.getByText("Sin abonos")).toBeInTheDocument();
-  expect(screen.getByText(/Gasto al completar: Sí · 2025-02-01/)).toBeInTheDocument();
+  expect(screen.getByText(/Gasto al completar: Sí · 1 de febrero de 2025/)).toBeInTheDocument();
   expect(screen.getByText(/Gasto al completar: No/)).toBeInTheDocument();
 });
 
 it("creates a fixed-period payment carrying the per-payment expense choice", async () => {
   const user = userEvent.setup();
   render(<PayrollPage />);
-  await user.click(screen.getByRole("button", { name: "Nuevo pago fijo" }));
+  await user.click(screen.getByRole("button", { name: "Nuevo pago" }));
 
   const dialog = screen.getByRole("dialog", { name: "Nuevo pago fijo" });
+  await settleDialogFocus();
   await user.selectOptions(within(dialog).getByLabelText("Empleado"), "emp-1");
   await user.type(within(dialog).getByLabelText(/Fecha inicial/), "2025-02-01");
   await user.type(within(dialog).getByLabelText(/Fecha final/), "2025-02-28");
@@ -199,9 +215,10 @@ it("creates a fixed-period payment carrying the per-payment expense choice", asy
 it("sends an explicit no-expense choice when the toggle stays off", async () => {
   const user = userEvent.setup();
   render(<PayrollPage />);
-  await user.click(screen.getByRole("button", { name: "Nuevo pago fijo" }));
+  await user.click(screen.getByRole("button", { name: "Nuevo pago" }));
 
   const dialog = screen.getByRole("dialog", { name: "Nuevo pago fijo" });
+  await settleDialogFocus();
   await user.selectOptions(within(dialog).getByLabelText("Empleado"), "emp-2");
   await user.type(within(dialog).getByLabelText(/Fecha inicial/), "2025-02-01");
   await user.type(within(dialog).getByLabelText(/Fecha final/), "2025-02-28");
@@ -224,15 +241,21 @@ it("groups only the shifts that are not already owned by a payment", async () =>
   const user = userEvent.setup();
   state.obligations.data = [groupObligation];
   render(<PayrollPage />);
-  await user.click(screen.getByRole("button", { name: "Nuevo pago por jornadas" }));
+  await user.click(screen.getByRole("button", { name: "Nuevo pago" }));
 
-  const dialog = screen.getByRole("dialog", { name: "Nuevo pago por jornadas" });
+  let dialog = screen.getByRole("dialog", { name: "Nuevo pago fijo" });
+  await settleDialogFocus();
+  // One entry point with a kind switch instead of two competing buttons.
+  await user.click(within(dialog).getByRole("button", { name: "Por jornadas" }));
+  dialog = screen.getByRole("dialog", { name: "Nuevo pago por jornadas" });
+  await settleDialogFocus();
   await user.selectOptions(within(dialog).getByLabelText("Empleado"), "emp-1");
 
-  expect(within(dialog).getByLabelText("Jornada 2025-01-06")).toBeInTheDocument();
-  expect(within(dialog).queryByLabelText("Jornada 2025-01-05")).not.toBeInTheDocument();
+  const freeShift = within(dialog).getByRole("checkbox", { name: /6 de enero de 2025 · Día parcial/ });
+  expect(freeShift).toBeInTheDocument();
+  expect(within(dialog).queryByRole("checkbox", { name: /5 de enero de 2025/ })).not.toBeInTheDocument();
 
-  await user.click(within(dialog).getByLabelText("Jornada 2025-01-06"));
+  await user.click(freeShift);
   await user.click(within(dialog).getByRole("button", { name: "Crear pago" }));
 
   await waitFor(() =>
@@ -249,8 +272,10 @@ it("registers an installment on the endpoint that matches the obligation kind", 
   state.obligations.data = [periodObligation, groupObligation];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Registrar abono Ana Gómez" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(screen.getByRole("menuitem", { name: "Registrar abono" }));
   let dialog = screen.getByRole("dialog", { name: "Registrar abono" });
+  await settleDialogFocus();
   await user.type(within(dialog).getByLabelText(/Monto del abono/), "500000.75");
   await user.type(within(dialog).getByLabelText(/Fecha del abono/), "2025-01-20");
   await user.selectOptions(within(dialog).getByLabelText("Método de pago"), "TRANSFER");
@@ -267,8 +292,10 @@ it("registers an installment on the endpoint that matches the obligation kind", 
   );
 
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  await user.click(screen.getByRole("button", { name: "Registrar abono Luis Prado" }));
+  await openActions(user, "Luis Prado");
+  await user.click(screen.getByRole("menuitem", { name: "Registrar abono" }));
   dialog = screen.getByRole("dialog", { name: "Registrar abono" });
+  await settleDialogFocus();
   await user.type(within(dialog).getByLabelText(/Monto del abono/), "100000");
   await user.type(within(dialog).getByLabelText(/Fecha del abono/), "2025-01-21");
   await user.click(within(dialog).getByRole("button", { name: "Guardar abono" }));
@@ -312,8 +339,10 @@ it("shows the approved expense limit and inactive category messages instead of f
   state.obligations.data = [periodObligation];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Registrar abono Ana Gómez" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(screen.getByRole("menuitem", { name: "Registrar abono" }));
   const dialog = screen.getByRole("dialog", { name: "Registrar abono" });
+  await settleDialogFocus();
   await user.type(within(dialog).getByLabelText(/Monto del abono/), "10");
   await user.type(within(dialog).getByLabelText(/Fecha del abono/), "2025-01-20");
   await user.click(within(dialog).getByRole("button", { name: "Guardar abono" }));
@@ -330,7 +359,8 @@ it("shows the approved expense limit and inactive category messages instead of f
   );
 });
 
-it("offers no installment on a payment the server reports as completed", () => {
+it("offers no installment on a payment the server reports as completed", async () => {
+  const user = userEvent.setup();
   state.obligations.data = [
     {
       ...periodObligation,
@@ -341,15 +371,20 @@ it("offers no installment on a payment the server reports as completed", () => {
   render(<PayrollPage />);
 
   expect(screen.getByTestId("summary-balance-ob-period")).toHaveTextContent("$ 0,00");
-  expect(screen.queryByRole("button", { name: "Registrar abono Ana Gómez" })).not.toBeInTheDocument();
+  await openActions(user, "Ana Gómez");
+  expect(screen.queryByRole("menuitem", { name: "Registrar abono" })).not.toBeInTheDocument();
 });
 
 it("requires at least one shift before creating a group payment", async () => {
   const user = userEvent.setup();
   render(<PayrollPage />);
-  await user.click(screen.getByRole("button", { name: "Nuevo pago por jornadas" }));
+  await user.click(screen.getByRole("button", { name: "Nuevo pago" }));
 
-  const dialog = screen.getByRole("dialog", { name: "Nuevo pago por jornadas" });
+  let dialog = screen.getByRole("dialog", { name: "Nuevo pago fijo" });
+  await settleDialogFocus();
+  await user.click(within(dialog).getByRole("button", { name: "Por jornadas" }));
+  dialog = screen.getByRole("dialog", { name: "Nuevo pago por jornadas" });
+  await settleDialogFocus();
   await user.selectOptions(within(dialog).getByLabelText("Empleado"), "emp-1");
   await user.click(within(dialog).getByRole("button", { name: "Crear pago" }));
 
@@ -376,22 +411,24 @@ it("corrects a wrongly recorded installment without resending its date, method o
   ];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Corregir abono Ana Gómez" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(screen.getByRole("menuitem", { name: "Corregir abono" }));
   const dialog = screen.getByRole("dialog", { name: "Corregir abono" });
+  await settleDialogFocus();
 
   // The wrongly recorded cash row is shown read-only: the correction never picks
   // a new date or method, and the server decides the expense date.
   expect(within(dialog).getByTestId("correction-current-amount")).toHaveTextContent("$ 111.111,00");
-  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("2025-01-15");
+  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("15 de enero de 2025");
   expect(within(dialog).queryByLabelText(/Fecha/)).not.toBeInTheDocument();
   expect(within(dialog).queryByLabelText(/Método/)).not.toBeInTheDocument();
 
   await user.selectOptions(within(dialog).getByLabelText("Abono a corregir"), "inst-2");
   expect(within(dialog).getByTestId("correction-current-amount")).toHaveTextContent("$ 30.000,00");
-  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("2025-01-25");
+  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("25 de enero de 2025");
 
-  // The number input normalizes the typed decimal, so the route receives the
-  // exact value the browser holds; the backend accepts 1-2 decimal places.
+  // The typed decimal is sent exactly as the field holds it; the backend accepts
+  // 1-2 decimal places.
   await user.type(within(dialog).getByLabelText(/Importe corregido/), "180000.5");
   await user.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
 
@@ -438,10 +475,12 @@ it("corrects the installment of the payment whose dialog was opened", async () =
   ];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Corregir abono Luis Prado" }));
+  await openActions(user, "Luis Prado");
+  await user.click(screen.getByRole("menuitem", { name: "Corregir abono" }));
   const dialog = screen.getByRole("dialog", { name: "Corregir abono" });
+  await settleDialogFocus();
   expect(within(dialog).getByTestId("correction-current-amount")).toHaveTextContent("$ 70.000,00");
-  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("2025-01-09");
+  expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("9 de enero de 2025");
 
   await user.type(within(dialog).getByLabelText(/Importe corregido/), "90000");
   await user.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
@@ -461,8 +500,10 @@ it("describes the correction as an amount fix that may still complete the paymen
   state.obligations.data = [periodObligation];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Corregir abono Ana Gómez" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(screen.getByRole("menuitem", { name: "Corregir abono" }));
   const dialog = screen.getByRole("dialog", { name: "Corregir abono" });
+  await settleDialogFocus();
 
   expect(dialog).toHaveTextContent(
     "El movimiento de caja conserva su fecha y su método de pago; la fecha del gasto la decide el servidor.",
@@ -485,8 +526,10 @@ it("surfaces the correction error verbatim and keeps the dialog open", async () 
   state.obligations.data = [periodObligation];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Corregir abono Ana Gómez" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(screen.getByRole("menuitem", { name: "Corregir abono" }));
   const dialog = screen.getByRole("dialog", { name: "Corregir abono" });
+  await settleDialogFocus();
   await user.type(within(dialog).getByLabelText(/Importe corregido/), "9999999");
   await user.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
 
@@ -496,7 +539,8 @@ it("surfaces the correction error verbatim and keeps the dialog open", async () 
   expect(screen.getByRole("dialog", { name: "Corregir abono" })).toBeInTheDocument();
 });
 
-it("offers no correction on a completed payment or on a shift-group payment", () => {
+it("offers no correction on a completed payment or on a shift-group payment", async () => {
+  const user = userEvent.setup();
   state.obligations.data = [
     {
       ...periodObligation,
@@ -507,18 +551,22 @@ it("offers no correction on a completed payment or on a shift-group payment", ()
   ];
   render(<PayrollPage />);
 
-  expect(screen.queryByRole("button", { name: "Corregir abono Ana Gómez" })).not.toBeInTheDocument();
+  await openActions(user, "Ana Gómez");
+  expect(screen.queryByRole("menuitem", { name: "Corregir abono" })).not.toBeInTheDocument();
   // The correction route only exists for fixed-period installments.
-  expect(screen.queryByRole("button", { name: "Corregir abono Luis Prado" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Registrar abono Luis Prado" })).toBeInTheDocument();
+  await openActions(user, "Luis Prado");
+  expect(screen.queryByRole("menuitem", { name: "Corregir abono" })).not.toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Registrar abono" })).toBeInTheDocument();
 });
 
-it("offers no correction while the payment has no installment to fix", () => {
+it("offers no correction while the payment has no installment to fix", async () => {
+  const user = userEvent.setup();
   state.obligations.data = [{ ...periodObligation, installments: [] }];
   render(<PayrollPage />);
 
-  expect(screen.queryByRole("button", { name: "Corregir abono Ana Gómez" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Registrar abono Ana Gómez" })).toBeInTheDocument();
+  await openActions(user, "Ana Gómez");
+  expect(screen.queryByRole("menuitem", { name: "Corregir abono" })).not.toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Registrar abono" })).toBeInTheDocument();
 });
 
 it("does not expose payroll to roles other than OWNER and ADMIN", () => {
@@ -527,9 +575,10 @@ it("does not expose payroll to roles other than OWNER and ADMIN", () => {
   render(<PayrollPage />);
 
   expect(state.obligationsEnabled).toBe(false);
-  expect(screen.queryByRole("button", { name: "Nuevo pago fijo" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Nuevo pago por jornadas" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Nuevo pago" })).not.toBeInTheDocument();
   expect(screen.queryByText("Ana Gómez")).not.toBeInTheDocument();
+  // A forbidden role reads why, instead of an empty page.
+  expect(screen.getByText("No tienes acceso a la nómina")).toBeInTheDocument();
 });
 
 // S7/S8: a real return covers exactly one complete installment (L329), is
@@ -573,29 +622,33 @@ const bogotaToday = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 }).format(new Date());
 
-it("offers no return while the payment is still pending", () => {
+it("offers no return while the payment is still pending", async () => {
+  const user = userEvent.setup();
   state.obligations.data = [periodObligation];
   render(<PayrollPage />);
 
-  expect(screen.queryByRole("button", { name: /Registrar devolución/ })).not.toBeInTheDocument();
+  await openActions(user, "Ana Gómez");
+  expect(screen.queryByRole("menuitem", { name: /Registrar devolución/ })).not.toBeInTheDocument();
   // A pending payment keeps its abono and correction actions instead.
-  expect(screen.getByRole("button", { name: "Registrar abono Ana Gómez" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Registrar abono" })).toBeInTheDocument();
 });
 
-it("offers a return only on a completed installment that has no return yet", () => {
+it("offers a return only on a completed installment that has no return yet", async () => {
+  const user = userEvent.setup();
   state.obligations.data = [
     { ...completedPeriodObligation, installments: [returnedInstallment, unreturnedInstallment] },
   ];
   render(<PayrollPage />);
 
+  await openActions(user, "Ana Gómez");
   expect(
-    screen.getByRole("button", { name: "Registrar devolución Ana Gómez 2025-01-25" }),
+    screen.getByRole("menuitem", { name: /Registrar devolución · 25 de enero de 2025/ }),
   ).toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Registrar devolución Ana Gómez 2025-01-15" }),
+    screen.queryByRole("menuitem", { name: /Registrar devolución · 15 de enero de 2025/ }),
   ).not.toBeInTheDocument();
   // A completed payment takes no new abono and no correction.
-  expect(screen.queryByRole("button", { name: "Registrar abono Ana Gómez" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "Registrar abono" })).not.toBeInTheDocument();
 });
 
 it("records the real return date and method without sending the amount", async () => {
@@ -603,8 +656,12 @@ it("records the real return date and method without sending the amount", async (
   state.obligations.data = [completedPeriodObligation];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Registrar devolución Ana Gómez 2025-01-15" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(
+    screen.getByRole("menuitem", { name: /Registrar devolución · 15 de enero de 2025/ }),
+  );
   const dialog = screen.getByRole("dialog", { name: "Registrar devolución" });
+  await settleDialogFocus();
 
   // The returned amount comes from the stored installment and is not editable.
   expect(within(dialog).getByTestId("cash-return-amount")).toHaveTextContent("$ 111.111,00");
@@ -640,8 +697,12 @@ it("keeps the server error visible when the return is refused", async () => {
   state.obligations.data = [completedPeriodObligation];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Registrar devolución Ana Gómez 2025-01-15" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(
+    screen.getByRole("menuitem", { name: /Registrar devolución · 15 de enero de 2025/ }),
+  );
   const dialog = screen.getByRole("dialog", { name: "Registrar devolución" });
+  await settleDialogFocus();
   await user.click(within(dialog).getByRole("button", { name: "Guardar devolución" }));
 
   expect(await within(dialog).findByRole("alert")).toHaveTextContent(
@@ -652,12 +713,14 @@ it("keeps the server error visible when the return is refused", async () => {
   expect(screen.queryByText(/Devolución registrada/)).not.toBeInTheDocument();
 });
 
-it("shows a returned installment as returned and offers no second return", () => {
+it("shows a returned installment as returned and offers no second return", async () => {
+  const user = userEvent.setup();
   state.obligations.data = [{ ...completedPeriodObligation, installments: [returnedInstallment] }];
   render(<PayrollPage />);
 
-  expect(screen.getByText("Devuelto el 2025-01-20 · Tarjeta")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Registrar devolución/ })).not.toBeInTheDocument();
+  expect(screen.getByText("Devuelto el 20 de enero de 2025 · Tarjeta")).toBeInTheDocument();
+  await openActions(user, "Ana Gómez");
+  expect(screen.queryByRole("menuitem", { name: /Registrar devolución/ })).not.toBeInTheDocument();
 });
 
 // S6/S7 (L327, L338): a replacement is a NEW payment that references the valid
@@ -670,19 +733,23 @@ const completedForReplacement = {
   summary: { total: "141111.00", paid: "141111.00", balance: "0.00", status: "completed" },
 };
 
-it("offers no replacement while the payment is still pending", () => {
+it("offers no replacement while the payment is still pending", async () => {
+  const user = userEvent.setup();
   state.obligations.data = [periodObligation];
   const view = render(<PayrollPage />);
 
-  expect(screen.queryByRole("button", { name: "Reemplazar pago Ana Gómez" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Registrar abono Ana Gómez" })).toBeInTheDocument();
+  await openActions(user, "Ana Gómez");
+  expect(screen.queryByRole("menuitem", { name: "Reemplazar pago" })).not.toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Registrar abono" })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
 
   // Only the completed payment can be replaced; the pending one keeps its own
   // actions and never shows the replacement entry point.
   state.obligations.data = [completedForReplacement];
   view.rerender(<PayrollPage />);
-  expect(screen.getByRole("button", { name: "Reemplazar pago Ana Gómez" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Registrar abono Ana Gómez" })).not.toBeInTheDocument();
+  await openActions(user, "Ana Gómez");
+  expect(screen.getByRole("menuitem", { name: "Reemplazar pago" })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "Registrar abono" })).not.toBeInTheDocument();
 });
 
 it("changes the referenced total when the installment selection changes", async () => {
@@ -690,11 +757,13 @@ it("changes the referenced total when the installment selection changes", async 
   state.obligations.data = [completedForReplacement];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Reemplazar pago Ana Gómez" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(screen.getByRole("menuitem", { name: "Reemplazar pago" }));
   const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
+  await settleDialogFocus();
 
-  const firstInstallment = within(dialog).getByRole("checkbox", { name: /Abono 2025-01-15/ });
-  const secondInstallment = within(dialog).getByRole("checkbox", { name: /Abono 2025-01-25/ });
+  const firstInstallment = within(dialog).getByRole("checkbox", { name: /15 de enero de 2025/ });
+  const secondInstallment = within(dialog).getByRole("checkbox", { name: /25 de enero de 2025/ });
   // Every installment of the completed payment starts selected.
   expect(firstInstallment).toBeChecked();
   expect(secondInstallment).toBeChecked();
@@ -719,8 +788,10 @@ it("sends the seven replacement fields and never an amount", async () => {
   state.obligations.data = [completedForReplacement];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Reemplazar pago Ana Gómez" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(screen.getByRole("menuitem", { name: "Reemplazar pago" }));
   const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
+  await settleDialogFocus();
 
   // The new payment starts with the dates of the payment it replaces, and the
   // actor may state others.
@@ -734,7 +805,7 @@ it("sends the seven replacement fields and never an amount", async () => {
   await user.type(periodEnd, "2025-02-28");
 
   // The wrongly recorded installment stays behind as the balance still to pay.
-  await user.click(within(dialog).getByRole("checkbox", { name: /Abono 2025-01-25/ }));
+  await user.click(within(dialog).getByRole("checkbox", { name: /25 de enero de 2025/ }));
 
   await user.click(within(dialog).getByLabelText("Generar gasto al completar el pago"));
   await user.type(within(dialog).getByLabelText("Fecha del gasto (opcional)"), "2025-03-01");
@@ -752,9 +823,12 @@ it("sends the seven replacement fields and never an amount", async () => {
     }),
   );
 
-  // Exactly those seven fields: the corrected amount stays server-owned.
-  const submitted = (state.createReplacement as unknown as { mock: { calls: [Record<string, unknown>][] } })
-    .mock.calls[0][0];
+  // Exactly those seven fields: the corrected amount stays server-owned. The
+  // hoisted mutation is typed as unknown at the mock boundary, so it is narrowed
+  // once to the call contract this assertion reads.
+  type ReplacementCall = { mock: { calls: [Record<string, unknown>][] } };
+  const replacementMock = state.createReplacement as unknown as ReplacementCall;
+  const submitted = replacementMock.mock.calls[0][0];
   expect(Object.keys(submitted).sort()).toEqual(
     [
       "employeeId",
@@ -780,8 +854,10 @@ it("keeps the server refusal of a replacement visible with the dialog open", asy
   state.obligations.data = [completedForReplacement];
   render(<PayrollPage />);
 
-  await user.click(screen.getByRole("button", { name: "Reemplazar pago Ana Gómez" }));
+  await openActions(user, "Ana Gómez");
+  await user.click(screen.getByRole("menuitem", { name: "Reemplazar pago" }));
   const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
+  await settleDialogFocus();
   await user.click(within(dialog).getByRole("button", { name: "Crear pago de reemplazo" }));
 
   expect(await within(dialog).findByRole("alert")).toHaveTextContent(
