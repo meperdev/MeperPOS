@@ -23,9 +23,13 @@ npm run lint            # ESLint with auto-fix
 npm run seed            # Seed database with faker data
 npx prisma migrate dev  # Run migrations
 npx prisma studio       # Open Prisma Studio GUI
+npm run db:up           # Start the local PostgreSQL container (docker compose)
+npm run db:status       # Is the database container up?
+npm run db:down         # Stop it
+npm run db:logs         # Follow the server log
 ```
 
-> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npx eslint <file>`. The backend test suite also requires PostgreSQL on port 5432: roughly 94 integration tests fail without it.
+> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npx eslint <file>`. The backend test suite also requires PostgreSQL on port 5432 (`npm run db:up` starts it): roughly 94 integration tests fail without it. The container is the `postgres` service of `backend/docker-compose.yml`; if Docker asks for a password, add your user to the group once (`sudo usermod -aG docker "$USER"`) and start a new session.
 
 ### Frontend (`/frontend`)
 ```bash

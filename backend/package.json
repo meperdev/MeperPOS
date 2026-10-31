@@ -31,6 +31,10 @@
     "migrate:dev": "dotenv -e .env.development -- npx prisma migrate dev",
     "migrate:prod": "dotenv -e .env.production -- npx prisma migrate deploy",
     "provision:prod": "dotenv -e .env.production -- ts-node prisma/provision.ts",
+    "db:up": "bash scripts/db.sh up",
+    "db:status": "bash scripts/db.sh status",
+    "db:down": "bash scripts/db.sh down",
+    "db:logs": "bash scripts/db.sh logs",
     "studio": "dotenv -e .env.development -- npx prisma studio"
   },
   "dependencies": {
