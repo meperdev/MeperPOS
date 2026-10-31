@@ -20,6 +20,7 @@ import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.
 import type { PayrollObligationCompletionFacts } from './payroll-obligation-completion';
 import { planPayrollObligationCompletion } from './payroll-obligation-completion';
 import { CreatePayrollPeriodInstallmentDto } from './dto/create-payroll-period-installment.dto';
+import { throwPayrollTransactionError } from './payroll-transaction-error';
 
 @Injectable()
 export class PayrollPeriodInstallmentsService {
@@ -53,7 +54,7 @@ export class PayrollPeriodInstallmentsService {
     )
       throw new BadRequestException('Datos de abono inválidos');
 
-    return this.prisma.$transaction(async (tx) => {
+    const transaction = this.prisma.$transaction(async (tx) => {
       // All payroll mutations must acquire the employee before the obligation.
       // Inactive employees may still receive payments for existing obligations.
       const employees = await tx.$queryRaw<{ id: string }[]>`
@@ -197,6 +198,7 @@ export class PayrollPeriodInstallmentsService {
         status,
       };
     });
+    return transaction.catch(throwPayrollTransactionError);
   }
 
   /**

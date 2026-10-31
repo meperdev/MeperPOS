@@ -20,6 +20,7 @@ import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.
 import type { PayrollObligationCompletionFacts } from './payroll-obligation-completion';
 import { planPayrollObligationCompletion } from './payroll-obligation-completion';
 import { CorrectPayrollPeriodInstallmentDto } from './dto/correct-payroll-period-installment.dto';
+import { throwPayrollTransactionError } from './payroll-transaction-error';
 
 /**
  * Corrects the cash amount of a still-pending fixed-period installment in place
@@ -70,7 +71,7 @@ export class PayrollPeriodInstallmentCorrectionService {
       throw new BadRequestException('Datos de corrección inválidos');
     const amount = new Prisma.Decimal(dto.amount);
 
-    return this.prisma.$transaction(async (tx) => {
+    const transaction = this.prisma.$transaction(async (tx) => {
       // S5/S6: a correction introduces no new cash date, so the day this correction
       // is made is the completion day of the payment it may complete. It is read
       // once, in the Bogotá calendar, so every effect of one correction agrees.
@@ -307,6 +308,7 @@ export class PayrollPeriodInstallmentCorrectionService {
         status,
       };
     });
+    return transaction.catch(throwPayrollTransactionError);
   }
 
   /**

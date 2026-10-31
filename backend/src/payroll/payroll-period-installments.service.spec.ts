@@ -89,6 +89,21 @@ function setup() {
 }
 
 describe('PayrollPeriodInstallmentsService (mock transaction only)', () => {
+  it('maps a transaction timeout to a retryable service error', async () => {
+    const { service, transaction } = setup();
+    transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('transaction expired', {
+        code: 'P2028',
+        clientVersion: 'test',
+      }),
+    );
+    await expect(service.create(input, 'org', actor)).rejects.toMatchObject({
+      status: 503,
+      message:
+        'No se pudo confirmar la operación. Verifique su estado antes de reintentar',
+    });
+  });
+
   it('records a real outflow and installment under employee then obligation locks, including for inactive employees', async () => {
     const { tx, service } = setup();
     const result = await service.create(input, 'org', actor);

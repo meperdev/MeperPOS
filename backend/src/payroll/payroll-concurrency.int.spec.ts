@@ -1860,12 +1860,13 @@ describePostgres(
         throw new Error(
           'The completion must not report success after its transaction budget expired',
         );
-      // The real code, and the proof that it is the transaction being closed
-      // after the deadline rather than an interrupted statement.
-      expect(deadlockEvidence(interruptedResult.error)).toMatch(/P2028/);
-      expect(deadlockEvidence(interruptedResult.error)).toMatch(
-        /however \d+ ms passed since the start of the transaction/,
-      );
+      // The direct probe above establishes Prisma's P2028; the production service
+      // translates it to a safe service-unavailable response without raw details.
+      expect(interruptedResult.error).toMatchObject({
+        status: 503,
+        message:
+        'No se pudo confirmar la operación. Verifique su estado antes de reintentar',
+      });
 
       // Nothing of the expired completion may survive, including the cash and the
       // installment it had already inserted before the block.

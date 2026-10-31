@@ -100,7 +100,13 @@ function setup() {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     payrollCashOutflow: { create: jest.fn().mockResolvedValue({ id: 'cash' }) },
-    payrollInstallment: { create: jest.fn().mockResolvedValue({ id: 'new' }) },
+    payrollInstallment: {
+      create: jest.fn().mockResolvedValue({ id: 'new' }),
+      // Legacy rows stored no registration order, so the next one starts at 1.
+      aggregate: jest.fn().mockResolvedValue({ _max: { sequence: null } }),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
     payrollAllocation: {
       createMany: jest
         .fn()
@@ -146,6 +152,47 @@ const transactionCount = (tx: ReturnType<typeof setup>['tx']): number =>
   tx.$queryRaw.mock.calls.length;
 
 describe('group installment (mock transaction, not database locks or rollback)', () => {
+  it('maps a transaction timeout to a retryable service error', async () => {
+    const { service, transaction } = setup();
+    transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('transaction expired', {
+        code: 'P2028',
+        clientVersion: 'test',
+      }),
+    );
+    await expect(service.create(input, 'org', actor)).rejects.toMatchObject({
+      status: 503,
+      message:
+        'No se pudo confirmar la operación. Verifique su estado antes de reintentar',
+    });
+  });
+
+  it('accepts the same locked shifts in database collation order', async () => {
+    const { service, tx } = setup();
+    tx.$queryRaw
+      .mockReset()
+      .mockResolvedValueOnce([{ id: 'emp', active: true }])
+      .mockResolvedValueOnce([{ id: 'group' }])
+      .mockResolvedValueOnce([{ id: 's2' }, { id: 's1' }]);
+    await expect(service.create(input, 'org', actor)).resolves.toMatchObject({
+      status: 'PENDING',
+    });
+    expect(tx.payrollCashOutflow.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a different locked shift set before creating cash', async () => {
+    const { service, tx } = setup();
+    tx.$queryRaw
+      .mockReset()
+      .mockResolvedValueOnce([{ id: 'emp', active: true }])
+      .mockResolvedValueOnce([{ id: 'group' }])
+      .mockResolvedValueOnce([{ id: 's1' }, { id: 'other' }]);
+    await expect(service.create(input, 'org', actor)).rejects.toThrow(
+      'Turnos modificados',
+    );
+    expect(tx.payrollCashOutflow.create).not.toHaveBeenCalled();
+  });
+
   it('preserves historical application and allocates only new cash by current dates, after ordered locks', async () => {
     const { service, tx } = setup();
     const result = await service.create(input, 'org', actor);
@@ -213,9 +260,128 @@ describe('group installment (mock transaction, not database locks or rollback)',
         employeeId: 'emp',
         obligationId: 'group',
         outflowId: 'cash',
+        sequence: 1,
       },
     });
   });
+
+  // L332/L333: registration order is persisted, never inferred. The obligation
+  // lock serialises cooperating writers and the scoped unique index refuses a
+  // duplicate from any writer that skipped it.
+  describe('registration sequence', () => {
+    const expectedInstallment = (sequence: number) => ({
+      data: {
+        organizationId: 'org',
+        employeeId: 'emp',
+        obligationId: 'group',
+        outflowId: 'cash',
+        sequence,
+      },
+    });
+    const known = (code: string, meta: Record<string, unknown>) =>
+      new Prisma.PrismaClientKnownRequestError('database detail', {
+        code,
+        clientVersion: 'test',
+        meta,
+      });
+
+    it('assigns the next sequence from the locked obligation scope before creating cash', async () => {
+      const { service, tx } = setup();
+      tx.payrollInstallment.aggregate.mockResolvedValueOnce({
+        _max: { sequence: 2 },
+      });
+
+      await expect(service.create(input, 'org', actor)).resolves.toMatchObject({
+        status: 'PENDING',
+      });
+
+      expect(tx.payrollInstallment.aggregate).toHaveBeenCalledWith({
+        where: {
+          organizationId: 'org',
+          employeeId: 'emp',
+          obligationId: 'group',
+        },
+        _max: { sequence: true },
+      });
+      expect(tx.payrollInstallment.create).toHaveBeenCalledWith(
+        expectedInstallment(3),
+      );
+      // The employee and obligation locks are held before the scope is read and
+      // before any cash exists.
+      expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+        tx.payrollInstallment.aggregate.mock.invocationCallOrder[0],
+      );
+      expect(
+        tx.payrollInstallment.aggregate.mock.invocationCallOrder[0],
+      ).toBeLessThan(tx.payrollCashOutflow.create.mock.invocationCallOrder[0]);
+    });
+
+    it('starts at one for a group whose only installments are legacy and never rewrites them', async () => {
+      const { service, tx, group } = setup();
+      const before = JSON.stringify(group.installments);
+
+      await service.create(input, 'org', actor);
+
+      expect(tx.payrollInstallment.create).toHaveBeenCalledWith(
+        expectedInstallment(1),
+      );
+      // No backfill and no inferred legacy order: historical rows stay NULL.
+      expect(tx.payrollInstallment.update).not.toHaveBeenCalled();
+      expect(tx.payrollInstallment.updateMany).not.toHaveBeenCalled();
+      expect(JSON.stringify(group.installments)).toBe(before);
+    });
+
+    it('ignores a client-supplied registration order', async () => {
+      const { service, transaction } = setup();
+
+      await expect(
+        service.create({ ...input, sequence: 7 }, 'org', actor),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when the sequence cannot grow, without cash', async () => {
+      const { service, tx } = setup();
+      tx.payrollInstallment.aggregate.mockResolvedValueOnce({
+        _max: { sequence: 2147483647 },
+      });
+
+      await expect(service.create(input, 'org', actor)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(tx.payrollCashOutflow.create).not.toHaveBeenCalled();
+      expect(tx.payrollInstallment.create).not.toHaveBeenCalled();
+      expect(tx.payrollAllocation.createMany).not.toHaveBeenCalled();
+      expect(tx.payrollObligation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('maps a scoped sequence collision to a conflict', async () => {
+      const { service, tx } = setup();
+      tx.payrollInstallment.create.mockRejectedValueOnce(
+        known('P2002', {
+          target: 'PayrollInstallment_obligation_sequence_key',
+        }),
+      );
+
+      await expect(service.create(input, 'org', actor)).rejects.toMatchObject({
+        status: 409,
+        message: 'Conflicto al registrar el abono',
+      });
+      expect(tx.payrollAllocation.createMany).not.toHaveBeenCalled();
+      expect(tx.payrollObligation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('propagates an unrelated uniqueness error origin unchanged', async () => {
+      const { service, tx } = setup();
+      const unrelated = known('P2002', {
+        target: ['outflowId', 'organizationId', 'employeeId'],
+      });
+      tx.payrollCashOutflow.create.mockRejectedValueOnce(unrelated);
+
+      await expect(service.create(input, 'org', actor)).rejects.toBe(unrelated);
+    });
+  });
+
   it('completes on exact balance and splits new allocation across current dates', async () => {
     const { service, tx } = setup();
     expect(

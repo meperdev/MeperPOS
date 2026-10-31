@@ -60,6 +60,21 @@ function setup() {
 }
 
 describe('PayrollGroupsService', () => {
+  it('reports an uncertain transaction outcome without encouraging blind retries', async () => {
+    const { service, transaction } = setup();
+    transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('transaction expired', {
+        code: 'P2028',
+        clientVersion: 'test',
+      }),
+    );
+    await expect(service.create(input, 'org', owner)).rejects.toMatchObject({
+      status: 503,
+      message:
+        'No se pudo confirmar la operación. Verifique su estado antes de reintentar',
+    });
+  });
+
   it('locks scoped shifts in id order after the employee and before rereading and checking membership', async () => {
     const { service, tx } = setup();
     await service.create({ ...input, shiftIds: ['s2', 's1'] }, 'org', owner);
@@ -80,6 +95,17 @@ describe('PayrollGroupsService', () => {
     expect(
       tx.payrollShiftMembership.findFirst.mock.invocationCallOrder[0],
     ).toBeLessThan(tx.payrollObligation.create.mock.invocationCallOrder[0]);
+  });
+
+  it('keeps the original code-unit order for mixed-case shift identifiers', async () => {
+    const { service, tx } = setup();
+    tx.employeeShift.findMany.mockResolvedValueOnce([
+      { id: 'A', amount: new Prisma.Decimal('1') },
+      { id: 'a', amount: new Prisma.Decimal('1') },
+    ]);
+    await service.create({ ...input, shiftIds: ['a', 'A'] }, 'org', owner);
+    const [query] = tx.$queryRaw.mock.calls[1] as [Prisma.Sql];
+    expect(query.values).toEqual(['org', 'emp', 'A', 'a']);
   });
 
   it('validates the post-lock shift read and does not write when it became invalid', async () => {

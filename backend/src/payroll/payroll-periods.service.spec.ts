@@ -54,6 +54,21 @@ function setup() {
 }
 
 describe('PayrollPeriodsService', () => {
+  it('maps a transaction timeout to a retryable service error', async () => {
+    const { service, transaction } = setup();
+    transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('transaction expired', {
+        code: 'P2028',
+        clientVersion: 'test',
+      }),
+    );
+    await expect(service.create(input, 'org', owner)).rejects.toMatchObject({
+      status: 503,
+      message:
+        'No se pudo confirmar la operación. Verifique su estado antes de reintentar',
+    });
+  });
+
   it.each(['OWNER', 'ADMIN'])(
     'creates a manually specified pending period for %s under a tenant employee lock',
     async (role) => {
