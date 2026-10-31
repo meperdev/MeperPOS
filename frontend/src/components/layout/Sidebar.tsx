@@ -443,20 +443,10 @@ export function Sidebar() {
         {navGroups.map((group, groupIndex) => (
           <div
             key={group.label}
-            className={
-              groupIndex > 0
-                ? isCollapsed
-                  ? "mt-2 border-t border-border/60 pt-2"
-                  : "mt-4 border-t border-border/60 pt-3.5"
-                : undefined
-            }
+            className={groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined}
           >
             {!isCollapsed && (
-              <p className="mb-2 flex items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
-                <span
-                  aria-hidden="true"
-                  className="h-3 w-0.5 rounded-full bg-primary/50"
-                />
+              <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground/70">
                 {group.label}
               </p>
             )}
