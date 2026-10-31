@@ -57,6 +57,11 @@ model Organization {
   inventoryLoans     InventoryLoan[]
   posLoanSaleIntents PosLoanSaleIntent[]
   posLoanSaleReservations PosLoanSaleReservation[]
+  whatsAppConnections WhatsAppConnection[]
+  whatsAppConversations WhatsAppConversation[]
+  whatsAppInternalContacts WhatsAppInternalContact[]
+  whatsAppIdentities WhatsAppIdentity[]
+  whatsAppLinkChallenges WhatsAppLinkChallenge[]
 
   @@index([status, trialEndsAt])
 }
@@ -359,6 +364,9 @@ model User {
   organizationUsers  OrganizationUser[]
   purchaseOrders     PurchaseOrder[]
   refreshTokens      RefreshToken[]
+  whatsAppInternalContacts WhatsAppInternalContact[]
+  whatsAppIdentities WhatsAppIdentity[]
+  whatsAppLinkChallenges WhatsAppLinkChallenge[]
   sales              Sale[]
   tasksAssigned      Task[]              @relation("TaskAssignedTo")
   tasksCreated       Task[]              @relation("TaskCreatedBy")
@@ -539,6 +547,7 @@ model Customer {
   moneyLoans     MoneyLoan[]
   inventoryLoans InventoryLoan[]
   posLoanSaleIntents PosLoanSaleIntent[]
+  whatsAppConversations WhatsAppConversation[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, documentNumber])
@@ -1217,4 +1226,222 @@ enum PurchaseOrderStatus {
   PARTIAL_RECEIVED
   RECEIVED
   CANCELLED
+}
+
+/// Provider session bound to one channel. COMMERCIAL belongs to one
+/// organization; INTELLIGENCE is a single central channel shared across
+/// organizations and owned by the platform (organizationId stays null).
+///
+/// `retentionDays` is the channel's message-retention policy. It is never null:
+/// the channel always has a policy, and the purge job reads it from here rather
+/// than from configuration, so changing it is one row update. The migration adds
+/// a CHECK (retentionDays >= 1) as NOT VALID, which keeps a row an operator may
+/// have corrupted from blocking the deploy.
+model WhatsAppConnection {
+  id              String                @id @default(uuid())
+  provider        String                @default("WAHA")
+  sessionName     String                @unique
+  channel         WhatsAppChannel
+  organizationId  String?
+  status          WhatsAppSessionStatus @default(STOPPED)
+  statusUpdatedAt DateTime?
+  accountId       String?
+  retentionDays   Int                   @default(30)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  organization    Organization?          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  processedEvents WhatsAppProcessedEvent[]
+  conversations   WhatsAppConversation[]
+  deliveries      WhatsAppDelivery[]
+
+  @@unique([channel, organizationId])
+  @@index([channel])
+}
+
+/// Durable record of a provider event already handled. The provider event id
+/// comes from the HMAC-signed payload, never from unsigned transport headers.
+model WhatsAppProcessedEvent {
+  id              String   @id @default(uuid())
+  connectionId    String
+  providerEventId String
+  eventType       String
+  receivedAt      DateTime @default(now())
+
+  connection WhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, providerEventId])
+  @@index([receivedAt])
+}
+
+enum WhatsAppChannel {
+  COMMERCIAL
+  INTELLIGENCE
+}
+
+enum WhatsAppSessionStatus {
+  STOPPED
+  STARTING
+  SCAN_QR_CODE
+  PASSKEY_REQUIRED
+  PASSKEY_CONFIRMATION_REQUIRED
+  WORKING
+  FAILED
+}
+
+/// One WhatsApp thread on one connection. There is no location: the commercial
+/// number is shared by every branch, so a conversation is never attributed to a
+/// site automatically. The location column arrives with the branches work.
+model WhatsAppConversation {
+  id              String                    @id @default(uuid())
+  connectionId    String
+  organizationId  String?
+  contactPhone    String
+  contactKind     WhatsAppContactKind       @default(CLIENT)
+  state           WhatsAppConversationState @default(AUTOMATED)
+  customerId      String?
+  firstInboundAt  DateTime?
+  firstResponseAt DateTime?
+  lastMessageAt   DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  connection   WhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  organization Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  messages     WhatsAppMessage[]
+
+  @@unique([connectionId, contactPhone])
+  @@index([organizationId, state])
+}
+
+/// Stored only for text we already received; media stays out of scope.
+model WhatsAppMessage {
+  id                String                   @id @default(uuid())
+  conversationId    String
+  providerMessageId String
+  direction         WhatsAppMessageDirection
+  source            String
+  body              String?
+  sentAt            DateTime
+  createdAt         DateTime                 @default(now())
+
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, providerMessageId])
+  @@index([conversationId, sentAt])
+}
+
+/// Numbers that must never receive an automated reply: employees and the
+/// administrator. Scoped per organization.
+model WhatsAppInternalContact {
+  id             String   @id @default(uuid())
+  organizationId String
+  phone          String
+  userId         String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, phone])
+  @@index([organizationId])
+}
+
+enum WhatsAppContactKind {
+  CLIENT
+  INTERNAL
+  UNKNOWN
+}
+
+enum WhatsAppConversationState {
+  AUTOMATED
+  HUMAN
+  SUSPENDED
+}
+
+enum WhatsAppMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+/// A phone proven to belong to a MeperPOS user. Access is granted by this row,
+/// never by the phone number appearing in a list or by the provider session.
+model WhatsAppIdentity {
+  id             String                @id @default(uuid())
+  phone          String                @unique
+  userId         String
+  organizationId String?
+  status         WhatsAppIdentityStatus @default(PENDING)
+  verifiedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+/// One single-use linking code, generated from an authenticated web session and
+/// sent by the administrator from her own phone. Only its hash is stored.
+model WhatsAppLinkChallenge {
+  id             String    @id @default(uuid())
+  codeHash       String    @unique
+  userId         String
+  organizationId String
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+enum WhatsAppIdentityStatus {
+  PENDING
+  VERIFIED
+  REVOKED
+}
+
+/// One attempt at delivering the daily report PDF over a WhatsApp session. The
+/// row is claimed before the provider is called, so a crash leaves PENDING and a
+/// successful send leaves SENT; nothing here is retried automatically.
+///
+/// Exactly one SCHEDULED delivery may exist per connection per calendar day.
+/// That is enforced by a partial unique index in the migration (WHERE kind =
+/// 'SCHEDULED'), never by a composite @@unique: on-demand reports are legitimately
+/// requested more than once a day and must not collide with each other.
+model WhatsAppDelivery {
+  id                String                  @id @default(uuid())
+  connectionId      String
+  kind              WhatsAppDeliveryKind
+  /// Calendar day the report covers, in America/Bogota. Stored as a date.
+  reportDate        DateTime                @db.Date
+  status            WhatsAppDeliveryStatus  @default(PENDING)
+  /// Fixed failure code from a closed set; never provider text.
+  failureReason     String?
+  providerMessageId String?
+  attempts          Int                     @default(0)
+  sentAt            DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  connection WhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId, reportDate])
+}
+
+enum WhatsAppDeliveryKind {
+  SCHEDULED
+  ON_DEMAND
+}
+
+enum WhatsAppDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
 }

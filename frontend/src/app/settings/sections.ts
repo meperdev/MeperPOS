@@ -2,6 +2,7 @@ import {
   Building2,
   CreditCard,
   Database,
+  MessageCircle,
   Receipt,
   UsersRound,
   type LucideIcon,
@@ -32,6 +33,12 @@ export const settingsSections: SettingsSection[] = [
     label: "Equipo y acceso",
     href: "/settings/team",
     icon: UsersRound,
+  },
+  {
+    key: "whatsapp",
+    label: "WhatsApp",
+    href: "/settings/whatsapp",
+    icon: MessageCircle,
   },
   {
     key: "data",
