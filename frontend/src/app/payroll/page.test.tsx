@@ -23,6 +23,7 @@ const state = vi.hoisted(() => ({
   createGroupInstallment: (() => undefined) as unknown,
   correctPeriodInstallment: (() => undefined) as unknown,
   createCashReturn: (() => undefined) as unknown,
+  createReplacement: (() => undefined) as unknown,
 }));
 
 vi.mock("@/components/layout/DashboardLayout", () => ({
@@ -45,6 +46,7 @@ vi.mock("@/hooks/usePayroll", () => ({
   useCreatePayrollGroupInstallment: () => ({ mutateAsync: state.createGroupInstallment }),
   useCorrectPayrollPeriodInstallment: () => ({ mutateAsync: state.correctPeriodInstallment }),
   useCreatePayrollCashReturn: () => ({ mutateAsync: state.createCashReturn }),
+  useCreatePayrollReplacementPayment: () => ({ mutateAsync: state.createReplacement }),
 }));
 
 const employees = [
@@ -126,6 +128,7 @@ beforeEach(() => {
   state.createGroupInstallment = vi.fn().mockResolvedValue({});
   state.correctPeriodInstallment = vi.fn().mockResolvedValue({});
   state.createCashReturn = vi.fn().mockResolvedValue({});
+  state.createReplacement = vi.fn().mockResolvedValue({});
 });
 
 afterEach(cleanup);
@@ -655,4 +658,137 @@ it("shows a returned installment as returned and offers no second return", () =>
 
   expect(screen.getByText("Devuelto el 2025-01-20 · Tarjeta")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Registrar devolución/ })).not.toBeInTheDocument();
+});
+
+// S6/S7 (L327, L338): a replacement is a NEW payment that references the valid
+// installments of a COMPLETED one, so the completed payment and its expense stay
+// untouched and no amount is ever typed or sent.
+const completedForReplacement = {
+  ...periodObligation,
+  status: "COMPLETED",
+  installments: [installment, unreturnedInstallment],
+  summary: { total: "141111.00", paid: "141111.00", balance: "0.00", status: "completed" },
+};
+
+it("offers no replacement while the payment is still pending", () => {
+  state.obligations.data = [periodObligation];
+  const view = render(<PayrollPage />);
+
+  expect(screen.queryByRole("button", { name: "Reemplazar pago Ana Gómez" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Registrar abono Ana Gómez" })).toBeInTheDocument();
+
+  // Only the completed payment can be replaced; the pending one keeps its own
+  // actions and never shows the replacement entry point.
+  state.obligations.data = [completedForReplacement];
+  view.rerender(<PayrollPage />);
+  expect(screen.getByRole("button", { name: "Reemplazar pago Ana Gómez" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Registrar abono Ana Gómez" })).not.toBeInTheDocument();
+});
+
+it("changes the referenced total when the installment selection changes", async () => {
+  const user = userEvent.setup();
+  state.obligations.data = [completedForReplacement];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Reemplazar pago Ana Gómez" }));
+  const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
+
+  const firstInstallment = within(dialog).getByRole("checkbox", { name: /Abono 2025-01-15/ });
+  const secondInstallment = within(dialog).getByRole("checkbox", { name: /Abono 2025-01-25/ });
+  // Every installment of the completed payment starts selected.
+  expect(firstInstallment).toBeChecked();
+  expect(secondInstallment).toBeChecked();
+
+  // The total of the payment is the server value and never a client re-derivation;
+  // the referenced total and the balance follow the selection.
+  expect(within(dialog).getByTestId("replacement-source-total")).toHaveTextContent("$ 141.111,00");
+  expect(within(dialog).getByTestId("replacement-referenced-total")).toHaveTextContent("$ 141.111,00");
+  expect(within(dialog).getByTestId("replacement-balance-total")).toHaveTextContent("$ 0,00");
+
+  await user.click(secondInstallment);
+
+  expect(firstInstallment).toBeChecked();
+  expect(secondInstallment).not.toBeChecked();
+  expect(within(dialog).getByTestId("replacement-referenced-total")).toHaveTextContent("$ 111.111,00");
+  expect(within(dialog).getByTestId("replacement-balance-total")).toHaveTextContent("$ 30.000,00");
+  expect(within(dialog).getByTestId("replacement-source-total")).toHaveTextContent("$ 141.111,00");
+});
+
+it("sends the seven replacement fields and never an amount", async () => {
+  const user = userEvent.setup();
+  state.obligations.data = [completedForReplacement];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Reemplazar pago Ana Gómez" }));
+  const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
+
+  // The new payment starts with the dates of the payment it replaces, and the
+  // actor may state others.
+  const periodStart = within(dialog).getByLabelText(/Fecha inicial del nuevo pago/);
+  const periodEnd = within(dialog).getByLabelText(/Fecha final del nuevo pago/);
+  expect(periodStart).toHaveValue("2025-01-01");
+  expect(periodEnd).toHaveValue("2025-01-31");
+  await user.clear(periodStart);
+  await user.type(periodStart, "2025-02-01");
+  await user.clear(periodEnd);
+  await user.type(periodEnd, "2025-02-28");
+
+  // The wrongly recorded installment stays behind as the balance still to pay.
+  await user.click(within(dialog).getByRole("checkbox", { name: /Abono 2025-01-25/ }));
+
+  await user.click(within(dialog).getByLabelText("Generar gasto al completar el pago"));
+  await user.type(within(dialog).getByLabelText("Fecha del gasto (opcional)"), "2025-03-01");
+  await user.click(within(dialog).getByRole("button", { name: "Crear pago de reemplazo" }));
+
+  await waitFor(() =>
+    expect(state.createReplacement).toHaveBeenCalledWith({
+      employeeId: "emp-1",
+      sourceObligationId: "ob-period",
+      installmentIds: ["inst-1"],
+      periodStart: "2025-02-01",
+      periodEnd: "2025-02-28",
+      expenseEnabled: true,
+      selectedExpenseDate: "2025-03-01",
+    }),
+  );
+
+  // Exactly those seven fields: the corrected amount stays server-owned.
+  const submitted = (state.createReplacement as unknown as { mock: { calls: [Record<string, unknown>][] } })
+    .mock.calls[0][0];
+  expect(Object.keys(submitted).sort()).toEqual(
+    [
+      "employeeId",
+      "expenseEnabled",
+      "installmentIds",
+      "periodEnd",
+      "periodStart",
+      "selectedExpenseDate",
+      "sourceObligationId",
+    ].sort(),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+});
+
+it("keeps the server refusal of a replacement visible with the dialog open", async () => {
+  const user = userEvent.setup();
+  state.createReplacement = vi.fn().mockRejectedValue(
+    Object.assign(new Error("Request failed"), {
+      isAxiosError: true,
+      response: { data: { message: "Los abonos referenciados cubren el pago completo" } },
+    }),
+  );
+  state.obligations.data = [completedForReplacement];
+  render(<PayrollPage />);
+
+  await user.click(screen.getByRole("button", { name: "Reemplazar pago Ana Gómez" }));
+  const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
+  await user.click(within(dialog).getByRole("button", { name: "Crear pago de reemplazo" }));
+
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+    "Los abonos referenciados cubren el pago completo",
+  );
+  // The dialog stays open on the same payment so the refusal can be read and the
+  // selection corrected.
+  expect(screen.getByRole("dialog", { name: "Reemplazar pago completado" })).toBeInTheDocument();
+  expect(screen.queryByText(/Pago de reemplazo creado/)).not.toBeInTheDocument();
 });

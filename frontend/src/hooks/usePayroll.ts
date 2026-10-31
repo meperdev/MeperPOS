@@ -118,6 +118,21 @@ export interface CreatePayrollCashReturnInput {
   returnMethod: PayrollPaymentMethod;
 }
 
+// S6/S7 (L327, L338): a completed payment is never edited. A replacement is a
+// NEW pending payment that references the valid installments of the completed
+// one, so their cash counts as paid without a new cash outflow. The amount is
+// deliberately absent: the server reads it from the referenced outflows, and the
+// period, the state and every money value stay server-owned. The expense choice
+// is per payment (S5), so it is stated here and applied when the new payment
+// completes.
+export interface CreatePayrollReplacementPaymentInput extends PayrollExpenseChoice {
+  employeeId: string;
+  sourceObligationId: string;
+  installmentIds: string[];
+  periodStart: string;
+  periodEnd: string;
+}
+
 const OBLIGATIONS_KEY = ["payroll-obligations"];
 
 export function usePayrollObligations(enabled: boolean) {
@@ -163,4 +178,8 @@ export function useCorrectPayrollPeriodInstallment() {
 
 export function useCreatePayrollCashReturn() {
   return usePayrollMutation<CreatePayrollCashReturnInput>("/payroll/cash-returns");
+}
+
+export function useCreatePayrollReplacementPayment() {
+  return usePayrollMutation<CreatePayrollReplacementPaymentInput>("/payroll/replacement-payments");
 }

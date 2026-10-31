@@ -22,6 +22,7 @@ import {
   useCreatePayrollGroupInstallment,
   useCreatePayrollPeriod,
   useCreatePayrollPeriodInstallment,
+  useCreatePayrollReplacementPayment,
   usePayrollObligations,
   type PayrollInstallment,
   type PayrollObligation,
@@ -69,6 +70,17 @@ const CASH_RETURN_INTRO =
 const CASH_RETURN_EFFECT_NOTICE =
   "El abono y su gasto quedan sin cambios; el importe devuelto se descuenta en caja con la fecha y el medio reales.";
 
+// S6/S7 (L327, L338): a completed payment is never edited. The replacement is a
+// NEW pending payment that references the valid installments of the completed
+// one, so their cash counts as already paid without a second cash outflow. The
+// dialog therefore never asks for an amount: it asks which installments are
+// valid, the period of the new payment and that payment's own expense choice.
+const REPLACEMENT_INTRO =
+  "Crea un pago nuevo que referencia los abonos válidos del pago completado. El pago original, su caja y su gasto quedan sin cambios.";
+const REPLACEMENT_PREVIEW_NOTICE =
+  "Desmarca los abonos registrados por error: quedan como saldo a pagar del pago nuevo. Los importes definitivos los calcula el servidor a partir de los abonos referenciados.";
+const REPLACEMENT_EMPTY_SELECTION = "Selecciona al menos un abono";
+
 // The server owns every amount and sends it as a decimal string. The client only
 // formats it for display; it never adds, splits or re-derives a money value.
 const COP = new Intl.NumberFormat("es-CO", {
@@ -85,6 +97,40 @@ function money(value: string): string {
 /** Payroll dates are stored date-only; show the calendar day the user stored. */
 function day(value: string): string {
   return value.slice(0, 10);
+}
+
+// The replacement preview adds up the selected installments in integer cents, so
+// the exact decimal strings the server sends never pass through floating point.
+// It is a preview of what the reference will cover: the request carries no
+// amounts and the server re-reads every value from the locked cash outflows.
+function centsOf(value: string): bigint {
+  // Only the plain 2-decimal strings the server sends are summed; anything else
+  // is a display-time fact this preview cannot represent, so it contributes zero
+  // instead of throwing while the dialog renders.
+  const trimmed = value.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return BigInt(0);
+  const [whole = "0", fraction = ""] = trimmed.split(".");
+  return BigInt(`${whole || "0"}${fraction.padEnd(2, "0").slice(0, 2)}`);
+}
+
+function centsToMoney(value: bigint): string {
+  const negative = value < BigInt(0);
+  const absolute = negative ? -value : value;
+  const fraction = (absolute % BigInt(100)).toString().padStart(2, "0");
+  const formatted = `${absolute / BigInt(100)}.${fraction}`;
+  return COP.format(negative ? -toFiniteNumber(formatted) : toFiniteNumber(formatted));
+}
+
+// The new payment keeps the dates of the payment it replaces unless the actor
+// states others: a fixed-period payment keeps its period, a grouped payment keeps
+// the span of the shifts it paid.
+function sourcePeriod(obligation: PayrollObligation): { start: string; end: string } {
+  if (obligation.kind === "FIXED_PERIOD" && obligation.periodStart && obligation.periodEnd) {
+    return { start: day(obligation.periodStart), end: day(obligation.periodEnd) };
+  }
+  const days = obligation.shiftMemberships.map((membership) => day(membership.shift.date)).sort();
+  if (!days.length) return { start: "", end: "" };
+  return { start: days[0], end: days[days.length - 1] };
 }
 
 function expenseLabel(obligation: PayrollObligation): string {
@@ -562,18 +608,162 @@ function CashReturnDialog({
   );
 }
 
+function ReplacementPaymentDialog({ obligation, onClose }: { obligation: PayrollObligation; onClose: () => void }) {
+  const replacement = useCreatePayrollReplacementPayment();
+  const toast = useToast();
+  // Every installment starts selected: the actor unchecks the registrations that
+  // were wrong, and the ones that stay selected are the valid abonos whose cash
+  // is referenced without charging it again (L327).
+  const [selectedIds, setSelectedIds] = useState<string[]>(() =>
+    obligation.installments.map((installment) => installment.id),
+  );
+  const [period, setPeriod] = useState(() => sourcePeriod(obligation));
+  const [expenseEnabled, setExpenseEnabled] = useState(false);
+  const [expenseDate, setExpenseDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  // The route refuses a reference that already covers the whole payment, cash
+  // that was already referenced, a non-completed source and an inconsistent
+  // history; keep its message verbatim and the dialog open.
+  const [error, setError] = useState<string | null>(null);
+
+  const selected = obligation.installments.filter((installment) => selectedIds.includes(installment.id));
+  const referencedCents = selected.reduce((total, installment) => total + centsOf(installment.outflow.amount), BigInt(0));
+  const totalCents = centsOf(obligation.summary.total);
+  const balanceCents =
+    totalCents > referencedCents ? totalCents - referencedCents : BigInt(0);
+
+  function toggleInstallment(installmentId: string, checked: boolean) {
+    setSelectedIds((current) =>
+      checked ? [...current, installmentId] : current.filter((id) => id !== installmentId),
+    );
+    setError(null);
+  }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (saving) return;
+    if (!selectedIds.length) {
+      setError(REPLACEMENT_EMPTY_SELECTION);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await replacement.mutateAsync({
+        employeeId: obligation.employeeId,
+        sourceObligationId: obligation.id,
+        installmentIds: selectedIds,
+        periodStart: period.start,
+        periodEnd: period.end,
+        expenseEnabled,
+        ...(expenseEnabled && expenseDate ? { selectedExpenseDate: expenseDate } : {}),
+      });
+      toast.success("Pago de reemplazo creado");
+      onClose();
+    } catch (submitError) {
+      setError(getApiErrorMessage(submitError, "No se pudo crear el pago de reemplazo"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <PayrollDialog title="Reemplazar pago completado" onClose={() => { if (!saving) onClose(); }}>
+      <form onSubmit={submit}>
+        <fieldset disabled={saving} className="grid gap-3">
+          <fieldset className="space-y-2">
+            <legend className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Abonos válidos a referenciar
+            </legend>
+            {obligation.installments.map((installment) => (
+              <label
+                key={installment.id}
+                className="flex items-center gap-3 rounded-xl border border-border p-3 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  aria-label={`Abono ${day(installment.outflow.date)} · ${money(installment.outflow.amount)}`}
+                  checked={selectedIds.includes(installment.id)}
+                  onChange={(event) => toggleInstallment(installment.id, event.target.checked)}
+                />
+                <span className="min-w-0 font-mono tabular-nums">
+                  {day(installment.outflow.date)} · {PAYMENT_METHODS[installment.outflow.method]} · {money(installment.outflow.amount)}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <dl className="grid grid-cols-1 gap-2 rounded-xl border border-border p-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Total del pago
+              </dt>
+              <dd data-testid="replacement-source-total" className="font-mono tabular-nums">
+                {money(obligation.summary.total)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Total referenciado
+              </dt>
+              <dd data-testid="replacement-referenced-total" className="font-mono tabular-nums">
+                {centsToMoney(referencedCents)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Saldo a pagar
+              </dt>
+              <dd data-testid="replacement-balance-total" className="font-mono tabular-nums">
+                {centsToMoney(balanceCents)}
+              </dd>
+            </div>
+          </dl>
+          <Input
+            label="Fecha inicial del nuevo pago"
+            type="date"
+            required
+            value={period.start}
+            onChange={(event) => setPeriod((current) => ({ ...current, start: event.target.value }))}
+          />
+          <Input
+            label="Fecha final del nuevo pago"
+            type="date"
+            required
+            value={period.end}
+            onChange={(event) => setPeriod((current) => ({ ...current, end: event.target.value }))}
+          />
+          <ExpenseChoiceFields
+            enabled={expenseEnabled}
+            date={expenseDate}
+            onToggle={setExpenseEnabled}
+            onDateChange={setExpenseDate}
+          />
+          <p className="text-xs text-muted-foreground">{REPLACEMENT_INTRO}</p>
+          <p className="text-xs text-muted-foreground">{REPLACEMENT_PREVIEW_NOTICE}</p>
+          <FormError message={error} />
+          <div>
+            <Button type="submit" disabled={saving}>Crear pago de reemplazo</Button>
+          </div>
+        </fieldset>
+      </form>
+    </PayrollDialog>
+  );
+}
+
 function ObligationCard({
   obligation,
   employeeName,
   onRegisterInstallment,
   onCorrectInstallment,
   onRegisterCashReturn,
+  onReplacePayment,
 }: {
   obligation: PayrollObligation;
   employeeName: string;
   onRegisterInstallment: (obligation: PayrollObligation) => void;
   onCorrectInstallment: (obligation: PayrollObligation) => void;
   onRegisterCashReturn: (obligation: PayrollObligation, installment: PayrollInstallment) => void;
+  onReplacePayment: (obligation: PayrollObligation) => void;
 }) {
   const completed = obligation.summary.status === "completed";
   // S6: only a wrongly recorded fixed-period installment can be corrected, and
@@ -653,6 +843,16 @@ function ObligationCard({
           )}
         </div>
       )}
+      {/* S6/S7: only a COMPLETED payment can be replaced, and only by referencing
+          the installments it already paid — a payment with no installment has no
+          cash to reference. */}
+      {completed && obligation.installments.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => onReplacePayment(obligation)} aria-label={`Reemplazar pago ${employeeName}`}>
+            Reemplazar pago
+          </Button>
+        </div>
+      )}
     </article>
   );
 }
@@ -674,6 +874,9 @@ export default function PayrollPage() {
     obligation: PayrollObligation;
     installment: PayrollInstallment;
   } | null>(null);
+  // S6/S7: a replacement belongs to one COMPLETED payment and references its own
+  // installments, so the dialog keeps that payment's identity.
+  const [replacementFor, setReplacementFor] = useState<PayrollObligation | null>(null);
 
   const activeEmployees = (employees.data ?? []).filter((employee) => employee.active);
   const employeeName = (employeeId: string) =>
@@ -713,6 +916,7 @@ export default function PayrollPage() {
                   onRegisterInstallment={setInstallmentFor}
                   onCorrectInstallment={setCorrectionFor}
                   onRegisterCashReturn={(obligation, installment) => setCashReturnFor({ obligation, installment })}
+                  onReplacePayment={setReplacementFor}
                 />
               ))}
             </div>
@@ -730,6 +934,9 @@ export default function PayrollPage() {
               installment={cashReturnFor.installment}
               onClose={() => setCashReturnFor(null)}
             />
+          )}
+          {replacementFor && (
+            <ReplacementPaymentDialog obligation={replacementFor} onClose={() => setReplacementFor(null)} />
           )}
         </div>
       )}
