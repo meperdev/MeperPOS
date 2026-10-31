@@ -17,7 +17,6 @@ import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
-  FilterClearButton,
   FilterGroup,
   FilterOptionButton,
 } from "@/components/ui/FilterBar";
@@ -199,14 +198,6 @@ export default function CustomersPage() {
                   </FilterOptionButton>
                 ))}
               </FilterGroup>
-              {segment && (
-                <FilterClearButton
-                  onClick={() => {
-                    setPage(1);
-                    setSegment("");
-                  }}
-                />
-              )}
               <ViewModeToggle
                 value={viewMode}
                 onChange={(mode) => {

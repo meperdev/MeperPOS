@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadingState } from "@/components/ui/LoadingState";
 import { RowActions } from "@/components/ui/RowActions";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
@@ -251,11 +250,11 @@ function WhatsAppSettings() {
   // a stale code cannot be read off the screen later.
   useEffect(() => {
     if (!linkCode) return;
-    const remaining = new Date(linkCode.expiresAt).getTime() - Date.now();
-    if (remaining <= 0) {
-      setLinkCode(null);
-      return;
-    }
+    const remaining = Math.max(
+      0,
+      new Date(linkCode.expiresAt).getTime() - Date.now(),
+    );
+    // Always through the timer, never synchronously in the effect body.
     const timer = setTimeout(() => setLinkCode(null), remaining);
     return () => clearTimeout(timer);
   }, [linkCode]);
@@ -298,8 +297,10 @@ function WhatsAppSettings() {
     <div className="space-y-4">
       <PageIntro />
 
-      <SettingsCard
-        title="Canal comercial"
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
+        <SettingsCard
+          className="h-full"
+          title="Canal comercial"
         description="Estado del número con el que se atiende a los clientes"
         icon={<MessageCircle className="h-4 w-4" aria-hidden="true" />}
       >
@@ -315,11 +316,17 @@ function WhatsAppSettings() {
               className="min-h-[140px]"
             />
           ) : !statusQuery.data ? (
-            <LoadingState
-              icon={<MessageCircle className="h-4 w-4 text-muted-foreground" />}
-              message="Consultando el estado del canal..."
-              className="min-h-[140px]"
-            />
+            <div
+              role="status"
+              className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-3"
+            >
+              <span className="sr-only">Consultando el estado del canal...</span>
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-muted-foreground/40" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-2.5 w-24 animate-pulse rounded-full bg-muted-foreground/20" />
+                <div className="h-2 w-32 animate-pulse rounded-full bg-muted-foreground/15" />
+              </div>
+            </div>
           ) : (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 space-y-1.5">
@@ -386,6 +393,7 @@ function WhatsAppSettings() {
               <Button
                 size="sm"
                 variant="outline"
+                className="shrink-0 whitespace-nowrap"
                 onClick={toggleQr}
                 loading={qrRequested && qrQuery.isFetching}
               >
@@ -395,7 +403,7 @@ function WhatsAppSettings() {
             </div>
 
             {qrRequested && (
-              <div className="mt-3">
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start">
                 {qrQuery.isError ? (
                   <ErrorState
                     message={getApiErrorMessage(
@@ -433,10 +441,11 @@ function WhatsAppSettings() {
             )}
           </div>
         </div>
-      </SettingsCard>
+        </SettingsCard>
 
-      <SettingsCard
-        title="Número vinculado"
+        <SettingsCard
+          className="h-full"
+          title="Número vinculado"
         description="El vínculo entre tu WhatsApp y tu usuario de MeperPOS"
         icon={<Link2 className="h-4 w-4" aria-hidden="true" />}
       >
@@ -524,6 +533,7 @@ function WhatsAppSettings() {
             />
           ) : identities.length === 0 ? (
             <EmptyState
+              className="min-h-0 py-6"
               icon={<Link2 className="h-5 w-5 text-muted-foreground" />}
               title="Sin números vinculados"
               subtitle="Solicita un código y escríbelo desde el WhatsApp que quieres vincular."
@@ -569,7 +579,8 @@ function WhatsAppSettings() {
             </ul>
           )}
         </div>
-      </SettingsCard>
+        </SettingsCard>
+      </div>
 
       <SettingsCard
         title="Reporte diario"
@@ -644,12 +655,19 @@ function WhatsAppSettings() {
                 className="mx-4 min-h-[140px] sm:mx-5"
               />
             ) : deliveries.length === 0 ? (
-              <EmptyState
-                icon={<Send className="h-5 w-5 text-muted-foreground" />}
-                title="Sin envíos registrados"
-                subtitle="El historial aparece cuando se envía el primer reporte."
-                className="mx-4 sm:mx-5"
-              />
+              <div className="mx-4 flex items-center gap-3 rounded-lg border border-dashed border-border/70 px-4 py-5 sm:mx-5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground">
+                  <Send className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-foreground">
+                    Sin envíos registrados
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    El historial aparece cuando se envía el primer reporte.
+                  </p>
+                </div>
+              </div>
             ) : (
               <Table className="min-w-[420px]">
                 <TableHeader>

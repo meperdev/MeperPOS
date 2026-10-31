@@ -102,6 +102,33 @@ function sourcePeriod(obligation: PayrollObligation): {
  * expense choice exist once, and the kind switch only swaps the middle of the
  * form (period fields or the shifts it pays).
  */
+function inputDate(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Period shortcuts: a payroll period is nearly always the month, the previous
+ * one or a quincena, so the calendar stops being the only way in.
+ */
+function periodPresets() {
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const previousStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const previousEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+  const firstHalfEnd = new Date(today.getFullYear(), today.getMonth(), 15);
+  const secondHalfStart = new Date(today.getFullYear(), today.getMonth(), 16);
+
+  return [
+    { label: "Mes actual", start: inputDate(monthStart), end: inputDate(monthEnd) },
+    { label: "Mes anterior", start: inputDate(previousStart), end: inputDate(previousEnd) },
+    { label: "Quincena 1", start: inputDate(monthStart), end: inputDate(firstHalfEnd) },
+    { label: "Quincena 2", start: inputDate(secondHalfStart), end: inputDate(monthEnd) },
+  ];
+}
+
 export function CreatePaymentDialog({
   employees,
   usedShiftIds,
@@ -230,6 +257,22 @@ export function CreatePaymentDialog({
 
       {kind === "FIXED_PERIOD" ? (
         <>
+          <FilterGroup label="Período">
+            {periodPresets().map((preset) => (
+              <FilterOptionButton
+                key={preset.label}
+                active={
+                  periodStart === preset.start && periodEnd === preset.end
+                }
+                onClick={() => {
+                  setPeriodStart(preset.start);
+                  setPeriodEnd(preset.end);
+                }}
+              >
+                {preset.label}
+              </FilterOptionButton>
+            ))}
+          </FilterGroup>
           <Input
             label="Fecha inicial"
             type="date"

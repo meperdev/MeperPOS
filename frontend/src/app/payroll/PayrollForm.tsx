@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { MoneyField } from "@/components/ui/MoneyField";
 import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
 import type { Employee } from "@/hooks/useEmployees";
@@ -207,15 +208,7 @@ export function MoneyInput({
   onChange: (value: string) => void;
 }) {
   return (
-    <Input
-      label={label}
-      required
-      inputMode="decimal"
-      autoComplete="off"
-      className="font-mono tabular-nums"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
+    <MoneyField label={label} value={value} onChange={onChange} required />
   );
 }
 

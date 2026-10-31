@@ -12,10 +12,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
-import {
-  FilterBar,
-  FilterClearButton,
-} from "@/components/ui/FilterBar";
+import { FilterBar, FilterClearButton } from "@/components/ui/FilterBar";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
@@ -166,9 +163,7 @@ export default function PurchaseOrdersPage() {
                 />
               </div>
 
-              {hasFilters && (
-                <FilterClearButton onClick={clearFilters} />
-              )}
+              {hasFilters && <FilterClearButton onClick={clearFilters} />}
 
               <ViewModeToggle
                 value={viewMode}
