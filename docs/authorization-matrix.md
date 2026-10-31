@@ -141,6 +141,19 @@ with a 409 instead of an error.
 | /api/customers/:id | PUT | ADMIN | org-scoped | backend/src/customers/customers.service.int.spec.ts |
 | /api/customers/:id | DELETE | ADMIN | org-scoped | backend/src/customers/customers.service.int.spec.ts |
 
+## employees
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/employees | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+| /api/employees | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+| /api/employees/shifts | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/employee-shifts.service.spec.ts |
+| /api/employees/shifts/:shiftId | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/employee-shifts.service.spec.ts |
+| /api/employees/:id/shifts | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/employee-shifts.service.spec.ts |
+| /api/employees/:id | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+| /api/employees/:id | PATCH | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+| /api/employees/:id/active | PATCH | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+
 ## expenses
 
 | Route | Method | Role(s) | Org-scope | Test reference |
@@ -215,6 +228,20 @@ Note: `InventoryLoansController` (`backend/src/loans/inventory-loans.controller.
 `@Roles(OrgRole.OWNER, OrgRole.ADMIN)`) is a prepared artifact that is deliberately **unregistered**
 in every module, so it is absent from the OpenAPI document and has no rows here. Wire it into a
 module and add its rows in the same change that exposes it.
+
+## payroll
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/payroll/periods | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/groups | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/period-installments | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/group-installments | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/group-installments/correct | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll.controller.spec.ts |
+| /api/payroll/period-installments/correct | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/cash-returns | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll.controller.spec.ts |
+| /api/payroll/replacement-payments | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll.controller.spec.ts |
+| /api/payroll/obligations | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
 
 ## plan-limits
 
