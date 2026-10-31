@@ -113,15 +113,19 @@ export class WhatsAppSessionService {
    * Persist what the provider actually reports rather than assuming the state a
    * command implies. The row is the durable record the webhook resolves from,
    * so it must not drift from the session it describes.
+   *
+   * `accountId` is the linked identity, and losing it on a transient status would
+   * make the row lie about a number that is still linked. It is therefore kept
+   * (left untouched) across STARTING, SCAN_QR_CODE, PASSKEY_*, STOPPED and FAILED,
+   * and cleared only when the provider explicitly reports no identity while the
+   * session is otherwise healthy (`WORKING`). An unreadable identity preserves
+   * the last known value instead of clearing it.
    */
   private async mirror(
     channel: ResolvedChannel,
   ): Promise<{ status: WhatsAppSessionStatus }> {
     const { status } = await this.provider.status(channel.sessionName);
-    const accountId =
-      status === 'WORKING'
-        ? await this.linkedAccount(channel.sessionName)
-        : null;
+    const accountId = await this.linkedAccount(status, channel.sessionName);
     await this.connections.recordStatus(
       channel.connectionId,
       status,
@@ -131,14 +135,21 @@ export class WhatsAppSessionService {
   }
 
   /**
-   * The linked WhatsApp account, kept only to make the row's `accountId` honest.
-   * An unreadable identity must not fail an otherwise successful operation.
+   * The linked WhatsApp account. `undefined` means "leave the stored value
+   * alone": a transient status and an unreadable identity both preserve the last
+   * known account, while a healthy session that reports no identity returns null
+   * so the row is cleared. An unreadable identity must not fail an otherwise
+   * successful operation.
    */
-  private async linkedAccount(sessionName: string): Promise<string | null> {
+  private async linkedAccount(
+    status: WhatsAppSessionStatus,
+    sessionName: string,
+  ): Promise<string | null | undefined> {
+    if (status !== 'WORKING') return undefined;
     try {
       return (await this.provider.me(sessionName)).accountId;
     } catch {
-      return null;
+      return undefined;
     }
   }
 }

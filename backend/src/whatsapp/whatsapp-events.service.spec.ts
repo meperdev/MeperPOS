@@ -218,6 +218,77 @@ describe('WhatsAppEventsService', () => {
     expect(committed).toEqual([]);
   });
 
+  describe('non-conversational chats', () => {
+    it.each<[unknown, string]>([
+      ['120363000000000000@g.us', 'group'],
+      ['status@broadcast', 'unknown'],
+      ['@c.us', 'no digits'],
+      [undefined, 'missing sender'],
+    ])(
+      'ignores a %s sender (%s) before any receipt or transaction',
+      async (from) => {
+        const { prisma, tx, ingestion, committed, service } =
+          setup(commercialRow);
+        const warn = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+
+        try {
+          await expect(
+            service.handle('meper-commercial-abc', 'evt-1', 'message.any', {
+              ...payload,
+              from,
+            }),
+          ).resolves.toEqual({ status: 'ignored_non_conversational' });
+
+          // The check sits before the receipt, so group traffic stops filling
+          // the deduplication table and never reaches ingestion.
+          expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
+          expect(prisma.$transaction).not.toHaveBeenCalled();
+          expect(tx.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
+          expect(ingestion.ingest).not.toHaveBeenCalled();
+          expect(committed).toEqual([]);
+
+          const logged = warn.mock.calls
+            .map((args) => JSON.stringify(args))
+            .join(' ');
+          expect(logged).toContain('ignored_non_conversational');
+          if (typeof from === 'string') expect(logged).not.toContain(from);
+        } finally {
+          warn.mockRestore();
+        }
+      },
+    );
+
+    it('ignores a group on the central channel as well', async () => {
+      const { prisma, ingestion, service } = setup(intelligenceRow);
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-2', 'message.any', {
+          ...payload,
+          from: '120363000000000000@g.us',
+        }),
+      ).resolves.toEqual({ status: 'ignored_non_conversational' });
+
+      expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(ingestion.ingest).not.toHaveBeenCalled();
+    });
+
+    it('keeps unsupported_event for an event type this stage does not handle', async () => {
+      const { prisma, ingestion, service } = setup(commercialRow);
+
+      await expect(
+        service.handle('meper-commercial-abc', 'evt-3', 'session.status', {
+          ...payload,
+          from: '120363000000000000@g.us',
+        }),
+      ).resolves.toEqual({ status: 'unsupported_event' });
+      expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
+      expect(ingestion.ingest).not.toHaveBeenCalled();
+    });
+  });
+
   describe('administrative identity linking on the central channel', () => {
     it('marks a recorded event as linked when a challenge was consumed', async () => {
       const { prisma, identity, service } = setup(intelligenceRow);
@@ -286,7 +357,6 @@ describe('WhatsAppEventsService', () => {
 
     it('never attempts a link for an unparseable sender', async () => {
       const { prisma, identity, service } = setup(intelligenceRow);
-      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
 
       const result = await service.handle(
         'meper-intelligence',
@@ -295,7 +365,9 @@ describe('WhatsAppEventsService', () => {
         { ...payload, from: '120363000000000000@g.us' },
       );
 
-      expect(result).toEqual({ status: 'recorded', route: 'intelligence' });
+      expect(result).toEqual({ status: 'ignored_non_conversational' });
+      // Non-conversational chats are rejected before the central receipt too.
+      expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
       expect(identity.consume).not.toHaveBeenCalled();
     });
 
@@ -491,14 +563,14 @@ describe('WhatsAppEventsService', () => {
 
     it('keeps the marker absent for an unparseable sender', async () => {
       const { prisma, admin, service } = setup(intelligenceRow);
-      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
 
       await expect(
         service.handle('meper-intelligence', 'evt-2', 'message.any', {
           ...payload,
           from: '120363000000000000@g.us',
         }),
-      ).resolves.toEqual({ status: 'recorded', route: 'intelligence' });
+      ).resolves.toEqual({ status: 'ignored_non_conversational' });
+      expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
       expect(admin.authorize).not.toHaveBeenCalled();
     });
 

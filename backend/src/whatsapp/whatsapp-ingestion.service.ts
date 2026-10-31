@@ -34,8 +34,58 @@ export class DuplicateWhatsAppMessageError extends Error {
   }
 }
 
-/** JIDs the provider uses for a person; anything else is not a contact. */
-const KNOWN_SUFFIXES = ['@c.us', '@s.whatsapp.net', '@lid'];
+/** The provider chat-id families this stage can distinguish. */
+export type WhatsAppContactJidKind = 'phone' | 'lid' | 'group' | 'unknown';
+
+/** A provider chat id reduced to what the row needs to store. */
+export interface WhatsAppContactJid {
+  /** The raw id exactly as received, trimmed; never rewritten. */
+  jid: string;
+  /** Digits from the local part; empty for an id that carries none. */
+  digits: string;
+  kind: WhatsAppContactJidKind;
+}
+
+const PHONE_SUFFIXES = ['@c.us', '@s.whatsapp.net'];
+
+/**
+ * Parse the provider's chat id without losing what kind of chat it is. A phone
+ * (`@c.us`, `@s.whatsapp.net` or a bare number) is the only kind that can be
+ * matched against a stored phone; `@lid` is an opaque privacy identifier, a
+ * group (`@g.us`) is not a conversation with one person, and everything else is
+ * unknown. An id with no digits is always unknown, whatever its suffix says.
+ */
+export function parseContactJid(from: unknown): WhatsAppContactJid | null {
+  if (typeof from !== 'string') return null;
+  const jid = from.trim();
+  if (jid.length === 0) return null;
+
+  const separator = jid.indexOf('@');
+  const local = separator === -1 ? jid : jid.slice(0, separator);
+  const suffix = separator === -1 ? '' : jid.slice(separator).toLowerCase();
+  const digits = local.replace(/\D/g, '');
+
+  if (digits.length === 0) return { jid, digits, kind: 'unknown' };
+  if (suffix === '' || PHONE_SUFFIXES.includes(suffix)) {
+    return { jid, digits, kind: 'phone' };
+  }
+  if (suffix === '@lid') return { jid, digits, kind: 'lid' };
+  if (suffix === '@g.us') return { jid, digits, kind: 'group' };
+  return { jid, digits, kind: 'unknown' };
+}
+
+/**
+ * Reduce a JID to the digits an existing phone-keyed column stores. Kept for the
+ * callers that only need that reduction (administrative identity and delivery);
+ * ingestion uses `parseContactJid` so a LID is never mistaken for a phone.
+ * Groups and unknown families still yield null, exactly as before.
+ */
+export function normaliseContactPhone(from: unknown): string | null {
+  const parsed = parseContactJid(from);
+  if (!parsed) return null;
+  if (parsed.kind !== 'phone' && parsed.kind !== 'lid') return null;
+  return parsed.digits;
+}
 
 /** Matches the column width the migration declares for a text body. */
 export const MAX_BODY_LENGTH = 4096;
@@ -46,29 +96,6 @@ const isUniqueViolation = (error: unknown): boolean =>
   typeof error === 'object' &&
   error !== null &&
   (error as { code?: unknown }).code === 'P2002';
-
-/**
- * Reduce a provider JID to the digits we can compare against a stored phone.
- * A group, a broadcast list or anything without digits cannot be a contact and
- * yields null so the event is ignored instead of becoming a bogus conversation.
- */
-export function normaliseContactPhone(from: unknown): string | null {
-  if (typeof from !== 'string') return null;
-  const value = from.trim();
-  if (value.length === 0) return null;
-
-  const separator = value.indexOf('@');
-  const local = separator === -1 ? value : value.slice(0, separator);
-  if (
-    separator !== -1 &&
-    !KNOWN_SUFFIXES.includes(value.slice(separator).toLowerCase())
-  ) {
-    return null;
-  }
-
-  const digits = local.replace(/\D/g, '');
-  return digits.length > 0 ? digits : null;
-}
 
 /** The provider reports seconds; anything unusable falls back to the receipt time. */
 function resolveSentAt(timestamp: unknown): Date {
@@ -98,9 +125,11 @@ export class WhatsAppIngestionService {
     connection: Pick<WhatsAppConnection, 'id' | 'organizationId'>,
     event: WhatsAppEvent,
   ): Promise<void> {
-    const contactPhone = normaliseContactPhone(event.payload.from);
-    if (!contactPhone) {
-      // No phone, no conversation: an unusable sender is not a contact.
+    const sender = parseContactJid(event.payload.from);
+    if (!sender || (sender.kind !== 'phone' && sender.kind !== 'lid')) {
+      // A group, a broadcast list or an unusable id is not a conversation.
+      // Non-conversational traffic is normally rejected before the transaction
+      // in WhatsAppEventsService; this is the last line of defence.
       this.logger.warn({
         event: 'whatsapp_ingestion',
         outcome: 'unparseable_contact',
@@ -108,11 +137,14 @@ export class WhatsAppIngestionService {
       return;
     }
 
-    const { contactKind, customerId } = await this.resolveContact(
-      tx,
-      connection.organizationId,
-      contactPhone,
-    );
+    // For a phone this is the number; for a LID it is the opaque identifier and
+    // must never be compared with a stored phone.
+    const contactPhone = sender.digits;
+    const { contactKind, customerId } =
+      sender.kind === 'phone'
+        ? await this.resolveContact(tx, connection.organizationId, contactPhone)
+        : // A LID is never a customer and never an internal contact.
+          { contactKind: 'UNKNOWN' as const, customerId: null };
 
     const conversation = await tx.whatsAppConversation.upsert({
       where: {
@@ -124,11 +156,13 @@ export class WhatsAppIngestionService {
       create: {
         connectionId: connection.id,
         organizationId: connection.organizationId,
+        contactJid: sender.jid,
         contactPhone,
         contactKind,
         ...(customerId === null ? {} : { customerId }),
       },
-      update: {},
+      // Reconcile rows written before the raw id was stored.
+      update: { contactJid: sender.jid },
     });
 
     const fromMe = event.payload.fromMe === true;

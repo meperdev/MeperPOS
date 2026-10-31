@@ -37,6 +37,33 @@ function fakeConnections() {
   };
 }
 
+/** Models the one column that must survive a transient status. */
+function statefulConnections(accountId: string | null) {
+  const state = { accountId };
+  return {
+    state,
+    getOrCreateCommercial: jest
+      .fn()
+      .mockImplementation((organizationId: string) =>
+        Promise.resolve({ id: `row-${organizationId}` }),
+      ),
+    getOrCreateIntelligence: jest.fn().mockResolvedValue({ id: 'central-row' }),
+    recordStatus: jest
+      .fn()
+      .mockImplementation(
+        (
+          _id: string,
+          _status: string,
+          nextAccountId: string | null | undefined,
+        ) => {
+          // `undefined` is Prisma's "leave the column alone".
+          if (nextAccountId !== undefined) state.accountId = nextAccountId;
+          return Promise.resolve({ id: 'row' });
+        },
+      ),
+  };
+}
+
 function build(
   masterKey: string | undefined,
   provider = fakeProvider(),
@@ -118,19 +145,57 @@ describe('WhatsAppSessionService', () => {
     );
   });
 
-  it('clears the linked account when the session is not working', async () => {
+  it('keeps the last known account when the session moves to a transient state', async () => {
+    for (const status of [
+      'STARTING',
+      'SCAN_QR_CODE',
+      'PASSKEY_REQUIRED',
+      'PASSKEY_CONFIRMATION_REQUIRED',
+      'STOPPED',
+      'FAILED',
+    ] as const) {
+      const provider = fakeProvider();
+      (provider.status as jest.Mock).mockResolvedValue({ status });
+      const connections = statefulConnections('57300@c.us');
+      const { service } = build(MASTER, provider, connections);
+
+      await service.status(commercial('org-a'));
+
+      // No identity read while the session is not healthy, and no clearing.
+      expect(provider.me).not.toHaveBeenCalled();
+      expect(connections.state.accountId).toBe('57300@c.us');
+      expect(connections.recordStatus).toHaveBeenCalledWith(
+        'row-org-a',
+        status,
+        undefined,
+      );
+    }
+  });
+
+  it('keeps accountId across WORKING -> STOPPED', async () => {
     const provider = fakeProvider();
+    const connections = statefulConnections(null);
+    const { service } = build(MASTER, provider, connections);
+
+    await service.status(commercial('org-a'));
+    expect(connections.state.accountId).toBe('57300@c.us');
+
     (provider.status as jest.Mock).mockResolvedValue({ status: 'STOPPED' });
-    const { service, connections } = build(MASTER, provider);
+    await service.status(commercial('org-a'));
+
+    expect(connections.state.accountId).toBe('57300@c.us');
+  });
+
+  it('clears the linked account only when a healthy session reports no identity', async () => {
+    const provider = fakeProvider();
+    (provider.me as jest.Mock).mockResolvedValue({ accountId: null });
+    const connections = statefulConnections('57300@c.us');
+    const { service } = build(MASTER, provider, connections);
 
     await service.status(commercial('org-a'));
 
-    expect(provider.me).not.toHaveBeenCalled();
-    expect(connections.recordStatus).toHaveBeenCalledWith(
-      'row-org-a',
-      'STOPPED',
-      null,
-    );
+    expect(provider.me).toHaveBeenCalledWith(commercialSessionName('org-a'));
+    expect(connections.state.accountId).toBeNull();
   });
 
   it('records the observed state after every lifecycle command', async () => {
@@ -206,7 +271,8 @@ describe('WhatsAppSessionService', () => {
   it('does not fail a mirror when the linked identity cannot be read', async () => {
     const provider = fakeProvider();
     (provider.me as jest.Mock).mockRejectedValue(new Error('unavailable'));
-    const { service, connections } = build(MASTER, provider);
+    const connections = statefulConnections('57300@c.us');
+    const { service } = build(MASTER, provider, connections);
 
     await expect(service.status(commercial('org-a'))).resolves.toEqual({
       status: 'WORKING',
@@ -214,8 +280,10 @@ describe('WhatsAppSessionService', () => {
     expect(connections.recordStatus).toHaveBeenCalledWith(
       'row-org-a',
       'WORKING',
-      null,
+      undefined,
     );
+    // An unreadable identity preserves the last known value instead of clearing it.
+    expect(connections.state.accountId).toBe('57300@c.us');
   });
 });
 

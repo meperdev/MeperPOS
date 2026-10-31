@@ -954,6 +954,11 @@ model WhatsAppConversation {
   id              String                    @id @default(uuid())
   connectionId    String
   organizationId  String?
+  /// Raw provider chat id exactly as received (`573000000000@c.us`,
+  /// `145805600096353@lid`, `120363000000000000@g.us`). Nullable only because
+  /// conversations written before this column existed have no raw id yet.
+  contactJid      String?
+  /// Digits for a phone, but for a LID this is the opaque identifier, not a phone.
   contactPhone    String
   contactKind     WhatsAppContactKind       @default(CLIENT)
   state           WhatsAppConversationState @default(AUTOMATED)
