@@ -277,6 +277,13 @@ describe('PayrollReplacementPaymentService authorization and input', () => {
         periodEnd: '2026-03-01',
       },
       { ...validBody, installmentIds: ['   '] },
+      // S5: the per-payment expense choice is a boolean and a date-only value,
+      // never a truthy string, a number or a full timestamp.
+      { ...validBody, expenseEnabled: 'true' },
+      { ...validBody, expenseEnabled: 1 },
+      { ...validBody, selectedExpenseDate: '2026-02-30' },
+      { ...validBody, selectedExpenseDate: '2026-10-31T00:00:00Z' },
+      { ...validBody, selectedExpenseDate: 20261031 },
     ];
     for (const body of malformed) {
       const { service, transaction } = buildService(buildTx().tx);
@@ -725,6 +732,99 @@ describe('PayrollReplacementPaymentService replacement creation', () => {
     expect(obligationCreate).toHaveBeenCalledTimes(1);
     expect(result).toEqual(
       expect.objectContaining({ paid: '600000.00', balance: '400000.00' }),
+    );
+  });
+});
+
+// S5: the expense decision is per payment, so a replacement payment carries its
+// own choice instead of always being stored unspecified. The choice is only
+// stored here; the expense itself belongs to the completion transaction, whose
+// seam reads it back from the same obligation row.
+describe('PayrollReplacementPaymentService expense choice', () => {
+  const storedData = (built: ReturnType<typeof create>) =>
+    built.obligationCreate.mock.calls[0][0].data as Record<string, unknown>;
+
+  it('stores the enabled choice and its date on the new payment', async () => {
+    const built = create({
+      ...validBody,
+      expenseEnabled: true,
+      selectedExpenseDate: '2026-11-15',
+    });
+    await built.run;
+
+    expect(storedData(built)).toEqual(
+      expect.objectContaining({
+        expenseEnabled: true,
+        selectedExpenseDate: date('2026-11-15'),
+      }),
+    );
+  });
+
+  it('keeps an explicit disabled choice as false instead of unspecified', async () => {
+    const built = create({ ...validBody, expenseEnabled: false });
+    await built.run;
+
+    expect(storedData(built)).toEqual(
+      expect.objectContaining({
+        expenseEnabled: false,
+        selectedExpenseDate: null,
+      }),
+    );
+  });
+
+  it('stores an expense date without inventing a choice', async () => {
+    const built = create({
+      ...validBody,
+      selectedExpenseDate: '2026-11-15',
+    });
+    await built.run;
+
+    // A date alone never turns the expense on: null is unspecified, not "true".
+    expect(storedData(built)).toEqual(
+      expect.objectContaining({
+        expenseEnabled: null,
+        selectedExpenseDate: date('2026-11-15'),
+      }),
+    );
+  });
+
+  it('never inherits the source payment choice when none was given', async () => {
+    const built = create(validBody, {
+      source: sourceRow({
+        expenseEnabled: true,
+        selectedExpenseDate: date('2026-10-31'),
+      }),
+    });
+    await built.run;
+
+    expect(storedData(built)).toEqual(
+      expect.objectContaining({
+        expenseEnabled: null,
+        selectedExpenseDate: null,
+      }),
+    );
+  });
+
+  it('still writes no expense while registering the replacement', async () => {
+    const built = create({
+      ...validBody,
+      expenseEnabled: true,
+      selectedExpenseDate: '2026-11-15',
+    });
+    const result = await built.run;
+
+    // The expense is written by the completion transaction only (S5), and no new
+    // cash exists for the referenced installments.
+    expect(built.tx.expense.create).not.toHaveBeenCalled();
+    expect(built.tx.expensePayment.createMany).not.toHaveBeenCalled();
+    expect(built.tx.payrollObligationExpense.create).not.toHaveBeenCalled();
+    expect(built.tx.payrollCashOutflow.create).not.toHaveBeenCalled();
+    expect(built.tx.payrollObligation.updateMany).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: PayrollObligationStatus.PENDING,
+        balance: '600000.00',
+      }),
     );
   });
 });

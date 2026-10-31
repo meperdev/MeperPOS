@@ -58,8 +58,11 @@ const money = (value: Prisma.Decimal, cents: bigint): Prisma.Decimal => {
  * What this writer does NOT do: no refund, no reimbursement, no group correction,
  * no expense write, no status transition of the source payment, no editing of any
  * source row. `PayrollInstallmentReference` is append-only evidence for exactly
- * that reason. Real PostgreSQL locking, rollback and race behavior are proven by
- * mocked tests only.
+ * that reason. The per-payment expense choice (S5) is stored on the new payment
+ * but never acted on here: the completion transaction of that payment reads it
+ * back and writes the expense there, so no expense exists before completion.
+ * Real PostgreSQL locking, rollback and race behavior are proven by mocked tests
+ * only.
  */
 @Injectable()
 export class PayrollReplacementPaymentService {
@@ -314,11 +317,15 @@ export class PayrollReplacementPaymentService {
           periodEnd,
           // The corrected total: referenced cash plus the remaining balance.
           periodAmount: new Prisma.Decimal(total),
-          // The expense decision of a payment is per payment and has no default
-          // (S5). A replacement is a new payment, so it never inherits the source
-          // choice: it stays unspecified until it is decided.
-          expenseEnabled: null,
-          selectedExpenseDate: null,
+          // S5: the expense decision is per payment, so a replacement carries its
+          // own choice and never inherits the source one. `?? null` keeps an
+          // omitted choice unspecified while an explicit false stays false; the
+          // completion transaction of this same row reads it back to decide
+          // whether to write the expense.
+          expenseEnabled: dto.expenseEnabled ?? null,
+          selectedExpenseDate: dto.selectedExpenseDate
+            ? new Date(`${dto.selectedExpenseDate}T00:00:00.000Z`)
+            : null,
         },
       });
 

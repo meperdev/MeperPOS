@@ -1,6 +1,7 @@
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsNotEmpty,
   IsOptional,
@@ -22,6 +23,11 @@ import {
  * The period is optional but must be stated as a whole: the writer derives it
  * from the source's shift dates (grouped payment) or from the source period
  * (fixed-period payment) when it is omitted.
+ *
+ * The expense decision is per payment (S5), so a replacement carries its own:
+ * absent or null stays unspecified, false is an explicit "no expense" and true
+ * asks the completion transaction to write one. It is never inherited from the
+ * source payment.
  */
 export class CreatePayrollReplacementPaymentDto {
   @IsString()
@@ -54,4 +60,16 @@ export class CreatePayrollReplacementPaymentDto {
   @IsDateString({ strict: true })
   @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/)
   periodEnd?: string | null;
+
+  // S5: the expense decision is per payment and has no default. Absent or null
+  // stays unspecified, so the feature can never charge an expense nobody chose.
+  @IsOptional()
+  @IsBoolean()
+  expenseEnabled?: boolean | null;
+
+  // Optional date-only expense date; absent or null means "the completion day".
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/)
+  selectedExpenseDate?: string | null;
 }

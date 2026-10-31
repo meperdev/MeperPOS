@@ -625,5 +625,71 @@ describe('PayrollPeriodInstallmentsService (mock transaction only)', () => {
       });
       expect(tx.payrollCashOutflow.create).toHaveBeenCalledTimes(1);
     });
+
+    // S5: a replacement now stores its own expense choice, so the completion seam
+    // must apply it to the replacement's total - referenced real cash plus the
+    // installment that completed the payment - exactly once.
+    it('writes one expense whose payments equal the completed replacement total', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.expenseEnabled = true;
+      period.selectedExpenseDate = new Date('2026-11-15T00:00:00.000Z');
+      period.installmentReferences = [reference('40')];
+
+      await expect(
+        service.create({ ...input, amount: '30' }, 'org', actor),
+      ).resolves.toMatchObject({ status: 'COMPLETED', paid: '100.00' });
+
+      expect(tx.expense.create).toHaveBeenCalledTimes(1);
+      const data = tx.expense.create.mock.calls[0][0].data as {
+        total: Prisma.Decimal;
+        date: Date;
+        payments: {
+          create: { amount: Prisma.Decimal; method: string; date: Date }[];
+        };
+      };
+      const payments = data.payments.create;
+      const sum = payments.reduce(
+        (total, payment) => total.plus(payment.amount.toFixed(2)),
+        new Prisma.Decimal(0),
+      );
+      // One expense, mirroring every real outflow it pays for: the payment's own
+      // cash, the referenced cash and the installment that completed it.
+      expect(payments).toHaveLength(3);
+      expect(sum.toFixed(2)).toBe(data.total.toFixed(2));
+      expect(data.total).toEqual(new Prisma.Decimal('100.00'));
+      // The stored choice supplies the expense date, and it is not the completion
+      // day of the new installment.
+      expect(data.date).toEqual(new Date('2026-11-15T05:00:00.000Z'));
+      expect(tx.payrollCashOutflow.create).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['disabled', false],
+      ['unspecified', null],
+    ])(
+      'writes no expense when a completing replacement has a %s expense choice',
+      async (_case, choice) => {
+        const { tx, service } = setup();
+        const period = await tx.payrollObligation.findFirst();
+        period.expenseEnabled = choice;
+        period.installmentReferences = [reference('40')];
+
+        await expect(
+          service.create({ ...input, amount: '30' }, 'org', actor),
+        ).resolves.toMatchObject({ status: 'COMPLETED', paid: '100.00' });
+
+        expect(tx.expense.create).not.toHaveBeenCalled();
+        expect(tx.payrollObligationExpense.create).not.toHaveBeenCalled();
+        // No category work at all: only the employee and obligation locks ran.
+        expect(tx.payrollExpenseCategory.findUnique).not.toHaveBeenCalled();
+        expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+        expect(tx.payrollObligation.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ status: 'COMPLETED' }),
+          }),
+        );
+      },
+    );
   });
 });
