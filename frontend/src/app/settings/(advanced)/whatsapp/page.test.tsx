@@ -235,7 +235,7 @@ describe("WhatsApp settings page", () => {
       screen.queryByAltText("Código QR para vincular el número de WhatsApp"),
     ).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: /Mostrar código/ }));
+    await user.click(screen.getByRole("button", { name: /Mostrar QR/ }));
 
     expect(mocks.qr).toHaveBeenLastCalledWith(true);
     expect(
@@ -337,7 +337,9 @@ describe("WhatsApp settings page", () => {
     await user.click(screen.getByRole("button", { name: /Solicitar código/ }));
     expect(await screen.findByTestId("whatsapp-link-code")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Ocultar código" }));
+    await user.click(
+      screen.getByRole("button", { name: "Ocultar código de vinculación" }),
+    );
     expect(screen.queryByTestId("whatsapp-link-code")).toBeNull();
   });
 
