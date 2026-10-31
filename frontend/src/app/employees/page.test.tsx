@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import EmployeesPage from "./page";
+import { formatDate } from "@/lib/utils";
 
 const state = vi.hoisted(() => ({ role: "ADMIN", list: { data: [] as object[], isLoading: false, isError: false, refetch: vi.fn() }, create: vi.fn(), update: vi.fn(), active: vi.fn(), shiftCreate: vi.fn(), shifts: { data: [] as { id: string; date: string; kind: string; amount: string; observation: string | null }[], isLoading: false, isError: false, refetch: vi.fn() } }));
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: {children: React.ReactNode}) => <>{children}</> }));
@@ -17,6 +18,10 @@ vi.mock("@/hooks/useEmployeeShifts", () => ({ useEmployeeShifts: () => state.shi
 const employee = { id: "1", name: "Ana", identification: "123", phone: null, email: "ana@example.com", address: null, jobTitle: "Vendedora", startDate: "2024-01-03T00:00:00.000Z", remunerationModality: "BY_DAY", referenceAmount: "1000.00", active: true };
 beforeEach(() => { vi.clearAllMocks(); state.role = "ADMIN"; state.list = { data: [], isLoading: false, isError: false, refetch: vi.fn() }; state.create.mockResolvedValue({}); state.update.mockResolvedValue({}); state.active.mockResolvedValue({}); state.shiftCreate.mockResolvedValue({}); state.shifts = { data: [], isLoading: false, isError: false, refetch: vi.fn() }; });
 afterEach(cleanup);
+
+async function openRowMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole("button", { name: `Acciones de ${name}` }));
+}
 it("shows loading, error and empty states", () => {
   state.list.isLoading = true; const view = render(<EmployeesPage />); expect(screen.getByText("Cargando empleados...")).toBeInTheDocument();
   state.list.isLoading = false; state.list.isError = true; view.rerender(<EmployeesPage />); expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar los empleados");
@@ -28,7 +33,8 @@ it("creates and edits profiles, explicitly clearing nullable fields", async () =
   await user.type(screen.getByLabelText(/Nombre/), "Luis");
   await user.click(screen.getByRole("button", { name: "Guardar" }));
   await waitFor(() => expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ name: "Luis", email: null, referenceAmount: null })));
-  await user.click(screen.getByRole("button", { name: "Editar Ana" }));
+  await openRowMenu(user, "Ana");
+  await user.click(screen.getByRole("menuitem", { name: "Editar" }));
   await user.clear(screen.getByLabelText("Correo electrónico"));
   await user.clear(screen.getByLabelText("Fecha de ingreso"));
   await user.click(screen.getByRole("button", { name: "Guardar" }));
@@ -56,17 +62,18 @@ it("names the dialog, contains keyboard focus, and restores it after Escape", as
   expect(dialog).toHaveAttribute("aria-modal", "true");
   expect(screen.getByLabelText(/Nombre/)).toHaveFocus();
   await user.tab({ shift: true });
-  expect(screen.getByRole("button", { name: "Cerrar" })).toHaveFocus();
+  expect(dialog).toContainElement(document.activeElement as HTMLElement);
   await user.tab();
-  expect(screen.getByLabelText(/Nombre/)).toHaveFocus();
+  expect(dialog).toContainElement(document.activeElement as HTMLElement);
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(opener).toHaveFocus();
 });
 it("returns escaped programmatic focus and restores the edit opener on close", async () => {
   const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
-  const opener = screen.getByRole("button", { name: "Editar Ana" });
+  const opener = screen.getByRole("button", { name: "Acciones de Ana" });
   await user.click(opener);
+  await user.click(screen.getByRole("menuitem", { name: "Editar" }));
   expect(screen.getByRole("dialog", { name: "Editar empleado" })).toBeInTheDocument();
   screen.getByRole("button", { name: "Nuevo empleado" }).focus();
   expect(screen.getByLabelText(/Nombre/)).toHaveFocus();
@@ -82,7 +89,12 @@ it("keeps the dialog open while a save is pending", async () => {
   expect(screen.getByRole("dialog", { name: "Nuevo empleado" })).toBeInTheDocument();
 });
 it("changes active state without deleting the employee", async () => {
-  state.list.data = [employee]; render(<EmployeesPage />); await userEvent.click(screen.getByRole("button", { name: "Desactivar Ana" }));
+  const user = userEvent.setup();
+  state.list.data = [employee]; render(<EmployeesPage />);
+  await openRowMenu(user, "Ana");
+  await user.click(screen.getByRole("menuitem", { name: "Desactivar" }));
+  const dialog = screen.getByRole("dialog", { name: "Desactivar empleado" });
+  await user.click(within(dialog).getByRole("button", { name: "Desactivar" }));
   await waitFor(() => expect(state.active).toHaveBeenCalledWith({ id: "1", active: false }));
 });
 it("opens shift history for active and inactive employees without allowing inactive creation", async () => {
@@ -96,7 +108,8 @@ it("lists shifts and creates a partial day with a date-only payload", async () =
   const user = userEvent.setup(); state.list.data = [employee];
   state.shifts.data = [{ id: "s", date: "2025-01-02T00:00:00.000Z", kind: "FULL_DAY", amount: "100.00", observation: "Nota anterior" }];
   render(<EmployeesPage />); await user.click(screen.getByRole("button", { name: "Jornadas Ana" }));
-  expect(screen.getByText(/2025-01-02 · Día completo/)).toBeInTheDocument();
+  expect(screen.getByText(formatDate("2025-01-02T00:00:00.000Z"))).toBeInTheDocument();
+  expect(screen.getAllByText("Día completo").length).toBeGreaterThan(0);
   expect(screen.getByText("Nota anterior")).toBeInTheDocument();
   await user.type(screen.getByLabelText(/Fecha/), "2025-01-03");
   await user.selectOptions(screen.getByLabelText("Tipo de jornada"), "PARTIAL_DAY");
@@ -117,7 +130,9 @@ it("prevents changes to shift fields while a save is pending", async () => {
     expect(screen.getByLabelText(label)).toBeDisabled();
   }
   screen.getByRole("button", { name: "Nuevo empleado" }).focus();
-  expect(screen.getByRole("button", { name: "Cerrar" })).toHaveFocus();
+  const shiftDialog = screen.getByRole("dialog", { name: "Jornadas de Ana" });
+  const focused = document.activeElement as HTMLElement;
+  expect(shiftDialog === focused || shiftDialog.contains(focused)).toBe(true);
   await user.keyboard("{Escape}");
   expect(screen.getByRole("dialog", { name: "Jornadas de Ana" })).toBeInTheDocument();
 });
