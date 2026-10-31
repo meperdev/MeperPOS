@@ -51,6 +51,7 @@ model Organization {
   inventoryLoans     InventoryLoan[]
   posLoanSaleIntents PosLoanSaleIntent[]
   posLoanSaleReservations PosLoanSaleReservation[]
+  whatsAppConnections WhatsAppConnection[]
 
   @@index([status, trialEndsAt])
 }
@@ -875,4 +876,56 @@ enum PurchaseOrderStatus {
   PARTIAL_RECEIVED
   RECEIVED
   CANCELLED
+}
+
+/// Provider session bound to one channel. COMMERCIAL belongs to one
+/// organization; INTELLIGENCE is a single central channel shared across
+/// organizations and owned by the platform (organizationId stays null).
+model WhatsAppConnection {
+  id              String                @id @default(uuid())
+  provider        String                @default("WAHA")
+  sessionName     String                @unique
+  channel         WhatsAppChannel
+  organizationId  String?
+  status          WhatsAppSessionStatus @default(STOPPED)
+  statusUpdatedAt DateTime?
+  accountId       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  organization    Organization?          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  processedEvents WhatsAppProcessedEvent[]
+
+  @@unique([channel, organizationId])
+  @@index([channel])
+}
+
+/// Durable record of a provider event already handled. The provider event id
+/// comes from the HMAC-signed payload, never from unsigned transport headers.
+model WhatsAppProcessedEvent {
+  id              String   @id @default(uuid())
+  connectionId    String
+  providerEventId String
+  eventType       String
+  receivedAt      DateTime @default(now())
+
+  connection WhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, providerEventId])
+  @@index([receivedAt])
+}
+
+enum WhatsAppChannel {
+  COMMERCIAL
+  INTELLIGENCE
+}
+
+enum WhatsAppSessionStatus {
+  STOPPED
+  STARTING
+  SCAN_QR_CODE
+  PASSKEY_REQUIRED
+  PASSKEY_CONFIRMATION_REQUIRED
+  WORKING
+  FAILED
 }

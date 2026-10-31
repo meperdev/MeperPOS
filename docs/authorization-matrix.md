@@ -37,11 +37,26 @@ Where a row shows an inherited role in parentheses — `ADMIN (OWNER inherits)`,
 
 ## whatsapp
 
+The module runs two independent WAHA sessions inside one instance. The commercial session belongs to
+exactly one organization: its name is derived from the authenticated token's organization, so it is
+created, started, stopped and restarted only for the caller's own tenant. The intelligence session is
+a single central channel owned by the platform, has no organization scope, and is reachable only by a
+platform `SUPER_ADMIN`; it is deliberately guarded without `OrganizationRequiredGuard`. Neither
+controller accepts a session name from the request.
+
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
-| /api/whatsapp/session | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp.controller.spec.ts |
-| /api/whatsapp/session | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp.controller.spec.ts |
-| /api/whatsapp/session/qr | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp.controller.spec.ts |
+| /api/whatsapp/commercial/session | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/commercial/session | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/commercial/session/qr | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/commercial/session/stop | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/commercial/session/restart | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/intelligence/session | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session | GET | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/qr | GET | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/stop | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/restart | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/logout | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/webhook | POST | WAHA HMAC | provider-hmac | backend/src/whatsapp/whatsapp-webhook.spec.ts |
 
 ## auth
