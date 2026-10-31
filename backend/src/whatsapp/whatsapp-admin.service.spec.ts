@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { DailyReportService } from '../reports/daily-report.service';
+import type { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
 import {
   normaliseCommand,
@@ -115,6 +116,7 @@ function setup(
     identities?: IdentityRow[];
     memberships?: MembershipRow[];
     generate?: jest.Mock;
+    onDemand?: jest.Mock;
   } = {},
 ) {
   const identities = options.identities ?? [];
@@ -163,13 +165,25 @@ function setup(
     generate: options.generate ?? jest.fn().mockResolvedValue(report),
   };
 
+  // The delivery service is the only collaborator that writes, and here it is a
+  // double: what the gate must prove is when it is called and with what.
+  const delivery = {
+    onDemand:
+      options.onDemand ??
+      jest
+        .fn()
+        .mockResolvedValue({ status: 'sent', providerMessageId: 'wamid-1' }),
+  };
+
   return {
     prisma,
     reports,
+    delivery,
     service: new WhatsAppAdminService(
       prisma as unknown as PrismaService,
       new WhatsAppIdentityService(prisma as unknown as PrismaService),
       reports as unknown as DailyReportService,
+      delivery as unknown as WhatsAppDeliveryService,
     ),
   };
 }
@@ -309,6 +323,7 @@ describe('WhatsAppAdminService', () => {
           userId: USER_ID,
           organizationId: ORGANIZATION_ID,
           role,
+          phone: PHONE,
         });
       }
     });
@@ -348,6 +363,7 @@ describe('WhatsAppAdminService', () => {
         userId: USER_ID,
         organizationId: ORGANIZATION_ID,
         role: 'ADMIN',
+        phone: PHONE,
       });
     });
 
@@ -372,6 +388,7 @@ describe('WhatsAppAdminService', () => {
       userId: USER_ID,
       organizationId: ORGANIZATION_ID,
       role: 'ADMIN' as const,
+      phone: PHONE,
     };
 
     it('answers with aggregates and the report date only', async () => {
@@ -566,6 +583,127 @@ describe('WhatsAppAdminService', () => {
     });
   });
 
+  describe('the report PDF command', () => {
+    const authorized = {
+      status: 'authorized' as const,
+      userId: USER_ID,
+      organizationId: ORGANIZATION_ID,
+      role: 'ADMIN' as const,
+      phone: PHONE,
+    };
+
+    it.each([
+      'pdf',
+      'PDF',
+      'reporte pdf',
+      'pdf del reporte',
+      'manda el reporte',
+      'Mándame el reporte',
+      'envia el reporte',
+      'manda el pdf',
+    ])('sends the document on demand for %s', async (text) => {
+      const { service, delivery, reports } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+      });
+
+      await expect(service.answer(authorized, text)).resolves.toEqual({
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: ORGANIZATION_ID,
+        delivery: 'sent',
+      });
+
+      // The destination is the sender's own verified number, and the gate never
+      // reduces the report itself on this path.
+      expect(delivery.onDemand).toHaveBeenCalledWith({
+        organizationId: ORGANIZATION_ID,
+        phone: PHONE,
+      });
+      expect(reports.generate).not.toHaveBeenCalled();
+    });
+
+    it('reports a failed delivery without throwing or leaking a reason code', async () => {
+      const { service } = setup({
+        onDemand: jest
+          .fn()
+          .mockResolvedValue({ status: 'failed', reason: 'provider_rejected' }),
+      });
+
+      const answer = await service.answer(authorized, 'pdf');
+
+      expect(answer).toEqual({
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: ORGANIZATION_ID,
+        delivery: 'failed',
+      });
+      expect(JSON.stringify(answer)).not.toContain('provider_rejected');
+    });
+
+    it('reports a delivery the service declined for lack of identity', async () => {
+      const { service } = setup({
+        onDemand: jest.fn().mockResolvedValue({ status: 'no_identity' }),
+      });
+
+      await expect(service.answer(authorized, 'pdf')).resolves.toEqual({
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: ORGANIZATION_ID,
+        delivery: 'no_identity',
+      });
+    });
+
+    it('never sends for a summary command, an unknown command or a refusal', async () => {
+      const { service, delivery } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+      });
+
+      await service.answer(authorized, 'resumen');
+      await service.answer(authorized, 'cierre del dia');
+      await service.answer(authorized, 'borra todo');
+      await service.answer({ status: 'unlinked' }, 'pdf');
+      await service.answer({ status: 'forbidden' }, 'manda el reporte');
+
+      expect(delivery.onDemand).not.toHaveBeenCalled();
+    });
+
+    it('refuses rather than throwing when the delivery service fails', async () => {
+      const { service } = setup({
+        onDemand: jest.fn().mockRejectedValue(new Error('database is down')),
+      });
+
+      const answer: WhatsAppAdminAnswer = await service.answer(
+        authorized,
+        'pdf',
+      );
+
+      expect(answer).toEqual({ status: 'refused', reason: 'unavailable' });
+      expect(JSON.stringify(answer)).not.toContain('database is down');
+    });
+
+    it('cannot be widened by a phone or an organization appended to the command', async () => {
+      const { service, delivery } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+      });
+
+      for (const text of [
+        `pdf ${PHONE}`,
+        `manda el reporte a 573009998877`,
+        `pdf ${OTHER_ORGANIZATION_ID}`,
+        'pdf;',
+      ]) {
+        await expect(service.answer(authorized, text)).resolves.toEqual({
+          status: 'unsupported',
+        });
+      }
+
+      expect(delivery.onDemand).not.toHaveBeenCalled();
+    });
+  });
+
   describe('no write is reachable', () => {
     it('only reads on every path and never opens a transaction', async () => {
       const { service, prisma } = setup({
@@ -580,6 +718,7 @@ describe('WhatsAppAdminService', () => {
           userId: USER_ID,
           organizationId: ORGANIZATION_ID,
           role: 'ADMIN',
+          phone: PHONE,
         },
         'resumen',
       );
@@ -635,6 +774,7 @@ describe('WhatsAppAdminService', () => {
       const authorized = await service.authorize(JID);
       await service.answer(authorized, 'resumen');
       await service.answer(authorized, 'borra todo');
+      await service.answer(authorized, 'manda el reporte');
       await stranger.service.authorize('573009998877');
       await setup().service.authorize('573001110000');
 
@@ -648,6 +788,7 @@ describe('WhatsAppAdminService', () => {
         '573001110000',
         'resumen',
         'borra todo',
+        'manda el reporte',
         '1234.56',
         '200.00',
         'Ana Cliente',

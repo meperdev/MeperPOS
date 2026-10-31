@@ -857,3 +857,86 @@ export interface CollectLoanInput {
 
 /** Flat pagination envelope returned by GET /loans and GET /loans/:id/history. */
 export type LoanPage<T> = { data: T[]; total: number; page: number; limit: number; totalPages: number };
+
+/** Provider lifecycle state of a WAHA session (`WhatsAppSessionStatus`). */
+export type WhatsAppSessionStatus =
+  | "STOPPED"
+  | "STARTING"
+  | "SCAN_QR_CODE"
+  | "PASSKEY_REQUIRED"
+  | "PASSKEY_CONFIRMATION_REQUIRED"
+  | "WORKING"
+  | "FAILED";
+
+/**
+ * GET /whatsapp/commercial/session — the channel status. `accountId` is the
+ * number the session is linked to; it is present only once the provider reports
+ * a working session, so the screen shows it when it is known.
+ */
+export interface WhatsAppSessionState {
+  status: WhatsAppSessionStatus;
+  accountId?: string | null;
+}
+
+/** GET /whatsapp/commercial/session/qr — base64 PNG, never cached. */
+export interface WhatsAppQrImage {
+  data: string;
+}
+
+/** One linked number (`WhatsAppIdentityStatus`). */
+export type WhatsAppIdentityStatus = "PENDING" | "VERIFIED" | "REVOKED";
+
+/** GET /whatsapp/identity — one administrative link of the calling user. */
+export interface WhatsAppIdentity {
+  id: string;
+  phone: string;
+  status: WhatsAppIdentityStatus;
+  verifiedAt: string | null;
+  organizationId: string | null;
+}
+
+/** POST /whatsapp/identity/challenge — the code is shown once, then worthless. */
+export interface WhatsAppLinkChallenge {
+  code: string;
+  expiresAt: string;
+}
+
+/** One report attempt as the history shows it (`WhatsAppDeliveryKind`). */
+export type WhatsAppDeliveryKind = "SCHEDULED" | "ON_DEMAND";
+
+/** The attempt state a delivery row carries (`WhatsAppDeliveryStatus`). */
+export type WhatsAppDeliveryStatus = "PENDING" | "SENT" | "FAILED";
+
+/**
+ * The closed set of failure codes the backend may record. A row never carries
+ * provider text, so the screen can translate every reason it receives.
+ */
+export type WhatsAppDeliveryFailure =
+  | "no_recipient"
+  | "organization_ambiguous"
+  | "report_failed"
+  | "render_failed"
+  | "provider_rejected"
+  | "send_failed";
+
+/** GET /whatsapp/deliveries — one attempt of the calling organization. */
+export interface WhatsAppDelivery {
+  id: string;
+  kind: WhatsAppDeliveryKind;
+  reportDate: string;
+  status: WhatsAppDeliveryStatus;
+  failureReason: WhatsAppDeliveryFailure | null;
+  sentAt: string | null;
+  attempts: number;
+}
+
+/**
+ * POST /whatsapp/deliveries/report — the send outcome, exactly as the server
+ * reported it. `no_identity` arrives as a 409 body: nobody is linked, so nothing
+ * was sent and nothing failed.
+ */
+export type WhatsAppReportOutcome =
+  | { status: "sent"; providerMessageId: string | null }
+  | { status: "failed"; reason: WhatsAppDeliveryFailure }
+  | { status: "already_attempted" }
+  | { status: "no_identity"; reason: "no_recipient" };

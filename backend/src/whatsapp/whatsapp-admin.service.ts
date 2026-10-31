@@ -5,6 +5,7 @@ import {
   DailyReportService,
   type DailyReport,
 } from '../reports/daily-report.service';
+import { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { normaliseContactPhone } from './whatsapp-ingestion.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
 
@@ -40,6 +41,22 @@ const DAILY_SUMMARY_COMMANDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The only commands that make this gate *send* something. Phrasing that already
+ * means "give me the figures" (`reporte`, `cierre`, …) stays on the summary tool;
+ * an administrator who wants the document asks for the document. Everything not
+ * listed here is still `unsupported` and still sends nothing.
+ */
+const DAILY_PDF_COMMANDS: ReadonlySet<string> = new Set([
+  'pdf',
+  'reporte pdf',
+  'pdf del reporte',
+  'manda el reporte',
+  'mandame el reporte',
+  'envia el reporte',
+  'manda el pdf',
+]);
+
+/**
  * Chat clients send whatever the sender's keyboard produced: `Resumen `,
  * `RESUMEN`, `resúmen del día`. Trimming, lowercasing, collapsing whitespace
  * and stripping diacritics lets the allowlist above stay ASCII and closed
@@ -66,6 +83,11 @@ export type WhatsAppAdminAuthorization =
       userId: string;
       organizationId: string;
       role: OrgRole;
+      /**
+       * The sender's own number, reduced to digits. Carried on the context so the
+       * only address an on-demand delivery can use is the phone that asked.
+       */
+      phone: string;
     }
   | { status: 'unlinked' }
   | { status: 'forbidden' };
@@ -100,6 +122,13 @@ export type WhatsAppAdminAnswer =
       organizationId: string;
       summary: WhatsAppDailySummary;
     }
+  | {
+      status: 'delivered';
+      tool: 'daily_report_pdf';
+      organizationId: string;
+      /** What the delivery attempt concluded; no provider text is included. */
+      delivery: 'sent' | 'already_attempted' | 'failed' | 'no_identity';
+    }
   | { status: 'refused'; reason: 'unlinked' | 'forbidden' | 'unavailable' }
   | { status: 'unsupported' };
 
@@ -115,8 +144,8 @@ function countOf(value: unknown): number {
 }
 
 /**
- * Read-only administrative gate for the central INTELLIGENCE channel: the first
- * stage of the administrative assistant, and strictly a reader.
+ * Administrative gate for the central INTELLIGENCE channel: the first stage of the
+ * administrative assistant.
  *
  * Authorization order — the organization is never an input, only a result:
  *  1. the sender is reduced to the digits the identity table stores; a JID that
@@ -131,11 +160,14 @@ function countOf(value: unknown): number {
  *     that does not exist, is `forbidden`.
  *
  * Two invariants hold for every method here:
- *  - **No write is reachable.** The service depends on exactly two collaborators
- *    (`WhatsAppIdentityService` and `DailyReportService`) and touches the
- *    database only through two read queries: `whatsAppIdentity.findFirst` and
- *    `organizationUser.findFirst`. Neither collaborator exposes a mutation to
- *    this code path, and no answer path opens a transaction.
+ *  - **The allowlist is closed, and only one entry writes.** The summary tool is
+ *    a pure read: this class queries `whatsAppIdentity.findFirst` and
+ *    `organizationUser.findFirst` and nothing else. The report-PDF command is the
+ *    single exception, and the only write it can reach is a `WhatsAppDelivery`
+ *    row created by `WhatsAppDeliveryService` — a row whose recipient is the
+ *    sender's own verified phone, never an address taken from the message. No
+ *    other command sends anything, and no command can edit a sale, a product, an
+ *    expense or a membership.
  *  - **Nothing identifiable is logged.** No method logs the phone, the message
  *    body, the identity, a customer, a document number or a figure. The only
  *    log lines are identifier-free outcome markers.
@@ -148,6 +180,8 @@ function countOf(value: unknown): number {
  * a given phone is registered in MeperPOS, which is exactly the enumeration
  * oracle this gate exists to deny. The distinction lives in `reason` for
  * internal accounting and logs only, and any future transport must collapse it.
+ * Every refusal is therefore decided before the allowlist is consulted, which is
+ * also what keeps the PDF command unreachable for a stranger.
  */
 @Injectable()
 export class WhatsAppAdminService {
@@ -157,6 +191,7 @@ export class WhatsAppAdminService {
     private readonly prisma: PrismaService,
     private readonly identity: WhatsAppIdentityService,
     private readonly reports: DailyReportService,
+    private readonly delivery: WhatsAppDeliveryService,
   ) {}
 
   /**
@@ -195,14 +230,16 @@ export class WhatsAppAdminService {
       userId: identity.userId,
       organizationId: identity.organizationId,
       role: membership.role,
+      phone: contactPhone,
     };
   }
 
   /**
    * Answer one message. `context` is what `authorize` returned, so this method
    * cannot be reached with an organization that did not come from a verified
-   * identity. Today the allowlist has a single tool; everything else is
-   * `unsupported` without touching the reports service at all.
+   * identity, and the only address a delivery can use is `context.phone` — the
+   * sender's own verified number. Everything outside the two closed allowlists is
+   * `unsupported` without touching the reports or delivery services at all.
    */
   async answer(
     context: WhatsAppAdminAuthorization,
@@ -214,7 +251,13 @@ export class WhatsAppAdminService {
     }
 
     const command = normaliseCommand(text);
-    if (!command || !DAILY_SUMMARY_COMMANDS.has(command)) {
+    if (!command) return { status: 'unsupported' };
+
+    if (DAILY_PDF_COMMANDS.has(command)) {
+      return this.sendDailyReportPdf(context);
+    }
+
+    if (!DAILY_SUMMARY_COMMANDS.has(command)) {
       return { status: 'unsupported' };
     }
 
@@ -227,6 +270,42 @@ export class WhatsAppAdminService {
       organizationId: context.organizationId,
       summary,
     };
+  }
+
+  /**
+   * The one command that sends a document: the report PDF, on demand, back to the
+   * administrator who asked. The outcome is reported as a flag so the transport
+   * can say whether the document left; a delivery failure is not a gate failure
+   * and never becomes an exception, because the webhook receipt for this message
+   * is already spent.
+   */
+  private async sendDailyReportPdf(
+    context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
+  ): Promise<WhatsAppAdminAnswer> {
+    try {
+      const outcome = await this.delivery.onDemand({
+        organizationId: context.organizationId,
+        phone: context.phone,
+      });
+      return {
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: context.organizationId,
+        delivery:
+          outcome.status === 'sent'
+            ? 'sent'
+            : outcome.status === 'failed'
+              ? 'failed'
+              : outcome.status,
+      };
+    } catch (error) {
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'delivery_failed',
+        reason: error instanceof Error ? error.name : 'unknown',
+      });
+      return { status: 'refused', reason: 'unavailable' };
+    }
   }
 
   /**
