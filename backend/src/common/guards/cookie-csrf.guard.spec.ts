@@ -66,6 +66,33 @@ describe('CookieCsrfGuard', () => {
     expect(guard.canActivate(makeContext(request))).toBe(true);
   });
 
+  it('exempts only POST to the HMAC-authenticated WAHA webhook', () => {
+    expect(
+      guard.canActivate(
+        makeContext({ ...baseRequest, path: '/api/whatsapp/webhook' }),
+      ),
+    ).toBe(true);
+    expect(() =>
+      guard.canActivate(
+        makeContext({ ...baseRequest, path: '/api/whatsapp/webhook/other' }),
+      ),
+    ).toThrow(ForbiddenException);
+    expect(() =>
+      guard.canActivate(
+        makeContext({
+          ...baseRequest,
+          method: 'PUT',
+          path: '/api/whatsapp/webhook',
+        }),
+      ),
+    ).toThrow(ForbiddenException);
+    expect(() =>
+      guard.canActivate(
+        makeContext({ ...baseRequest, path: '/api/whatsapp/session' }),
+      ),
+    ).toThrow(ForbiddenException);
+  });
+
   it('rejects cookie-authenticated mutation with missing CSRF header', () => {
     const request = {
       ...baseRequest,

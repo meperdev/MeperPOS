@@ -7,6 +7,7 @@ describe("settings sections registry", () => {
       "general",
       "invoicing",
       "team",
+      "whatsapp",
       "data",
       "billing",
     ]);

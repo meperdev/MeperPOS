@@ -54,6 +54,10 @@ export class CookieCsrfGuard implements CanActivate {
 
     const rawPath = String(request.path ?? request.url ?? '');
     const path = this.normalizePath(rawPath);
+    // The only handler at this exact POST path independently verifies WAHA HMAC.
+    if (method === 'POST' && path === '/api/whatsapp/webhook') {
+      return true;
+    }
     if (CSRF_EXEMPT_PATHS.has(path)) {
       return true;
     }
