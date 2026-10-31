@@ -12,6 +12,7 @@ export type StatusDomain =
   | "expense"
   | "purchase-order"
   | "loan"
+  | "payroll"
   | "whatsapp-session"
   | "whatsapp-identity"
   | "whatsapp-delivery"
@@ -50,6 +51,12 @@ const STATUS_META: Record<StatusDomain, Record<string, StatusMeta>> = {
     OPEN: { label: "Abierto", tone: "primary" },
     CLOSED: { label: "Cerrado", tone: "success" },
     CANCELLED: { label: "Cancelado", tone: "danger" },
+  },
+  // A payroll obligation is pending until its cash covers the total, and the
+  // server owns that verdict through the per-payment summary.
+  payroll: {
+    PENDING: { label: "Pendiente", tone: "warning" },
+    COMPLETED: { label: "Completado", tone: "success" },
   },
   // The WhatsApp session drifts on its own: the provider state machine is the
   // source, and the ones that wait for the operator (scan, passkey) carry the
