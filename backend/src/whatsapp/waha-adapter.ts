@@ -188,6 +188,13 @@ export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
 
   async status(session: string): Promise<{ status: WhatsAppSessionStatus }> {
     const response = await this.call(this.sessionPath(session));
+    if (response.status === 404) {
+      // The session was never created on the provider. That is the initial
+      // state of a channel, not a provider fault: report nothing running so a
+      // freshly opened screen can offer the connect action.
+      this.discard(response);
+      return { status: 'STOPPED' };
+    }
     if (!response.ok) {
       this.discard(response);
       throw this.failure('provider_rejected');

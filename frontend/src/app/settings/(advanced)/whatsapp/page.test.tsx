@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -59,6 +59,17 @@ vi.mock("@/hooks/useWhatsApp", () => ({
 }));
 
 import WhatsAppSettingsPage from "./page";
+
+/**
+ * A status is printed by the shared StatusBadge, which renders the dot and the
+ * label as one typed chip. The local mark this screen used to hand-roll did
+ * not, so the class and the dot child are what tell the two apart.
+ */
+function expectSharedStatusBadge(label: string) {
+  const badge = screen.getByText(label);
+  expect(badge.className).toContain("font-mono");
+  expect(badge.firstElementChild).not.toBeNull();
+}
 
 function statusState(status = "WORKING") {
   return {
@@ -126,6 +137,81 @@ describe("WhatsApp settings page", () => {
     expect(
       screen.getByRole("button", { name: "Enviar reporte ahora" }),
     ).toBeInTheDocument();
+  });
+
+  it("paints the session state through the shared status badge", () => {
+    render(<WhatsAppSettingsPage />);
+
+    expectSharedStatusBadge("Conectado");
+  });
+
+  it("holds the deliveries table with the shared skeleton while it loads", () => {
+    mocks.deliveries.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<WhatsAppSettingsPage />);
+
+    const skeleton = screen.getByRole("status");
+    expect(screen.getByText("Cargando envíos...")).toBeInTheDocument();
+    // Four bars in the header band: the table it stands in for has four columns.
+    expect(skeleton.querySelector("div")?.children).toHaveLength(4);
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("keeps the skeleton column count equal to the real table", () => {
+    mocks.deliveries.mockReturnValue(
+      emptyQuery([
+        {
+          id: "delivery-1",
+          kind: "SCHEDULED",
+          reportDate: "2026-02-10T00:00:00.000Z",
+          status: "SENT",
+          failureReason: null,
+          sentAt: "2026-02-10T12:30:00.000Z",
+          attempts: 1,
+        },
+      ]),
+    );
+
+    render(<WhatsAppSettingsPage />);
+
+    expect(screen.getAllByRole("columnheader")).toHaveLength(4);
+  });
+
+  it("confirms before revoking a verified number", async () => {
+    const user = userEvent.setup();
+    mocks.identities.mockReturnValue(
+      emptyQuery([
+        {
+          id: "identity-1",
+          phone: "+573001234567",
+          status: "VERIFIED",
+          verifiedAt: "2026-02-10T12:00:00.000Z",
+          organizationId: null,
+        },
+      ]),
+    );
+
+    render(<WhatsAppSettingsPage />);
+
+    expectSharedStatusBadge("Verificado");
+
+    await user.click(
+      screen.getByRole("button", { name: "Acciones de +573001234567" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Revocar número" }));
+
+    expect(mocks.revoke).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Revocar número" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Revocar" }));
+
+    expect(mocks.revoke).toHaveBeenCalledWith("identity-1");
   });
 
   it("keeps WhatsApp away from a role that cannot drive it", () => {
@@ -217,7 +303,7 @@ describe("WhatsApp settings page", () => {
     const user = userEvent.setup();
     mocks.challenge.mockResolvedValue({
       code: "ABCDEFGHJK",
-      expiresAt: "2026-02-10T12:45:00.000Z",
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     });
     mocks.sendReport.mockResolvedValue({
       status: "failed",
@@ -237,5 +323,39 @@ describe("WhatsApp settings page", () => {
     expect(
       await screen.findByText(/No se envió el reporte: no se pudo generar el reporte/),
     ).toBeInTheDocument();
+  });
+
+  it("hides the code on demand so it stops being readable", async () => {
+    const user = userEvent.setup();
+    mocks.challenge.mockResolvedValue({
+      code: "ABCDEFGHJK",
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
+
+    render(<WhatsAppSettingsPage />);
+
+    await user.click(screen.getByRole("button", { name: /Solicitar código/ }));
+    expect(await screen.findByTestId("whatsapp-link-code")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ocultar código" }));
+    expect(screen.queryByTestId("whatsapp-link-code")).toBeNull();
+  });
+
+  it("clears an expired code without requiring a reload", async () => {
+    const user = userEvent.setup();
+    mocks.challenge.mockResolvedValue({
+      code: "ABCDEFGHJK",
+      expiresAt: new Date(Date.now() + 400).toISOString(),
+    });
+
+    render(<WhatsAppSettingsPage />);
+
+    await user.click(screen.getByRole("button", { name: /Solicitar código/ }));
+    expect(await screen.findByTestId("whatsapp-link-code")).toBeInTheDocument();
+
+    await waitFor(
+      () => expect(screen.queryByTestId("whatsapp-link-code")).toBeNull(),
+      { timeout: 3000 },
+    );
   });
 });

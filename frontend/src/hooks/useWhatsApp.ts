@@ -100,14 +100,18 @@ export function useWhatsAppRestart() {
   });
 }
 
-/** The numbers the calling user linked inside their own organization. */
-export function useWhatsAppIdentities() {
+/**
+ * The numbers the calling user linked inside their own organization. An optional
+ * interval lets a screen watch for a link that is being completed from a phone.
+ */
+export function useWhatsAppIdentities(pollMs?: number) {
   return useQuery({
     queryKey: [WHATSAPP_KEY, "identities"],
     queryFn: () =>
       api
         .get<WhatsAppIdentity[]>("/whatsapp/identity")
         .then((res) => res.data),
+    ...(pollMs ? { refetchInterval: pollMs } : {}),
   });
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Ban,
   Link2,
@@ -15,7 +15,10 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { RowActions } from "@/components/ui/RowActions";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import {
@@ -32,49 +35,14 @@ import {
 } from "@/hooks/useWhatsApp";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
-import { cn, formatDate, formatDateTime } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import type {
   WhatsAppDeliveryFailure,
   WhatsAppDeliveryKind,
-  WhatsAppDeliveryStatus,
   WhatsAppIdentity,
-  WhatsAppIdentityStatus,
   WhatsAppLinkChallenge,
   WhatsAppReportOutcome,
-  WhatsAppSessionStatus,
 } from "@/types";
-
-/** The three tones a status may carry; the dot is the only colour signal. */
-type StatusTone = "ok" | "pending" | "failed" | "idle";
-
-const STATUS_DOT: Record<StatusTone, string> = {
-  ok: "bg-success",
-  pending: "bg-warning",
-  failed: "bg-danger",
-  idle: "bg-muted-foreground",
-};
-
-/**
- * Status is one luminous dot plus sentence-case text: no coloured capsule, no
- * duplicated bullet glyph, no shouting label.
- */
-function StatusMark({
-  tone,
-  label,
-}: {
-  tone: StatusTone;
-  label: string;
-}) {
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-foreground">
-      <span
-        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_DOT[tone])}
-        aria-hidden="true"
-      />
-      <span className="truncate">{label}</span>
-    </span>
-  );
-}
 
 /** A bento panel: one outer card, a quiet header, and the body. */
 function Panel({
@@ -104,49 +72,8 @@ function Panel({
   );
 }
 
-const SESSION_LABELS: Record<WhatsAppSessionStatus, string> = {
-  STOPPED: "Detenido",
-  STARTING: "Iniciando",
-  SCAN_QR_CODE: "Esperando el escaneo del código QR",
-  PASSKEY_REQUIRED: "Requiere passkey",
-  PASSKEY_CONFIRMATION_REQUIRED: "Requiere confirmar la passkey",
-  WORKING: "Conectado",
-  FAILED: "No se pudo conectar",
-};
-
-const SESSION_TONES: Record<WhatsAppSessionStatus, StatusTone> = {
-  STOPPED: "idle",
-  STARTING: "pending",
-  SCAN_QR_CODE: "pending",
-  PASSKEY_REQUIRED: "pending",
-  PASSKEY_CONFIRMATION_REQUIRED: "pending",
-  WORKING: "ok",
-  FAILED: "failed",
-};
-
-const IDENTITY_LABELS: Record<WhatsAppIdentityStatus, string> = {
-  PENDING: "Pendiente",
-  VERIFIED: "Verificado",
-  REVOKED: "Revocado",
-};
-
-const IDENTITY_TONES: Record<WhatsAppIdentityStatus, StatusTone> = {
-  PENDING: "pending",
-  VERIFIED: "ok",
-  REVOKED: "idle",
-};
-
-const DELIVERY_LABELS: Record<WhatsAppDeliveryStatus, string> = {
-  PENDING: "En curso",
-  SENT: "Enviado",
-  FAILED: "Falló",
-};
-
-const DELIVERY_TONES: Record<WhatsAppDeliveryStatus, StatusTone> = {
-  PENDING: "pending",
-  SENT: "ok",
-  FAILED: "failed",
-};
+/** How often the link list refreshes while a code is waiting to be sent. */
+const IDENTITY_POLL_MS = 5_000;
 
 const KIND_LABELS: Record<WhatsAppDeliveryKind, string> = {
   SCHEDULED: "Automático",
@@ -193,10 +120,12 @@ function ReportOutcome({
   if (outcome.status === "failed") {
     return (
       <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
-        <StatusMark
-          tone="failed"
-          label={`No se envió el reporte: ${FAILURE_LABELS[outcome.reason]}`}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge domain="whatsapp-report" status="FAILED" />
+          <p className="min-w-0 text-xs text-foreground">
+            No se envió el reporte: {FAILURE_LABELS[outcome.reason]}.
+          </p>
+        </div>
       </div>
     );
   }
@@ -204,14 +133,24 @@ function ReportOutcome({
   if (outcome.status === "already_attempted") {
     return (
       <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
-        <StatusMark tone="pending" label="Este reporte ya se había intentado" />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge domain="whatsapp-report" status="ALREADY_ATTEMPTED" />
+          <p className="min-w-0 text-xs text-foreground">
+            Este reporte ya se había intentado, así que no se envió de nuevo.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
-      <StatusMark tone="ok" label="Reporte enviado al número vinculado" />
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge domain="whatsapp-report" status="SENT" />
+        <p className="min-w-0 text-xs text-foreground">
+          El reporte se envió al número vinculado.
+        </p>
+      </div>
     </div>
   );
 }
@@ -245,7 +184,17 @@ function WhatsAppSettings() {
   const stopSession = useWhatsAppStop();
   const restartSession = useWhatsAppRestart();
 
-  const identitiesQuery = useWhatsAppIdentities();
+  const [linkCode, setLinkCode] = useState<WhatsAppLinkChallenge | null>(null);
+  const [identityToRevoke, setIdentityToRevoke] =
+    useState<WhatsAppIdentity | null>(null);
+  const [reportOutcome, setReportOutcome] =
+    useState<WhatsAppReportOutcome | null>(null);
+
+  // While a code is on screen the operator is linking from their phone, so the
+  // list has to pick up the new number without a reload.
+  const identitiesQuery = useWhatsAppIdentities(
+    linkCode ? IDENTITY_POLL_MS : undefined,
+  );
   const requestChallenge = useWhatsAppChallenge();
   const revokeIdentity = useWhatsAppRevokeIdentity();
 
@@ -256,14 +205,6 @@ function WhatsAppSettings() {
   // the operator is looking at it.
   const [qrRequested, setQrRequested] = useState(false);
   const qrQuery = useWhatsAppQr(qrRequested);
-
-  const [linkCode, setLinkCode] = useState<WhatsAppLinkChallenge | null>(null);
-  const [identityToRevoke, setIdentityToRevoke] = useState<WhatsAppIdentity | null>(
-    null,
-  );
-  const [reportOutcome, setReportOutcome] = useState<WhatsAppReportOutcome | null>(
-    null,
-  );
 
   const identities = identitiesQuery.data ?? [];
   const deliveries = deliveriesQuery.data ?? [];
@@ -305,6 +246,21 @@ function WhatsAppSettings() {
       );
     }
   };
+
+  // A code is a credential with a deadline: it clears itself when it expires, so
+  // a stale code cannot be read off the screen later.
+  useEffect(() => {
+    if (!linkCode) return;
+    const remaining = new Date(linkCode.expiresAt).getTime() - Date.now();
+    if (remaining <= 0) {
+      setLinkCode(null);
+      return;
+    }
+    const timer = setTimeout(() => setLinkCode(null), remaining);
+    return () => clearTimeout(timer);
+  }, [linkCode]);
+
+  const handleHideCode = () => setLinkCode(null);
 
   const handleRevoke = async () => {
     if (!identityToRevoke) return;
@@ -377,10 +333,7 @@ function WhatsAppSettings() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0 space-y-1">
-                <StatusMark
-                  tone={SESSION_TONES[sessionStatus]}
-                  label={SESSION_LABELS[sessionStatus]}
-                />
+                <StatusBadge domain="whatsapp-session" status={sessionStatus} />
                 {linkedNumber && (
                   <p className="font-mono text-xs tabular-nums text-muted-foreground">
                     {linkedNumber}
@@ -394,7 +347,7 @@ function WhatsAppSettings() {
                   loading={connectSession.isPending}
                 >
                   <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-                  Conectar
+                  Conectar sesión
                 </Button>
                 <Button
                   size="sm"
@@ -404,7 +357,7 @@ function WhatsAppSettings() {
                   disabled={sessionStatus === "STOPPED"}
                 >
                   <Ban className="h-3.5 w-3.5" aria-hidden="true" />
-                  Detener
+                  Detener sesión
                 </Button>
                 <Button
                   size="sm"
@@ -413,7 +366,7 @@ function WhatsAppSettings() {
                   loading={restartSession.isPending}
                 >
                   <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-                  Reiniciar
+                  Reiniciar sesión
                 </Button>
               </div>
             </div>
@@ -465,7 +418,7 @@ function WhatsAppSettings() {
                         variant="ghost"
                         onClick={() => setQrRequested(false)}
                       >
-                        Ocultar el código
+                        Ocultar código
                       </Button>
                     </div>
                   )}
@@ -497,6 +450,11 @@ function WhatsAppSettings() {
                 <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
                 Solicitar código
               </Button>
+              {linkCode && (
+                <Button size="sm" variant="outline" onClick={handleHideCode}>
+                  Ocultar código
+                </Button>
+              )}
               {linkCode && (
                 <span className="text-xs text-muted-foreground">
                   Vence el{" "}
@@ -561,21 +519,28 @@ function WhatsAppSettings() {
                         : "Sin verificar"}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <StatusMark
-                      tone={IDENTITY_TONES[identity.status]}
-                      label={IDENTITY_LABELS[identity.status]}
+                  <div className="flex items-center gap-2">
+                    <StatusBadge
+                      domain="whatsapp-identity"
+                      status={identity.status}
                     />
                     {identity.status === "VERIFIED" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setIdentityToRevoke(identity)}
-                        aria-label={`Revocar ${identity.phone}`}
-                      >
-                        <Ban className="h-3.5 w-3.5" aria-hidden="true" />
-                        Revocar
-                      </Button>
+                      <RowActions
+                        label={`Acciones de ${identity.phone}`}
+                        items={[
+                          {
+                            label: "Revocar número",
+                            icon: (
+                              <Ban
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                            ),
+                            destructive: true,
+                            onSelect: () => setIdentityToRevoke(identity),
+                          },
+                        ]}
+                      />
                     )}
                   </div>
                 </li>
@@ -610,11 +575,14 @@ function WhatsAppSettings() {
           )}
 
           {deliveriesQuery.isLoading ? (
-            <LoadingState
-              icon={<Send className="h-4 w-4 text-muted-foreground" />}
-              message="Cargando los envíos..."
-              className="min-h-[140px]"
-            />
+            <div className="-mx-5 overflow-x-auto">
+              <TableSkeleton
+                columns={4}
+                rows={6}
+                label="Cargando envíos..."
+                className="min-w-[420px] rounded-none border-0 bg-transparent"
+              />
+            </div>
           ) : deliveriesQuery.isError ? (
             <ErrorState
               message={getApiErrorMessage(
@@ -672,9 +640,9 @@ function WhatsAppSettings() {
                         {formatDate(delivery.reportDate)}
                       </TableCell>
                       <TableCell>
-                        <StatusMark
-                          tone={DELIVERY_TONES[delivery.status]}
-                          label={DELIVERY_LABELS[delivery.status]}
+                        <StatusBadge
+                          domain="whatsapp-delivery"
+                          status={delivery.status}
                         />
                         {delivery.status === "FAILED" && delivery.failureReason && (
                           <span className="mt-0.5 block text-[11px] text-muted-foreground">
@@ -698,7 +666,7 @@ function WhatsAppSettings() {
         isOpen={identityToRevoke !== null}
         onClose={() => setIdentityToRevoke(null)}
         onConfirm={handleRevoke}
-        title="Revocar el número"
+        title="Revocar número"
         message="Ese número dejará de recibir el reporte diario y no podrá consultar información administrativa."
         confirmText="Revocar"
       />

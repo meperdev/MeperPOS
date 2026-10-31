@@ -173,6 +173,15 @@ describe('WahaAdapter', () => {
       'http://waha:3000/api/meper-abc/auth/qr',
     );
   });
+  it('reports a never-created session as stopped instead of a provider fault', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await expect(new WahaAdapter(config).status('meper-abc')).resolves.toEqual({
+      status: 'STOPPED',
+    });
+  });
+
   it('rejects unexpected provider status instead of exposing arbitrary metadata', async () => {
     global.fetch = jest.fn().mockResolvedValue(
       new Response(JSON.stringify({ status: 'PRIVATE_API_KEY' }), {
