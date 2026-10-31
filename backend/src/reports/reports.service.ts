@@ -298,6 +298,7 @@ export interface FinancialOverviewResponse {
 
 function aggregateCashPayments(
   payments: Array<{ amount: Prisma.Decimal; method: string }>,
+  returns: Array<{ amount: Prisma.Decimal; returnMethod: string }> = [],
 ) {
   const byMethod = new Map<string, { total: Prisma.Decimal; count: number }>();
   for (const payment of payments) {
@@ -308,6 +309,14 @@ function aggregateCashPayments(
     current.total = current.total.add(payment.amount);
     current.count += 1;
     byMethod.set(payment.method, current);
+  }
+  for (const returned of returns) {
+    const current = byMethod.get(returned.returnMethod) ?? {
+      total: new Prisma.Decimal(0),
+      count: 0,
+    };
+    current.total = current.total.sub(returned.amount);
+    byMethod.set(returned.returnMethod, current);
   }
 
   return {
@@ -496,49 +505,57 @@ export class ReportsService {
     // Payroll cash is stored as a DATE, so it needs the DATE-column window of the
     // same Bogotá days instead of the timestamp window used by the other reads.
     const payrollCashDayWindow = buildDateOnlyWindow(period.current);
-    const [paymentGroups, expensePayments, payrollCashOutflows] =
-      await Promise.all([
-        this.prisma.payment.groupBy({
-          by: ['method'],
-          where: {
-            organizationId: orgId,
-            createdAt: period.current,
-            sale: { status: 'COMPLETED' },
-          },
-          _sum: { amount: true },
-          _count: { method: true },
-          orderBy: { method: 'asc' },
-        }),
-        this.prisma.expensePayment.findMany({
-          where: {
-            organizationId: orgId,
-            date: period.current,
-            // A payroll obligation's generated expense mirrors cash that its
-            // PayrollCashOutflow rows already report on the outflows aggregate
-            // below. Counting the mirror too would count the same payroll cash
-            // twice. Only the payroll-linked expense is skipped; every other
-            // expense payment keeps its current (deliberately inactive-blind)
-            // behaviour.
-            expense: { payrollObligationExpense: { is: null } },
-          },
-          select: { amount: true, method: true },
-        }),
-        // Payroll cash is cash even when completion generated no expense at all
-        // (S8), so the outflows come from the cash facts themselves, on the day
-        // they happened, and are merged into the same aggregate.
-        this.prisma.payrollCashOutflow.findMany({
-          where: { organizationId: orgId, date: payrollCashDayWindow },
-          select: { amount: true, method: true },
-        }),
-      ]);
+    const [
+      paymentGroups,
+      expensePayments,
+      payrollCashOutflows,
+      payrollCashReturns,
+    ] = await Promise.all([
+      this.prisma.payment.groupBy({
+        by: ['method'],
+        where: {
+          organizationId: orgId,
+          createdAt: period.current,
+          sale: { status: 'COMPLETED' },
+        },
+        _sum: { amount: true },
+        _count: { method: true },
+        orderBy: { method: 'asc' },
+      }),
+      this.prisma.expensePayment.findMany({
+        where: {
+          organizationId: orgId,
+          date: period.current,
+          // A payroll obligation's generated expense mirrors cash that its
+          // PayrollCashOutflow rows already report on the outflows aggregate
+          // below. Counting the mirror too would count the same payroll cash
+          // twice. Only the payroll-linked expense is skipped; every other
+          // expense payment keeps its current (deliberately inactive-blind)
+          // behaviour.
+          expense: { payrollObligationExpense: { is: null } },
+        },
+        select: { amount: true, method: true },
+      }),
+      // Payroll cash is cash even when completion generated no expense at all
+      // (S8), so the outflows come from the cash facts themselves, on the day
+      // they happened, and are merged into the same aggregate.
+      this.prisma.payrollCashOutflow.findMany({
+        where: { organizationId: orgId, date: payrollCashDayWindow },
+        select: { amount: true, method: true },
+      }),
+      this.prisma.payrollCashReturn.findMany({
+        where: { organizationId: orgId, returnDate: payrollCashDayWindow },
+        select: { amount: true, returnMethod: true },
+      }),
+    ]);
 
     return {
       accountingBasis: 'CASH_BY_PAYMENT_DATE',
       collections: aggregatePaymentGroups(paymentGroups),
-      expensePayments: aggregateCashPayments([
-        ...expensePayments,
-        ...payrollCashOutflows,
-      ]),
+      expensePayments: aggregateCashPayments(
+        [...expensePayments, ...payrollCashOutflows],
+        payrollCashReturns,
+      ),
       appliedRange: buildFinancialRangeMeta(period.current),
     };
   }

@@ -32,6 +32,9 @@ describe('ReportsService', () => {
     payrollCashOutflow: {
       findMany: jest.fn(),
     },
+    payrollCashReturn: {
+      findMany: jest.fn(),
+    },
     inventoryMovement: {
       findMany: jest.fn(),
     },
@@ -44,7 +47,39 @@ describe('ReportsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaMock.payrollCashReturn.findMany.mockResolvedValue([]);
     service = new ReportsService(prismaMock as never, cacheMock as never);
+  });
+
+  it('deducts a real payroll return on its own day and real payment method', async () => {
+    prismaMock.payment.groupBy.mockResolvedValue([]);
+    prismaMock.expensePayment.findMany.mockResolvedValue([]);
+    prismaMock.payrollCashOutflow.findMany.mockResolvedValue([]);
+    prismaMock.payrollCashReturn.findMany.mockResolvedValue([
+      { amount: new Prisma.Decimal('40.00'), returnMethod: 'TRANSFER' },
+    ]);
+
+    const result = await service.getCashFlow(
+      'org-1',
+      '2026-03-13',
+      '2026-03-13',
+    );
+
+    expect(result.expensePayments.total).toBe('-40.00');
+    expect(result.expensePayments.byPaymentMethod).toEqual([
+      { paymentMethod: 'TRANSFER', total: '-40.00', count: 0 },
+    ]);
+    expect(result.collections.total).toBe('0.00');
+    expect(prismaMock.payrollCashReturn.findMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        returnDate: {
+          gte: new Date('2026-03-13T00:00:00.000Z'),
+          lte: new Date('2026-03-13T00:00:00.000Z'),
+        },
+      },
+      select: { amount: true, returnMethod: true },
+    });
   });
 
   it('rejects invalid ranges where endDate is before startDate', async () => {

@@ -9,6 +9,7 @@ describe('ReportsService financial read model', () => {
     payment: { findMany: jest.fn(), groupBy: jest.fn() },
     expensePayment: { findMany: jest.fn() },
     payrollCashOutflow: { findMany: jest.fn() },
+    payrollCashReturn: { findMany: jest.fn() },
     product: { findMany: jest.fn() },
     inventoryMovement: { findMany: jest.fn() },
   };
@@ -20,6 +21,7 @@ describe('ReportsService financial read model', () => {
     // Cash flow reads payroll cash facts too; this spec keeps them empty unless a
     // test supplies them.
     prismaMock.payrollCashOutflow.findMany.mockResolvedValue([]);
+    prismaMock.payrollCashReturn.findMany.mockResolvedValue([]);
   });
 
   it('queries completed sales and expenses by the organization and equivalent ranges', async () => {
