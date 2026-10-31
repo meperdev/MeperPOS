@@ -149,7 +149,9 @@ describe('WahaAdapter', () => {
       const result = new WahaAdapter(config).qr('meper-abc');
       abort.abort();
       await expect(result).rejects.toThrow('WhatsApp provider unavailable');
-      expect(timeout).toHaveBeenCalledWith(5000);
+      // The QR gets a longer budget than the default: WAHA spends the full 5 s
+      // producing the image, which is what broke the deployed instance.
+      expect(timeout).toHaveBeenCalledWith(20_000);
     } finally {
       timeout.mockRestore();
     }
@@ -173,6 +175,24 @@ describe('WahaAdapter', () => {
       'http://waha:3000/api/meper-abc/auth/qr',
     );
   });
+  it('keeps the short deadline for a status call', async () => {
+    const timeout = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(new AbortController().signal);
+    try {
+      global.fetch = jest.fn().mockResolvedValue(
+        new Response(JSON.stringify({ status: 'WORKING' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      await new WahaAdapter(config).status('meper-abc');
+      expect(timeout).toHaveBeenCalledWith(5000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it('reports a never-created session as stopped instead of a provider fault', async () => {
     global.fetch = jest
       .fn()

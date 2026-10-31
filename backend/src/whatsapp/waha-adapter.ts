@@ -34,6 +34,15 @@ const ME_LIMIT = 16 * 1024;
 const SEND_LIMIT = 16 * 1024;
 const QR_JSON_LIMIT = 2 * 1024 * 1024;
 const QR_BASE64_LIMIT = 1024 * 1024;
+/** Default deadline for a provider call. */
+const CALL_TIMEOUT_MS = 5_000;
+/**
+ * WAHA blocks while the engine produces the image and routinely uses the whole
+ * default budget, so the QR gets its own, longer deadline. Measured against the
+ * deployed instance: 4.993-5.000 s per request, which the old 5 s budget cut
+ * exactly at the finish line.
+ */
+const QR_TIMEOUT_MS = 20_000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
@@ -87,6 +96,7 @@ export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
     method = 'GET',
     body?: unknown,
     accept = 'application/json',
+    timeoutMs = CALL_TIMEOUT_MS,
   ): Promise<Response> {
     const { baseUrl, apiKey, webhookUrl } = this.config;
     if (!baseUrl || !apiKey || !webhookUrl)
@@ -109,7 +119,7 @@ export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
           ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(timeoutMs),
         redirect: 'error',
       });
       return response;
@@ -226,6 +236,7 @@ export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
       'GET',
       undefined,
       'application/json',
+      QR_TIMEOUT_MS,
     );
     if (!response.ok) {
       this.discard(response);
