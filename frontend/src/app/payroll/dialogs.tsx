@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { Button } from "@/components/ui/Button";
 import { FilterGroup, FilterOptionButton } from "@/components/ui/FilterBar";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -127,6 +128,40 @@ function periodPresets() {
     { label: "Quincena 1", start: inputDate(monthStart), end: inputDate(firstHalfEnd) },
     { label: "Quincena 2", start: inputDate(secondHalfStart), end: inputDate(monthEnd) },
   ];
+}
+
+/** Date field with a one-tap "Hoy": cash dates are almost always today. */
+function DateWithToday({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex items-end gap-2">
+      <div className="min-w-0 flex-1">
+        <Input
+          label={label}
+          type="date"
+          required
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="mb-px h-[38px] shrink-0"
+        onClick={() => onChange(getBogotaDateInputValue())}
+      >
+        Hoy
+      </Button>
+    </div>
+  );
 }
 
 export function CreatePaymentDialog({
@@ -392,13 +427,7 @@ export function InstallmentDialog({
       error={error}
     >
       <MoneyInput label="Monto del abono" value={amount} onChange={setAmount} />
-      <Input
-        label="Fecha del abono"
-        type="date"
-        required
-        value={date}
-        onChange={(event) => setDate(event.target.value)}
-      />
+      <DateWithToday label="Fecha del abono" value={date} onChange={setDate} />
       <Select
         label="Método de pago"
         value={method}
@@ -576,12 +605,10 @@ export function CashReturnDialog({
           },
         ]}
       />
-      <Input
+      <DateWithToday
         label="Fecha de la devolución"
-        type="date"
-        required
         value={returnDate}
-        onChange={(event) => setReturnDate(event.target.value)}
+        onChange={setReturnDate}
       />
       <Select
         label="Método de la devolución"

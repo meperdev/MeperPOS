@@ -776,19 +776,21 @@ export default function ExpensesPage() {
                               </p>
                             )}
                           </div>
-                          <button
-                            type="button"
-                            aria-label="Ver detalle"
-                            title="Ver detalle"
-                            onClick={() => setDetailExpense(expense)}
-                            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                          >
-                            <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <RowActions
-                            label="Más acciones"
-                            items={actionsFor(expense, isPaid, paymentButtonLabel)}
-                          />
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              aria-label="Ver detalle"
+                              title="Ver detalle"
+                              onClick={() => setDetailExpense(expense)}
+                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
+                            >
+                              <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                            </button>
+                            <RowActions
+                              label="Más acciones"
+                              items={actionsFor(expense, isPaid, paymentButtonLabel)}
+                            />
+                          </div>
 
                         </div>
                       </div>

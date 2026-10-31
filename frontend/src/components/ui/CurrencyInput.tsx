@@ -38,7 +38,11 @@ function digitsFromValue(v: number | string | undefined): string {
   // "1500000" and displays 100x the real amount. A blank input stays blank
   // instead of collapsing to a displayed "0".
   if (typeof v === "string" && v.trim() === "") return "";
-  return toDigits(String(toFiniteNumber(v)));
+  const numeric = toFiniteNumber(v);
+  // A zero is "nothing typed yet" in a money field; leaving it on screen makes
+  // the caret fight the digit and reads like a value the user chose.
+  if (numeric === 0) return "";
+  return toDigits(String(numeric));
 }
 
 /**
