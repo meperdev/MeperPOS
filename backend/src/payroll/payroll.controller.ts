@@ -24,6 +24,7 @@ import { OrganizationRequiredGuard } from '../common/guards/organization-require
 import { OrganizationStatusGuard } from '../common/guards/organization-status.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
+import { CorrectPayrollGroupInstallmentDto } from './dto/correct-payroll-group-installment.dto';
 import { CorrectPayrollPeriodInstallmentDto } from './dto/correct-payroll-period-installment.dto';
 import { CreatePayrollCashReturnDto } from './dto/create-payroll-cash-return.dto';
 import { CreatePayrollGroupDto } from './dto/create-payroll-group.dto';
@@ -31,6 +32,7 @@ import { CreatePayrollGroupInstallmentDto } from './dto/create-payroll-group-ins
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
 import { CreatePayrollPeriodInstallmentDto } from './dto/create-payroll-period-installment.dto';
 import { PayrollCashReturnService } from './payroll-cash-return.service';
+import { PayrollGroupInstallmentCorrectionService } from './payroll-group-installment-correction.service';
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
 import { PayrollGroupsService } from './payroll-groups.service';
 import { PayrollObligationsService } from './payroll-obligations.service';
@@ -78,6 +80,7 @@ export class PayrollController {
     private readonly groups: PayrollGroupsService,
     private readonly periodInstallments: PayrollPeriodInstallmentsService,
     private readonly groupInstallments: PayrollGroupInstallmentsService,
+    private readonly groupCorrections: PayrollGroupInstallmentCorrectionService,
     private readonly corrections: PayrollPeriodInstallmentCorrectionService,
     private readonly cashReturns: PayrollCashReturnService,
     private readonly obligations: PayrollObligationsService,
@@ -127,6 +130,17 @@ export class PayrollController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.groupInstallments.create(dto, this.tenant(user), user);
+  }
+
+  // Revises the recorded amount of one still-pending grouped installment in place,
+  // keeping its cash identity and append-only evidence. A correction that exactly
+  // completes the payment applies its stored expense choice.
+  @Post('group-installments/correct')
+  correctGroupInstallment(
+    @PayrollBody(payrollBodyPipe) dto: CorrectPayrollGroupInstallmentDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.groupCorrections.correct(dto, this.tenant(user), user);
   }
 
   @Post('period-installments/correct')

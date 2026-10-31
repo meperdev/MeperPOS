@@ -13,6 +13,7 @@ import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-inst
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
 import { PayrollCashReturnService } from './payroll-cash-return.service';
+import { PayrollGroupInstallmentCorrectionService } from './payroll-group-installment-correction.service';
 
 // The completion expense is now written inside the installment transactions, and
 // cash-flow reports exclude linked expense payments while counting payroll
@@ -30,6 +31,9 @@ import { PayrollCashReturnService } from './payroll-cash-return.service';
     PayrollGroupsService,
     PayrollPeriodInstallmentsService,
     PayrollGroupInstallmentsService,
+    // Revises the recorded amount of one pending grouped installment in place and
+    // reapplies the plan to the installments registered after it.
+    PayrollGroupInstallmentCorrectionService,
     PayrollPeriodInstallmentCorrectionService,
     // Read-only: the obligations route projects persisted facts and the
     // server-computed paid/balance/completion summary. It writes nothing.

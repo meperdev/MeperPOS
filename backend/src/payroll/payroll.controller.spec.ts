@@ -21,6 +21,7 @@ import { OrganizationStatusGuard } from '../common/guards/organization-status.gu
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayrollExpenseCategoryService } from './payroll-expense-category.service';
+import { PayrollGroupInstallmentCorrectionService } from './payroll-group-installment-correction.service';
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
 import { PayrollGroupsService } from './payroll-groups.service';
 import { PayrollModule } from './payroll.module';
@@ -34,6 +35,7 @@ const periods = { create: jest.fn() };
 const groups = { create: jest.fn() };
 const periodInstallments = { create: jest.fn() };
 const groupInstallments = { create: jest.fn() };
+const groupCorrections = { correct: jest.fn() };
 const corrections = { correct: jest.fn() };
 const cashReturns = { create: jest.fn() };
 const prisma = {
@@ -158,6 +160,25 @@ const routeCases = [
       amount: 120,
     },
   },
+  {
+    name: 'POST payroll/group-installments/correct',
+    method: 'post',
+    path: '/api/payroll/group-installments/correct',
+    routePath: 'group-installments/correct',
+    invoke: groupCorrections.correct,
+    body: {
+      employeeId: 'emp-a',
+      obligationId: 'obligation-a',
+      installmentId: 'installment-a',
+      amount: '120.00',
+    },
+    invalid: {
+      employeeId: 'emp-a',
+      obligationId: 'obligation-a',
+      installmentId: 'installment-a',
+      amount: 120,
+    },
+  },
 ] as const;
 
 const forbiddenRoles = [
@@ -250,6 +271,8 @@ describe('payroll HTTP boundary', () => {
       .useValue(periodInstallments)
       .overrideProvider(PayrollGroupInstallmentsService)
       .useValue(groupInstallments)
+      .overrideProvider(PayrollGroupInstallmentCorrectionService)
+      .useValue(groupCorrections)
       .overrideProvider(PayrollPeriodInstallmentCorrectionService)
       .useValue(corrections)
       .overrideProvider(PayrollCashReturnService)
@@ -518,6 +541,7 @@ describe('payroll module wiring', () => {
       PayrollGroupsService,
       PayrollPeriodInstallmentsService,
       PayrollGroupInstallmentsService,
+      PayrollGroupInstallmentCorrectionService,
       PayrollPeriodInstallmentCorrectionService,
       PayrollObligationsService,
     ]) {
