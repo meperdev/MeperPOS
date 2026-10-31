@@ -160,6 +160,16 @@ const payrollObligationSelect = {
           createdAt: true,
         },
       },
+      // A returned installment is shown as returned; the UI must not offer a
+      // second return for the same real cash.
+      cashReturn: {
+        select: {
+          id: true,
+          amount: true,
+          returnDate: true,
+          returnMethod: true,
+        },
+      },
     },
   },
   shiftMemberships: {
@@ -202,6 +212,12 @@ type PayrollObligationProjection = {
       method: PaymentMethod;
       createdAt: Date;
     };
+    cashReturn: {
+      id: string;
+      amount: Prisma.Decimal;
+      returnDate: Date;
+      returnMethod: PaymentMethod;
+    } | null;
   }[];
   shiftMemberships: {
     id: string;

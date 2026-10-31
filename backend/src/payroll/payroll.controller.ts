@@ -25,10 +25,12 @@ import { OrganizationStatusGuard } from '../common/guards/organization-status.gu
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { CorrectPayrollPeriodInstallmentDto } from './dto/correct-payroll-period-installment.dto';
+import { CreatePayrollCashReturnDto } from './dto/create-payroll-cash-return.dto';
 import { CreatePayrollGroupDto } from './dto/create-payroll-group.dto';
 import { CreatePayrollGroupInstallmentDto } from './dto/create-payroll-group-installment.dto';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
 import { CreatePayrollPeriodInstallmentDto } from './dto/create-payroll-period-installment.dto';
+import { PayrollCashReturnService } from './payroll-cash-return.service';
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
 import { PayrollGroupsService } from './payroll-groups.service';
 import { PayrollObligationsService } from './payroll-obligations.service';
@@ -77,6 +79,7 @@ export class PayrollController {
     private readonly periodInstallments: PayrollPeriodInstallmentsService,
     private readonly groupInstallments: PayrollGroupInstallmentsService,
     private readonly corrections: PayrollPeriodInstallmentCorrectionService,
+    private readonly cashReturns: PayrollCashReturnService,
     private readonly obligations: PayrollObligationsService,
   ) {}
 
@@ -132,6 +135,17 @@ export class PayrollController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.corrections.correct(dto, this.tenant(user), user);
+  }
+
+  // Records money an employee actually gave back for one completed installment,
+  // on the day and by the method it came back. Append-only: it never rewrites the
+  // paid installment, its outflow or its linked expense.
+  @Post('cash-returns')
+  createCashReturn(
+    @PayrollBody(payrollBodyPipe) dto: CreatePayrollCashReturnDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.cashReturns.create(dto, this.tenant(user), user);
   }
 
   // Read-only projection: persisted payroll facts (amounts, dates, version), their

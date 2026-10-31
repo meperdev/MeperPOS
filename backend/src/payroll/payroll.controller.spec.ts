@@ -28,12 +28,14 @@ import { PayrollObligationsService } from './payroll-obligations.service';
 import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-installment-correction.service';
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
+import { PayrollCashReturnService } from './payroll-cash-return.service';
 
 const periods = { create: jest.fn() };
 const groups = { create: jest.fn() };
 const periodInstallments = { create: jest.fn() };
 const groupInstallments = { create: jest.fn() };
 const corrections = { correct: jest.fn() };
+const cashReturns = { create: jest.fn() };
 const prisma = {
   payrollObligation: { findMany: jest.fn() },
   $transaction: jest.fn(),
@@ -42,6 +44,28 @@ const prisma = {
 // Every route this controller may expose. Adding an expense/writer route must
 // fail this table before it can reach production.
 const routeCases = [
+  {
+    name: 'POST payroll/cash-returns',
+    method: 'post',
+    path: '/api/payroll/cash-returns',
+    routePath: 'cash-returns',
+    invoke: cashReturns.create,
+    body: {
+      employeeId: 'emp-a',
+      obligationId: 'obligation-a',
+      installmentId: 'installment-a',
+      returnDate: '2026-01-20',
+      returnMethod: 'TRANSFER',
+    },
+    invalid: {
+      employeeId: 'emp-a',
+      obligationId: 'obligation-a',
+      installmentId: 'installment-a',
+      returnDate: '2026-01-20',
+      returnMethod: 'TRANSFER',
+      amount: '100.00',
+    },
+  },
   {
     name: 'POST payroll/periods',
     method: 'post',
@@ -171,6 +195,14 @@ const obligationSelect = {
           createdAt: true,
         },
       },
+      cashReturn: {
+        select: {
+          id: true,
+          amount: true,
+          returnDate: true,
+          returnMethod: true,
+        },
+      },
     },
   },
   shiftMemberships: {
@@ -220,6 +252,8 @@ describe('payroll HTTP boundary', () => {
       .useValue(groupInstallments)
       .overrideProvider(PayrollPeriodInstallmentCorrectionService)
       .useValue(corrections)
+      .overrideProvider(PayrollCashReturnService)
+      .useValue(cashReturns)
       .overrideGuard(JwtAuthGuard)
       .useValue({
         canActivate: (context: ExecutionContext) => {

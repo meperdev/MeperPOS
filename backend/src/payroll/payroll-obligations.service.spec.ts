@@ -61,6 +61,14 @@ const select = {
           createdAt: true,
         },
       },
+      cashReturn: {
+        select: {
+          id: true,
+          amount: true,
+          returnDate: true,
+          returnMethod: true,
+        },
+      },
     },
   },
   shiftMemberships: {

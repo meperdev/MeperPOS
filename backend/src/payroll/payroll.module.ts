@@ -12,6 +12,7 @@ import { PayrollObligationsService } from './payroll-obligations.service';
 import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-installment-correction.service';
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
+import { PayrollCashReturnService } from './payroll-cash-return.service';
 
 // The completion expense is now written inside the installment transactions, and
 // cash-flow reports exclude linked expense payments while counting payroll
@@ -33,6 +34,8 @@ import { PayrollPeriodsService } from './payroll-periods.service';
     // Read-only: the obligations route projects persisted facts and the
     // server-computed paid/balance/completion summary. It writes nothing.
     PayrollObligationsService,
+    // Append-only: records a real returned installment on its own date and method.
+    PayrollCashReturnService,
     OrganizationRequiredGuard,
     OrganizationStatusGuard,
   ],
