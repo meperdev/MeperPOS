@@ -15,6 +15,7 @@ import { validateSync } from 'class-validator';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePayrollGroupDto } from './dto/create-payroll-group.dto';
+import { throwPayrollTransactionError } from './payroll-transaction-error';
 
 @Injectable()
 export class PayrollGroupsService {
@@ -56,7 +57,7 @@ export class PayrollGroupsService {
           SELECT "id" FROM "EmployeeShift"
           WHERE "organizationId" = ${organizationId}
             AND "employeeId" = ${dto.employeeId}
-            AND "id" IN (${Prisma.join([...dto.shiftIds].sort((a, b) => a.localeCompare(b)))})
+            AND "id" IN (${Prisma.join([...dto.shiftIds].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)))})
           ORDER BY "id" FOR UPDATE`;
         await tx.$queryRaw(lockShifts);
         const shifts = await tx.employeeShift.findMany({
@@ -128,7 +129,7 @@ export class PayrollGroupsService {
             'Conflicto concurrente al crear el grupo',
           );
       }
-      throw error;
+      throwPayrollTransactionError(error);
     }
   }
 }

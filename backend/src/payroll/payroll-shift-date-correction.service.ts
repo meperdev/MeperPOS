@@ -73,7 +73,7 @@ export class PayrollShiftDateCorrectionService {
         });
         const obligationIds = [
           ...new Set(before.map((m) => m.obligationId)),
-        ].sort((a, b) => a.localeCompare(b));
+        ].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
         if (obligationIds.length) {
           await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "PayrollObligation"
             WHERE "organizationId" = ${organizationId} AND "employeeId" = ${employeeId}

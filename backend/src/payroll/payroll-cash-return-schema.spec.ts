@@ -162,13 +162,15 @@ describe('payroll cash return storage foundation', () => {
     expect(sql).not.toMatch(/\bDROP\b/i);
   });
 
-  it('is the newest migration and is the only one that mentions the return table', () => {
+  it('follows its prerequisite and uniquely defines the return table', () => {
     const dirs = readdirSync(migrationsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort();
-    expect(dirs[dirs.length - 1]).toBe('20261009260000_payroll_cash_return');
-    expect(dirs[dirs.length - 2]).toBe('20261009250000_expense_label_index');
+    const prerequisite = dirs.indexOf('20261009250000_expense_label_index');
+    const returnMigration = dirs.indexOf('20261009260000_payroll_cash_return');
+    expect(prerequisite).toBeGreaterThanOrEqual(0);
+    expect(returnMigration).toBeGreaterThan(prerequisite);
     const declared = dirs
       .filter((dir) =>
         readFileSync(

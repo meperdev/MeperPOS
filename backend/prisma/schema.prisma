@@ -198,6 +198,13 @@ model PayrollInstallment {
   employeeId     String
   obligationId   String
   outflowId      String
+  // Registration order inside the obligation, assigned by the grouped writer
+  // while it holds the employee -> obligation lock. Nullable on purpose: rows
+  // created before this column existed keep NULL because their order was never
+  // persisted and must never be inferred; corrections must fail closed on it.
+  // Positive and unique per obligation/tenant/employee when set. Fixed-period
+  // installments leave it NULL (their revision history is sequenced separately).
+  sequence       Int?
   createdAt      DateTime           @default(now())
   obligation     PayrollObligation  @relation(fields: [obligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_obligation_fkey")
   outflow        PayrollCashOutflow @relation(fields: [outflowId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_outflow_fkey")
@@ -208,6 +215,7 @@ model PayrollInstallment {
   @@unique([id, obligationId, outflowId, organizationId, employeeId], map: "PayrollInstallment_revision_target_key")
   @@unique([id, obligationId, organizationId, employeeId], map: "PayrollInstallment_allocation_target_key")
   @@unique([obligationId, outflowId], map: "PayrollInstallment_obligation_outflow_key")
+  @@unique([obligationId, organizationId, employeeId, sequence], map: "PayrollInstallment_obligation_sequence_key")
   @@index([outflowId, organizationId, employeeId], map: "PayrollInstallment_outflow_idx")
 }
 

@@ -21,6 +21,7 @@ import type { PayrollObligationCompletionFacts } from './payroll-obligation-comp
 import { planPayrollObligationCompletion } from './payroll-obligation-completion';
 import { CreatePayrollGroupInstallmentDto } from './dto/create-payroll-group-installment.dto';
 import { validatePayrollGroupHistory } from './payroll-group-history';
+import { throwPayrollTransactionError } from './payroll-transaction-error';
 
 @Injectable()
 export class PayrollGroupInstallmentsService {
@@ -54,7 +55,7 @@ export class PayrollGroupInstallmentsService {
     )
       throw new BadRequestException('Datos de abono inválidos');
 
-    return this.prisma.$transaction(async (tx) => {
+    const transaction = this.prisma.$transaction(async (tx) => {
       // Every current and future payroll writer must use employee -> sorted
       // obligations -> sorted shifts; inactive employees may receive payments.
       const employees = await tx.$queryRaw<{ id: string }[]>`
@@ -75,8 +76,8 @@ export class PayrollGroupInstallmentsService {
         },
         select: { id: true, shiftId: true },
       });
-      const shiftIds = [...new Set(before.map((m) => m.shiftId))].sort((a, b) =>
-        a.localeCompare(b),
+      const shiftIds = [...new Set(before.map((m) => m.shiftId))].sort(
+        (a, b) => (a < b ? -1 : a > b ? 1 : 0),
       );
       if (!shiftIds.length || shiftIds.length !== before.length)
         throw new ConflictException('Grupo inconsistente');
@@ -84,9 +85,11 @@ export class PayrollGroupInstallmentsService {
         SELECT "id" FROM "EmployeeShift"
         WHERE "organizationId" = ${organizationId} AND "employeeId" = ${dto.employeeId}
           AND "id" IN (${Prisma.join(shiftIds)}) ORDER BY "id" FOR UPDATE`);
+      const lockedIds = new Set(locked.map((shift) => shift.id));
       if (
         locked.length !== shiftIds.length ||
-        locked.some((s, i) => s.id !== shiftIds[i])
+        lockedIds.size !== shiftIds.length ||
+        shiftIds.some((id) => !lockedIds.has(id))
       )
         throw new ConflictException('Turnos modificados');
       const group = await tx.payrollObligation.findFirst({
@@ -154,6 +157,12 @@ export class PayrollGroupInstallmentsService {
       } catch {
         throw new ConflictException('Saldo o historial de grupo inconsistente');
       }
+      const sequence = await this.nextRegistrationSequence(
+        tx,
+        organizationId,
+        dto.employeeId,
+        dto.obligationId,
+      );
       const outflow = await tx.payrollCashOutflow.create({
         data: {
           organizationId,
@@ -170,6 +179,7 @@ export class PayrollGroupInstallmentsService {
           employeeId: dto.employeeId,
           obligationId: dto.obligationId,
           outflowId: outflow.id,
+          sequence,
         },
       });
       const membershipByShift = new Map(
@@ -255,6 +265,39 @@ export class PayrollGroupInstallmentsService {
         status,
       };
     });
+    return transaction.catch((error: unknown) => {
+      // The scoped unique index is the concurrency backstop for a writer that did
+      // not take the obligation lock; report it as a conflict, but never hide a
+      // uniqueness failure from another origin.
+      if (isRegistrationSequenceConflict(error))
+        throw new ConflictException('Conflicto al registrar el abono');
+      throwPayrollTransactionError(error);
+    });
+  }
+
+  /**
+   * Next positive registration order for a grouped installment.
+   *
+   * Runs inside the caller's transaction while it already holds the
+   * employee -> obligation row locks, which is the ordering every payroll writer
+   * must follow, so cooperating writers serialise here. The scoped unique index
+   * below is the backstop for anyone else. Legacy installments keep a NULL
+   * sequence: they are never numbered, because their order cannot be proven.
+   */
+  private async nextRegistrationSequence(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    employeeId: string,
+    obligationId: string,
+  ): Promise<number> {
+    const highest = await tx.payrollInstallment.aggregate({
+      where: { organizationId, employeeId, obligationId },
+      _max: { sequence: true },
+    });
+    const sequence = (highest._max?.sequence ?? 0) + 1;
+    if (sequence > 2147483647)
+      throw new ConflictException('Registro de abonos no disponible');
+    return sequence;
   }
 
   /**
@@ -299,4 +342,20 @@ export class PayrollGroupInstallmentsService {
       : undefined;
     await writePayrollCompletionExpense(tx, { ...scope, category, facts });
   }
+}
+
+// Only the scoped registration-sequence key counts as a sequence conflict; every
+// other uniqueness failure keeps its original origin.
+function isRegistrationSequenceConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code !== 'P2002') return false;
+  const target: unknown = error.meta?.target;
+  return (
+    target === 'PayrollInstallment_obligation_sequence_key' ||
+    (Array.isArray(target) &&
+      target.length === 4 &&
+      ['obligationId', 'organizationId', 'employeeId', 'sequence'].every(
+        (field) => target.includes(field),
+      ))
+  );
 }
