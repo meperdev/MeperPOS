@@ -8,6 +8,7 @@ import {
 import { WhatsAppSessionService } from './whatsapp-session.service';
 import { WhatsAppConnectionsService } from './whatsapp-connections.service';
 import { WhatsAppEventsService } from './whatsapp-events.service';
+import { WhatsAppIngestionService } from './whatsapp-ingestion.service';
 import { WHATSAPP_PROVIDER } from './whatsapp-provider';
 import { WahaAdapter } from './waha-adapter';
 
@@ -21,6 +22,7 @@ import { WahaAdapter } from './waha-adapter';
     WhatsAppSessionService,
     WhatsAppConnectionsService,
     WhatsAppEventsService,
+    WhatsAppIngestionService,
     {
       provide: WAHA_WEBHOOK_KEY,
       useFactory: () => process.env.WAHA_WEBHOOK_HMAC_KEY,

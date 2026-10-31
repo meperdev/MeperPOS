@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppConnectionsService } from './whatsapp-connections.service';
+import {
+  DuplicateWhatsAppMessageError,
+  WhatsAppIngestionService,
+  type WhatsAppEventPayload,
+} from './whatsapp-ingestion.service';
 
 export type WhatsAppRoute = 'commercial' | 'intelligence';
 
@@ -28,17 +33,21 @@ export class WhatsAppEventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly connections: WhatsAppConnectionsService,
+    private readonly ingestion: WhatsAppIngestionService,
   ) {}
 
   /**
    * Resolve the channel from the persisted connection, never from the session
    * name alone, then deduplicate durably before anything acts on the event.
-   * Nothing here stores message content: this stage only proves routing.
+   * A commercial event is recorded in the same transaction as its receipt, so a
+   * crash cannot leave it marked processed with nothing stored; the central
+   * channel has no handler yet and only spends its deduplication row.
    */
   async handle(
     sessionName: string,
     providerEventId: string,
     eventType: string,
+    payload: WhatsAppEventPayload,
   ): Promise<WhatsAppDispatch> {
     const connection = await this.connections.findBySessionName(sessionName);
     if (!connection) {
@@ -53,15 +62,46 @@ export class WhatsAppEventsService {
       return { status: 'unsupported_event' };
     }
 
+    if (route === 'intelligence') {
+      try {
+        await this.prisma.whatsAppProcessedEvent.create({
+          data: {
+            connectionId: connection.id,
+            providerEventId,
+            eventType,
+          },
+        });
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+        this.logger.warn({ event: 'whatsapp_event', outcome: 'duplicate' });
+        return { status: 'duplicate', route };
+      }
+      return { status: 'recorded', route };
+    }
+
     try {
-      await this.prisma.whatsAppProcessedEvent.create({
-        data: {
-          connectionId: connection.id,
-          providerEventId,
-          eventType,
-        },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.whatsAppProcessedEvent.create({
+          data: {
+            connectionId: connection.id,
+            providerEventId,
+            eventType,
+          },
+        });
+        await this.ingestion.ingest(tx, connection, {
+          providerMessageId: providerEventId,
+          payload,
+        });
       });
     } catch (error) {
+      if (error instanceof DuplicateWhatsAppMessageError) {
+        // The transaction rolled back, so nothing was recorded for this receipt.
+        this.logger.warn({
+          event: 'whatsapp_event',
+          outcome: 'duplicate_message',
+        });
+        return { status: 'duplicate', route };
+      }
       if (!isUniqueViolation(error)) throw error;
       this.logger.warn({ event: 'whatsapp_event', outcome: 'duplicate' });
       return { status: 'duplicate', route };

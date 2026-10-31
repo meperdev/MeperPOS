@@ -31,7 +31,15 @@ const envelope = (session = SESSION, id: unknown = 'true_111@c.us_AAAA') =>
     event: 'message.any',
     session,
     engine: 'WEBJS',
-    payload: { id, from: '111@c.us', fromMe: false, body: 'hola' },
+    payload: {
+      id,
+      from: '111@c.us',
+      fromMe: false,
+      source: 'app',
+      body: 'hola',
+      timestamp: 1_700_000_000,
+      _data: { notifyName: 'never-forwarded' },
+    },
   });
 
 const sign = (body: string, master = MASTER, session = SESSION): string =>
@@ -75,7 +83,50 @@ describe('WAHA webhook HTTP boundary', () => {
         SESSION,
         'true_111@c.us_AAAA',
         'message.any',
+        {
+          from: '111@c.us',
+          fromMe: false,
+          source: 'app',
+          body: 'hola',
+          timestamp: 1_700_000_000,
+        },
       );
+    });
+  });
+
+  it('forwards only the five message fields, never the provider payload', async () => {
+    await withApp(async (app) => {
+      const body = envelope();
+      await post(app).set('X-Webhook-Hmac', sign(body)).send(body);
+
+      const forwarded = handle.mock.calls[0][3] as Record<string, unknown>;
+      expect(Object.keys(forwarded).sort()).toEqual([
+        'body',
+        'from',
+        'fromMe',
+        'source',
+        'timestamp',
+      ]);
+      expect(JSON.stringify(forwarded)).not.toContain('never-forwarded');
+    });
+  });
+
+  it('forwards undefined message fields when the payload carries none', async () => {
+    await withApp(async (app) => {
+      const body = JSON.stringify({
+        event: 'message.any',
+        session: SESSION,
+        payload: { id: 'true_111@c.us_AAAA' },
+      });
+      await post(app).set('X-Webhook-Hmac', sign(body)).send(body);
+
+      expect(handle.mock.calls[0][3]).toEqual({
+        from: undefined,
+        fromMe: undefined,
+        source: undefined,
+        body: undefined,
+        timestamp: undefined,
+      });
     });
   });
 
