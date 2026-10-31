@@ -5,6 +5,14 @@ import { Prisma } from '@prisma/client';
 // reject empty or duplicate shift IDs, and validate dates and per-shift overpayment
 // separately. This function performs no reads or writes and does not implement
 // correction or release semantics.
+//
+// Allocations are append-only evidence, so a corrected installment keeps the
+// applications it replaced. An allocation with any void is superseded: it stays
+// in history for audit but contributes nothing to the cash reconciliation nor to
+// the effective plan handed to the allocator. Cash must therefore equal the sum
+// of the *effective* applications of each installment. Anything that cannot be
+// resolved into exactly one effective application per membership is rejected
+// instead of being guessed, because a wrong interpretation moves money.
 type Membership = {
   id: string;
   shiftId: string;
@@ -95,17 +103,23 @@ export function validatePayrollGroupHistory({
     cashIds.add(installment.outflowId);
     const cash = cents(installment.outflow.amount, '36520589999963479.41');
     let applied = 0n;
-    const seen = new Set<string>();
+    // At most one effective application per membership: a correction voids the
+    // replaced row and adds its successor in the same installment.
+    const effectiveMemberships = new Set<string>();
     for (const allocation of installment.allocations) {
       const membership = byId.get(allocation.membershipId);
-      if (
-        !membership ||
-        seen.has(allocation.membershipId) ||
-        allocation.voids.length
-      )
+      // One allocation can be superseded once. Unknown targets and repeated voids
+      // are ambiguous evidence, voided or not.
+      if (!membership || allocation.voids.length > 1)
         throw new ConflictException('Aplicación inconsistente');
-      seen.add(allocation.membershipId);
-      applied += cents(allocation.amount, '9999999999.99');
+      // Superseded amounts are validated too, so corrupt evidence never passes as
+      // history merely because it no longer counts.
+      const amount = cents(allocation.amount, '9999999999.99');
+      if (allocation.voids.length !== 0) continue;
+      if (effectiveMemberships.has(allocation.membershipId))
+        throw new ConflictException('Aplicación inconsistente');
+      effectiveMemberships.add(allocation.membershipId);
+      applied += amount;
       if (applied > cash)
         throw new ConflictException('Aplicación excede abono');
       allocations.push({
