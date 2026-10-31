@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import {
   DuplicateWhatsAppMessageError,
   MAX_BODY_LENGTH,
+  parseContactJid,
   WhatsAppIngestionService,
   type WhatsAppEvent,
   type WhatsAppEventPayload,
@@ -79,6 +80,57 @@ function setup(conversation: Partial<ConversationRow> = {}) {
 }
 
 describe('WhatsAppIngestionService', () => {
+  describe('provider chat id parsing', () => {
+    it.each([
+      [
+        '573001112233@c.us',
+        { jid: '573001112233@c.us', digits: '573001112233', kind: 'phone' },
+      ],
+      [
+        '573001112233@s.whatsapp.net',
+        {
+          jid: '573001112233@s.whatsapp.net',
+          digits: '573001112233',
+          kind: 'phone',
+        },
+      ],
+      [
+        '573001112233',
+        { jid: '573001112233', digits: '573001112233', kind: 'phone' },
+      ],
+      [
+        '145805600096353@lid',
+        {
+          jid: '145805600096353@lid',
+          digits: '145805600096353',
+          kind: 'lid',
+        },
+      ],
+      [
+        '120363000000000000@g.us',
+        {
+          jid: '120363000000000000@g.us',
+          digits: '120363000000000000',
+          kind: 'group',
+        },
+      ],
+      [
+        'status@broadcast',
+        { jid: 'status@broadcast', digits: '', kind: 'unknown' },
+      ],
+      ['@c.us', { jid: '@c.us', digits: '', kind: 'unknown' }],
+    ])('parses %s without losing its kind', (from, expected) => {
+      expect(parseContactJid(from)).toEqual(expected);
+    });
+
+    it.each([[undefined], [null], [42], [''], ['   ']])(
+      'returns null for a sender that is not a non-empty string (%s)',
+      (from) => {
+        expect(parseContactJid(from)).toBeNull();
+      },
+    );
+  });
+
   describe('contact classification', () => {
     it('classifies an internal number as INTERNAL and never as a client', async () => {
       const { tx, ingest, conversationCreated } = setup();
@@ -89,7 +141,10 @@ describe('WhatsAppIngestionService', () => {
       await ingest();
 
       const { create } = conversationCreated();
-      expect(create).toMatchObject({ contactKind: 'INTERNAL' });
+      expect(create).toMatchObject({
+        contactKind: 'INTERNAL',
+        contactJid: '573001112233@c.us',
+      });
       expect(create).not.toHaveProperty('customerId');
       expect(tx.customer.findFirst).not.toHaveBeenCalled();
     });
@@ -116,10 +171,59 @@ describe('WhatsAppIngestionService', () => {
       expect(conversationCreated().create).toMatchObject({
         contactKind: 'CLIENT',
         customerId: 'customer-1',
+        contactJid: '573001112233@c.us',
       });
       expect(tx.customer.findFirst).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', phone: '573001112233' },
         select: { id: true },
+      });
+    });
+
+    it('never treats a LID as a customer or an internal contact', async () => {
+      const { tx, ingest, conversationCreated } = setup();
+      tx.whatsAppInternalContact.findFirst.mockResolvedValue({
+        id: 'internal-1',
+      });
+      tx.customer.findFirst.mockResolvedValue({ id: 'customer-1' });
+
+      await ingest(event({ from: '145805600096353@lid' }));
+
+      expect(tx.whatsAppInternalContact.findFirst).not.toHaveBeenCalled();
+      expect(tx.customer.findFirst).not.toHaveBeenCalled();
+      const { where, create } = conversationCreated();
+      expect(where).toEqual({
+        connectionId_contactPhone: {
+          connectionId: 'conn-1',
+          contactPhone: '145805600096353',
+        },
+      });
+      expect(create).toMatchObject({
+        contactPhone: '145805600096353',
+        contactJid: '145805600096353@lid',
+        contactKind: 'UNKNOWN',
+      });
+      expect(create).not.toHaveProperty('customerId');
+    });
+
+    it.each([
+      ['573001112233@c.us', '573001112233@c.us'],
+      ['573001112233@s.whatsapp.net', '573001112233@s.whatsapp.net'],
+      ['145805600096353@lid', '145805600096353@lid'],
+    ])('persists the raw contactJid for %s', async (from, expected) => {
+      const { ingest, conversationCreated } = setup();
+
+      await ingest(event({ from }));
+
+      expect(conversationCreated().create.contactJid).toBe(expected);
+    });
+
+    it('reconciles the raw contactJid on an existing conversation', async () => {
+      const { ingest, conversationCreated } = setup();
+
+      await ingest(event({ from: '573001112233@s.whatsapp.net' }));
+
+      expect(conversationCreated().update).toEqual({
+        contactJid: '573001112233@s.whatsapp.net',
       });
     });
 
@@ -148,6 +252,7 @@ describe('WhatsAppIngestionService', () => {
       expect(create).toMatchObject({
         connectionId: 'conn-1',
         organizationId: 'org-1',
+        contactJid: '573001112233@c.us',
         contactPhone: '573001112233',
       });
     });

@@ -5,6 +5,7 @@ import { WhatsAppConnectionsService } from './whatsapp-connections.service';
 import {
   DuplicateWhatsAppMessageError,
   normaliseContactPhone,
+  parseContactJid,
   WhatsAppIngestionService,
   type WhatsAppEventPayload,
 } from './whatsapp-ingestion.service';
@@ -15,6 +16,7 @@ export type WhatsAppRoute = 'commercial' | 'intelligence';
 export type WhatsAppDispatch =
   | { status: 'unknown_session' }
   | { status: 'unsupported_event' }
+  | { status: 'ignored_non_conversational' }
   | { status: 'duplicate'; route: WhatsAppRoute }
   | {
       status: 'recorded';
@@ -77,6 +79,19 @@ export class WhatsAppEventsService {
 
     if (!SUPPORTED_EVENTS.has(eventType)) {
       return { status: 'unsupported_event' };
+    }
+
+    // A group chat or an id we cannot classify is not a conversation with one
+    // person. This check sits before both the receipt and the transaction on
+    // purpose: group traffic must not fill the deduplication table, must not
+    // create a conversation, and is never logged with its identifier.
+    const sender = parseContactJid(payload.from);
+    if (!sender || (sender.kind !== 'phone' && sender.kind !== 'lid')) {
+      this.logger.warn({
+        event: 'whatsapp_event',
+        outcome: 'ignored_non_conversational',
+      });
+      return { status: 'ignored_non_conversational' };
     }
 
     if (route === 'intelligence') {
