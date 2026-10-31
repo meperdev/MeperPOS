@@ -31,6 +31,7 @@ import { CreatePayrollGroupDto } from './dto/create-payroll-group.dto';
 import { CreatePayrollGroupInstallmentDto } from './dto/create-payroll-group-installment.dto';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
 import { CreatePayrollPeriodInstallmentDto } from './dto/create-payroll-period-installment.dto';
+import { CreatePayrollReplacementPaymentDto } from './dto/create-payroll-replacement-payment.dto';
 import { PayrollCashReturnService } from './payroll-cash-return.service';
 import { PayrollGroupInstallmentCorrectionService } from './payroll-group-installment-correction.service';
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
@@ -39,6 +40,7 @@ import { PayrollObligationsService } from './payroll-obligations.service';
 import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-installment-correction.service';
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
+import { PayrollReplacementPaymentService } from './payroll-replacement-payment.service';
 
 // Custom parameters bypass the global pipe's implicit conversion. The local
 // pipe validates the original JSON with the same whitelist policy instead, so a
@@ -84,6 +86,7 @@ export class PayrollController {
     private readonly corrections: PayrollPeriodInstallmentCorrectionService,
     private readonly cashReturns: PayrollCashReturnService,
     private readonly obligations: PayrollObligationsService,
+    private readonly replacements: PayrollReplacementPaymentService,
   ) {}
 
   // Tenant and role come from the authenticated request only. The payroll
@@ -160,6 +163,17 @@ export class PayrollController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.cashReturns.create(dto, this.tenant(user), user);
+  }
+
+  // Creates a NEW pending payment for a completed one, referencing the valid
+  // installments of the completed payment so their cash counts as paid without a
+  // new cash outflow (S6/S7, L327, L338). The completed payment is never edited.
+  @Post('replacement-payments')
+  createReplacementPayment(
+    @PayrollBody(payrollBodyPipe) dto: CreatePayrollReplacementPaymentDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.replacements.create(dto, this.tenant(user), user);
   }
 
   // Read-only projection: persisted payroll facts (amounts, dates, version), their

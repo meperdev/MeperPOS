@@ -19,6 +19,13 @@ import { writePayrollCompletionExpense } from './payroll-completed-expense-write
 import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.service';
 import type { PayrollObligationCompletionFacts } from './payroll-obligation-completion';
 import { planPayrollObligationCompletion } from './payroll-obligation-completion';
+import type { PayrollOutflowFact } from './payroll-obligation-completion';
+import {
+  payrollMoneyCents,
+  payrollMoneyText,
+  payrollObligationCashOutflowFacts,
+  payrollObligationReferencedCashCents,
+} from './payroll-obligations.service';
 import { CreatePayrollPeriodInstallmentDto } from './dto/create-payroll-period-installment.dto';
 import { throwPayrollTransactionError } from './payroll-transaction-error';
 
@@ -80,6 +87,25 @@ export class PayrollPeriodInstallmentsService {
               },
             },
           },
+          // Cash of the completed payment this one counts as already paid, so a
+          // replacement can reach its corrected total (L327, L338).
+          installmentReferences: {
+            select: {
+              amount: true,
+              sourceInstallment: {
+                select: {
+                  outflow: {
+                    select: {
+                      id: true,
+                      amount: true,
+                      date: true,
+                      method: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       });
       if (
@@ -96,20 +122,49 @@ export class PayrollPeriodInstallmentsService {
       const Decimal = Prisma.Decimal.clone({
         precision: Math.max(20, total.length + 3),
       });
-      let paid = new Decimal(0);
+      let ownPaid = new Decimal(0);
       for (const installment of period.installments) {
         if (installment.outflow._count.installments !== 1)
           throw new ConflictException(
             'Abono compartido requiere protocolo de corrección',
           );
-        paid = paid.plus(installment.outflow.amount.toFixed(2));
-        if (paid.gte(total))
+        ownPaid = ownPaid.plus(installment.outflow.amount.toFixed(2));
+        if (ownPaid.gte(total))
           throw new ConflictException('Saldo de pago inconsistente');
+      }
+      // Referenced installments of a completed payment are already paid cash, so
+      // they reduce the balance payable here (L327/L338) - never by creating a new
+      // outflow for them. A stored reference that disagrees with the live source
+      // cash, or that repeats cash this payment already holds, is refused.
+      let referencedCents: bigint;
+      let cashFacts: PayrollOutflowFact[];
+      const referenceFacts = {
+        installments: period.installments,
+        references: period.installmentReferences,
+      };
+      try {
+        referencedCents = payrollObligationReferencedCashCents(referenceFacts);
+        cashFacts = payrollObligationCashOutflowFacts(referenceFacts);
+      } catch {
+        throw new ConflictException('Historial de referencias inconsistente');
+      }
+      let paid: string;
+      try {
+        // Zero own cash is valid before the first installment; every other amount
+        // must be a positive exact money value.
+        const ownCents = ownPaid.isZero() ? 0n : payrollMoneyCents(ownPaid);
+        const paidCents = ownCents + referencedCents;
+        if (paidCents >= payrollMoneyCents(total))
+          throw new ConflictException('Saldo de pago inconsistente');
+        paid = payrollMoneyText(paidCents);
+      } catch (error) {
+        if (error instanceof ConflictException) throw error;
+        throw new ConflictException('Saldo de pago inconsistente');
       }
       let result: ReturnType<typeof allocatePeriodInstallment>;
       try {
         result = allocatePeriodInstallment(
-          { status: 'pending', total, paid: paid.toFixed(2) },
+          { status: 'pending', total, paid },
           dto.amount,
         );
       } catch {
@@ -153,12 +208,9 @@ export class PayrollPeriodInstallmentsService {
           {
             total: result.total,
             outflows: [
-              ...period.installments.map(({ outflow: previous }) => ({
-                id: previous.id,
-                amount: previous.amount.toFixed(2),
-                date: previous.date.toISOString().slice(0, 10),
-                method: previous.method,
-              })),
+              // Own cash plus the referenced real cash of the completed payment:
+              // the same identities, dates and methods, with no invented outflow.
+              ...cashFacts,
               // The outflow inserted above is part of the completed cash; an
               // expense that omitted it could not equal the obligation total.
               {

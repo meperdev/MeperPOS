@@ -19,6 +19,13 @@ import { writePayrollCompletionExpense } from './payroll-completed-expense-write
 import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.service';
 import type { PayrollObligationCompletionFacts } from './payroll-obligation-completion';
 import { planPayrollObligationCompletion } from './payroll-obligation-completion';
+import type { PayrollOutflowFact } from './payroll-obligation-completion';
+import {
+  payrollMoneyCents,
+  payrollMoneyText,
+  payrollObligationCashOutflowFacts,
+  payrollObligationReferencedCashCents,
+} from './payroll-obligations.service';
 import { CorrectPayrollPeriodInstallmentDto } from './dto/correct-payroll-period-installment.dto';
 import { throwPayrollTransactionError } from './payroll-transaction-error';
 
@@ -97,6 +104,20 @@ export class PayrollPeriodInstallmentCorrectionService {
             _count: { select: { allocations: true } },
             outflow: {
               include: { _count: { select: { installments: true } } },
+            },
+          },
+        },
+        // Cash of the completed payment this one counts as already paid, so a
+        // replacement's remaining installment can complete it (L327, L338).
+        installmentReferences: {
+          select: {
+            amount: true,
+            sourceInstallment: {
+              select: {
+                outflow: {
+                  select: { id: true, amount: true, date: true, method: true },
+                },
+              },
             },
           },
         },
@@ -197,24 +218,52 @@ export class PayrollPeriodInstallmentCorrectionService {
           String(amounts.length + 1).length +
           2,
       });
-      const paid = amounts.reduce(
+      const ownPaid = amounts.reduce(
         (sum, value) => sum.plus(value),
         new Decimal(0),
       );
-      const nextPaid = paid
-        .minus(current.outflow.amount.toFixed(2))
-        .plus(dto.amount);
+      // Referenced installments of a completed payment are already paid cash, so a
+      // replacement's remaining installment can complete it (L327/L338). They are
+      // counted here with the same fail-closed rules as the read routes: a
+      // snapshot that disagrees with the live source cash, or a repeated outflow,
+      // is refused instead of being summed, and no new outflow is created for them.
+      let referencedCents: bigint;
+      let cashFacts: PayrollOutflowFact[];
+      const referenceFacts = {
+        installments: period.installments,
+        references: period.installmentReferences,
+      };
+      try {
+        referencedCents = payrollObligationReferencedCashCents(referenceFacts);
+        cashFacts = payrollObligationCashOutflowFacts(referenceFacts);
+      } catch {
+        throw new ConflictException('Historial de referencias inconsistente');
+      }
+      let paidCents: bigint;
+      let totalCents: bigint;
+      let nextPaidCents: bigint;
+      try {
+        paidCents = payrollMoneyCents(ownPaid) + referencedCents;
+        totalCents = payrollMoneyCents(total);
+        nextPaidCents =
+          paidCents -
+          payrollMoneyCents(current.outflow.amount) +
+          payrollMoneyCents(amount);
+      } catch {
+        throw new ConflictException('Saldo de pago inconsistente');
+      }
+      const nextPaid = new Prisma.Decimal(payrollMoneyText(nextPaidCents));
       // Stored history must be a consistent partial payment: it is locked as
       // PENDING, so a paid amount already at the total is a corrupt history.
-      if (paid.gte(total))
+      if (paidCents >= totalCents)
         throw new ConflictException('Saldo de pago inconsistente');
       // Only an amount that would EXCEED the total is rejected; reaching it
       // exactly is an approved completion (S4).
-      if (nextPaid.gt(total))
+      if (nextPaidCents > totalCents)
         throw new ConflictException('Corrección excede el saldo disponible');
       if (current.outflow.amount.eq(amount))
         throw new ConflictException('El importe no cambió');
-      const completes = nextPaid.eq(total);
+      const completes = nextPaidCents === totalCents;
       // S4/S5: when the corrected amount completes the payment, the stored expense
       // choice is applied inside this transaction, before this transaction writes
       // the obligation status. The planner owns completion, choice and the approved
@@ -232,16 +281,14 @@ export class PayrollPeriodInstallmentCorrectionService {
           {
             total,
             // Facts describe the post-correction state: the corrected outflow is
-            // reported with its new amount and keeps its own date and method.
-            outflows: period.installments.map((item) => ({
-              id: item.outflowId,
-              amount:
-                item.id === current.id
-                  ? amount.toFixed(2)
-                  : item.outflow.amount.toFixed(2),
-              date: item.outflow.date.toISOString().slice(0, 10),
-              method: item.outflow.method,
-            })),
+            // reported with its new amount and keeps its own date and method, and
+            // referenced cash keeps the original date and method of the source
+            // outflow it already belongs to.
+            outflows: cashFacts.map((fact) =>
+              fact.id === current.outflowId
+                ? { ...fact, amount: amount.toFixed(2) }
+                : fact,
+            ),
             // A null choice is unspecified, never "no expense".
             expenseChoice: period.expenseEnabled ?? null,
             // A correction introduces no new cash date: the corrected outflow is
@@ -304,7 +351,7 @@ export class PayrollPeriodInstallmentCorrectionService {
       return {
         revision,
         paid: nextPaid.toFixed(2),
-        balance: new Decimal(total).minus(nextPaid).toFixed(2),
+        balance: payrollMoneyText(totalCents - nextPaidCents),
         status,
       };
     });

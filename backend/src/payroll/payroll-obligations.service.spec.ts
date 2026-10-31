@@ -2,18 +2,47 @@ import { ConflictException, ForbiddenException } from '@nestjs/common';
 import {
   PayrollObligationKind,
   PayrollObligationStatus,
+  PaymentMethod,
   Prisma,
 } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
   PayrollObligationsService,
+  payrollObligationCashOutflowFacts,
   summarizePayrollObligation,
 } from './payroll-obligations.service';
 
 // These are mocked facts, not database rows: every amount is a decimal value as
 // the projection returns it, so the arithmetic contract is what gets exercised.
-function cash(amount: string) {
-  return { outflow: { amount: new Prisma.Decimal(amount) } };
+let cashSequence = 0;
+function cash(amount: string, day = '2026-01-15') {
+  cashSequence += 1;
+  return {
+    outflow: {
+      id: `outflow-${cashSequence}`,
+      amount: new Prisma.Decimal(amount),
+      date: new Date(`${day}T00:00:00.000Z`),
+      method: PaymentMethod.CASH,
+    },
+  };
+}
+
+// One reference row of a replacement payment: the snapshot it stores plus the
+// live facts of the source installment it points at.
+let referenceSequence = 0;
+function reference(amount: string, sourceAmount = amount, day = '2026-10-15') {
+  referenceSequence += 1;
+  return {
+    amount: new Prisma.Decimal(amount),
+    sourceInstallment: {
+      outflow: {
+        id: `source-outflow-${referenceSequence}`,
+        amount: new Prisma.Decimal(sourceAmount),
+        date: new Date(`${day}T00:00:00.000Z`),
+        method: PaymentMethod.CASH,
+      },
+    },
+  };
 }
 
 function shift(amount: string) {
@@ -29,6 +58,7 @@ function periodFacts(
     periodAmount: new Prisma.Decimal('1500000.00'),
     installments: [],
     shiftMemberships: [],
+    references: [],
     ...overrides,
   };
 }
@@ -82,6 +112,24 @@ const select = {
       },
     },
   },
+  installmentReferences: {
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      sourceInstallmentId: true,
+      amount: true,
+      createdAt: true,
+      sourceInstallment: {
+        select: {
+          id: true,
+          obligationId: true,
+          outflow: {
+            select: { id: true, amount: true, date: true, method: true },
+          },
+        },
+      },
+    },
+  },
 } as const;
 
 function projectedRow(
@@ -102,6 +150,7 @@ function projectedRow(
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     installments: [],
     shiftMemberships: [],
+    installmentReferences: [],
     ...overrides,
   };
 }
@@ -302,6 +351,154 @@ describe('payroll obligation summary', () => {
   });
 });
 
+// A reference-based replacement counts the valid installments of the completed
+// source payment as its own paid cash without creating a new outflow (L327,
+// L338). The total stays the corrected total, so referenced cash plus the amount
+// still to pay always add up to it.
+describe('payroll replacement references in the money summary', () => {
+  it('counts referenced installments as paid cash and keeps the balance payable', () => {
+    expect(
+      summarizePayrollObligation(
+        periodFacts({
+          periodAmount: new Prisma.Decimal('1000000.00'),
+          references: [reference('400000.00')],
+        }),
+      ),
+    ).toEqual({
+      total: '1000000.00',
+      paid: '400000.00',
+      balance: '600000.00',
+      status: 'pending',
+    });
+  });
+
+  it('sums referenced cash together with the replacement own installments', () => {
+    expect(
+      summarizePayrollObligation(
+        periodFacts({
+          periodAmount: new Prisma.Decimal('1000000.00'),
+          references: [reference('400000.00')],
+          installments: [cash('250000.50')],
+        }),
+      ),
+    ).toEqual({
+      total: '1000000.00',
+      paid: '650000.50',
+      balance: '349999.50',
+      status: 'pending',
+    });
+  });
+
+  it('completes when referenced cash plus own cash reaches the total', () => {
+    expect(
+      summarizePayrollObligation(
+        periodFacts({
+          status: PayrollObligationStatus.COMPLETED,
+          periodAmount: new Prisma.Decimal('1000000.00'),
+          references: [reference('400000.00')],
+          installments: [cash('600000.00')],
+        }),
+      ),
+    ).toEqual({
+      total: '1000000.00',
+      paid: '1000000.00',
+      balance: '0.00',
+      status: 'completed',
+    });
+  });
+
+  it('fails closed when a reference snapshot disagrees with the live source cash', () => {
+    expect(() =>
+      summarizePayrollObligation(
+        periodFacts({ references: [reference('400000.00', '300000.00')] }),
+      ),
+    ).toThrow('Referencia de abono inconsistente');
+  });
+
+  it('fails closed when the same real cash is counted twice', () => {
+    const counted = cash('250000.00');
+    expect(() =>
+      summarizePayrollObligation(
+        periodFacts({
+          installments: [counted],
+          references: [
+            {
+              amount: counted.outflow.amount,
+              sourceInstallment: { outflow: counted.outflow },
+            },
+          ],
+        }),
+      ),
+    ).toThrow('Abono contado dos veces');
+  });
+
+  it('fails closed when referenced cash overpays the replacement', () => {
+    expect(() =>
+      summarizePayrollObligation(
+        periodFacts({
+          periodAmount: new Prisma.Decimal('1000000.00'),
+          references: [reference('400000.00')],
+          installments: [cash('600000.01')],
+        }),
+      ),
+    ).toThrow('Paid amount exceeds obligation total');
+  });
+});
+
+// The completion expense mirrors real cash dates and methods. Referenced cash is
+// real cash of the source payment, so it is listed with its own identity and
+// date; nothing here invents an outflow for it.
+describe('payroll completion cash facts with references', () => {
+  it('lists the real cash identities of own and referenced installments', () => {
+    const own = cash('600000.00', '2026-10-31');
+    const referenced = reference('400000.00', '400000.00', '2026-10-15');
+    const facts = periodFacts({
+      periodAmount: new Prisma.Decimal('1000000.00'),
+      installments: [own],
+      references: [referenced],
+    });
+    expect(payrollObligationCashOutflowFacts(facts)).toEqual([
+      {
+        id: own.outflow.id,
+        amount: '600000.00',
+        date: '2026-10-31',
+        method: PaymentMethod.CASH,
+      },
+      {
+        id: referenced.sourceInstallment.outflow.id,
+        amount: '400000.00',
+        date: '2026-10-15',
+        method: PaymentMethod.CASH,
+      },
+    ]);
+  });
+
+  it('invents no outflow: the facts sum to the paid cash of the summary', () => {
+    const facts = periodFacts({
+      periodAmount: new Prisma.Decimal('2000000.00'),
+      installments: [cash('600000.00')],
+      references: [reference('400000.00')],
+    });
+    const paid = payrollObligationCashOutflowFacts(facts).reduce(
+      (sum, fact) => sum.plus(new Prisma.Decimal(fact.amount)),
+      new Prisma.Decimal(0),
+    );
+    expect(paid.toFixed(2)).toBe(
+      summarizePayrollObligation(facts).paid.toString(),
+    );
+    // No fact exists for the reference itself: each fact is a stored outflow.
+    expect(payrollObligationCashOutflowFacts(facts)).toHaveLength(2);
+  });
+
+  it('fails closed on a reference that disagrees with the live source cash', () => {
+    expect(() =>
+      payrollObligationCashOutflowFacts(
+        periodFacts({ references: [reference('400000.00', '300000.00')] }),
+      ),
+    ).toThrow('Referencia de abono inconsistente');
+  });
+});
+
 describe('PayrollObligationsService', () => {
   const prisma = {
     payrollObligation: { findMany: jest.fn() },
@@ -371,6 +568,40 @@ describe('PayrollObligationsService', () => {
         balance: '1000000.00',
         status: 'pending',
       },
+    });
+  });
+
+  it('projects referenced installments and counts their cash in the summary', async () => {
+    const row = projectedRow({
+      periodAmount: new Prisma.Decimal('1000000.00'),
+      installmentReferences: [
+        {
+          id: 'reference-a',
+          sourceInstallmentId: 'installment-source',
+          amount: new Prisma.Decimal('400000.00'),
+          createdAt: new Date('2026-11-02T00:00:00.000Z'),
+          sourceInstallment: {
+            id: 'installment-source',
+            obligationId: 'obligation-source',
+            outflow: {
+              id: 'outflow-source',
+              amount: new Prisma.Decimal('400000.00'),
+              date: new Date('2026-10-15T00:00:00.000Z'),
+              method: PaymentMethod.CASH,
+            },
+          },
+        },
+      ],
+    });
+    prisma.payrollObligation.findMany.mockResolvedValue([row]);
+    const [result] = await service.findAll('org-a');
+    // The reference is projected as stored evidence, and its cash is paid.
+    expect(result.installmentReferences).toEqual(row.installmentReferences);
+    expect(result.summary).toEqual({
+      total: '1000000.00',
+      paid: '400000.00',
+      balance: '600000.00',
+      status: 'pending',
     });
   });
 

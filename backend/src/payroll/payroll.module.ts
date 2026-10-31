@@ -14,6 +14,7 @@ import { PayrollPeriodInstallmentsService } from './payroll-period-installments.
 import { PayrollPeriodsService } from './payroll-periods.service';
 import { PayrollCashReturnService } from './payroll-cash-return.service';
 import { PayrollGroupInstallmentCorrectionService } from './payroll-group-installment-correction.service';
+import { PayrollReplacementPaymentService } from './payroll-replacement-payment.service';
 
 // The completion expense is now written inside the installment transactions, and
 // cash-flow reports exclude linked expense payments while counting payroll
@@ -40,6 +41,9 @@ import { PayrollGroupInstallmentCorrectionService } from './payroll-group-instal
     PayrollObligationsService,
     // Append-only: records a real returned installment on its own date and method.
     PayrollCashReturnService,
+    // Creates a new pending payment that references the valid installments of a
+    // completed payment without editing it or charging their cash again.
+    PayrollReplacementPaymentService,
     OrganizationRequiredGuard,
     OrganizationStatusGuard,
   ],

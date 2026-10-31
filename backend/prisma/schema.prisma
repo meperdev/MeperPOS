@@ -147,6 +147,7 @@ model PayrollObligation {
   shiftMemberships PayrollShiftMembership[]
   installments PayrollInstallment[]
   expenseLink PayrollObligationExpense?
+  installmentReferences PayrollInstallmentReference[]
 
   @@unique([id, organizationId, employeeId])
   @@unique([id, organizationId, employeeId, kind])
@@ -211,6 +212,7 @@ model PayrollInstallment {
   allocations    PayrollAllocation[]
   revisions      PayrollCashRevision[]
   cashReturn     PayrollCashReturn?
+  references     PayrollInstallmentReference[]
 
   @@unique([id, obligationId, outflowId, organizationId, employeeId], map: "PayrollInstallment_revision_target_key")
   @@unique([id, obligationId, organizationId, employeeId], map: "PayrollInstallment_allocation_target_key")
@@ -278,6 +280,35 @@ model PayrollCashReturn {
 
   @@unique([installmentId, obligationId, outflowId, organizationId, employeeId], map: "PayrollCashReturn_installment_key")
   @@index([organizationId, returnDate], map: "PayrollCashReturn_date_idx")
+}
+
+// Reference-based replacement of a completed payroll payment (L327, L338): a new
+// pending payment counts the valid installments of the completed one as already
+// paid cash without creating any new cash outflow. This row is the evidence of
+// that shared cash: it snapshots the source installment's amount and pins both
+// the new payment and the source installment identity (with its owning payment,
+// tenant and employee) through composite RESTRICT foreign keys, so neither can be
+// re-keyed or deleted while the reference exists. Rows are append-only; ordinary
+// UPDATE and DELETE are rejected by trigger, while TRUNCATE and privileged bypass
+// are not guarded. Uniqueness per (target payment, source installment) keeps one
+// reference per counted installment, and the writer refuses a source installment
+// that any other payment already references, so the same cash cannot be counted
+// twice. The snapshot is not CHECKed against the source outflow, so comparing it
+// with the live cash amount stays a writer/reader rule.
+model PayrollInstallmentReference {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  employeeId          String
+  targetObligationId  String
+  sourceObligationId  String
+  sourceInstallmentId String
+  amount              Decimal  @db.Decimal
+  createdAt           DateTime @default(now())
+  targetObligation    PayrollObligation  @relation(fields: [targetObligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallmentReference_target_fkey")
+  sourceInstallment   PayrollInstallment @relation(fields: [sourceInstallmentId, sourceObligationId, organizationId, employeeId], references: [id, obligationId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallmentReference_source_fkey")
+
+  @@unique([targetObligationId, sourceInstallmentId], map: "PayrollInstallmentReference_target_source_key")
+  @@index([sourceInstallmentId, organizationId, employeeId], map: "PayrollInstallmentReference_source_idx")
 }
 
 // Immutable application evidence; voids and replacements require a future transaction protocol.

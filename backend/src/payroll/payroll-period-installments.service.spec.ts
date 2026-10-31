@@ -37,6 +37,18 @@ function setup() {
         },
       },
     ],
+    // Installments of a completed payment this one counts as already paid (L327).
+    installmentReferences: [] as Array<{
+      amount: Prisma.Decimal;
+      sourceInstallment: {
+        outflow: {
+          id: string;
+          amount: Prisma.Decimal;
+          date: Date;
+          method: string;
+        };
+      };
+    }>,
   };
   const tx = {
     $queryRaw: jest
@@ -476,6 +488,141 @@ describe('PayrollPeriodInstallmentsService (mock transaction only)', () => {
       // The mock has no rollback: it only proves the failed completion never
       // requests the later writes. Real rollback of the outflow/installment needs
       // PostgreSQL.
+      expect(tx.payrollCashOutflow.create).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // L327/L338: a replacement payment references the valid installments of a
+  // completed payment, so their cash already counts as paid here. Paying the
+  // remaining balance is what completes it - without a second outflow for the
+  // referenced money and without double counting.
+  describe('referenced cash', () => {
+    const reference = (
+      amount: string,
+      id = 'ref-cash',
+      sourceAmount = amount,
+    ) => ({
+      amount: new Prisma.Decimal(amount),
+      sourceInstallment: {
+        outflow: {
+          id,
+          amount: new Prisma.Decimal(sourceAmount),
+          date: new Date('2024-01-20T00:00:00.000Z'),
+          method: 'TRANSFER',
+        },
+      },
+    });
+
+    // Regression guard for the read this whole block depends on: without the
+    // relation in the locked query, references would silently count as zero.
+    it('requests referenced installments in the locked payment read', async () => {
+      const { tx, service } = setup();
+      await service.create(input, 'org', actor);
+      expect(
+        JSON.stringify(tx.payrollObligation.findFirst.mock.calls[0][0]),
+      ).toContain('installmentReferences');
+    });
+
+    it('counts referenced installments as already paid when the balance is paid', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.installmentReferences = [reference('40')];
+
+      await expect(
+        service.create({ ...input, amount: '30' }, 'org', actor),
+      ).resolves.toMatchObject({
+        paid: '100.00',
+        balance: '0.00',
+        status: 'COMPLETED',
+      });
+      // Only the installment the caller actually paid creates cash.
+      expect(tx.payrollCashOutflow.create).toHaveBeenCalledTimes(1);
+      expect(tx.payrollCashOutflow.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ amount: new Prisma.Decimal('30') }),
+      });
+      expect(tx.payrollObligation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'COMPLETED' }),
+        }),
+      );
+    });
+
+    it('rejects a new installment when referenced cash already covers the balance', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.installmentReferences = [reference('70')];
+
+      await expect(
+        service.create({ ...input, amount: '1' }, 'org', actor),
+      ).rejects.toEqual(new ConflictException('Saldo de pago inconsistente'));
+      expect(tx.payrollCashOutflow.create).not.toHaveBeenCalled();
+      expect(tx.payrollInstallment.create).not.toHaveBeenCalled();
+      expect(tx.payrollObligation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when a reference disagrees with the live source cash', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      // The snapshot says 40 but the referenced cash is 30: no money may be shown.
+      period.installmentReferences = [reference('40', 'ref-cash', '30')];
+
+      await expect(service.create(input, 'org', actor)).rejects.toEqual(
+        new ConflictException('Historial de referencias inconsistente'),
+      );
+      expect(tx.payrollCashOutflow.create).not.toHaveBeenCalled();
+      expect(tx.payrollInstallment.create).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when a reference points at cash this payment already holds', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      // Same real outflow as an own installment: counting it twice is not money.
+      period.installmentReferences = [reference('30', 'old-cash')];
+
+      await expect(service.create(input, 'org', actor)).rejects.toEqual(
+        new ConflictException('Historial de referencias inconsistente'),
+      );
+      expect(tx.payrollCashOutflow.create).not.toHaveBeenCalled();
+    });
+
+    it('mirrors referenced real cash in the completion expense', async () => {
+      const { tx, service } = setup();
+      const period = await tx.payrollObligation.findFirst();
+      period.expenseEnabled = true;
+      period.installmentReferences = [reference('40')];
+
+      await service.create({ ...input, amount: '30' }, 'org', actor);
+
+      // The expense keeps the original date and method of the referenced cash and
+      // adds the installment that completed the payment. No third mirror exists.
+      expect(tx.expense.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          total: new Prisma.Decimal('100.00'),
+          payments: {
+            create: [
+              {
+                organizationId: 'org',
+                amount: new Prisma.Decimal('30.00'),
+                method: 'CASH',
+                date: new Date('2024-01-15T05:00:00.000Z'),
+              },
+              {
+                organizationId: 'org',
+                amount: new Prisma.Decimal('40.00'),
+                method: 'TRANSFER',
+                date: new Date('2024-01-20T05:00:00.000Z'),
+              },
+              {
+                organizationId: 'org',
+                amount: new Prisma.Decimal('30.00'),
+                method: 'CASH',
+                date: new Date('2024-02-29T05:00:00.000Z'),
+              },
+            ],
+          },
+        }),
+        select: { id: true },
+      });
       expect(tx.payrollCashOutflow.create).toHaveBeenCalledTimes(1);
     });
   });

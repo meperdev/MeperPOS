@@ -60,6 +60,18 @@ function setup() {
     expenseEnabled: null as boolean | null,
     selectedExpenseDate: null as Date | null,
     installments: [installment],
+    // Installments of a completed payment this one counts as already paid (L327).
+    installmentReferences: [] as Array<{
+      amount: Prisma.Decimal;
+      sourceInstallment: {
+        outflow: {
+          id: string;
+          amount: Prisma.Decimal;
+          date: Date;
+          method: string;
+        };
+      };
+    }>,
   };
   const tx = {
     $queryRaw: jest
@@ -806,5 +818,134 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
     const failure = new Error('revision write failed');
     tx.payrollCashRevision.create.mockRejectedValueOnce(failure);
     await expect(service.correct(input, 'org', actor)).rejects.toBe(failure);
+  });
+
+  // L327/L338: a replacement payment counts the valid installments of a completed
+  // payment as already paid. A correction of its remaining installment therefore
+  // has to count that referenced cash too, or the payment can never complete.
+  describe('referenced cash', () => {
+    const reference = (
+      amount: string,
+      id = 'ref-cash',
+      sourceAmount = amount,
+    ) => ({
+      amount: new Prisma.Decimal(amount),
+      sourceInstallment: {
+        outflow: {
+          id,
+          amount: new Prisma.Decimal(sourceAmount),
+          date: new Date('2024-01-20T00:00:00.000Z'),
+          method: 'TRANSFER',
+        },
+      },
+    });
+
+    // Regression guard for the read this whole block depends on: without the
+    // relation in the locked query, references would silently count as zero.
+    it('requests referenced installments in the locked payment read', async () => {
+      const { tx, service } = setup();
+      await service.correct({ ...input, amount: '60' }, 'org', actor);
+      expect(
+        JSON.stringify(tx.payrollObligation.findFirst.mock.calls[0][0]),
+      ).toContain('installmentReferences');
+    });
+
+    it('counts referenced installments when a correction completes the payment exactly', async () => {
+      const { service, tx, period } = setup();
+      period.installmentReferences = [reference('40')];
+
+      await expect(
+        service.correct({ ...input, amount: '60' }, 'org', actor),
+      ).resolves.toMatchObject({
+        paid: '100.00',
+        balance: '0.00',
+        status: 'COMPLETED',
+      });
+
+      // Only the corrected outflow changes amount: referenced cash keeps its row.
+      expect(tx.payrollCashOutflow.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({ id: 'cash', organizationId: 'org' }),
+        data: { amount: new Prisma.Decimal('60') },
+      });
+      expect(tx.payrollCashOutflow.updateMany).toHaveBeenCalledTimes(1);
+      expect(tx.payrollObligation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: 'COMPLETED', version: { increment: 1 } },
+        }),
+      );
+      expect(tx.payrollCashOutflow.create).not.toHaveBeenCalled();
+      expect(tx.payrollCashOutflow.delete).not.toHaveBeenCalled();
+    });
+
+    it('rejects a correction that would exceed the total once references are counted', async () => {
+      const { service, tx, period } = setup();
+      period.installmentReferences = [reference('40')];
+
+      await expect(
+        service.correct({ ...input, amount: '70' }, 'org', actor),
+      ).rejects.toEqual(
+        new ConflictException('Corrección excede el saldo disponible'),
+      );
+      expect(tx.payrollCashOutflow.updateMany).not.toHaveBeenCalled();
+      expect(tx.payrollCashRevision.create).not.toHaveBeenCalled();
+      expect(tx.payrollObligation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when a reference disagrees with the live source cash', async () => {
+      const { service, tx, period } = setup();
+      period.installmentReferences = [reference('40', 'ref-cash', '30')];
+
+      await expect(
+        service.correct({ ...input, amount: '60' }, 'org', actor),
+      ).rejects.toEqual(
+        new ConflictException('Historial de referencias inconsistente'),
+      );
+      expect(tx.payrollCashOutflow.updateMany).not.toHaveBeenCalled();
+      expect(tx.payrollCashRevision.create).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when a reference points at cash this payment already holds', async () => {
+      const { service, tx, period } = setup();
+      period.installmentReferences = [reference('30', 'cash')];
+
+      await expect(
+        service.correct({ ...input, amount: '60' }, 'org', actor),
+      ).rejects.toEqual(
+        new ConflictException('Historial de referencias inconsistente'),
+      );
+      expect(tx.payrollCashOutflow.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('mirrors referenced real cash in the expense of the completing correction', async () => {
+      const { service, tx, period } = setup();
+      period.expenseEnabled = true;
+      period.installmentReferences = [reference('40')];
+      at('2024-02-29T15:00:00.000Z');
+
+      await service.correct({ ...input, amount: '60' }, 'org', actor);
+
+      expect(tx.expense.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          total: new Prisma.Decimal('100.00'),
+          payments: {
+            create: [
+              {
+                organizationId: 'org',
+                amount: new Prisma.Decimal('60.00'),
+                method: 'CASH',
+                date: new Date('2024-02-29T05:00:00.000Z'),
+              },
+              {
+                organizationId: 'org',
+                amount: new Prisma.Decimal('40.00'),
+                method: 'TRANSFER',
+                date: new Date('2024-01-20T05:00:00.000Z'),
+              },
+            ],
+          },
+        }),
+        select: { id: true },
+      });
+    });
   });
 });

@@ -30,6 +30,7 @@ import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-inst
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
 import { PayrollCashReturnService } from './payroll-cash-return.service';
+import { PayrollReplacementPaymentService } from './payroll-replacement-payment.service';
 
 const periods = { create: jest.fn() };
 const groups = { create: jest.fn() };
@@ -38,6 +39,7 @@ const groupInstallments = { create: jest.fn() };
 const groupCorrections = { correct: jest.fn() };
 const corrections = { correct: jest.fn() };
 const cashReturns = { create: jest.fn() };
+const replacements = { create: jest.fn() };
 const prisma = {
   payrollObligation: { findMany: jest.fn() },
   $transaction: jest.fn(),
@@ -179,6 +181,28 @@ const routeCases = [
       amount: 120,
     },
   },
+  {
+    name: 'POST payroll/replacement-payments',
+    method: 'post',
+    path: '/api/payroll/replacement-payments',
+    routePath: 'replacement-payments',
+    invoke: replacements.create,
+    body: {
+      employeeId: 'emp-a',
+      sourceObligationId: 'obligation-a',
+      installmentIds: ['installment-a', 'installment-b'],
+      periodStart: '2026-10-01',
+      periodEnd: '2026-10-31',
+    },
+    // The amount of a replacement is server-owned: an empty selection and any
+    // amount field are refused before the service runs.
+    invalid: {
+      employeeId: 'emp-a',
+      sourceObligationId: 'obligation-a',
+      installmentIds: [],
+      periodAmount: '1000000.00',
+    },
+  },
 ] as const;
 
 const forbiddenRoles = [
@@ -237,6 +261,24 @@ const obligationSelect = {
       },
     },
   },
+  installmentReferences: {
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      sourceInstallmentId: true,
+      amount: true,
+      createdAt: true,
+      sourceInstallment: {
+        select: {
+          id: true,
+          obligationId: true,
+          outflow: {
+            select: { id: true, amount: true, date: true, method: true },
+          },
+        },
+      },
+    },
+  },
 } as const;
 
 type PayrollControllerClass = {
@@ -277,6 +319,8 @@ describe('payroll HTTP boundary', () => {
       .useValue(corrections)
       .overrideProvider(PayrollCashReturnService)
       .useValue(cashReturns)
+      .overrideProvider(PayrollReplacementPaymentService)
+      .useValue(replacements)
       .overrideGuard(JwtAuthGuard)
       .useValue({
         canActivate: (context: ExecutionContext) => {
@@ -465,10 +509,16 @@ describe('payroll HTTP boundary', () => {
           {
             id: 'installment-a',
             outflowId: 'outflow-a',
-            outflow: { id: 'outflow-a', amount: '100', method: 'CASH' },
+            outflow: {
+              id: 'outflow-a',
+              amount: '100',
+              date: '2026-01-15T00:00:00.000Z',
+              method: 'CASH',
+            },
           },
         ],
         shiftMemberships: [],
+        installmentReferences: [],
       },
     ];
     prisma.payrollObligation.findMany.mockResolvedValue(rows);
@@ -544,6 +594,7 @@ describe('payroll module wiring', () => {
       PayrollGroupInstallmentCorrectionService,
       PayrollPeriodInstallmentCorrectionService,
       PayrollObligationsService,
+      PayrollReplacementPaymentService,
     ]) {
       expect(providers).toContain(service);
       expect(moduleRef.get(service)).toBeInstanceOf(service);
