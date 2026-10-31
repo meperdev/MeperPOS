@@ -21,6 +21,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ReportsService } from '../reports/reports.service';
 import { writePayrollCompletionExpense } from './payroll-completed-expense-writer';
 import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.service';
+import { PayrollGroupInstallmentCorrectionService } from './payroll-group-installment-correction.service';
 import { PayrollGroupInstallmentsService } from './payroll-group-installments.service';
 import { PayrollGroupsService } from './payroll-groups.service';
 import type { PayrollObligationCompletionFacts } from './payroll-obligation-completion';
@@ -28,6 +29,7 @@ import { PayrollObligationsService } from './payroll-obligations.service';
 import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-installment-correction.service';
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
+import { PayrollReplacementPaymentService } from './payroll-replacement-payment.service';
 
 /**
  * Opt-in PostgreSQL proof for the payroll claims that the mocked specs can only
@@ -56,7 +58,22 @@ import { PayrollPeriodsService } from './payroll-periods.service';
  *    `ExpenseLabel ... FOR UPDATE` lock statement serializes with it, so the completion
  *    fails closed instead of committing an expense bound to inactive taxonomy;
  * 8. cross-tenant isolation between two namespaced fixture organizations for
- *    the obligation, installment, cash and expense rows these paths own.
+ *    the obligation, installment, cash and expense rows these paths own;
+ * 9. two concurrent corrections of one grouped installment: exactly one applies,
+ *    and the loser leaves no void, no replacement application, no revision, no
+ *    cash change and no status change behind;
+ * 10. a grouped correction whose completion expense write fails writes nothing at
+ *    all, and a failure that happens *after* the expense and cash work of the same
+ *    transaction is discarded by PostgreSQL, so no money survives it;
+ * 11. two concurrent reference-based replacements of the same source installment:
+ *    exactly one succeeds, and the other is refused without a second obligation,
+ *    reference or cash row;
+ * 12. a replacement whose referenced cash plus its completing installment reaches
+ *    COMPLETED exactly once, writing one expense when the stored choice is enabled
+ *    and none when it is disabled;
+ * 13. a probe of the `Organization` KEY SHARE -> FOR UPDATE upgrade between two
+ *    expense-writing completions of *different* employees in one tenant: the
+ *    outcome PostgreSQL produces is asserted, whichever side it kills.
  *
  * Opt-in on purpose: ordinary `npm test` runs must never touch a database.
  * The suite is skipped unless `PAYROLL_PG_INT=1`.
@@ -112,6 +129,29 @@ const TAXONOMY_TOTAL_BEFORE_WRITE = '40.00';
 const TAXONOMY_TOTAL_AFTER_WRITE = '30.00';
 const TAXONOMY_TOTAL_AFTER_GROUP_WRITE = '20.00';
 const ISOLATION_TOTAL_A = '60.00';
+
+// Scenarios 9-13 own their employees, dates and amounts, so their rows stay
+// disjoint from every scenario above and from each other.
+const DATE_CORRECTION_CONCURRENT = '2026-11-05';
+const DATE_CORRECTION_ROLLBACK = '2026-12-05';
+const DATE_CORRECTION_TIMEOUT = '2027-01-05';
+const DATE_REPLACEMENT_RACE = '2027-02-05';
+const DATE_REPLACEMENT_RACE_LATER = '2027-02-06';
+const DATE_REPLACEMENT_SOURCE = '2027-03-05';
+const DATE_REPLACEMENT_SOURCE_LATER = '2027-03-06';
+const DATE_REPLACEMENT_COMPLETE_WITH_EXPENSE = '2027-03-10';
+const DATE_REPLACEMENT_COMPLETE_WITHOUT_EXPENSE = '2027-03-11';
+const DATE_ORGANIZATION_LOCK_PROBE = '2027-04-10';
+
+// Grouped shifts are 110.00 each, so every grouped payment here totals 220.00:
+// an amount no other scenario of this suite uses.
+const GROUPED_SHIFT_AMOUNT = '110.00';
+const GROUPED_TOTAL = '220.00';
+const CORRECTION_FIRST_TOTAL = '75.00';
+const REPLACEMENT_FIRST_TOTAL = '65.00';
+const REPLACEMENT_SECOND_TOTAL = '155.00';
+const ORGANIZATION_PROBE_TOTAL_A = '45.00';
+const ORGANIZATION_PROBE_TOTAL_B = '55.00';
 const ISOLATION_TOTAL_B_PENDING = '100.00';
 const ISOLATION_PAID_B = '40.00';
 const ISOLATION_TOTAL_B_COMPLETED = '50.00';
@@ -361,10 +401,40 @@ describePostgres(
     let tenantBCompletedInstallmentId: string;
     let tenantBExpenseId: string;
 
+    // Scenarios 9-13: the grouped correction writer and the reference-based
+    // replacement writer. Each scenario owns its employees and shifts.
+    let employeeCorrectionConcurrentId: string;
+    let employeeCorrectionRollbackId: string;
+    let employeeCorrectionTimeoutId: string;
+    let employeeReplacementRaceId: string;
+    let employeeReplacementCompleteId: string;
+    let employeeOrganizationProbeAId: string;
+    let employeeOrganizationProbeBId: string;
+
+    let correctionConcurrentObligationId: string;
+    let correctionConcurrentInstallmentId: string;
+    let correctionConcurrentOutflowId: string;
+    let correctionRollbackObligationId: string;
+    let correctionRollbackInstallmentId: string;
+    let correctionTimeoutObligationId: string;
+    let correctionTimeoutInstallmentId: string;
+    let correctionTimeoutAllocationId: string;
+    let replacementRaceSourceObligationId: string;
+    let replacementRaceInstallmentId: string;
+    let replacementCompleteSourceObligationId: string;
+    let replacementCompleteExpenseInstallmentId: string;
+    let replacementCompleteNoExpenseInstallmentId: string;
+    let organizationProbeObligationAId: string;
+    let organizationProbeObligationBId: string;
+
     let periodInstallments: PayrollPeriodInstallmentsService;
     let periodInstallmentsSecond: PayrollPeriodInstallmentsService;
     let groupInstallments: PayrollGroupInstallmentsService;
     let correction: PayrollPeriodInstallmentCorrectionService;
+    let groupCorrection: PayrollGroupInstallmentCorrectionService;
+    let groupCorrectionSecond: PayrollGroupInstallmentCorrectionService;
+    let replacement: PayrollReplacementPaymentService;
+    let replacementSecond: PayrollReplacementPaymentService;
     let obligations: PayrollObligationsService;
     let expenses: ExpensesService;
     let reports: ReportsService;
@@ -385,6 +455,9 @@ describePostgres(
         outflows,
         installments,
         allocations,
+        allocationVoids,
+        revisions,
+        references,
         links,
         expenses,
         expensePayments,
@@ -401,6 +474,9 @@ describePostgres(
         client.payrollCashOutflow.count(),
         client.payrollInstallment.count(),
         client.payrollAllocation.count(),
+        client.payrollAllocationVoid.count(),
+        client.payrollCashRevision.count(),
+        client.payrollInstallmentReference.count(),
         client.payrollObligationExpense.count(),
         client.expense.count(),
         client.expensePayment.count(),
@@ -418,6 +494,9 @@ describePostgres(
         payrollCashOutflow: outflows,
         payrollInstallment: installments,
         payrollAllocation: allocations,
+        payrollAllocationVoid: allocationVoids,
+        payrollCashRevision: revisions,
+        payrollInstallmentReference: references,
         payrollObligationExpense: links,
         expense: expenses,
         expensePayment: expensePayments,
@@ -581,6 +660,12 @@ describePostgres(
       );
       groupInstallments = new PayrollGroupInstallmentsService(prisma);
       correction = new PayrollPeriodInstallmentCorrectionService(prisma);
+      groupCorrection = new PayrollGroupInstallmentCorrectionService(prisma);
+      groupCorrectionSecond = new PayrollGroupInstallmentCorrectionService(
+        prismaSecond,
+      );
+      replacement = new PayrollReplacementPaymentService(prisma);
+      replacementSecond = new PayrollReplacementPaymentService(prismaSecond);
       obligations = new PayrollObligationsService(prisma);
       expenses = new ExpensesService(prisma, {} as never);
       reports = new ReportsService(prisma, new CacheService());
@@ -791,6 +876,236 @@ describePostgres(
       console.log(
         `[payroll-pg-int] scenario 5-8 fixtures: org=${organization.id} employees=5 obligations=7 tenantB=${organizationB.id} tenantB_obligations=2 tenantB_outflows=2 tenantB_expenses=1`,
       );
+
+      // ---------------------------------------------------------------------
+      // Scenarios 9-13: grouped correction and reference-based replacement.
+      // ---------------------------------------------------------------------
+      const writerEmployees = await Promise.all(
+        [
+          'correction-concurrent',
+          'correction-rollback',
+          'correction-timeout',
+          'replacement-race',
+          'replacement-complete',
+          'organization-probe-a',
+          'organization-probe-b',
+        ].map((suffix) =>
+          prisma.employee.create({
+            data: {
+              organizationId: organization.id,
+              name: `Payroll PG ${runId} ${suffix}`,
+              identification: `${runId}-${suffix}`,
+              active: true,
+            },
+          }),
+        ),
+      );
+      employeeCorrectionConcurrentId = writerEmployees[0].id;
+      employeeCorrectionRollbackId = writerEmployees[1].id;
+      employeeCorrectionTimeoutId = writerEmployees[2].id;
+      employeeReplacementRaceId = writerEmployees[3].id;
+      employeeReplacementCompleteId = writerEmployees[4].id;
+      employeeOrganizationProbeAId = writerEmployees[5].id;
+      employeeOrganizationProbeBId = writerEmployees[6].id;
+
+      // Two dated shifts of 110.00 each, owned by one grouped payment: the
+      // positive amounts and one-shift-per-day rules of S2/S3 hold by construction.
+      const createGroupPayment = async (
+        employeeId: string,
+        shiftDates: [string, string],
+        expenseEnabled: boolean,
+      ): Promise<string> => {
+        const shifts = await Promise.all(
+          shiftDates.map((date) =>
+            prisma.employeeShift.create({
+              data: {
+                organizationId: organization.id,
+                employeeId,
+                date: new Date(`${date}T00:00:00.000Z`),
+                kind: EmployeeShiftKind.FULL_DAY,
+                amount: new Prisma.Decimal(GROUPED_SHIFT_AMOUNT),
+              },
+            }),
+          ),
+        );
+        const obligation = await groups.create(
+          {
+            employeeId,
+            shiftIds: shifts.map((shift) => shift.id),
+            expenseEnabled,
+          },
+          organization.id,
+          actor,
+        );
+        return obligation.id;
+      };
+
+      const payGroup = (
+        employeeId: string,
+        obligationId: string,
+        amount: string,
+        date: string,
+      ) =>
+        groupInstallments.create(
+          {
+            employeeId,
+            obligationId,
+            amount,
+            date,
+            method: PaymentMethod.CASH,
+          },
+          organization.id,
+          actor,
+        );
+
+      // Scenario 9: one pending grouped payment of 75.00 on a 220.00 group; both
+      // concurrent corrections try to complete it, so only one can survive.
+      correctionConcurrentObligationId = await createGroupPayment(
+        employeeCorrectionConcurrentId,
+        ['2026-11-01', '2026-11-02'],
+        false,
+      );
+      const concurrentFirstInstallment = await payGroup(
+        employeeCorrectionConcurrentId,
+        correctionConcurrentObligationId,
+        CORRECTION_FIRST_TOTAL,
+        DATE_CORRECTION_CONCURRENT,
+      );
+      correctionConcurrentInstallmentId =
+        concurrentFirstInstallment.installment.id;
+      correctionConcurrentOutflowId = concurrentFirstInstallment.outflow.id;
+
+      // Scenario 10: the same shape with the stored expense choice enabled, so the
+      // completing correction reaches the in-transaction expense writer.
+      correctionRollbackObligationId = await createGroupPayment(
+        employeeCorrectionRollbackId,
+        ['2026-12-01', '2026-12-02'],
+        true,
+      );
+      correctionRollbackInstallmentId = (
+        await payGroup(
+          employeeCorrectionRollbackId,
+          correctionRollbackObligationId,
+          CORRECTION_FIRST_TOTAL,
+          DATE_CORRECTION_ROLLBACK,
+        )
+      ).installment.id;
+
+      correctionTimeoutObligationId = await createGroupPayment(
+        employeeCorrectionTimeoutId,
+        ['2027-01-01', '2027-01-02'],
+        true,
+      );
+      correctionTimeoutInstallmentId = (
+        await payGroup(
+          employeeCorrectionTimeoutId,
+          correctionTimeoutObligationId,
+          CORRECTION_FIRST_TOTAL,
+          DATE_CORRECTION_TIMEOUT,
+        )
+      ).installment.id;
+      // The application the correction must supersede: scenario 10 blocks on it
+      // after the expense of the same transaction was already written.
+      correctionTimeoutAllocationId = (
+        await prisma.payrollAllocation.findFirstOrThrow({
+          where: { installmentId: correctionTimeoutInstallmentId },
+          select: { id: true },
+        })
+      ).id;
+
+      // Scenario 11: a completed grouped payment of 220.00 in two installments, so
+      // one of them can be referenced and a balance still remains.
+      replacementRaceSourceObligationId = await createGroupPayment(
+        employeeReplacementRaceId,
+        ['2027-02-01', '2027-02-02'],
+        false,
+      );
+      replacementRaceInstallmentId = (
+        await payGroup(
+          employeeReplacementRaceId,
+          replacementRaceSourceObligationId,
+          REPLACEMENT_FIRST_TOTAL,
+          DATE_REPLACEMENT_RACE,
+        )
+      ).installment.id;
+      await payGroup(
+        employeeReplacementRaceId,
+        replacementRaceSourceObligationId,
+        REPLACEMENT_SECOND_TOTAL,
+        DATE_REPLACEMENT_RACE_LATER,
+      );
+
+      // Scenario 12: the same completed shape, with both installments kept for two
+      // replacements that carry opposite expense choices.
+      replacementCompleteSourceObligationId = await createGroupPayment(
+        employeeReplacementCompleteId,
+        ['2027-03-01', '2027-03-02'],
+        false,
+      );
+      replacementCompleteExpenseInstallmentId = (
+        await payGroup(
+          employeeReplacementCompleteId,
+          replacementCompleteSourceObligationId,
+          REPLACEMENT_FIRST_TOTAL,
+          DATE_REPLACEMENT_SOURCE,
+        )
+      ).installment.id;
+      replacementCompleteNoExpenseInstallmentId = (
+        await payGroup(
+          employeeReplacementCompleteId,
+          replacementCompleteSourceObligationId,
+          REPLACEMENT_SECOND_TOTAL,
+          DATE_REPLACEMENT_SOURCE_LATER,
+        )
+      ).installment.id;
+
+      // Scenario 13: two pending fixed-period payments of different employees of
+      // the same tenant, both with an enabled expense choice.
+      organizationProbeObligationAId = (
+        await periods.create(
+          {
+            employeeId: employeeOrganizationProbeAId,
+            periodStart: '2027-04-01',
+            periodEnd: '2027-04-30',
+            periodAmount: ORGANIZATION_PROBE_TOTAL_A,
+            expenseEnabled: true,
+          },
+          organization.id,
+          actor,
+        )
+      ).id;
+      organizationProbeObligationBId = (
+        await periods.create(
+          {
+            employeeId: employeeOrganizationProbeBId,
+            periodStart: '2027-04-01',
+            periodEnd: '2027-04-30',
+            periodAmount: ORGANIZATION_PROBE_TOTAL_B,
+            expenseEnabled: true,
+          },
+          organization.id,
+          actor,
+        )
+      ).id;
+
+      const writerSourceStatuses = await prisma.payrollObligation.findMany({
+        where: {
+          id: {
+            in: [
+              replacementRaceSourceObligationId,
+              replacementCompleteSourceObligationId,
+            ],
+          },
+        },
+        select: { id: true, status: true },
+      });
+      if (writerSourceStatuses.some((row) => row.status !== 'COMPLETED'))
+        throw new Error(
+          'Scenario 11/12 source payments were not completed by their installments',
+        );
+      console.log(
+        `[payroll-pg-int] scenario 9-13 fixtures: org=${organization.id} employees=7 group_obligations=5 period_obligations=2 grouped_installments=7 references=0`,
+      );
     }, 60000);
 
     afterAll(async () => {
@@ -824,6 +1139,9 @@ describePostgres(
                   where: { organizationId: createdOrgId },
                 });
                 await tx.payrollCashRevision.deleteMany({
+                  where: { organizationId: createdOrgId },
+                });
+                await tx.payrollInstallmentReference.deleteMany({
                   where: { organizationId: createdOrgId },
                 });
                 await tx.payrollObligationExpense.deleteMany({
@@ -892,6 +1210,10 @@ describePostgres(
             const remainingLinks = await prisma.payrollObligationExpense.count({
               where: { organizationId: createdOrgId },
             });
+            const remainingReferences =
+              await prisma.payrollInstallmentReference.count({
+                where: { organizationId: createdOrgId },
+              });
             const remainingExpenses = await prisma.expense.count({
               where: { organizationId: createdOrgId },
             });
@@ -901,11 +1223,12 @@ describePostgres(
             if (
               remaining !== 0 ||
               remainingLinks !== 0 ||
+              remainingReferences !== 0 ||
               remainingExpenses !== 0 ||
               remainingOrg !== 0
             )
               leftovers.push(
-                `org=${createdOrgId} outflows=${remaining} links=${remainingLinks} expenses=${remainingExpenses} organizations=${remainingOrg}`,
+                `org=${createdOrgId} outflows=${remaining} links=${remainingLinks} references=${remainingReferences} expenses=${remainingExpenses} organizations=${remainingOrg}`,
               );
           }
           if (leftovers.length > 0)
@@ -923,7 +1246,7 @@ describePostgres(
             );
 
           console.log(
-            `[payroll-pg-int] fixtures removed for ${createdOrgIds.length} organizations: outflows=0 links=0 expenses=0 organizations=0`,
+            `[payroll-pg-int] fixtures removed for ${createdOrgIds.length} organizations: outflows=0 links=0 references=0 expenses=0 organizations=0`,
           );
           console.log(
             `[payroll-pg-int] pre-existing rows preserved (before -> after): ${Object.keys(
@@ -1865,7 +2188,7 @@ describePostgres(
       expect(interruptedResult.error).toMatchObject({
         status: 503,
         message:
-        'No se pudo confirmar la operación. Verifique su estado antes de reintentar',
+          'No se pudo confirmar la operación. Verifique su estado antes de reintentar',
       });
 
       // Nothing of the expired completion may survive, including the cash and the
@@ -2542,6 +2865,851 @@ describePostgres(
         tenantBBefore,
       );
     }, 60000);
+
+    it('9. two concurrent corrections of one grouped installment: exactly one applies, the loser leaves no void, replacement, revision, cash or status change', async () => {
+      const request = {
+        employeeId: employeeCorrectionConcurrentId,
+        obligationId: correctionConcurrentObligationId,
+        installmentId: correctionConcurrentInstallmentId,
+        amount: GROUPED_TOTAL,
+      };
+      const expensesBefore = await prisma.expense.count({
+        where: { organizationId: orgId },
+      });
+      // One installment write already happened, so the version is a baseline this
+      // scenario must advance by exactly one - never by two.
+      const obligationBefore = await prisma.payrollObligation.findUniqueOrThrow(
+        {
+          where: { id: correctionConcurrentObligationId },
+          select: { status: true, version: true },
+        },
+      );
+      expect(obligationBefore.status).toBe('PENDING');
+
+      // Two services on two clients: two real PostgreSQL backends, each opening its
+      // own correction transaction. Both corrections would complete the payment.
+      const results = await Promise.allSettled([
+        groupCorrection.correct({ ...request }, orgId, actor),
+        groupCorrectionSecond.correct({ ...request }, orgId, actor),
+      ]);
+      const fulfilled = results.filter(
+        (result) => result.status === 'fulfilled',
+      );
+      const rejected = results.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected',
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+
+      // The loser serialises on the employee row, re-reads the committed state and
+      // fails closed because the payment is no longer pending - not because of a
+      // lock-wait artifact.
+      const failure = rejected[0].reason as Error;
+      expect(failure).toBeInstanceOf(ConflictException);
+      expect(failure.message).toBe('Pago no disponible');
+      console.log(
+        `[payroll-pg-int] concurrent grouped correction loser: ${failure.constructor.name}: ${failure.message}`,
+      );
+
+      const obligation = await prisma.payrollObligation.findUniqueOrThrow({
+        where: { id: correctionConcurrentObligationId },
+      });
+      expect(obligation.status).toBe('COMPLETED');
+      expect(obligation.version).toBe(obligationBefore.version + 1);
+
+      // One cash row, revised in place: identity, date and method are kept.
+      const cash = await prisma.payrollCashOutflow.findMany({
+        where: {
+          organizationId: orgId,
+          employeeId: employeeCorrectionConcurrentId,
+        },
+      });
+      expect(cash).toHaveLength(1);
+      expect(cash[0].id).toBe(correctionConcurrentOutflowId);
+      expect(cash[0].amount.toFixed(2)).toBe(GROUPED_TOTAL);
+      expect(cash[0].date.toISOString().slice(0, 10)).toBe(
+        DATE_CORRECTION_CONCURRENT,
+      );
+      expect(cash[0].method).toBe(PaymentMethod.CASH);
+
+      await expect(
+        prisma.payrollInstallment.count({
+          where: {
+            organizationId: orgId,
+            obligationId: correctionConcurrentObligationId,
+          },
+        }),
+      ).resolves.toBe(1);
+
+      // Exactly one void and exactly one replacement set: the loser voided and
+      // allocated nothing of its own.
+      const voids = await prisma.payrollAllocationVoid.findMany({
+        where: {
+          organizationId: orgId,
+          obligationId: correctionConcurrentObligationId,
+        },
+      });
+      expect(voids).toHaveLength(1);
+      // Applications are append-only: the superseded one stays in history, voided,
+      // and the two effective ones are the winner's replacement set. A loser that
+      // had written anything would show up as extra rows here.
+      const allocations = await prisma.payrollAllocation.findMany({
+        where: {
+          organizationId: orgId,
+          obligationId: correctionConcurrentObligationId,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(allocations).toHaveLength(3);
+      const superseded = allocations.filter(
+        (row) => row.id === voids[0].allocationId,
+      );
+      expect(superseded).toHaveLength(1);
+      expect(superseded[0].amount.toFixed(2)).toBe(CORRECTION_FIRST_TOTAL);
+      const effective = allocations.filter(
+        (row) => row.id !== voids[0].allocationId,
+      );
+      expect(effective.map((row) => row.amount.toFixed(2))).toEqual([
+        GROUPED_SHIFT_AMOUNT,
+        GROUPED_SHIFT_AMOUNT,
+      ]);
+
+      const revisions = await prisma.payrollCashRevision.findMany({
+        where: {
+          organizationId: orgId,
+          installmentId: correctionConcurrentInstallmentId,
+        },
+      });
+      expect(revisions).toHaveLength(1);
+      expect(revisions[0].sequence).toBe(1);
+      expect(revisions[0].outflowId).toBe(correctionConcurrentOutflowId);
+      expect(revisions[0].oldAmount.toFixed(2)).toBe(CORRECTION_FIRST_TOTAL);
+      expect(revisions[0].newAmount.toFixed(2)).toBe(GROUPED_TOTAL);
+
+      // This payment stores an explicit "no expense" choice, so completing it must
+      // not write one - by either correction.
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: { obligationId: correctionConcurrentObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBefore);
+
+      // The closed payment stays closed: a later correction is refused too.
+      await expect(
+        groupCorrection.correct({ ...request, amount: '221.00' }, orgId, actor),
+      ).rejects.toBeInstanceOf(ConflictException);
+      await expect(
+        prisma.payrollCashOutflow.findUniqueOrThrow({
+          where: { id: correctionConcurrentOutflowId },
+        }),
+      ).resolves.toMatchObject({ amount: new Prisma.Decimal(GROUPED_TOTAL) });
+    }, 60000);
+
+    it('10. a grouped correction whose completion expense write fails writes nothing, and a failure after its money writes is rolled back by PostgreSQL', async () => {
+      // Phase A: the approved fail-closed path. The inactive payroll category makes
+      // the in-transaction expense write throw. In this writer the expense is
+      // written *before* the voids, the replacement applications, the cash amount,
+      // the revision and the status, so the proof here is that the completion fails
+      // with no partial write of any of them.
+      await prisma.expenseLabel.update({
+        where: { id: labelId },
+        data: { active: false },
+      });
+      const expensesBefore = await prisma.expense.count({
+        where: { organizationId: orgId },
+      });
+      const paymentsBefore = await prisma.expensePayment.count({
+        where: { organizationId: orgId },
+      });
+      const auditsBefore = await prisma.auditLog.count({
+        where: { organizationId: orgId },
+      });
+      const request = {
+        employeeId: employeeCorrectionRollbackId,
+        obligationId: correctionRollbackObligationId,
+        installmentId: correctionRollbackInstallmentId,
+        amount: GROUPED_TOTAL,
+      };
+      const rollbackObligationBefore =
+        await prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: correctionRollbackObligationId },
+          select: { status: true, version: true },
+        });
+      expect(rollbackObligationBefore.status).toBe('PENDING');
+
+      const failure = await (async () => {
+        try {
+          await groupCorrection.correct({ ...request }, orgId, actor);
+          return null;
+        } catch (error) {
+          return error instanceof Error ? error : new Error('non-Error');
+        } finally {
+          // Always restore the category, so a failure here cannot cascade into the
+          // expense-dependent scenarios that follow.
+          await prisma.expenseLabel.update({
+            where: { id: labelId },
+            data: { active: true },
+          });
+        }
+      })();
+      expect(failure).toBeInstanceOf(ConflictException);
+      expect((failure as Error).message).toContain(
+        'La categoría de gasto de nómina está inactiva',
+      );
+
+      // Nothing of the failed correction survives: no void, no replacement, no
+      // revision, no cash change and no status change.
+      await expect(
+        prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: correctionRollbackObligationId },
+          select: { status: true, version: true },
+        }),
+      ).resolves.toEqual({
+        status: 'PENDING',
+        version: rollbackObligationBefore.version,
+      });
+      await expect(
+        prisma.payrollCashOutflow.findMany({
+          where: {
+            organizationId: orgId,
+            employeeId: employeeCorrectionRollbackId,
+          },
+        }),
+      ).resolves.toMatchObject([
+        { amount: new Prisma.Decimal(CORRECTION_FIRST_TOTAL) },
+      ]);
+      await expect(
+        prisma.payrollAllocationVoid.count({
+          where: { obligationId: correctionRollbackObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollAllocation.count({
+          where: { obligationId: correctionRollbackObligationId },
+        }),
+      ).resolves.toBe(1);
+      await expect(
+        prisma.payrollCashRevision.count({
+          where: { obligationId: correctionRollbackObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: { obligationId: correctionRollbackObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBefore);
+      await expect(
+        prisma.expensePayment.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(paymentsBefore);
+      await expect(
+        prisma.auditLog.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(auditsBefore);
+
+      // Control: the same correction succeeds once the expense write can succeed, so
+      // the failure above left nothing that blocks or duplicates the money.
+      const retried = await groupCorrection.correct(
+        { ...request },
+        orgId,
+        actor,
+      );
+      expect(retried.status).toBe('COMPLETED');
+      const completed = await prisma.payrollObligation.findUniqueOrThrow({
+        where: { id: correctionRollbackObligationId },
+      });
+      expect(completed.status).toBe('COMPLETED');
+      expect(completed.version).toBe(rollbackObligationBefore.version + 1);
+      const rollbackLinks = await prisma.payrollObligationExpense.findMany({
+        where: { obligationId: correctionRollbackObligationId },
+      });
+      expect(rollbackLinks).toHaveLength(1);
+      const rollbackExpense = await prisma.expense.findUniqueOrThrow({
+        where: { id: rollbackLinks[0].expenseId },
+        include: { payments: true },
+      });
+      expect(rollbackExpense.total.toFixed(2)).toBe(GROUPED_TOTAL);
+      expect(rollbackExpense.payments).toHaveLength(1);
+      expect(rollbackExpense.payments[0].amount.toFixed(2)).toBe(GROUPED_TOTAL);
+
+      // Phase B: a failure that happens *after* the money writes. The correction
+      // writes the completion expense, its payment mirror, its audit row and the
+      // obligation/expense link first, then has to void the superseded application.
+      // Holding that application FOR UPDATE blocks the void insert, the interactive
+      // transaction budget expires while the statement is blocked, and PostgreSQL
+      // must discard everything the transaction had already written.
+      let releaseAllocation = (): void => {};
+      const allocationMayBeReleased = new Promise<void>((resolve) => {
+        releaseAllocation = resolve;
+      });
+      let allocationHoldsLock = (): void => {};
+      const allocationLocked = new Promise<void>((resolve) => {
+        allocationHoldsLock = resolve;
+      });
+      const allocationHolder = prismaSecond.$transaction(
+        async (tx) => {
+          const locked = await tx.$queryRaw<{ id: string }[]>`
+            SELECT "id" FROM "PayrollAllocation"
+            WHERE "id" = ${correctionTimeoutAllocationId}
+            AND "organizationId" = ${orgId} FOR UPDATE`;
+          if (!locked.length)
+            throw new Error('Allocation holder could not lock');
+          allocationHoldsLock();
+          await allocationMayBeReleased;
+          return 'allocation released';
+        },
+        { timeout: 60000, maxWait: 30000 },
+      );
+      const settledAllocationHolder = allocationHolder.then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      await allocationLocked;
+
+      const expensesBeforeTimeout = await prisma.expense.count({
+        where: { organizationId: orgId },
+      });
+      const auditsBeforeTimeout = await prisma.auditLog.count({
+        where: { organizationId: orgId },
+      });
+      const timeoutRequest = {
+        employeeId: employeeCorrectionTimeoutId,
+        obligationId: correctionTimeoutObligationId,
+        installmentId: correctionTimeoutInstallmentId,
+        amount: GROUPED_TOTAL,
+      };
+      const timeoutObligationBefore =
+        await prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: correctionTimeoutObligationId },
+          select: { status: true, version: true },
+        });
+      expect(timeoutObligationBefore.status).toBe('PENDING');
+      const blocked = groupCorrection
+        .correct({ ...timeoutRequest }, orgId, actor)
+        .then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => ({ ok: false as const, error }),
+        );
+      let blockedWaited = 0;
+      let blockedWaitFailure: unknown;
+      try {
+        // The blocked statement is the writer's own void insert: the expense of this
+        // same completion was already written when it starts waiting.
+        blockedWaited = await waitForLockWaiter(
+          prismaProbe,
+          '%"PayrollAllocationVoid"%',
+          10000,
+        );
+      } catch (error) {
+        blockedWaitFailure = error;
+      }
+      const blockedRaced = await Promise.race([
+        blocked.then((result) => ({ settled: true as const, result })),
+        delay(6500).then(() => ({ settled: false as const })),
+      ]);
+      console.log(
+        `[payroll-pg-int] the grouped correction settled while its void insert was still blocked: ${String(blockedRaced.settled)}`,
+      );
+      releaseAllocation();
+      const holderResult = await settledAllocationHolder;
+      const blockedResult = blockedRaced.settled
+        ? blockedRaced.result
+        : await blocked;
+      if (blockedWaitFailure)
+        throw asError(blockedWaitFailure, 'Lock wait probe failed');
+      expect(blockedWaited).toBeGreaterThan(0);
+      expect(holderResult.ok).toBe(true);
+      expect(blockedRaced.settled).toBe(false);
+      if (blockedResult.ok)
+        throw new Error(
+          'The correction must not report success after its transaction budget expired',
+        );
+      console.log(
+        `[payroll-pg-int] grouped correction after its interactive transaction expired: ${describeDatabaseError(blockedResult.error)}`,
+      );
+      expect(blockedResult.error).toMatchObject({
+        status: 503,
+        message:
+          'No se pudo confirmar la operación. Verifique su estado antes de reintentar',
+      });
+
+      // The already-written expense, its mirror, its audit row, the link and the
+      // cash are all gone: only the untouched pending payment remains.
+      await delay(500);
+      await expect(
+        prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: correctionTimeoutObligationId },
+          select: { status: true, version: true },
+        }),
+      ).resolves.toEqual({
+        status: 'PENDING',
+        version: timeoutObligationBefore.version,
+      });
+      await expect(
+        prisma.payrollCashOutflow.findMany({
+          where: {
+            organizationId: orgId,
+            employeeId: employeeCorrectionTimeoutId,
+          },
+        }),
+      ).resolves.toMatchObject([
+        { amount: new Prisma.Decimal(CORRECTION_FIRST_TOTAL) },
+      ]);
+      await expect(
+        prisma.payrollAllocationVoid.count({
+          where: { obligationId: correctionTimeoutObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollAllocation.count({
+          where: { obligationId: correctionTimeoutObligationId },
+        }),
+      ).resolves.toBe(1);
+      await expect(
+        prisma.payrollCashRevision.count({
+          where: { obligationId: correctionTimeoutObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: { obligationId: correctionTimeoutObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBeforeTimeout);
+      await expect(
+        prisma.auditLog.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(auditsBeforeTimeout);
+
+      // Recovery: the same correction commits once the lock is free, and the expense
+      // of that retry is the only one this payment ever gets.
+      const timeoutRetried = await groupCorrection.correct(
+        { ...timeoutRequest },
+        orgId,
+        actor,
+      );
+      expect(timeoutRetried.status).toBe('COMPLETED');
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: { obligationId: correctionTimeoutObligationId },
+        }),
+      ).resolves.toBe(1);
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBeforeTimeout + 1);
+    }, 120000);
+
+    it('11. two concurrent replacements of the same source installment: exactly one succeeds and no second obligation, reference or cash row is created', async () => {
+      const request = {
+        employeeId: employeeReplacementRaceId,
+        sourceObligationId: replacementRaceSourceObligationId,
+        installmentIds: [replacementRaceInstallmentId],
+        expenseEnabled: false,
+      };
+      const cashBefore = await prisma.payrollCashOutflow.count({
+        where: { organizationId: orgId, employeeId: employeeReplacementRaceId },
+      });
+      const sourceBefore = await prisma.payrollObligation.findUniqueOrThrow({
+        where: { id: replacementRaceSourceObligationId },
+        select: { status: true, version: true },
+      });
+      expect(sourceBefore.status).toBe('COMPLETED');
+
+      // Both replacements reference the same real cash. The writer locks the
+      // employee, then the source payment, then the referenced cash row, so the two
+      // transactions serialise there and the second sees the committed reference.
+      const results = await Promise.allSettled([
+        replacement.create({ ...request }, orgId, actor),
+        replacementSecond.create({ ...request }, orgId, actor),
+      ]);
+      const fulfilled = results.filter(
+        (result) => result.status === 'fulfilled',
+      );
+      const rejected = results.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected',
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      const failure = rejected[0].reason as Error;
+      expect(failure).toBeInstanceOf(ConflictException);
+      expect(failure.message).toBe('El abono ya fue referenciado');
+      console.log(
+        `[payroll-pg-int] concurrent replacement loser: ${failure.constructor.name}: ${failure.message}`,
+      );
+
+      // Exactly one new payment, and it is the pending reference-based one.
+      const obligations = await prisma.payrollObligation.findMany({
+        where: {
+          organizationId: orgId,
+          employeeId: employeeReplacementRaceId,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(obligations).toHaveLength(2);
+      const source = obligations.find(
+        (row) => row.id === replacementRaceSourceObligationId,
+      );
+      expect(source).toMatchObject({
+        status: sourceBefore.status,
+        version: sourceBefore.version,
+      });
+      const created = obligations.filter(
+        (row) => row.id !== replacementRaceSourceObligationId,
+      );
+      expect(created).toHaveLength(1);
+      expect(created[0].kind).toBe('FIXED_PERIOD');
+      expect(created[0].status).toBe('PENDING');
+      expect(created[0].version).toBe(0);
+      expect(created[0].periodAmount?.toFixed(2)).toBe(GROUPED_TOTAL);
+      expect(created[0].expenseEnabled).toBe(false);
+
+      const references = await prisma.payrollInstallmentReference.findMany({
+        where: {
+          organizationId: orgId,
+          employeeId: employeeReplacementRaceId,
+        },
+      });
+      expect(references).toHaveLength(1);
+      expect(references[0].sourceInstallmentId).toBe(
+        replacementRaceInstallmentId,
+      );
+      expect(references[0].sourceObligationId).toBe(
+        replacementRaceSourceObligationId,
+      );
+      expect(references[0].targetObligationId).toBe(created[0].id);
+      expect(references[0].amount.toFixed(2)).toBe(REPLACEMENT_FIRST_TOTAL);
+
+      // Referenced cash is real cash of the source: no new outflow, and the source
+      // payment, its installments, applications and revisions are untouched.
+      await expect(
+        prisma.payrollCashOutflow.count({
+          where: {
+            organizationId: orgId,
+            employeeId: employeeReplacementRaceId,
+          },
+        }),
+      ).resolves.toBe(cashBefore);
+      await expect(
+        prisma.payrollInstallment.count({
+          where: { obligationId: replacementRaceSourceObligationId },
+        }),
+      ).resolves.toBe(2);
+      await expect(
+        prisma.payrollAllocationVoid.count({
+          where: { obligationId: replacementRaceSourceObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollCashRevision.count({
+          where: { obligationId: replacementRaceSourceObligationId },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: {
+            obligationId: {
+              in: [replacementRaceSourceObligationId, created[0].id],
+            },
+          },
+        }),
+      ).resolves.toBe(0);
+    }, 60000);
+
+    it('12. a reference-based replacement completes exactly once, with one expense when its stored choice is enabled and none when it is disabled', async () => {
+      const withExpense = await replacement.create(
+        {
+          employeeId: employeeReplacementCompleteId,
+          sourceObligationId: replacementCompleteSourceObligationId,
+          installmentIds: [replacementCompleteExpenseInstallmentId],
+          expenseEnabled: true,
+        },
+        orgId,
+        actor,
+      );
+      expect(withExpense.status).toBe('PENDING');
+      expect(withExpense.paid).toBe(REPLACEMENT_FIRST_TOTAL);
+      expect(withExpense.balance).toBe(REPLACEMENT_SECOND_TOTAL);
+
+      const withoutExpense = await replacement.create(
+        {
+          employeeId: employeeReplacementCompleteId,
+          sourceObligationId: replacementCompleteSourceObligationId,
+          installmentIds: [replacementCompleteNoExpenseInstallmentId],
+          expenseEnabled: false,
+        },
+        orgId,
+        actor,
+      );
+      expect(withoutExpense.status).toBe('PENDING');
+      expect(withoutExpense.paid).toBe(REPLACEMENT_SECOND_TOTAL);
+      expect(withoutExpense.balance).toBe(REPLACEMENT_FIRST_TOTAL);
+
+      // Creating a replacement registers references, never cash.
+      await expect(
+        prisma.payrollCashOutflow.count({
+          where: {
+            organizationId: orgId,
+            employeeId: employeeReplacementCompleteId,
+          },
+        }),
+      ).resolves.toBe(2);
+      const expensesBefore = await prisma.expense.count({
+        where: { organizationId: orgId },
+      });
+
+      // Enabled choice: referenced cash plus the completing installment reach the
+      // corrected total, so the payment completes and its expense is written once.
+      const completionWithExpense = await periodInstallments.create(
+        {
+          employeeId: employeeReplacementCompleteId,
+          obligationId: withExpense.obligation.id,
+          amount: REPLACEMENT_SECOND_TOTAL,
+          date: DATE_REPLACEMENT_COMPLETE_WITH_EXPENSE,
+          method: PaymentMethod.CASH,
+        },
+        orgId,
+        actor,
+      );
+      expect(completionWithExpense.status).toBe('COMPLETED');
+      await expect(
+        prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: withExpense.obligation.id },
+          select: { status: true, version: true },
+        }),
+      ).resolves.toEqual({ status: 'COMPLETED', version: 1 });
+
+      const withExpenseLinks = await prisma.payrollObligationExpense.findMany({
+        where: {
+          organizationId: orgId,
+          obligationId: withExpense.obligation.id,
+        },
+      });
+      expect(withExpenseLinks).toHaveLength(1);
+      const linkedExpense = await prisma.expense.findUniqueOrThrow({
+        where: { id: withExpenseLinks[0].expenseId },
+        include: { payments: { orderBy: { date: 'asc' } } },
+      });
+      expect(linkedExpense.total.toFixed(2)).toBe(GROUPED_TOTAL);
+      // One payment for the referenced cash on its real date and one for the new
+      // installment: no third cash movement was invented for the referenced money.
+      expect(linkedExpense.payments).toHaveLength(2);
+      expect(
+        linkedExpense.payments.map((payment) => payment.amount.toFixed(2)),
+      ).toEqual([REPLACEMENT_FIRST_TOTAL, REPLACEMENT_SECOND_TOTAL]);
+      expect(
+        linkedExpense.payments.map((payment) =>
+          payment.date.toISOString().slice(0, 10),
+        ),
+      ).toEqual([
+        DATE_REPLACEMENT_SOURCE,
+        DATE_REPLACEMENT_COMPLETE_WITH_EXPENSE,
+      ]);
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBefore + 1);
+
+      // Disabled choice: the same kind of completion writes no expense at all.
+      const completionWithoutExpense = await periodInstallments.create(
+        {
+          employeeId: employeeReplacementCompleteId,
+          obligationId: withoutExpense.obligation.id,
+          amount: REPLACEMENT_FIRST_TOTAL,
+          date: DATE_REPLACEMENT_COMPLETE_WITHOUT_EXPENSE,
+          method: PaymentMethod.CASH,
+        },
+        orgId,
+        actor,
+      );
+      expect(completionWithoutExpense.status).toBe('COMPLETED');
+      await expect(
+        prisma.payrollObligation.findUniqueOrThrow({
+          where: { id: withoutExpense.obligation.id },
+          select: { status: true, version: true },
+        }),
+      ).resolves.toEqual({ status: 'COMPLETED', version: 1 });
+      await expect(
+        prisma.payrollObligationExpense.count({
+          where: {
+            organizationId: orgId,
+            obligationId: withoutExpense.obligation.id,
+          },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma.expense.count({ where: { organizationId: orgId } }),
+      ).resolves.toBe(expensesBefore + 1);
+
+      // Exactly one completion each: a further installment is refused, so the
+      // completion (and its single expense) cannot happen twice.
+      await expect(
+        periodInstallments.create(
+          {
+            employeeId: employeeReplacementCompleteId,
+            obligationId: withExpense.obligation.id,
+            amount: '1.00',
+            date: DATE_REPLACEMENT_COMPLETE_WITHOUT_EXPENSE,
+            method: PaymentMethod.CASH,
+          },
+          orgId,
+          actor,
+        ),
+      ).rejects.toThrow('Pago no disponible');
+      await expect(
+        prisma.payrollCashOutflow.count({
+          where: {
+            organizationId: orgId,
+            employeeId: employeeReplacementCompleteId,
+          },
+        }),
+      ).resolves.toBe(4);
+    }, 60000);
+
+    it('13. probe: two expense-writing completions of different employees in one tenant either both commit or PostgreSQL kills one on the Organization lock upgrade', async () => {
+      // Both completions write an expense, and both first insert rows whose foreign
+      // keys take a KEY SHARE lock on the same `Organization` row. The category
+      // resolver then asks for that row FOR UPDATE, which conflicts with KEY SHARE.
+      // Whether PostgreSQL deadlocks therefore depends on the interleaving, and this
+      // probe asserts the observed outcome instead of assuming one.
+      const completionA = {
+        employeeId: employeeOrganizationProbeAId,
+        obligationId: organizationProbeObligationAId,
+        amount: ORGANIZATION_PROBE_TOTAL_A,
+        date: DATE_ORGANIZATION_LOCK_PROBE,
+        method: PaymentMethod.CASH,
+      };
+      const completionB = {
+        employeeId: employeeOrganizationProbeBId,
+        obligationId: organizationProbeObligationBId,
+        amount: ORGANIZATION_PROBE_TOTAL_B,
+        date: DATE_ORGANIZATION_LOCK_PROBE,
+        method: PaymentMethod.CASH,
+      };
+
+      const settled = await Promise.all([
+        periodInstallments.create({ ...completionA }, orgId, actor).then(
+          (value) => ({ side: 'completion A', ok: true as const, value }),
+          (error: unknown) => ({
+            side: 'completion A',
+            ok: false as const,
+            error,
+          }),
+        ),
+        periodInstallmentsSecond.create({ ...completionB }, orgId, actor).then(
+          (value) => ({ side: 'completion B', ok: true as const, value }),
+          (error: unknown) => ({
+            side: 'completion B',
+            ok: false as const,
+            error,
+          }),
+        ),
+      ]);
+      const failures = settled.filter(
+        (result): result is { side: string; ok: false; error: unknown } =>
+          !result.ok,
+      );
+      const survivors = settled.filter((result) => result.ok);
+      console.log(
+        `[payroll-pg-int] Organization lock-upgrade probe: ${survivors.length} committed, ${failures.length} refused${failures
+          .map(
+            (failure) =>
+              ` (${failure.side} -> ${describeDatabaseError(failure.error)})`,
+          )
+          .join('')}`,
+      );
+
+      if (failures.length === 0) {
+        // Observed outcome 1: no upgrade cycle in this run, both payments commit.
+        expect(survivors).toHaveLength(2);
+        expect(settled.map((result) => result.ok)).toEqual([true, true]);
+        for (const survivor of survivors) {
+          expect(survivor.ok ? survivor.value.status : undefined).toBe(
+            'COMPLETED',
+          );
+        }
+      } else {
+        // Observed outcome 2: PostgreSQL resolved a real cycle. Exactly one side may
+        // die, and only from its own deadlock detection - never from a client-side
+        // transaction budget, which would be a different (and unhandled) defect.
+        expect(failures).toHaveLength(1);
+        const victim = failures[0];
+        expect(deadlockEvidence(victim.error)).toMatch(/40P01|deadlock/i);
+        expect(deadlockEvidence(victim.error)).not.toMatch(/P2028/);
+
+        const victimRequest =
+          victim.side === 'completion A' ? completionA : completionB;
+        const victimEmployeeId = victimRequest.employeeId;
+        const victimObligationId = victimRequest.obligationId;
+        await expect(
+          prisma.payrollObligation.findUniqueOrThrow({
+            where: { id: victimObligationId },
+            select: { status: true, version: true },
+          }),
+        ).resolves.toEqual({ status: 'PENDING', version: 0 });
+        await expect(
+          prisma.payrollCashOutflow.count({
+            where: { organizationId: orgId, employeeId: victimEmployeeId },
+          }),
+        ).resolves.toBe(0);
+        await expect(
+          prisma.payrollObligationExpense.count({
+            where: { obligationId: victimObligationId },
+          }),
+        ).resolves.toBe(0);
+
+        // The victim left nothing behind, so the same request commits on retry.
+        const retried = await periodInstallments.create(
+          { ...victimRequest },
+          orgId,
+          actor,
+        );
+        expect(retried.status).toBe('COMPLETED');
+      }
+
+      // Whatever PostgreSQL did, the committed state is consistent and each payment
+      // completed exactly once with exactly one expense.
+      for (const [employeeId, obligationId, total] of [
+        [
+          employeeOrganizationProbeAId,
+          organizationProbeObligationAId,
+          ORGANIZATION_PROBE_TOTAL_A,
+        ],
+        [
+          employeeOrganizationProbeBId,
+          organizationProbeObligationBId,
+          ORGANIZATION_PROBE_TOTAL_B,
+        ],
+      ] as const) {
+        await expect(
+          prisma.payrollObligation.findUniqueOrThrow({
+            where: { id: obligationId },
+            select: { status: true, version: true },
+          }),
+        ).resolves.toEqual({ status: 'COMPLETED', version: 1 });
+        const outflows = await prisma.payrollCashOutflow.findMany({
+          where: { organizationId: orgId, employeeId },
+        });
+        expect(outflows).toHaveLength(1);
+        expect(outflows[0].amount.toFixed(2)).toBe(total);
+        const links = await prisma.payrollObligationExpense.findMany({
+          where: { obligationId },
+        });
+        expect(links).toHaveLength(1);
+        const expense = await prisma.expense.findUniqueOrThrow({
+          where: { id: links[0].expenseId },
+          include: { payments: true },
+        });
+        expect(expense.total.toFixed(2)).toBe(total);
+        expect(expense.payments).toHaveLength(1);
+        expect(expense.payments[0].amount.toFixed(2)).toBe(total);
+      }
+    }, 90000);
   },
 );
 
@@ -2583,7 +3751,49 @@ describePostgres(
  *   reads never cross, and twelve reads/mutations (period installment, correction,
  *   expense read/update/addPayment/remove in both directions, and the expense
  *   writer with a foreign tenant or a foreign category identity) are refused
- *   before any row is touched, with both tenants' snapshots identical afterwards.
+ *   before any row is touched, with both tenants' snapshots identical afterwards;
+ * - two concurrent corrections of one grouped installment (scenario 9): the two
+ *   transactions serialise on the employee row, exactly one applies, and the loser
+ *   answers 409 `Pago no disponible` after re-reading the committed state, leaving
+ *   no extra void, no extra application, no second revision, no cash change and no
+ *   status change. The winner revised the same cash row in place (date and method
+ *   kept), voided the superseded application, wrote the replacement applications,
+ *   one `PayrollCashRevision` (sequence 1) and one status transition, and wrote no
+ *   expense because the payment stores an explicit "no expense" choice;
+ * - a grouped correction whose completion expense write fails (scenario 10, phase
+ *   A) answers 409 with no void, no replacement, no revision, no cash change, no
+ *   status change, no expense/payment/audit row, and the same correction commits
+ *   afterwards. In this writer the expense is written *before* the money writes, so
+ *   phase A proves "no partial write" rather than discarding written money; phase B
+ *   supplies that proof: with the superseded application held `FOR UPDATE`, the
+ *   correction blocks on its own void insert after it already wrote the expense,
+ *   its payment mirror, its audit row and the obligation/expense link, the
+ *   interactive transaction expires while the statement is blocked, and PostgreSQL
+ *   discards all of it (P2028 -> 503), leaving the pending payment and its original
+ *   75.00 cash untouched, with the retry committing the only expense of that
+ *   payment;
+ * - two concurrent reference-based replacements of the same source installment
+ *   (scenario 11): exactly one succeeds, the other answers 409 `El abono ya fue
+ *   referenciado`, and there is exactly one new pending payment, exactly one
+ *   reference row, no new cash outflow and no change to the completed source
+ *   (status, version, installments, voids, revisions, no expense);
+ * - a replacement whose referenced cash plus its completing installment reaches
+ *   COMPLETED exactly once (scenario 12): with the stored choice enabled the
+ *   completion writes exactly one expense of the corrected total whose two payment
+ *   mirrors are the referenced cash on its real date and the new installment on the
+ *   completion date (no third cash movement for the referenced money); with the
+ *   choice disabled the same kind of completion writes no expense and no link. A
+ *   further installment on a completed replacement is refused, so neither the
+ *   completion nor its expense can happen twice;
+ * - the `Organization` KEY SHARE -> FOR UPDATE upgrade between two expense-writing
+ *   completions of *different* employees in one tenant (scenario 13) is a real
+ *   hazard of the production lock order, not a hypothetical one: each completion
+ *   inserts rows whose foreign keys hold KEY SHARE on the tenant row before the
+ *   category resolver asks for it FOR UPDATE. The suite asserts whichever outcome
+ *   PostgreSQL produces in the run: either both completions commit, or exactly one
+ *   dies with PostgreSQL's own deadlock (40P01) - never a P2028 - leaving no cash,
+ *   expense or link, and its retry then commits. Either way each payment ends
+ *   COMPLETED once with exactly one expense.
  *
  * REMAINING GAPS — assertions this suite does not, and cannot, prove:
  *
@@ -2615,4 +3825,20 @@ describePostgres(
  *   the label row only, so a concurrent **group** deactivation is still observed by
  *   a post-lock read rather than by a lock, and the `Expense` insert's own implicit
  *   key-share wait is not traced here.
+ * - Scenario 13 reports the outcome of one interleaving, not the probability of it.
+ *   It does not prove that the upgrade cycle is unreachable, and it does not map
+ *   the deadlock to an HTTP response: only P2028 is translated by
+ *   `throwPayrollTransactionError`, so an aborted side would answer 500 (L336).
+ * - Scenario 9's loser is refused because the winning correction completed the
+ *   payment, which is what makes "exactly one wins" observable. Two concurrent
+ *   corrections with *different* non-completing amounts are not rejected by this
+ *   writer: the employee lock serialises them and both apply in sequence, each with
+ *   its own revision. That sequential behaviour is not asserted here.
+ * - Scenario 10 phase B proves rollback of already-written money only for the
+ *   grouped correction's own write order; it is not a general proof for the other
+ *   payroll writers, whose blocked statements differ.
+ * - No `PayrollCashReturn`, refund route, grouped-shift-date correction or copy of a
+ *   completed payment beyond reference-based replacement is exercised, and the
+ *   reference writer's own rollback (its only writes are the new obligation and its
+ *   references) is not forced to fail here.
  */
