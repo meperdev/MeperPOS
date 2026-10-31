@@ -745,7 +745,10 @@ describe('WhatsAppAdminService', () => {
         expect.objectContaining({ status: 'answered', tool: 'daily_summary' }),
       );
       await expect(service.answer(authorized, 'manda el pdf')).resolves.toEqual(
-        expect.objectContaining({ status: 'delivered', tool: 'daily_report_pdf' }),
+        expect.objectContaining({
+          status: 'delivered',
+          tool: 'daily_report_pdf',
+        }),
       );
       await expect(service.answer(authorized, 'borra todo')).resolves.toEqual({
         status: 'unsupported',
