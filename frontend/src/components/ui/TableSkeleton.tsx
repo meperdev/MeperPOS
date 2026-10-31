@@ -25,7 +25,7 @@ export function TableSkeleton({
       )}
     >
       <span className="sr-only">{label}</span>
-      <div className="flex items-center gap-4 border-b border-border/60 bg-muted/30 px-4 py-3">
+      <div className="flex items-center gap-4 border-b border-border/60 bg-muted/30 px-5 py-3">
         {Array.from({ length: columns }).map((_, index) => (
           <div
             key={index}
@@ -39,7 +39,7 @@ export function TableSkeleton({
       {Array.from({ length: rows }).map((_, row) => (
         <div
           key={row}
-          className="flex items-center gap-4 border-b border-border/40 px-4 py-3 last:border-b-0"
+          className="flex items-center gap-4 border-b border-border/40 px-5 py-3 last:border-b-0"
         >
           {Array.from({ length: columns }).map((_, column) => (
             <div
