@@ -38,18 +38,18 @@ export class SequenceService {
     // backfill): en ese caso el máximo real manda y el contador se recupera.
     const maxExisting =
       type === 'SALE'
-        ? (
+        ? ((
             await tx.sale.aggregate({
               where: { organizationId },
               _max: { saleNumber: true },
             })
-          )._max.saleNumber ?? 0
-        : (
+          )._max.saleNumber ?? 0)
+        : ((
             await tx.purchaseOrder.aggregate({
               where: { organizationId },
               _max: { orderNumber: true },
             })
-          )._max.orderNumber ?? 0;
+          )._max.orderNumber ?? 0);
 
     // 3. Incrementar atómicamente desde el mayor de los dos
     const updated = await tx.organizationSequence.update({

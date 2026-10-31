@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -46,7 +47,12 @@ export class ExpensesService {
       where: { id: labelId, organizationId, active: true },
       include: { group: { select: { organizationId: true, active: true } } },
     });
-    if (!label || !label.active || !label.group.active || label.group.organizationId !== organizationId) {
+    if (
+      !label ||
+      !label.active ||
+      !label.group.active ||
+      label.group.organizationId !== organizationId
+    ) {
       throw new NotFoundException('Expense label not found');
     }
   }
@@ -80,6 +86,52 @@ export class ExpensesService {
       (sum, payment) => sum.add(payment.amount),
       new Prisma.Decimal(0),
     );
+  }
+
+  /**
+   * Payroll-owned guard for the existing expense mutations (`update`,
+   * `addPayment`, `remove`).
+   *
+   * It must run as the first statement inside the business transaction, before
+   * any read whose result decides a write: it locks the tenant's `Expense` row
+   * with `SELECT ... FOR UPDATE`, then asks whether payroll linked that expense
+   * to an obligation. A linked expense is payroll history, so the expense API
+   * refuses the change with 409 instead of rewriting a completed payroll payment.
+   * The payroll tables are only read here; no payroll or cash row is locked.
+   *
+   * Known limits, intentionally not implemented in this unit: this guard is not
+   * payroll-owned annulment (payroll still cannot annul a linked expense through
+   * this path) and it is not a complete cross-writer lock protocol. A payroll
+   * writer that inserts `PayrollObligationExpense` rows waits on this row lock
+   * through the link foreign key, but it must still take the same
+   * `Expense ... FOR UPDATE` lock before its own verification, or it could verify
+   * the expense from facts this mutation has already changed. That writer is
+   * still unwired.
+   */
+  private async lockExpenseForGuardedMutation(
+    tx: Prisma.TransactionClient,
+    id: string,
+    organizationId: string,
+  ): Promise<void> {
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Expense"
+      WHERE "id" = ${id} AND "organizationId" = ${organizationId}
+      FOR UPDATE`;
+
+    if (locked.length === 0) {
+      throw new NotFoundException('Salida no encontrada');
+    }
+
+    const payrollLink = await tx.payrollObligationExpense.findFirst({
+      where: { expenseId: id, organizationId },
+      select: { obligationId: true },
+    });
+
+    if (payrollLink) {
+      throw new ConflictException(
+        'La salida está vinculada a una obligación de nómina y no puede modificarse',
+      );
+    }
   }
 
   async create(
@@ -139,7 +191,11 @@ export class ExpensesService {
             })),
           },
         },
-        include: { payments: true, label: { include: { group: true } }, supplier: true },
+        include: {
+          payments: true,
+          label: { include: { group: true } },
+          supplier: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -204,7 +260,11 @@ export class ExpensesService {
         skip,
         take: limit,
         orderBy: { date: 'desc' },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       }),
       this.prisma.expense.count({ where }),
     ]);
@@ -236,24 +296,59 @@ export class ExpensesService {
 
     const categories = await this.prisma.expenseLabel.findMany({
       where: { id: { in: grouped.map((row) => row.labelId) } },
-      select: { id: true, name: true, groupId: true, group: { select: { id: true, name: true } } },
+      select: {
+        id: true,
+        name: true,
+        groupId: true,
+        group: { select: { id: true, name: true } },
+      },
     });
 
-    const labelsById = new Map(
-      categories.map((label) => [label.id, label]),
-    );
+    const labelsById = new Map(categories.map((label) => [label.id, label]));
 
-    const groups = new Map<string, { groupId: string; name: string; total: Prisma.Decimal; labels: Array<{ labelId: string; name: string; total: Prisma.Decimal }> }>();
+    const groups = new Map<
+      string,
+      {
+        groupId: string;
+        name: string;
+        total: Prisma.Decimal;
+        labels: Array<{ labelId: string; name: string; total: Prisma.Decimal }>;
+      }
+    >();
     for (const row of grouped) {
       const label = labelsById.get(row.labelId);
       if (!label) continue;
       const amount = row._sum.total ?? new Prisma.Decimal(0);
-      const current = groups.get(label.group.id) ?? { groupId: label.group.id, name: label.group.name, total: new Prisma.Decimal(0), labels: [] };
+      const current = groups.get(label.group.id) ?? {
+        groupId: label.group.id,
+        name: label.group.name,
+        total: new Prisma.Decimal(0),
+        labels: [],
+      };
       current.total = current.total.add(amount);
-      current.labels.push({ labelId: label.id, name: label.name, total: amount });
+      current.labels.push({
+        labelId: label.id,
+        name: label.name,
+        total: amount,
+      });
       groups.set(label.group.id, current);
     }
-    const rows = [...groups.values()].map((group) => ({ ...group, labels: group.labels.sort((a, b) => b.total.comparedTo(a.total) || a.name.localeCompare(b.name) || a.labelId.localeCompare(b.labelId)) })).sort((a, b) => b.total.comparedTo(a.total) || a.name.localeCompare(b.name) || a.groupId.localeCompare(b.groupId));
+    const rows = [...groups.values()]
+      .map((group) => ({
+        ...group,
+        labels: group.labels.sort(
+          (a, b) =>
+            b.total.comparedTo(a.total) ||
+            a.name.localeCompare(b.name) ||
+            a.labelId.localeCompare(b.labelId),
+        ),
+      }))
+      .sort(
+        (a, b) =>
+          b.total.comparedTo(a.total) ||
+          a.name.localeCompare(b.name) ||
+          a.groupId.localeCompare(b.groupId),
+      );
 
     const total = rows.reduce(
       (sum, row) => sum.add(row.total),
@@ -263,18 +358,18 @@ export class ExpensesService {
     return { month, total, groups: rows };
   }
 
-  async findForReports(
-    organizationId: string,
-    start: Date,
-    end: Date,
-  ) {
+  async findForReports(organizationId: string, start: Date, end: Date) {
     return this.prisma.expense.findMany({
       where: {
         organizationId: this.requireOrganizationId(organizationId),
         active: true,
         date: { gte: start, lte: end },
       },
-      select: { total: true, purchaseOrderId: true, label: { select: { name: true, group: { select: { name: true } } } } },
+      select: {
+        total: true,
+        purchaseOrderId: true,
+        label: { select: { name: true, group: { select: { name: true } } } },
+      },
     });
   }
 
@@ -335,9 +430,37 @@ export class ExpensesService {
       );
     }
 
-    const status = deriveExpensePaymentStatus(newTotal, paymentsSum);
-
     return this.prisma.$transaction(async (tx) => {
+      await this.lockExpenseForGuardedMutation(tx, id, orgId);
+
+      // The pre-transaction read only fast-fails. The amount, payment limits and
+      // derived status come from the post-lock reread of the locked row; the
+      // label/supplier/purchase-order membership checks remain the
+      // pre-transaction tenant asserts they already were.
+      const locked = await tx.expense.findFirst({
+        where: { id, organizationId: orgId },
+        include: { payments: true },
+      });
+
+      if (!locked) {
+        throw new NotFoundException('Salida no encontrada');
+      }
+
+      const lockedTotal =
+        dto.total !== undefined ? new Prisma.Decimal(dto.total) : locked.total;
+      const lockedPaymentsSum = this.sumPayments(locked.payments);
+
+      if (lockedTotal.lt(lockedPaymentsSum)) {
+        throw new BadRequestException(
+          'El nuevo total no puede ser menor que la suma de los pagos registrados',
+        );
+      }
+
+      const lockedStatus = deriveExpensePaymentStatus(
+        lockedTotal,
+        lockedPaymentsSum,
+      );
+
       const updated = await tx.expense.update({
         where: { id },
         data: {
@@ -350,10 +473,14 @@ export class ExpensesService {
             description: dto.description,
           }),
           ...(dto.date !== undefined && { date: new Date(dto.date) }),
-          ...(dto.total !== undefined && { total: newTotal }),
-          status,
+          ...(dto.total !== undefined && { total: lockedTotal }),
+          status: lockedStatus,
         },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -366,10 +493,10 @@ export class ExpensesService {
           metadata: {
             summary: 'Salida actualizada',
             before: {
-              total: existing.total.toString(),
-              status: existing.status,
-              description: existing.description,
-              date: existing.date.toISOString(),
+              total: locked.total.toString(),
+              status: locked.status,
+              description: locked.description,
+              date: locked.date.toISOString(),
             },
             after: {
               total: updated.total.toString(),
@@ -418,9 +545,39 @@ export class ExpensesService {
       );
     }
 
-    const status = deriveExpensePaymentStatus(existing.total, paymentsSum);
-
     return this.prisma.$transaction(async (tx) => {
+      await this.lockExpenseForGuardedMutation(tx, id, orgId);
+
+      // The pre-transaction read only fast-fails. The active flag, the payments
+      // sum and the resulting status come from the post-lock reread.
+      const locked = await tx.expense.findFirst({
+        where: { id, organizationId: orgId },
+        include: { payments: true },
+      });
+
+      if (!locked) {
+        throw new NotFoundException('Salida no encontrada');
+      }
+
+      if (!locked.active) {
+        throw new BadRequestException(
+          'No se pueden registrar pagos en una salida eliminada',
+        );
+      }
+
+      const lockedPaymentsSum = this.sumPayments(locked.payments).add(amount);
+
+      if (lockedPaymentsSum.gt(locked.total)) {
+        throw new BadRequestException(
+          'La suma de los pagos no puede superar el total de la salida',
+        );
+      }
+
+      const lockedStatus = deriveExpensePaymentStatus(
+        locked.total,
+        lockedPaymentsSum,
+      );
+
       await tx.expensePayment.create({
         data: {
           expenseId: id,
@@ -433,8 +590,12 @@ export class ExpensesService {
 
       const updated = await tx.expense.update({
         where: { id },
-        data: { status },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        data: { status: lockedStatus },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -449,8 +610,8 @@ export class ExpensesService {
             amount: amount.toString(),
             method: dto.method,
             date: dto.date,
-            beforeStatus: existing.status,
-            afterStatus: status,
+            beforeStatus: locked.status,
+            afterStatus: lockedStatus,
             timestamp: new Date().toISOString(),
           },
         },
@@ -520,7 +681,11 @@ export class ExpensesService {
             })),
           },
         },
-        include: { payments: true, label: { include: { group: true } }, supplier: true },
+        include: {
+          payments: true,
+          label: { include: { group: true } },
+          supplier: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -596,7 +761,11 @@ export class ExpensesService {
       const updated = await tx.expense.update({
         where: { id },
         data: { receiptUrl },
-        include: { label: { include: { group: true } }, supplier: true, payments: true },
+        include: {
+          label: { include: { group: true } },
+          supplier: true,
+          payments: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -630,6 +799,18 @@ export class ExpensesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await this.lockExpenseForGuardedMutation(tx, id, orgId);
+
+      // The audited total comes from the post-lock reread, not from the
+      // pre-transaction snapshot.
+      const locked = await tx.expense.findFirst({
+        where: { id, organizationId: orgId },
+      });
+
+      if (!locked) {
+        throw new NotFoundException('Salida no encontrada');
+      }
+
       const updated = await tx.expense.update({
         where: { id },
         data: { active: false },
@@ -644,7 +825,7 @@ export class ExpensesService {
           organizationId: orgId,
           metadata: {
             summary: 'Salida eliminada (borrado lógico)',
-            total: existing.total.toString(),
+            total: locked.total.toString(),
             timestamp: new Date().toISOString(),
           },
         },

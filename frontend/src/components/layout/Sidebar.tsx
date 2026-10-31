@@ -27,6 +27,7 @@ import {
   ClipboardList,
   Truck,
   Wallet,
+  Banknote,
   Building2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -128,6 +129,20 @@ const navItems: NavItem[] = [
     group: "Finanzas",
   },
   {
+    label: "Empleados",
+    href: "/employees",
+    icon: <Users className="w-4 h-4" />,
+    roles: ["ADMIN"],
+    group: "Equipo",
+  },
+  {
+    label: "Nómina",
+    href: "/payroll",
+    icon: <Banknote className="w-4 h-4" />,
+    roles: ["ADMIN"],
+    group: "Equipo",
+  },
+  {
     label: "Tareas",
     href: "/tasks",
     icon: <ClipboardList className="w-4 h-4" />,
@@ -155,6 +170,10 @@ const navItems: NavItem[] = [
     group: "Cuenta",
   },
 ];
+
+// Owners and administrators only. These routes are checked by identity instead of
+// the inherited role list, so a SUPER_ADMIN scope never reaches tenant payroll.
+const OWNER_ADMIN_ONLY_ROUTES = ["/employees", "/payroll"];
 
 const roleLabels: Record<string, string> = {
   OWNER: "Propietario",
@@ -208,7 +227,9 @@ export function Sidebar() {
   const navRef = useRef<HTMLElement>(null);
 
   const filteredItems = navItems.filter(
-    (item) => !item.roles || (user && hasAnyRole(user.role, item.roles))
+    (item) => OWNER_ADMIN_ONLY_ROUTES.includes(item.href)
+      ? user?.role === "OWNER" || user?.role === "ADMIN"
+      : !item.roles || (user && hasAnyRole(user.role, item.roles))
   );
 
   // Consecutive items sharing a group collapse into one labelled block, so the

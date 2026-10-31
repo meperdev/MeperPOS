@@ -30,6 +30,7 @@ import { CashRegistersModule } from './cash-registers/cash-registers.module';
 import { BillingModule } from './billing/billing.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { LoansModule } from './loans/loans.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
@@ -65,6 +66,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     BillingModule,
     ExpensesModule,
     LoansModule,
+    PayrollModule,
     WhatsAppModule,
   ],
   controllers: [AppController],
