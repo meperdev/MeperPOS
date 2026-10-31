@@ -225,6 +225,8 @@ export function RowActions({
                   title={item.label}
                   onClick={() => {
                     setOpen(false);
+                    // The dialog that opens next must know where focus came from.
+                    triggerRef.current?.focus();
                     item.onSelect();
                   }}
                   className={itemClass(disabled, item.destructive)}

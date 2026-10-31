@@ -52,17 +52,63 @@ export function Modal({
     const panel = panelRef.current;
     const previous = document.activeElement as HTMLElement | null;
 
+    // Visibility by style rather than layout rects: rects are empty until the
+    // browser lays out, and never exist at all under jsdom.
+    const isReachable = (element: HTMLElement) => {
+      if (element.closest("[hidden]")) return false;
+      // A control inside a disabled fieldset is disabled without carrying the
+      // attribute itself, and focusing it silently does nothing.
+      if (element.closest("fieldset:disabled")) return false;
+      const style = window.getComputedStyle(element);
+      return style.display !== "none" && style.visibility !== "hidden";
+    };
+
     const focusables = () =>
       Array.from(
         panel?.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ) ?? [],
-      ).filter((element) => element.getClientRects().length > 0);
+      ).filter(
+        (element) =>
+          isReachable(element) &&
+          element.tabIndex >= 0 &&
+          !(element as HTMLButtonElement).disabled,
+      );
 
-    const frame = window.requestAnimationFrame(() => {
-      const [first] = focusables();
-      (first ?? panel)?.focus();
-    });
+    // The first field wins over the close button: opening a form should land on
+    // the form, not on the way out of it.
+    const initialTarget = () => {
+      const body = panel?.querySelector<HTMLElement>("[data-modal-content]");
+      const inBody = body
+        ? Array.from(
+            body.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter(
+            (element) =>
+              isReachable(element) &&
+              element.tabIndex >= 0 &&
+              !(element as HTMLButtonElement).disabled,
+          )
+        : [];
+      return inBody[0] ?? focusables()[0] ?? null;
+    };
+
+    const focusInitial = () => {
+      (initialTarget() ?? panel)?.focus();
+    };
+    // Focus immediately for deterministic behaviour, then again after layout so
+    // a field that mounts late still receives it.
+    focusInitial();
+    const frame = window.requestAnimationFrame(focusInitial);
+
+    // Programmatic focus can escape a dialog; bring it back instead of leaving
+    // the keyboard user on the page behind it.
+    const handleFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof Node && panel && !panel.contains(event.target)) {
+        (initialTarget() ?? panel)?.focus();
+      }
+    };
 
     const handleTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
@@ -84,9 +130,11 @@ export function Modal({
     };
 
     document.addEventListener("keydown", handleTab);
+    document.addEventListener("focusin", handleFocusIn);
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleTab);
+      document.removeEventListener("focusin", handleFocusIn);
       previous?.focus?.();
     };
   }, [isOpen]);
@@ -141,7 +189,12 @@ export function Modal({
         )}
 
         {/* Content */}
-        <div className={cn("p-4 sm:p-6", scrollContent ? "overflow-y-auto scrollbar-app flex-1" : "shrink-0")}>{children}</div>
+        <div
+          data-modal-content
+          className={cn("p-4 sm:p-6", scrollContent ? "overflow-y-auto scrollbar-app flex-1" : "shrink-0")}
+        >
+          {children}
+        </div>
 
         {/* Footer */}
         {footer && (

@@ -1,81 +1,360 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useMemo, useState } from "react";
+import { CalendarClock, UserCheck, UserPlus, UserX, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { EmployeeDialog } from "./EmployeeDialog";
-import { ShiftDialog } from "./ShiftDialog";
-import { LoadingState } from "@/components/ui/LoadingState";
-import { ErrorState } from "@/components/ui/ErrorState";
+import { Card } from "@/components/ui/Card";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import {
+  FilterBar,
+  FilterGroup,
+  FilterOptionButton,
+} from "@/components/ui/FilterBar";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { RowActions } from "@/components/ui/RowActions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { formatCurrency } from "@/lib/utils";
-import { useEmployees, useCreateEmployee, useUpdateEmployee, useSetEmployeeActive, type Employee, type EmployeeModality, type EmployeePayload } from "@/hooks/useEmployees";
+import { cn, formatCurrency, formatDate, toFiniteNumber } from "@/lib/utils";
+import {
+  useEmployees,
+  useSetEmployeeActive,
+  type Employee,
+  type EmployeeModality,
+} from "@/hooks/useEmployees";
+import { EmployeeFormDialog } from "./EmployeeFormDialog";
+import { ShiftDialog } from "./ShiftDialog";
 
-type Form = { name: string; identification: string; phone: string; email: string; address: string; jobTitle: string; startDate: string; remunerationModality: "" | EmployeeModality; referenceAmount: string };
-const emptyForm: Form = { name: "", identification: "", phone: "", email: "", address: "", jobTitle: "", startDate: "", remunerationModality: "", referenceAmount: "" };
-const modalities: Record<EmployeeModality, string> = { FIXED: "Salario fijo", BY_DAY: "Por día", OTHER: "Otro acuerdo" };
+const MODALITY_LABELS: Record<EmployeeModality, string> = {
+  FIXED: "Salario fijo",
+  BY_DAY: "Por día",
+  OTHER: "Otro acuerdo",
+};
+
+const STATUS_FILTERS = [
+  { value: "all", label: "Todos" },
+  { value: "active", label: "Activos" },
+  { value: "inactive", label: "Inactivos" },
+] as const;
+
+type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+const EMPTY_LABELS = new Set(["Sin registrar", "Sin definir"]);
+
+function Meta({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "truncate text-xs",
+          EMPTY_LABELS.has(value) ? "text-muted-foreground" : "text-foreground",
+          mono && "font-mono tabular-nums",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function EmployeeCard({
+  employee,
+  pending,
+  onEdit,
+  onShifts,
+  onToggle,
+}: {
+  employee: Employee;
+  pending: boolean;
+  onEdit: () => void;
+  onShifts: () => void;
+  onToggle: () => void;
+}) {
+  const contact = [employee.phone, employee.email].filter(Boolean).join(" · ");
+
+  return (
+    <Card className="flex flex-col">
+      <div className="flex items-start gap-3 p-4 pb-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 font-mono text-xs font-semibold text-primary-text">
+          {initials(employee.name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-sm font-semibold text-foreground">
+              {employee.name}
+            </h2>
+            <Badge variant={employee.active ? "success" : "default"} dot>
+              {employee.active ? "Activo" : "Inactivo"}
+            </Badge>
+          </div>
+          <p className="truncate text-xs text-muted-foreground">
+            {employee.jobTitle ?? "Sin cargo asignado"}
+          </p>
+        </div>
+      </div>
+
+      <dl className="grid flex-1 grid-cols-2 gap-x-3 gap-y-2.5 px-4 pb-4">
+        <Meta
+          label="Identificación"
+          value={employee.identification ?? "Sin registrar"}
+          mono
+        />
+        <Meta label="Contacto" value={contact || "Sin registrar"} />
+        <Meta
+          label="Modalidad"
+          value={
+            employee.remunerationModality
+              ? MODALITY_LABELS[employee.remunerationModality]
+              : "Sin definir"
+          }
+        />
+        <Meta
+          label="Valor de referencia"
+          value={
+            employee.referenceAmount !== null
+              ? formatCurrency(toFiniteNumber(employee.referenceAmount))
+              : "Sin definir"
+          }
+          mono
+        />
+        <div className="col-span-2">
+          <Meta
+            label="Ingreso"
+            value={employee.startDate ? formatDate(employee.startDate) : "Sin registrar"}
+          />
+        </div>
+      </dl>
+
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2.5">
+        <Button
+          size="sm"
+          variant="secondary"
+          aria-label={`Jornadas ${employee.name}`}
+          onClick={onShifts}
+        >
+          <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+          Jornadas
+        </Button>
+        <RowActions
+          label={`Acciones de ${employee.name}`}
+          items={[
+            {
+              label: "Editar",
+              onSelect: onEdit,
+            },
+            {
+              label: employee.active ? "Desactivar" : "Activar",
+              icon: employee.active ? (
+                <UserX className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <UserCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              ),
+              onSelect: onToggle,
+              disabled: pending,
+            },
+          ]}
+        />
+      </div>
+    </Card>
+  );
+}
 
 export default function EmployeesPage() {
   const { user } = useAuth();
   const allowed = user?.role === "OWNER" || user?.role === "ADMIN";
   const employees = useEmployees(allowed);
-  const create = useCreateEmployee(); const update = useUpdateEmployee(); const setActive = useSetEmployeeActive();
+  const setActive = useSetEmployeeActive();
   const toast = useToast();
-  const [form, setForm] = useState<Form>(emptyForm);
-  const [nameError, setNameError] = useState(false);
-  const nameErrorId = useId();
-  const [editing, setEditing] = useState<Employee | null>(null);
-  const [shiftEmployeeId, setShiftEmployeeId] = useState<string | null>(null);
-  const shiftEmployee = employees.data?.find((employee) => employee.id === shiftEmployeeId);
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [dialog, setDialog] = useState<
+    { mode: "create" } | { mode: "edit"; employee: Employee } | null
+  >(null);
+  const [shiftFor, setShiftFor] = useState<Employee | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<Employee | null>(null);
   const [changingId, setChangingId] = useState<string | null>(null);
-  function edit(employee: Employee) {
-    setEditing(employee);
-    setNameError(false);
-    setForm({ name: employee.name, identification: employee.identification ?? "", phone: employee.phone ?? "", email: employee.email ?? "", address: employee.address ?? "", jobTitle: employee.jobTitle ?? "", startDate: employee.startDate?.slice(0, 10) ?? "", remunerationModality: employee.remunerationModality ?? "", referenceAmount: employee.referenceAmount ?? "" });
-    setOpen(true);
-  }
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!allowed || saving) return;
-    if (!form.name.trim()) { setNameError(true); return; }
-    setNameError(false);
-    const nullable = (value: string) => value.trim() || null;
-    const data: EmployeePayload = { name: form.name.trim(), identification: nullable(form.identification), phone: nullable(form.phone), email: nullable(form.email), address: nullable(form.address), jobTitle: nullable(form.jobTitle), startDate: form.startDate || null, remunerationModality: form.remunerationModality || null, referenceAmount: form.referenceAmount === "" ? null : Number(form.referenceAmount) };
-    setSaving(true);
-    try {
-      if (editing) await update.mutateAsync({ id: editing.id, data }); else await create.mutateAsync(data);
-      toast.success(editing ? "Empleado actualizado" : "Empleado creado"); setOpen(false);
-    } catch (error) { toast.error(getApiErrorMessage(error, "No se pudo guardar el empleado")); }
-    finally { setSaving(false); }
-  }
-  async function toggle(employee: Employee) {
-    if (!allowed || changingId) return;
+
+  const filtered = useMemo(() => {
+    const list = employees.data ?? [];
+    const needle = query.trim().toLowerCase();
+    return list.filter((employee) => {
+      const matchesStatus =
+        status === "all" || (status === "active" ? employee.active : !employee.active);
+      if (!matchesStatus) return false;
+      if (!needle) return true;
+      const haystack = [
+        employee.name,
+        employee.jobTitle,
+        employee.identification,
+        employee.email,
+        employee.phone,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [employees.data, query, status]);
+
+  async function setEmployeeActive(employee: Employee, active: boolean) {
+    if (changingId) return;
     setChangingId(employee.id);
-    try { await setActive.mutateAsync({ id: employee.id, active: !employee.active }); toast.success("Estado actualizado"); }
-    catch (error) { toast.error(getApiErrorMessage(error, "No se pudo cambiar el estado")); }
-    finally { setChangingId(null); }
+    try {
+      await setActive.mutateAsync({ id: employee.id, active });
+      toast.success(
+        active ? `${employee.name} quedó activo` : `${employee.name} quedó inactivo`,
+      );
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "No se pudo cambiar el estado"));
+    } finally {
+      setChangingId(null);
+    }
   }
-  return <DashboardLayout>{allowed && <div className="space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-2xl font-bold">Empleados</h1><p className="text-sm text-muted-foreground">Gestiona los datos de tus empleados</p></div><Button onClick={() => { setEditing(null); setNameError(false); setForm(emptyForm); setOpen(true); }}>Nuevo empleado</Button></div>
-    {employees.isLoading ? <LoadingState icon={<span>…</span>} message="Cargando empleados..." /> : employees.isError ? <ErrorState message="No se pudieron cargar los empleados" retryLabel="Reintentar" onRetry={() => void employees.refetch()} /> : !employees.data?.length ? <EmptyState icon={<span>•</span>} title="No hay empleados" subtitle="Agrega tu primer empleado" /> : <div className="grid gap-4 md:grid-cols-2">{employees.data.map((employee) => <article key={employee.id} className="rounded-xl border border-border bg-card p-4 space-y-2"><h2 className="font-semibold">{employee.name}</h2><p className="text-sm">{employee.active ? "Activo" : "Inactivo"}{employee.jobTitle ? ` · ${employee.jobTitle}` : ""}</p><p className="text-sm text-muted-foreground">{employee.identification || "Sin identificación"}{employee.phone ? ` · ${employee.phone}` : ""}{employee.email ? ` · ${employee.email}` : ""}</p><p className="text-sm text-muted-foreground">{employee.remunerationModality ? modalities[employee.remunerationModality] : "Sin modalidad"}{employee.referenceAmount !== null ? ` · ${formatCurrency(Number(employee.referenceAmount))}` : ""}</p><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setShiftEmployeeId(employee.id)} aria-label={`Jornadas ${employee.name}`}>Jornadas</Button><Button variant="outline" onClick={() => edit(employee)} aria-label={`Editar ${employee.name}`}>Editar</Button><Button variant="outline" disabled={changingId !== null} onClick={() => void toggle(employee)} aria-label={`${employee.active ? "Desactivar" : "Activar"} ${employee.name}`}>{employee.active ? "Desactivar" : "Activar"}</Button></div></article>)}</div>}
-    {shiftEmployee && <ShiftDialog employee={shiftEmployee} onClose={() => setShiftEmployeeId(null)} />}
-    {open && <EmployeeDialog onClose={() => { if (!saving) setOpen(false); }} title={editing ? "Editar empleado" : "Nuevo empleado"}><form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-      <div><Input label="Nombre" required maxLength={200} value={form.name} aria-invalid={nameError || undefined} aria-describedby={nameError ? nameErrorId : undefined} onChange={(e) => { setForm({ ...form, name: e.target.value }); if (e.target.value.trim()) setNameError(false); }} />{nameError && <p id={nameErrorId} role="alert" className="mt-1.5 text-xs text-danger">Ingresa un nombre válido</p>}</div>
-      <Input label="Identificación" maxLength={200} value={form.identification} onChange={(e) => setForm({ ...form, identification: e.target.value })} />
-      <Input label="Teléfono" maxLength={200} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-      <Input label="Correo electrónico" type="email" maxLength={200} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-      <Input label="Dirección" maxLength={500} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-      <Input label="Cargo" maxLength={200} value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} />
-      <Input label="Fecha de ingreso" type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-      <label className="text-xs font-semibold uppercase text-muted-foreground">Modalidad de remuneración<select className="mt-1.5 w-full rounded-xl border border-border bg-card p-3 text-foreground" value={form.remunerationModality} onChange={(e) => setForm({ ...form, remunerationModality: e.target.value as Form["remunerationModality"] })}><option value="">Sin especificar</option>{Object.entries(modalities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <Input label="Valor de referencia" type="number" min="0" max="9999999999.99" step="0.01" value={form.referenceAmount} onChange={(e) => setForm({ ...form, referenceAmount: e.target.value })} />
-      <div className="sm:col-span-2"><Button type="submit" disabled={saving}>Guardar</Button></div>
-    </form></EmployeeDialog>}
-  </div>}</DashboardLayout>;
+
+  function requestToggle(employee: Employee) {
+    if (employee.active) {
+      setDeactivateTarget(employee);
+      return;
+    }
+    void setEmployeeActive(employee, true);
+  }
+
+  if (!allowed) {
+    return (
+      <DashboardLayout>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <EmptyState
+            icon={<Users className="h-5 w-5 text-muted-foreground" />}
+            title="Sección privada"
+            subtitle="Solo el propietario o un administrador gestionan los empleados."
+          />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const total = employees.data?.length ?? 0;
+
+  return (
+    <DashboardLayout>
+      <div className="flex flex-col gap-4 lg:gap-5">
+        <PageHeader
+          title="Empleados"
+          subtitle="Datos, jornadas y estado del equipo"
+          count={employees.data ? `${total} ${total === 1 ? "empleado" : "empleados"}` : undefined}
+          actions={
+            <Button onClick={() => setDialog({ mode: "create" })}>
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              Nuevo empleado
+            </Button>
+          }
+        />
+
+        <FilterBar
+          searchValue={query}
+          onSearchChange={setQuery}
+          searchPlaceholder="Buscar por nombre, cargo o documento..."
+          filterControls={
+            <FilterGroup label="Estado">
+              {STATUS_FILTERS.map((option) => (
+                <FilterOptionButton
+                  key={option.value}
+                  active={status === option.value}
+                  onClick={() => setStatus(option.value)}
+                >
+                  {option.label}
+                </FilterOptionButton>
+              ))}
+            </FilterGroup>
+          }
+        />
+
+        {employees.isLoading ? (
+          <CardSkeleton count={6} label="Cargando empleados..." />
+        ) : employees.isError ? (
+          <ErrorState
+            message="No se pudieron cargar los empleados"
+            retryLabel="Reintentar"
+            onRetry={() => void employees.refetch()}
+          />
+        ) : total === 0 ? (
+          <EmptyState
+            icon={<Users className="h-5 w-5 text-muted-foreground" />}
+            title="No hay empleados"
+            subtitle="Agrega tu primer empleado para registrar jornadas y pagos"
+          />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={<Users className="h-5 w-5 text-muted-foreground" />}
+            title="Sin coincidencias"
+            subtitle="Ajusta la búsqueda o el filtro de estado"
+          />
+        ) : (
+          <div className="stagger-children grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((employee) => (
+              <EmployeeCard
+                key={employee.id}
+                employee={employee}
+                pending={changingId === employee.id}
+                onEdit={() => setDialog({ mode: "edit", employee })}
+                onShifts={() => setShiftFor(employee)}
+                onToggle={() => requestToggle(employee)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {dialog && (
+        <EmployeeFormDialog
+          key={dialog.mode === "edit" ? dialog.employee.id : "create"}
+          employee={dialog.mode === "edit" ? dialog.employee : null}
+          onClose={() => setDialog(null)}
+        />
+      )}
+
+      {shiftFor && (
+        <ShiftDialog employee={shiftFor} onClose={() => setShiftFor(null)} />
+      )}
+
+      <ConfirmDialog
+        isOpen={deactivateTarget !== null}
+        onClose={() => setDeactivateTarget(null)}
+        onConfirm={async () => {
+          if (deactivateTarget) {
+            await setEmployeeActive(deactivateTarget, false);
+            setDeactivateTarget(null);
+          }
+        }}
+        title="Desactivar empleado"
+        message={`${deactivateTarget?.name ?? "El empleado"} deja de aparecer al crear pagos nuevos. Su historial se conserva y puedes activarlo de nuevo cuando quieras.`}
+        confirmText="Desactivar"
+        cancelText="Cancelar"
+      />
+    </DashboardLayout>
+  );
 }
