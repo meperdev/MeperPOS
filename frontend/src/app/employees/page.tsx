@@ -287,7 +287,7 @@ export default function EmployeesPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:gap-5">
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-4 lg:gap-5">
         <PageHeader
           title="Empleados"
           subtitle="Datos, jornadas y estado del equipo"
@@ -477,6 +477,7 @@ export default function EmployeesPage() {
               </div>
             )}
             <Pagination
+              className="mt-auto"
               currentPage={page}
               totalPages={totalPages}
               onPageChange={setPage}

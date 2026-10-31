@@ -175,7 +175,7 @@ export default function PayrollPage() {
   return (
     <DashboardLayout>
       {allowed ? (
-        <div className="flex flex-col gap-4">
+        <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-4">
           <PageHeader
             title="Nómina"
             subtitle="Pagos y abonos de empleados"
@@ -378,6 +378,7 @@ export default function PayrollPage() {
                 </ul>
               )}
               <Pagination
+                className="mt-auto"
                 currentPage={page}
                 totalPages={totalPages}
                 onPageChange={setPage}

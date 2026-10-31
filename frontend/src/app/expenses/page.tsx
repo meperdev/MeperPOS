@@ -14,7 +14,7 @@ import {
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, getApiErrorMessage } from "@/lib/api";
-import { formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
@@ -689,7 +689,7 @@ export default function ExpensesPage() {
               </div>
             ) : (
               /* Desktop Grid View */
-              <div className="hidden md:grid flex-1 content-start items-start md:grid-cols-2 lg:grid-cols-3 gap-2.5 stagger-children">
+              <div className="hidden md:grid flex-1 content-start md:grid-cols-2 lg:grid-cols-3 gap-2.5 stagger-children">
                 {expenses.length === 0 ? (
                   <div className="col-span-full py-14">
                     <EmptyState
@@ -731,31 +731,36 @@ export default function ExpensesPage() {
                             <ExpenseStatusBadge status={expense.status} />
                           </div>
 
-                          {expense.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-1">
-                              {expense.description}
-                            </p>
-                          )}
+                          <p
+                            className={cn(
+                              "line-clamp-1 text-xs",
+                              expense.description
+                                ? "text-muted-foreground"
+                                : "text-muted-foreground/60",
+                            )}
+                          >
+                            {expense.description ?? "Sin descripción"}
+                          </p>
 
                           <div className="space-y-1 text-xs pt-1 border-t border-border/50">
-                            {expense.supplier?.name && (
-                              <div className="flex justify-between items-center text-muted-foreground">
-                                <span>Proveedor</span>
-                                <span className="font-medium text-foreground truncate max-w-[180px]">
-                                  {expense.supplier.name}
-                                </span>
-                              </div>
-                            )}
+                            <div className="flex justify-between items-center text-muted-foreground">
+                              <span>Proveedor</span>
+                              <span className="font-medium text-foreground truncate max-w-[180px]">
+                                {expense.supplier?.name ?? "—"}
+                              </span>
+                            </div>
                             <div className="flex justify-between items-center text-muted-foreground">
                               <span>Fecha</span>
-                              <span className="font-mono tabular-nums text-foreground">{formatDate(expense.date)}</span>
+                              <span className="inline-flex items-center gap-1.5 font-mono tabular-nums text-foreground">
+                                {formatDate(expense.date)}
+                                {expense.receiptUrl && (
+                                  <FileCheck
+                                    className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
+                                    aria-label="Comprobante adjunto"
+                                  />
+                                )}
+                              </span>
                             </div>
-                            {expense.receiptUrl && (
-                              <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                                <FileCheck className="w-3.5 h-3.5" />
-                                <span>Comprobante adjunto</span>
-                              </div>
-                            )}
                           </div>
                         </div>
 
