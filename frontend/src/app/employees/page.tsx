@@ -16,7 +16,11 @@ import {
   FilterOptionButton,
 } from "@/components/ui/FilterBar";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { RowActions } from "@/components/ui/RowActions";
+import { Pagination } from "@/components/ui/Pagination";
+import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
+import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
+import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
+import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -80,6 +84,27 @@ function Meta({
   );
 }
 
+function cardActions(
+  employee: Employee,
+  pending: boolean,
+  onEdit: () => void,
+  onToggle: () => void,
+): RowActionItem[] {
+  return [
+    { label: "Editar", onSelect: onEdit },
+    {
+      label: employee.active ? "Desactivar" : "Activar",
+      icon: employee.active ? (
+        <UserX className="h-3.5 w-3.5" aria-hidden="true" />
+      ) : (
+        <UserCheck className="h-3.5 w-3.5" aria-hidden="true" />
+      ),
+      onSelect: onToggle,
+      disabled: pending,
+    },
+  ];
+}
+
 function EmployeeCard({
   employee,
   pending,
@@ -96,7 +121,7 @@ function EmployeeCard({
   const contact = [employee.phone, employee.email].filter(Boolean).join(" · ");
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col" onClick={onEdit}>
       <div className="flex items-start gap-3 p-4 pb-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 font-mono text-xs font-semibold text-primary-text">
           {initials(employee.name)}
@@ -148,34 +173,25 @@ function EmployeeCard({
         </div>
       </dl>
 
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2.5">
+      <div
+        className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2.5"
+        onClick={(event) => event.stopPropagation()}
+      >
         <Button
           size="sm"
           variant="secondary"
           aria-label={`Jornadas ${employee.name}`}
-          onClick={onShifts}
+          onClick={(event) => {
+            event.stopPropagation();
+            onShifts();
+          }}
         >
           <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
           Jornadas
         </Button>
         <RowActions
           label={`Acciones de ${employee.name}`}
-          items={[
-            {
-              label: "Editar",
-              onSelect: onEdit,
-            },
-            {
-              label: employee.active ? "Desactivar" : "Activar",
-              icon: employee.active ? (
-                <UserX className="h-3.5 w-3.5" aria-hidden="true" />
-              ) : (
-                <UserCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              ),
-              onSelect: onToggle,
-              disabled: pending,
-            },
-          ]}
+          items={cardActions(employee, pending, onEdit, onToggle)}
         />
       </div>
     </Card>
@@ -197,6 +213,9 @@ export default function EmployeesPage() {
   const [shiftFor, setShiftFor] = useState<Employee | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Employee | null>(null);
   const [changingId, setChangingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = usePersistedViewMode("employees");
+  const [page, setPage] = useState(1);
+  const pageSize = viewMode === "table" ? 10 : 9;
 
   const filtered = useMemo(() => {
     const list = employees.data ?? [];
@@ -219,6 +238,13 @@ export default function EmployeesPage() {
       return haystack.includes(needle);
     });
   }, [employees.data, query, status]);
+
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
   async function setEmployeeActive(employee: Employee, active: boolean) {
     if (changingId) return;
@@ -261,7 +287,7 @@ export default function EmployeesPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:gap-5">
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-4 lg:gap-5">
         <PageHeader
           title="Empleados"
           subtitle="Datos, jornadas y estado del equipo"
@@ -276,20 +302,35 @@ export default function EmployeesPage() {
 
         <FilterBar
           searchValue={query}
-          onSearchChange={setQuery}
+          onSearchChange={(value) => {
+            setQuery(value);
+            setPage(1);
+          }}
           searchPlaceholder="Buscar por nombre, cargo o documento..."
           filterControls={
-            <FilterGroup label="Estado">
-              {STATUS_FILTERS.map((option) => (
-                <FilterOptionButton
-                  key={option.value}
-                  active={status === option.value}
-                  onClick={() => setStatus(option.value)}
-                >
-                  {option.label}
-                </FilterOptionButton>
-              ))}
-            </FilterGroup>
+            <>
+              <FilterGroup label="Estado">
+                {STATUS_FILTERS.map((option) => (
+                  <FilterOptionButton
+                    key={option.value}
+                    active={status === option.value}
+                    onClick={() => {
+                      setStatus(option.value);
+                      setPage(1);
+                    }}
+                  >
+                    {option.label}
+                  </FilterOptionButton>
+                ))}
+              </FilterGroup>
+              <ViewModeToggle
+                value={viewMode}
+                onChange={(mode) => {
+                  setViewMode(mode);
+                  setPage(1);
+                }}
+              />
+            </>
           }
         />
 
@@ -314,18 +355,137 @@ export default function EmployeesPage() {
             subtitle="Ajusta la búsqueda o el filtro de estado"
           />
         ) : (
-          <div className="stagger-children grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((employee) => (
-              <EmployeeCard
-                key={employee.id}
-                employee={employee}
-                pending={changingId === employee.id}
-                onEdit={() => setDialog({ mode: "edit", employee })}
-                onShifts={() => setShiftFor(employee)}
-                onToggle={() => requestToggle(employee)}
-              />
-            ))}
-          </div>
+          <>
+            {viewMode === "table" ? (
+              <>
+                <div className="hidden overflow-hidden rounded-xl border border-border/70 bg-card sm:block">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableCell as="th">Empleado</TableCell>
+                          <TableCell as="th">Contacto</TableCell>
+                          <TableCell as="th">Modalidad</TableCell>
+                          <TableCell as="th" className="text-right">
+                            Valor base
+                          </TableCell>
+                          <TableCell as="th">Estado</TableCell>
+                          <TableCell as="th" className="text-right">
+                            <span className="sr-only">Acciones</span>
+                          </TableCell>
+                        </TableRow>
+                      </TableHeader>
+                      <tbody>
+                        {paged.map((employee) => (
+                          <TableRow
+                            key={employee.id}
+                            className="cursor-pointer"
+                            onClick={() => setDialog({ mode: "edit", employee })}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-2.5">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/10 font-mono text-[10px] font-semibold text-primary-text">
+                                  {initials(employee.name)}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold text-foreground">
+                                    {employee.name}
+                                  </p>
+                                  <p className="truncate text-[11px] text-muted-foreground">
+                                    {employee.jobTitle ?? "Sin cargo"}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="max-w-[220px]">
+                              <p className="truncate text-xs text-muted-foreground">
+                                {[employee.phone, employee.email].filter(Boolean).join(" · ") || "Sin registrar"}
+                              </p>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-xs text-muted-foreground">
+                                {employee.remunerationModality
+                                  ? MODALITY_LABELS[employee.remunerationModality]
+                                  : "Sin definir"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs tabular-nums">
+                              {employee.referenceAmount !== null
+                                ? formatCurrency(toFiniteNumber(employee.referenceAmount))
+                                : "—"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={employee.active ? "success" : "default"} dot>
+                                {employee.active ? "Activo" : "Inactivo"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div
+                                className="flex items-center justify-end gap-1"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  aria-label={`Editar ${employee.name}`}
+                                  onClick={() => setDialog({ mode: "edit", employee })}
+                                >
+                                  Editar
+                                </Button>
+                                <RowActions
+                                  label={`Acciones de ${employee.name}`}
+                                  items={cardActions(
+                                    employee,
+                                    changingId === employee.id,
+                                    () => setDialog({ mode: "edit", employee }),
+                                    () => requestToggle(employee),
+                                  )}
+                                />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                </div>
+                <div className="stagger-children grid grid-cols-1 gap-3.5 sm:hidden">
+                  {paged.map((employee) => (
+                    <EmployeeCard
+                      key={employee.id}
+                      employee={employee}
+                      pending={changingId === employee.id}
+                      onEdit={() => setDialog({ mode: "edit", employee })}
+                      onShifts={() => setShiftFor(employee)}
+                      onToggle={() => requestToggle(employee)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="stagger-children grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+                {paged.map((employee) => (
+                  <EmployeeCard
+                    key={employee.id}
+                    employee={employee}
+                    pending={changingId === employee.id}
+                    onEdit={() => setDialog({ mode: "edit", employee })}
+                    onShifts={() => setShiftFor(employee)}
+                    onToggle={() => requestToggle(employee)}
+                  />
+                ))}
+              </div>
+            )}
+            <Pagination
+              className="mt-auto"
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              totalItems={filtered.length}
+              pageSize={pageSize}
+              itemLabel="empleado"
+            />
+          </>
         )}
       </div>
 

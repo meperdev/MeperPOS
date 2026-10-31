@@ -80,13 +80,6 @@ const navItems: NavItem[] = [
     group: "Operación",
   },
   {
-    label: "Préstamos",
-    href: "/loans",
-    icon: <HandCoins className="w-4 h-4" />,
-    roles: ["ADMIN", "CASHIER"],
-    group: "Operación",
-  },
-  {
     label: "Inventario",
     href: "/inventory",
     icon: <Package className="w-4 h-4" />,
@@ -126,6 +119,13 @@ const navItems: NavItem[] = [
     href: "/reports",
     icon: <TrendingUp className="w-4 h-4" />,
     roles: ["ADMIN"],
+    group: "Finanzas",
+  },
+  {
+    label: "Préstamos",
+    href: "/loans",
+    icon: <HandCoins className="w-4 h-4" />,
+    roles: ["ADMIN", "CASHIER"],
     group: "Finanzas",
   },
   {
@@ -446,7 +446,7 @@ export function Sidebar() {
             className={groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined}
           >
             {!isCollapsed && (
-              <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+              <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground/70">
                 {group.label}
               </p>
             )}

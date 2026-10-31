@@ -200,7 +200,7 @@ describe("Expenses page evidence", () => {
   it("renders the month total and per-category summary cards (EXP-8)", () => {
     render(<ExpensesPage />);
 
-    expect(screen.getByText("Total del Mes")).toBeTruthy();
+    expect(screen.getByText("Total del mes")).toBeTruthy();
     expect(screen.getByText(/800\.000/)).toBeTruthy();
     expect(screen.getAllByText(/Arriendo/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Caja menor")).toBeTruthy();

@@ -1,6 +1,23 @@
-import { InputHTMLAttributes, forwardRef, useId, useRef } from "react";
+import { InputHTMLAttributes, forwardRef, useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Numeric fields keep the text the user sees. Native number inputs re-render
+ * "0" the moment the value parses to 0, so deleting the last digit and typing
+ * again felt impossible; here an empty field stays empty while focused and
+ * leading zeros never survive a keystroke.
+ */
+function normalizeNumericText(raw: string) {
+  if (raw === "") return "";
+  if (!/^-?\d*\.?\d*$/.test(raw)) return raw;
+  const negative = raw.startsWith("-");
+  const unsigned = negative ? raw.slice(1) : raw;
+  const [integer, ...rest] = unsigned.split(".");
+  const cleanInteger = integer.replace(/^0+(?=\d)/, "");
+  const decimals = rest.length ? `.${rest.join("")}` : "";
+  return `${negative ? "-" : ""}${cleanInteger}${decimals}`;
+}
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> {
   label?: string;
@@ -18,6 +35,21 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
     const inputId = id || reactId;
     const innerInputRef = useRef<HTMLInputElement | null>(null);
     const isNumber = !textarea && type === "number";
+    const focusedRef = useRef(false);
+    const [numericText, setNumericText] = useState<string | null>(null);
+
+    useEffect(() => {
+      // Leaving the field hands control back to the prop.
+      if (!focusedRef.current) setNumericText(null);
+    }, [props.value]);
+
+    const propText =
+      isNumber && props.value !== undefined && props.value !== null
+        ? String(props.value)
+        : "";
+    const shownValue = isNumber
+      ? numericText ?? propText
+      : props.value;
 
     const stepNumber = (direction: 1 | -1) => {
       const el = innerInputRef.current;
@@ -103,6 +135,27 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
               readOnly={readOnly}
               className={commonClasses}
               {...props}
+              value={shownValue}
+              onFocus={(event) => {
+                focusedRef.current = true;
+                props.onFocus?.(event as React.FocusEvent<HTMLInputElement>);
+              }}
+              onBlur={(event) => {
+                focusedRef.current = false;
+                setNumericText(null);
+                props.onBlur?.(event as React.FocusEvent<HTMLInputElement>);
+              }}
+              onChange={(event) => {
+                if (isNumber) {
+                  const raw = event.target.value;
+                  const normalized = normalizeNumericText(raw);
+                  if (normalized !== raw) event.target.value = normalized;
+                  setNumericText(normalized);
+                }
+                (props.onChange as React.ChangeEventHandler<HTMLInputElement> | undefined)?.(
+                  event as React.ChangeEvent<HTMLInputElement>,
+                );
+              }}
             />
           )}
           {suffixIcon && (

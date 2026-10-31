@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { MoneyField } from "@/components/ui/MoneyField";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -218,20 +219,12 @@ export function EmployeeFormDialog({
         />
 
         <div className="sm:col-span-2">
-          <Input
+          <MoneyField
             label="Valor de referencia"
-            type="number"
-            inputMode="decimal"
-            min="0"
-            max="9999999999.99"
-            step="0.01"
             value={form.referenceAmount}
-            onChange={(event) => set("referenceAmount", event.target.value)}
+            onChange={(raw) => set("referenceAmount", raw)}
+            helper="Es la base que se propone al crear un pago de nómina; el servidor lo guarda tal cual y nunca lo usa para calcular un pago por sí solo."
           />
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            Es la base que se propone al crear un pago de nómina; el servidor lo
-            guarda tal cual y nunca lo usa para calcular un pago por sí solo.
-          </p>
         </div>
       </form>
     </Modal>

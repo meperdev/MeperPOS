@@ -17,7 +17,7 @@ import type {
   PayrollInstallment,
   PayrollObligation,
 } from "@/hooks/usePayroll";
-import { payrollDate, payrollMoney } from "./format";
+import { payrollDate, payrollDateShort, payrollMoney } from "./format";
 import { PAYMENT_METHODS } from "./PayrollForm";
 
 const KIND_LABELS: Record<PayrollObligation["kind"], string> = {
@@ -31,7 +31,7 @@ function expenseLabel(obligation: PayrollObligation): string {
   if (obligation.expenseEnabled === null) return "Gasto al completar: Sin definir";
   if (!obligation.expenseEnabled) return "Gasto al completar: No";
   return obligation.selectedExpenseDate
-    ? `Gasto al completar: Sí · ${payrollDate(obligation.selectedExpenseDate)}`
+    ? `Gasto al completar: Sí · ${payrollDateShort(obligation.selectedExpenseDate)}`
     : "Gasto al completar: Sí";
 }
 
@@ -67,6 +67,66 @@ function MoneyFact({
  * summary behind a progress bar, and the cash history. Every action the payment
  * allows lives in a single overflow menu whose entries change with its state.
  */
+export interface ObligationActionHandlers {
+  onRegisterInstallment: (obligation: PayrollObligation) => void;
+  onCorrectInstallment: (obligation: PayrollObligation) => void;
+  onRegisterCashReturn: (
+    obligation: PayrollObligation,
+    installment: PayrollInstallment,
+  ) => void;
+  onReplacePayment: (obligation: PayrollObligation) => void;
+}
+
+/** The card and the table row offer exactly the same actions. */
+export function buildObligationActions(
+  obligation: PayrollObligation,
+  handlers: ObligationActionHandlers,
+): RowActionItem[] {
+  const completed = obligation.summary.status === "completed";
+  const canCorrect =
+    obligation.kind === "FIXED_PERIOD" && obligation.installments.length > 0;
+  const actions: RowActionItem[] = [];
+  if (!completed) {
+    actions.push({
+      label: "Registrar abono",
+      icon: <Plus className="h-3.5 w-3.5" aria-hidden="true" />,
+      onSelect: () => handlers.onRegisterInstallment(obligation),
+    });
+    if (canCorrect) {
+      actions.push({
+        label: "Corregir abono",
+        icon: <Pencil className="h-3.5 w-3.5" aria-hidden="true" />,
+        onSelect: () => handlers.onCorrectInstallment(obligation),
+      });
+    }
+  } else {
+    // A return covers exactly one complete installment, so the menu names the
+    // installment it would return instead of offering an ambiguous "devolución".
+    for (const installment of obligation.installments) {
+      if (installment.cashReturn) continue;
+      actions.push({
+        label: "Registrar devolución",
+        hint: `${payrollDateShort(installment.outflow.date)} · ${payrollMoney(installment.outflow.amount)}`,
+        icon: <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />,
+        onSelect: () => handlers.onRegisterCashReturn(obligation, installment),
+      });
+    }
+    // S6/S7: only a COMPLETED payment can be replaced, and only by referencing
+    // the installments it already paid — a payment with no installment has no
+    // cash to reference.
+    if (obligation.installments.length > 0) {
+      actions.push({
+        label: "Reemplazar pago",
+        hint: "Nuevo pago con los abonos que siguen válidos",
+        icon: <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />,
+        onSelect: () => handlers.onReplacePayment(obligation),
+      });
+    }
+  }
+
+  return actions;
+}
+
 export function ObligationCard({
   obligation,
   employeeName,
@@ -86,59 +146,24 @@ export function ObligationCard({
   onReplacePayment: (obligation: PayrollObligation) => void;
 }) {
   const completed = obligation.summary.status === "completed";
-  // S6: only a wrongly recorded fixed-period installment can be corrected, and
-  // only while the payment is pending; a completed payment and its expense are
-  // frozen. The correction route has no shift-group equivalent.
-  const canCorrect =
-    obligation.kind === "FIXED_PERIOD" && obligation.installments.length > 0;
   const total = toFiniteNumber(obligation.summary.total);
   const paid = toFiniteNumber(obligation.summary.paid);
   const progress =
     total > 0 ? Math.min(100, Math.max(0, Math.round((paid / total) * 100))) : 0;
   const hasBalance = toFiniteNumber(obligation.summary.balance) > 0;
 
-  const actions: RowActionItem[] = [];
-  if (!completed) {
-    actions.push({
-      label: "Registrar abono",
-      icon: <Plus className="h-3.5 w-3.5" aria-hidden="true" />,
-      onSelect: () => onRegisterInstallment(obligation),
-    });
-    if (canCorrect) {
-      actions.push({
-        label: "Corregir abono",
-        icon: <Pencil className="h-3.5 w-3.5" aria-hidden="true" />,
-        onSelect: () => onCorrectInstallment(obligation),
-      });
-    }
-  } else {
-    // A return covers exactly one complete installment, so the menu names the
-    // installment it would return instead of offering an ambiguous "devolución".
-    for (const installment of obligation.installments) {
-      if (installment.cashReturn) continue;
-      actions.push({
-        label: `Registrar devolución · ${payrollDate(installment.outflow.date)} · ${payrollMoney(installment.outflow.amount)}`,
-        icon: <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />,
-        onSelect: () => onRegisterCashReturn(obligation, installment),
-      });
-    }
-    // S6/S7: only a COMPLETED payment can be replaced, and only by referencing
-    // the installments it already paid — a payment with no installment has no
-    // cash to reference.
-    if (obligation.installments.length > 0) {
-      actions.push({
-        label: "Reemplazar pago",
-        icon: <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />,
-        onSelect: () => onReplacePayment(obligation),
-      });
-    }
-  }
+  const actions = buildObligationActions(obligation, {
+    onRegisterInstallment,
+    onCorrectInstallment,
+    onRegisterCashReturn,
+    onReplacePayment,
+  });
 
   const period =
     obligation.kind === "FIXED_PERIOD" &&
     obligation.periodStart &&
     obligation.periodEnd
-      ? `${payrollDate(obligation.periodStart)} – ${payrollDate(obligation.periodEnd)}`
+      ? `${payrollDateShort(obligation.periodStart)} – ${payrollDateShort(obligation.periodEnd)}`
       : `${obligation.shiftMemberships.length} ${
           obligation.shiftMemberships.length === 1 ? "jornada" : "jornadas"
         }`;
@@ -192,28 +217,23 @@ export function ObligationCard({
           </span>
         </div>
 
-        <div>
-          <div className="flex items-baseline justify-between gap-2 text-[11px]">
-            <span className="font-medium text-muted-foreground">
-              Avance del pago
-            </span>
-            <span className="font-mono text-muted-foreground tabular-nums">
-              {progress}%
-            </span>
-          </div>
+        <div className="flex items-center gap-2">
           <div
             role="progressbar"
-            aria-label={`Avance del pago de ${employeeName}`}
+            aria-label={`Pagado de ${employeeName}`}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={progress}
-            className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
           >
             <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300"
+              className="h-full rounded-full bg-primary/80 transition-[width] duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
+          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+            {progress}%
+          </span>
         </div>
 
         <dl className="space-y-1 rounded-xl border border-border/60 bg-muted/25 p-2.5">

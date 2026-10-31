@@ -22,7 +22,6 @@ import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
-  FilterClearButton,
   FilterGroup,
   FilterOptionButton,
 } from "@/components/ui/FilterBar";
@@ -279,15 +278,6 @@ export default function SuppliersPage() {
                 ))}
               </FilterGroup>
 
-              {hasActiveFilters && (
-                <FilterClearButton
-                  onClick={() => {
-                    setPage(1);
-                    setSearch("");
-                    setStatusFilter("active");
-                  }}
-                />
-              )}
 
               <ViewModeToggle
                 value={viewMode}

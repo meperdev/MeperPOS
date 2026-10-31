@@ -25,6 +25,12 @@ export function payrollDate(value: string): string {
   return formatDate(new Date(`${value.slice(0, 10)}T12:00:00`));
 }
 
+/** Compact day for tables and tight rows: 31/10/2026. */
+export function payrollDateShort(value: string): string {
+  const [year = "", month = "", day = ""] = value.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
+}
+
 /**
  * Integer cents of a server decimal string. Only the replacement preview adds
  * money values, and it adds them as bigints so exact decimal strings never pass

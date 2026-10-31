@@ -181,7 +181,7 @@ it("renders the server summary and cash history exactly as the API returned them
   // Installment history keeps the real date, method and amount.
   expect(screen.getByText("15 de enero de 2025 · Efectivo · $ 111.111,00")).toBeInTheDocument();
   expect(screen.getByText("Sin abonos")).toBeInTheDocument();
-  expect(screen.getByText(/Gasto al completar: Sí · 1 de febrero de 2025/)).toBeInTheDocument();
+  expect(screen.getByText(/Gasto al completar: Sí · 01\/02\/2025/)).toBeInTheDocument();
   expect(screen.getByText(/Gasto al completar: No/)).toBeInTheDocument();
 });
 
@@ -642,10 +642,10 @@ it("offers a return only on a completed installment that has no return yet", asy
 
   await openActions(user, "Ana Gómez");
   expect(
-    screen.getByRole("menuitem", { name: /Registrar devolución · 25 de enero de 2025/ }),
+    screen.getByRole("menuitem", { name: /Registrar devolución[\s\S]*25\/01\/2025/ }),
   ).toBeInTheDocument();
   expect(
-    screen.queryByRole("menuitem", { name: /Registrar devolución · 15 de enero de 2025/ }),
+    screen.queryByRole("menuitem", { name: /Registrar devolución[\s\S]*15\/01\/2025/ }),
   ).not.toBeInTheDocument();
   // A completed payment takes no new abono and no correction.
   expect(screen.queryByRole("menuitem", { name: "Registrar abono" })).not.toBeInTheDocument();
@@ -658,7 +658,7 @@ it("records the real return date and method without sending the amount", async (
 
   await openActions(user, "Ana Gómez");
   await user.click(
-    screen.getByRole("menuitem", { name: /Registrar devolución · 15 de enero de 2025/ }),
+    screen.getByRole("menuitem", { name: /Registrar devolución[\s\S]*15\/01\/2025/ }),
   );
   const dialog = screen.getByRole("dialog", { name: "Registrar devolución" });
   await settleDialogFocus();
@@ -699,7 +699,7 @@ it("keeps the server error visible when the return is refused", async () => {
 
   await openActions(user, "Ana Gómez");
   await user.click(
-    screen.getByRole("menuitem", { name: /Registrar devolución · 15 de enero de 2025/ }),
+    screen.getByRole("menuitem", { name: /Registrar devolución[\s\S]*15\/01\/2025/ }),
   );
   const dialog = screen.getByRole("dialog", { name: "Registrar devolución" });
   await settleDialogFocus();
@@ -739,7 +739,7 @@ it("offers no replacement while the payment is still pending", async () => {
   const view = render(<PayrollPage />);
 
   await openActions(user, "Ana Gómez");
-  expect(screen.queryByRole("menuitem", { name: "Reemplazar pago" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /^Reemplazar pago/ })).not.toBeInTheDocument();
   expect(screen.getByRole("menuitem", { name: "Registrar abono" })).toBeInTheDocument();
   await user.keyboard("{Escape}");
 
@@ -748,7 +748,7 @@ it("offers no replacement while the payment is still pending", async () => {
   state.obligations.data = [completedForReplacement];
   view.rerender(<PayrollPage />);
   await openActions(user, "Ana Gómez");
-  expect(screen.getByRole("menuitem", { name: "Reemplazar pago" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: /^Reemplazar pago/ })).toBeInTheDocument();
   expect(screen.queryByRole("menuitem", { name: "Registrar abono" })).not.toBeInTheDocument();
 });
 
@@ -758,7 +758,7 @@ it("changes the referenced total when the installment selection changes", async 
   render(<PayrollPage />);
 
   await openActions(user, "Ana Gómez");
-  await user.click(screen.getByRole("menuitem", { name: "Reemplazar pago" }));
+  await user.click(screen.getByRole("menuitem", { name: /^Reemplazar pago/ }));
   const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
   await settleDialogFocus();
 
@@ -789,7 +789,7 @@ it("sends the seven replacement fields and never an amount", async () => {
   render(<PayrollPage />);
 
   await openActions(user, "Ana Gómez");
-  await user.click(screen.getByRole("menuitem", { name: "Reemplazar pago" }));
+  await user.click(screen.getByRole("menuitem", { name: /^Reemplazar pago/ }));
   const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
   await settleDialogFocus();
 
@@ -855,7 +855,7 @@ it("keeps the server refusal of a replacement visible with the dialog open", asy
   render(<PayrollPage />);
 
   await openActions(user, "Ana Gómez");
-  await user.click(screen.getByRole("menuitem", { name: "Reemplazar pago" }));
+  await user.click(screen.getByRole("menuitem", { name: /^Reemplazar pago/ }));
   const dialog = screen.getByRole("dialog", { name: "Reemplazar pago completado" });
   await settleDialogFocus();
   await user.click(within(dialog).getByRole("button", { name: "Crear pago de reemplazo" }));

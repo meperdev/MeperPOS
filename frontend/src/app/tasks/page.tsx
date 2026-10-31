@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
   FilterBar,
-  FilterClearButton,
   FilterGroup,
   FilterOptionButton,
 } from "@/components/ui/FilterBar";
@@ -392,19 +391,6 @@ export default function TasksPage() {
     }
   };
 
-  const hasActiveFilters =
-    scope !== "all" ||
-    statusFilter !== "ALL" ||
-    selectedAssigneeId !== "ALL" ||
-    Boolean(searchQuery.trim());
-
-  const clearFilters = () => {
-    setScope("all");
-    setStatusFilter("ALL");
-    setSelectedAssigneeId("ALL");
-    setSearchQuery("");
-  };
-
   if (tasksQuery.isLoading) {
     return (
       <DashboardLayout>
@@ -568,9 +554,6 @@ export default function TasksPage() {
                 />
               )}
 
-              {hasActiveFilters && (
-                <FilterClearButton onClick={clearFilters} />
-              )}
             </>
           }
         />

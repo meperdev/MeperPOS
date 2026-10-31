@@ -5,6 +5,8 @@ interface BadgeProps {
   children: React.ReactNode;
   variant?: "default" | "success" | "warning" | "danger" | "primary" | "secondary";
   dot?: boolean;
+  /** Pulses the dot: a state that is still settling, not a settled verdict. */
+  pulse?: boolean;
   className?: string;
 }
 
@@ -26,7 +28,7 @@ const dotColors = {
   secondary: "bg-stone-500",
 };
 
-export function Badge({ children, variant = "default", dot = false, className = "" }: BadgeProps) {
+export function Badge({ children, variant = "default", dot = false, pulse = false, className = "" }: BadgeProps) {
   return (
     <span
       className={cn(
@@ -36,9 +38,22 @@ export function Badge({ children, variant = "default", dot = false, className = 
       )}
     >
       {dot && (
-        <span
-          className={cn("w-1.5 h-1.5 rounded-full mr-1.5 shrink-0", dotColors[variant])}
-        />
+        <span className="relative mr-1.5 flex h-1.5 w-1.5 shrink-0">
+          {pulse && (
+            <span
+              className={cn(
+                "absolute inline-flex h-full w-full animate-ping rounded-full opacity-70",
+                dotColors[variant],
+              )}
+            />
+          )}
+          <span
+            className={cn(
+              "relative inline-flex h-1.5 w-1.5 rounded-full",
+              dotColors[variant],
+            )}
+          />
+        </span>
       )}
       {children}
     </span>
