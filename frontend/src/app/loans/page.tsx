@@ -22,7 +22,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import {
   FilterBar,
-  FilterClearButton,
   FilterGroup,
   FilterOptionButton,
 } from "@/components/ui/FilterBar";
@@ -336,16 +335,6 @@ export default function LoansPage() {
                   </FilterOptionButton>
                 ))}
               </FilterGroup>
-              {(typeFilter || statusFilter || search) && (
-                <FilterClearButton
-                  onClick={() => {
-                    setPage(1);
-                    setTypeFilter("");
-                    setStatusFilter("");
-                    setSearch("");
-                  }}
-                />
-              )}
               <ViewModeToggle
                 value={viewMode}
                 onChange={(mode) => {

@@ -14,7 +14,7 @@ import {
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, getApiErrorMessage } from "@/lib/api";
-import { formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
@@ -252,7 +252,7 @@ export default function ExpensesPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-4">
+      <div className="flex flex-col gap-3 lg:min-h-[calc(100vh-4rem)] lg:gap-3">
         <PageHeader
           title="Salidas"
           subtitle="Registra los gastos y pagos de tu negocio"
@@ -689,7 +689,7 @@ export default function ExpensesPage() {
               </div>
             ) : (
               /* Desktop Grid View */
-              <div className="hidden md:grid flex-1 content-start md:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-3 stagger-children">
+              <div className="hidden md:grid flex-1 content-start md:grid-cols-2 lg:grid-cols-3 gap-2.5 stagger-children">
                 {expenses.length === 0 ? (
                   <div className="col-span-full py-14">
                     <EmptyState
@@ -714,7 +714,7 @@ export default function ExpensesPage() {
                     return (
                       <div
                         key={expense.id}
-                        className="rounded-xl border border-border/70 bg-card p-3 shadow-2xs space-y-2.5 hover:border-border transition-colors flex flex-col justify-between"
+                        className="rounded-xl border border-border/70 bg-card p-2.5 shadow-2xs space-y-2 hover:border-border transition-colors flex flex-col justify-between"
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
@@ -731,35 +731,40 @@ export default function ExpensesPage() {
                             <ExpenseStatusBadge status={expense.status} />
                           </div>
 
-                          {expense.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {expense.description}
-                            </p>
-                          )}
-
-                          <div className="space-y-1.5 text-xs pt-1 border-t border-border/50">
-                            {expense.supplier?.name && (
-                              <div className="flex justify-between items-center text-muted-foreground">
-                                <span>Proveedor</span>
-                                <span className="font-medium text-foreground truncate max-w-[180px]">
-                                  {expense.supplier.name}
-                                </span>
-                              </div>
+                          <p
+                            className={cn(
+                              "line-clamp-1 text-xs",
+                              expense.description
+                                ? "text-muted-foreground"
+                                : "text-muted-foreground/60",
                             )}
+                          >
+                            {expense.description ?? "Sin descripción"}
+                          </p>
+
+                          <div className="space-y-1 text-xs pt-1 border-t border-border/50">
+                            <div className="flex justify-between items-center text-muted-foreground">
+                              <span>Proveedor</span>
+                              <span className="font-medium text-foreground truncate max-w-[180px]">
+                                {expense.supplier?.name ?? "—"}
+                              </span>
+                            </div>
                             <div className="flex justify-between items-center text-muted-foreground">
                               <span>Fecha</span>
-                              <span className="font-mono tabular-nums text-foreground">{formatDate(expense.date)}</span>
+                              <span className="inline-flex items-center gap-1.5 font-mono tabular-nums text-foreground">
+                                {formatDate(expense.date)}
+                                {expense.receiptUrl && (
+                                  <FileCheck
+                                    className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
+                                    aria-label="Comprobante adjunto"
+                                  />
+                                )}
+                              </span>
                             </div>
-                            {expense.receiptUrl && (
-                              <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                                <FileCheck className="w-3.5 h-3.5" />
-                                <span>Comprobante adjunto</span>
-                              </div>
-                            )}
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-2.5 border-t border-border/60 mt-auto">
+                        <div className="flex items-center justify-between pt-2 border-t border-border/60 mt-auto">
                           <div>
                             <p className="text-[11px] font-medium text-muted-foreground">Total</p>
                             <p className="text-sm font-semibold font-mono text-foreground tabular-nums">
@@ -771,19 +776,21 @@ export default function ExpensesPage() {
                               </p>
                             )}
                           </div>
-                          <button
-                            type="button"
-                            aria-label="Ver detalle"
-                            title="Ver detalle"
-                            onClick={() => setDetailExpense(expense)}
-                            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                          >
-                            <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <RowActions
-                            label="Más acciones"
-                            items={actionsFor(expense, isPaid, paymentButtonLabel)}
-                          />
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              aria-label="Ver detalle"
+                              title="Ver detalle"
+                              onClick={() => setDetailExpense(expense)}
+                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
+                            >
+                              <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                            </button>
+                            <RowActions
+                              label="Más acciones"
+                              items={actionsFor(expense, isPaid, paymentButtonLabel)}
+                            />
+                          </div>
 
                         </div>
                       </div>
@@ -794,14 +801,16 @@ export default function ExpensesPage() {
             )}
 
             {meta && (
-              <Pagination
-                currentPage={page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-                totalItems={meta.total}
-                pageSize={viewMode === "grid" ? 9 : 10}
-                itemLabel="salida"
-              />
+              <div className="sticky bottom-0 z-10 -mx-1 border-t border-border/60 bg-background/95 px-1 py-1.5 backdrop-blur-sm">
+                <Pagination
+                  currentPage={page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                  totalItems={meta.total}
+                  pageSize={viewMode === "grid" ? 9 : 10}
+                  itemLabel="salida"
+                />
+              </div>
             )}
           </>
         )}

@@ -28,7 +28,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 import {
   FilterBar,
-  FilterClearButton,
 } from "@/components/ui/FilterBar";
 import {
   Table,
@@ -535,16 +534,6 @@ function InventoryContent() {
                   </span>
                 )}
               </button>
-              {hasFilter && (
-                <FilterClearButton
-                  onClick={() => {
-                    setPage(1);
-                    setSelectedCategory(null);
-                    setStatusFilter("active");
-                    setLowStockFilter({ urlValue: urlLowStock, enabled: false });
-                  }}
-                />
-              )}
               <ViewModeToggle
                 value={viewMode}
                 onChange={(mode) => {

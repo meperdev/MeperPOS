@@ -79,6 +79,7 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
         height={32}
         data={data}
         margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+        style={{ pointerEvents: "none" }}
       >
         <Area
           type="monotone"
@@ -88,6 +89,7 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
           fill={color}
           fillOpacity={0.15}
           dot={false}
+          activeDot={false}
           isAnimationActive={false}
         />
       </AreaChart>

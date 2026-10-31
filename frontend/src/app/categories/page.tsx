@@ -24,7 +24,6 @@ import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
-  FilterClearButton,
 } from "@/components/ui/FilterBar";
 import {
   Table,
@@ -193,14 +192,6 @@ export default function CategoriesPage() {
           searchPlaceholder="Buscar por nombre o descripción..."
           filterControls={
             <>
-              {search && (
-                <FilterClearButton
-                  onClick={() => {
-                    setSearch("");
-                    setPage(1);
-                  }}
-                />
-              )}
 
               <ViewModeToggle
                 value={viewMode}

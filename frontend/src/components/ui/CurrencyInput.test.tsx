@@ -42,7 +42,9 @@ describe("CurrencyInput", () => {
 
   it("shows empty when value is 0", () => {
     render(<Harness initial={0} />);
-    expect(screen.getByRole("textbox")).toHaveValue("0");
+    // Zero is "nothing typed yet": the field must not put a digit in front of
+    // the caret.
+    expect(screen.getByRole("textbox")).toHaveValue("");
   });
 
   it("clamps to max when max is provided", () => {

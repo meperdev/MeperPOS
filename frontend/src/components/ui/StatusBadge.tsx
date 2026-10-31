@@ -101,20 +101,34 @@ export function statusMeta(domain: StatusDomain, status: string): StatusMeta {
   return { label: status, tone: "default" };
 }
 
+/** States that are still settling: the channel is doing work, not reporting. */
+const LIVE_STATUSES = new Set([
+  "STARTING",
+  "SCAN_QR_CODE",
+  "PASSKEY_REQUIRED",
+  "PASSKEY_CONFIRMATION_REQUIRED",
+  "PENDING",
+  "RUNNING",
+]);
+
 export function StatusBadge({
   domain,
   status,
   dot = true,
+  live,
   className,
 }: {
   domain: StatusDomain;
   status: string;
   dot?: boolean;
+  /** Defaults to pulsing for in-flight statuses. */
+  live?: boolean;
   className?: string;
 }) {
   const meta = statusMeta(domain, status);
+  const pulse = live ?? LIVE_STATUSES.has(status);
   return (
-    <Badge variant={meta.tone} dot={dot} className={className}>
+    <Badge variant={meta.tone} dot={dot} pulse={dot && pulse} className={className}>
       {meta.label}
     </Badge>
   );
