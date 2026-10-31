@@ -203,6 +203,7 @@ model PayrollInstallment {
   outflow        PayrollCashOutflow @relation(fields: [outflowId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_outflow_fkey")
   allocations    PayrollAllocation[]
   revisions      PayrollCashRevision[]
+  cashReturn     PayrollCashReturn?
 
   @@unique([id, obligationId, outflowId, organizationId, employeeId], map: "PayrollInstallment_revision_target_key")
   @@unique([id, obligationId, organizationId, employeeId], map: "PayrollInstallment_allocation_target_key")
@@ -233,6 +234,42 @@ model PayrollCashRevision {
 
   @@unique([installmentId, sequence], map: "PayrollCashRevision_installment_sequence_key")
   @@index([installmentId, obligationId, outflowId, organizationId, employeeId], map: "PayrollCashRevision_installment_idx")
+}
+
+// Actual full reimbursement of cash the employee had already received. It is a
+// separate append-only fact, not an in-place revision: the original payment,
+// its outflow, its allocations and its linked expense stay unchanged, and
+// reports must count this return on its own date. Row updates/deletes are
+// rejected; TRUNCATE and privileged operations are not guarded. Actor
+// membership cannot be deleted or re-keyed while referenced. One return covers
+// exactly one complete installment of the completed payment (never an
+// obligation-level total), and a second return of the same installment is
+// refused because the composite key below fixes its identity, so repeated
+// returns cannot be stored. The amount itself is not CHECKed against the
+// outflow, so a full return stays a writer rule: nothing is recomputed here and
+// the writer must verify amount and the original* snapshot against the returned
+// cash outflow. returnMethod is the real method chosen by the actor for the
+// money coming back; it is required and independent from originalMethod.
+model PayrollCashReturn {
+  id             String        @id @default(uuid())
+  organizationId String
+  employeeId     String
+  installmentId  String
+  obligationId   String
+  outflowId      String
+  actorId        String
+  amount         Decimal       @db.Decimal
+  originalAmount Decimal       @db.Decimal
+  originalDate   DateTime      @db.Date
+  originalMethod PaymentMethod
+  returnMethod   PaymentMethod
+  returnDate     DateTime      @db.Date
+  createdAt      DateTime      @default(now())
+  installment    PayrollInstallment @relation(fields: [installmentId, obligationId, outflowId, organizationId, employeeId], references: [id, obligationId, outflowId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashReturn_installment_fkey")
+  actor          OrganizationUser   @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashReturn_actor_fkey")
+
+  @@unique([installmentId, obligationId, outflowId, organizationId, employeeId], map: "PayrollCashReturn_installment_key")
+  @@index([organizationId, returnDate], map: "PayrollCashReturn_date_idx")
 }
 
 // Immutable application evidence; voids and replacements require a future transaction protocol.
@@ -308,6 +345,7 @@ model OrganizationUser {
   inventoryLoanOperations InventoryLoanOperation[]
   payrollCashOutflows PayrollCashOutflow[]
   payrollCashRevisions PayrollCashRevision[]
+  payrollCashReturns PayrollCashReturn[]
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
