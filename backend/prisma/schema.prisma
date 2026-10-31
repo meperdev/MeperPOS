@@ -54,6 +54,8 @@ model Organization {
   whatsAppConnections WhatsAppConnection[]
   whatsAppConversations WhatsAppConversation[]
   whatsAppInternalContacts WhatsAppInternalContact[]
+  whatsAppIdentities WhatsAppIdentity[]
+  whatsAppLinkChallenges WhatsAppLinkChallenge[]
 
   @@index([status, trialEndsAt])
 }
@@ -75,6 +77,8 @@ model User {
   purchaseOrders     PurchaseOrder[]
   refreshTokens      RefreshToken[]
   whatsAppInternalContacts WhatsAppInternalContact[]
+  whatsAppIdentities WhatsAppIdentity[]
+  whatsAppLinkChallenges WhatsAppLinkChallenge[]
   sales              Sale[]
   tasksAssigned      Task[]              @relation("TaskAssignedTo")
   tasksCreated       Task[]              @relation("TaskCreatedBy")
@@ -1009,4 +1013,46 @@ enum WhatsAppConversationState {
 enum WhatsAppMessageDirection {
   INBOUND
   OUTBOUND
+}
+
+/// A phone proven to belong to a MeperPOS user. Access is granted by this row,
+/// never by the phone number appearing in a list or by the provider session.
+model WhatsAppIdentity {
+  id             String                @id @default(uuid())
+  phone          String                @unique
+  userId         String
+  organizationId String?
+  status         WhatsAppIdentityStatus @default(PENDING)
+  verifiedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+/// One single-use linking code, generated from an authenticated web session and
+/// sent by the administrator from her own phone. Only its hash is stored.
+model WhatsAppLinkChallenge {
+  id             String    @id @default(uuid())
+  codeHash       String    @unique
+  userId         String
+  organizationId String
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+enum WhatsAppIdentityStatus {
+  PENDING
+  VERIFIED
+  REVOKED
 }

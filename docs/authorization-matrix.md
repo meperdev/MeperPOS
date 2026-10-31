@@ -57,6 +57,9 @@ controller accepts a session name from the request.
 | /api/whatsapp/intelligence/session/stop | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/intelligence/session/restart | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/intelligence/session/logout | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/identity | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
+| /api/whatsapp/identity/challenge | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
+| /api/whatsapp/identity/:id | DELETE | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/webhook | POST | WAHA HMAC | provider-hmac | backend/src/whatsapp/whatsapp-webhook.spec.ts |
 
 ## auth
