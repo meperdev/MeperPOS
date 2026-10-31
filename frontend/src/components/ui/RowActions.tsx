@@ -15,6 +15,8 @@ export type RowActionItem =
   | {
       kind?: "action";
       label: string;
+      /** Secondary line for context; the label stays the action. */
+      hint?: string;
       icon?: ReactNode;
       onSelect: () => void;
       disabled?: boolean;
@@ -232,7 +234,14 @@ export function RowActions({
                   className={itemClass(disabled, item.destructive)}
                 >
                   {item.icon}
-                  {item.label}
+                  <span className="min-w-0">
+                    <span className="block truncate">{item.label}</span>
+                    {item.hint && (
+                      <span className="mt-0.5 block truncate text-[11px] font-normal text-muted-foreground">
+                        {item.hint}
+                      </span>
+                    )}
+                  </span>
                 </button>
               );
             })}

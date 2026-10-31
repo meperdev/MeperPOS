@@ -15,8 +15,15 @@ import {
 } from "@/components/ui/FilterBar";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Pagination } from "@/components/ui/Pagination";
+import { RowActions } from "@/components/ui/RowActions";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
+import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
+import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployees } from "@/hooks/useEmployees";
+import { cn } from "@/lib/utils";
 import {
   usePayrollObligations,
   type PayrollInstallment,
@@ -29,10 +36,18 @@ import {
   InstallmentDialog,
   ReplacementPaymentDialog,
 } from "./dialogs";
-import { ObligationCard } from "./ObligationCard";
-import { sumServerAmounts } from "./format";
+import { ObligationCard, buildObligationActions } from "./ObligationCard";
+import { payrollDateShort, payrollMoney, sumServerAmounts } from "./format";
 
 type PayrollFilter = "all" | "pending" | "completed" | "shifts";
+
+function periodLabel(obligation: PayrollObligation): string {
+  if (obligation.kind === "FIXED_PERIOD" && obligation.periodStart && obligation.periodEnd) {
+    return `${payrollDateShort(obligation.periodStart)} – ${payrollDateShort(obligation.periodEnd)}`;
+  }
+  const shifts = obligation.shiftMemberships.length;
+  return `${shifts} ${shifts === 1 ? "jornada" : "jornadas"}`;
+}
 
 // The segmented filter is the one view control of the list: the three states a
 // payment can be read in, plus the payments paid by shifts.
@@ -66,6 +81,9 @@ export default function PayrollPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<PayrollFilter>("all");
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [viewMode, setViewMode] = usePersistedViewMode("payroll");
+  const [page, setPage] = useState(1);
+  const pageSize = viewMode === "table" ? 10 : 9;
 
   const all = useMemo(() => obligations.data ?? [], [obligations.data]);
   // Names and shift ownership are read once per render of the data instead of
@@ -112,6 +130,26 @@ export default function PayrollPage() {
         .includes(query);
     });
   }, [all, employeeNames, filter, search]);
+
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, page, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+
+  const actionHandlers = {
+    onRegisterInstallment: (target: PayrollObligation) =>
+      setDialog({ kind: "installment", obligation: target }),
+    onCorrectInstallment: (target: PayrollObligation) =>
+      setDialog({ kind: "correction", obligation: target }),
+    onRegisterCashReturn: (
+      target: PayrollObligation,
+      installment: PayrollInstallment,
+    ) => setDialog({ kind: "return", obligation: target, installment }),
+    onReplacePayment: (target: PayrollObligation) =>
+      setDialog({ kind: "replacement", obligation: target }),
+  };
 
   // The strip aggregates the server's per-obligation summary. It never re-prices
   // an obligation's installments, and it adds the decimal strings exactly.
@@ -178,20 +216,35 @@ export default function PayrollPage() {
 
           <FilterBar
             searchValue={search}
-            onSearchChange={setSearch}
+            onSearchChange={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
             searchPlaceholder="Buscar por empleado..."
             filterControls={
-              <FilterGroup label="Estado">
-                {FILTERS.map((option) => (
-                  <FilterOptionButton
-                    key={option.value}
-                    active={filter === option.value}
-                    onClick={() => setFilter(option.value)}
-                  >
-                    {option.label}
-                  </FilterOptionButton>
-                ))}
-              </FilterGroup>
+              <>
+                <FilterGroup label="Estado">
+                  {FILTERS.map((option) => (
+                    <FilterOptionButton
+                      key={option.value}
+                      active={filter === option.value}
+                      onClick={() => {
+                        setFilter(option.value);
+                        setPage(1);
+                      }}
+                    >
+                      {option.label}
+                    </FilterOptionButton>
+                  ))}
+                </FilterGroup>
+                <ViewModeToggle
+                  value={viewMode}
+                  onChange={(mode) => {
+                    setViewMode(mode);
+                    setPage(1);
+                  }}
+                />
+              </>
             }
           />
 
@@ -216,35 +269,123 @@ export default function PayrollPage() {
               subtitle="Ajusta la búsqueda o el filtro de estado"
             />
           ) : (
-            <ul className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3 stagger-children">
-              {visible.map((obligation) => (
-                <li key={obligation.id} className="min-w-0">
-                  <ObligationCard
-                    obligation={obligation}
-                    employeeName={
-                      employeeNames.get(obligation.employeeId) ??
-                      "Empleado sin nombre"
-                    }
-                    onRegisterInstallment={(target) =>
-                      setDialog({ kind: "installment", obligation: target })
-                    }
-                    onCorrectInstallment={(target) =>
-                      setDialog({ kind: "correction", obligation: target })
-                    }
-                    onRegisterCashReturn={(target, installment) =>
-                      setDialog({
-                        kind: "return",
-                        obligation: target,
-                        installment,
-                      })
-                    }
-                    onReplacePayment={(target) =>
-                      setDialog({ kind: "replacement", obligation: target })
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
+            <>
+              {viewMode === "table" ? (
+                <>
+                  <div className="hidden overflow-hidden rounded-xl border border-border/70 bg-card sm:block">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableCell as="th">Empleado</TableCell>
+                            <TableCell as="th">Tipo</TableCell>
+                            <TableCell as="th">Período</TableCell>
+                            <TableCell as="th" className="text-right">
+                              Total
+                            </TableCell>
+                            <TableCell as="th" className="text-right">
+                              Saldo
+                            </TableCell>
+                            <TableCell as="th">Estado</TableCell>
+                            <TableCell as="th" className="text-right">
+                              <span className="sr-only">Acciones</span>
+                            </TableCell>
+                          </TableRow>
+                        </TableHeader>
+                        <tbody>
+                          {paged.map((obligation) => {
+                            const name =
+                              employeeNames.get(obligation.employeeId) ??
+                              "Empleado sin nombre";
+                            const balance = Number(obligation.summary.balance);
+                            return (
+                              <TableRow key={obligation.id}>
+                                <TableCell className="text-xs font-semibold text-foreground">
+                                  {name}
+                                </TableCell>
+                                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                                  {obligation.kind === "FIXED_PERIOD"
+                                    ? "Pago fijo"
+                                    : "Por jornadas"}
+                                </TableCell>
+                                <TableCell className="max-w-[260px] truncate text-xs text-muted-foreground">
+                                  {periodLabel(obligation)}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-xs tabular-nums">
+                                  {payrollMoney(obligation.summary.total)}
+                                </TableCell>
+                                <TableCell
+                                  className={cn(
+                                    "text-right font-mono text-xs tabular-nums",
+                                    balance > 0
+                                      ? "text-foreground"
+                                      : "text-muted-foreground",
+                                  )}
+                                >
+                                  {payrollMoney(obligation.summary.balance)}
+                                </TableCell>
+                                <TableCell>
+                                  <StatusBadge
+                                    domain="payroll"
+                                    status={obligation.summary.status.toUpperCase()}
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <RowActions
+                                    label={`Acciones de ${name}`}
+                                    items={buildObligationActions(
+                                      obligation,
+                                      actionHandlers,
+                                    )}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </tbody>
+                      </Table>
+                    </div>
+                  </div>
+                  <ul className="stagger-children grid grid-cols-1 gap-3.5 sm:hidden">
+                    {paged.map((obligation) => (
+                      <li key={obligation.id} className="min-w-0">
+                        <ObligationCard
+                          obligation={obligation}
+                          employeeName={
+                            employeeNames.get(obligation.employeeId) ??
+                            "Empleado sin nombre"
+                          }
+                          {...actionHandlers}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <ul className="stagger-children grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+                  {paged.map((obligation) => (
+                    <li key={obligation.id} className="min-w-0">
+                      <ObligationCard
+                        obligation={obligation}
+                        employeeName={
+                          employeeNames.get(obligation.employeeId) ??
+                          "Empleado sin nombre"
+                        }
+                        {...actionHandlers}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                totalItems={visible.length}
+                pageSize={pageSize}
+                itemLabel="pago"
+              />
+            </>
           )}
         </div>
       ) : (

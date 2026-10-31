@@ -252,7 +252,7 @@ export default function ExpensesPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-4">
+      <div className="flex flex-col gap-3 lg:min-h-[calc(100vh-4rem)] lg:gap-3">
         <PageHeader
           title="Salidas"
           subtitle="Registra los gastos y pagos de tu negocio"
@@ -689,7 +689,7 @@ export default function ExpensesPage() {
               </div>
             ) : (
               /* Desktop Grid View */
-              <div className="hidden md:grid flex-1 content-start md:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-3 stagger-children">
+              <div className="hidden md:grid flex-1 content-start items-start md:grid-cols-2 lg:grid-cols-3 gap-2.5 stagger-children">
                 {expenses.length === 0 ? (
                   <div className="col-span-full py-14">
                     <EmptyState
@@ -714,7 +714,7 @@ export default function ExpensesPage() {
                     return (
                       <div
                         key={expense.id}
-                        className="rounded-xl border border-border/70 bg-card p-3 shadow-2xs space-y-2.5 hover:border-border transition-colors flex flex-col justify-between"
+                        className="rounded-xl border border-border/70 bg-card p-2.5 shadow-2xs space-y-2 hover:border-border transition-colors flex flex-col justify-between"
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
@@ -732,12 +732,12 @@ export default function ExpensesPage() {
                           </div>
 
                           {expense.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-2">
+                            <p className="text-xs text-muted-foreground line-clamp-1">
                               {expense.description}
                             </p>
                           )}
 
-                          <div className="space-y-1.5 text-xs pt-1 border-t border-border/50">
+                          <div className="space-y-1 text-xs pt-1 border-t border-border/50">
                             {expense.supplier?.name && (
                               <div className="flex justify-between items-center text-muted-foreground">
                                 <span>Proveedor</span>
@@ -759,7 +759,7 @@ export default function ExpensesPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-2.5 border-t border-border/60 mt-auto">
+                        <div className="flex items-center justify-between pt-2 border-t border-border/60 mt-auto">
                           <div>
                             <p className="text-[11px] font-medium text-muted-foreground">Total</p>
                             <p className="text-sm font-semibold font-mono text-foreground tabular-nums">
@@ -794,14 +794,16 @@ export default function ExpensesPage() {
             )}
 
             {meta && (
-              <Pagination
-                currentPage={page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-                totalItems={meta.total}
-                pageSize={viewMode === "grid" ? 9 : 10}
-                itemLabel="salida"
-              />
+              <div className="sticky bottom-0 z-10 -mx-1 border-t border-border/60 bg-background/95 px-1 py-1.5 backdrop-blur-sm">
+                <Pagination
+                  currentPage={page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                  totalItems={meta.total}
+                  pageSize={viewMode === "grid" ? 9 : 10}
+                  itemLabel="salida"
+                />
+              </div>
             )}
           </>
         )}
