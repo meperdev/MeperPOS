@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import OrganizationDetailPage from "./page";
@@ -142,7 +142,7 @@ describe("OrganizationDetailPage", () => {
       expect(screen.getByDisplayValue("Tienda Principal")).toBeInTheDocument();
       expect(screen.getByDisplayValue("tienda-principal")).toBeInTheDocument();
 
-      const badges = screen.getAllByText("ACTIVE");
+      const badges = screen.getAllByText("Activa");
       expect(badges.length).toBeGreaterThan(0);
     });
 
@@ -172,10 +172,10 @@ describe("OrganizationDetailPage", () => {
     });
 
     it("renders member roles in the table", () => {
-      // Role selects use labels like "Admin", "Cashier" from roleOptions
-      const adminOccurrences = screen.getAllByText("Admin");
+      // Role selects use Spanish labels from roleOptions
+      const adminOccurrences = screen.getAllByText("Administrador");
       expect(adminOccurrences.length).toBeGreaterThanOrEqual(1);
-      const cashierOccurrences = screen.getAllByText("Cashier");
+      const cashierOccurrences = screen.getAllByText("Cajero");
       expect(cashierOccurrences.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -185,11 +185,11 @@ describe("OrganizationDetailPage", () => {
     });
 
     it("renders the status change dropdown", () => {
-      expect(screen.getByText("Cambiar Estado")).toBeInTheDocument();
+      expect(screen.getByText("Cambiar estado")).toBeInTheDocument();
     });
 
     it("renders the plan change dropdown", () => {
-      expect(screen.getByText("Cambiar Plan")).toBeInTheDocument();
+      expect(screen.getByText("Cambiar plan")).toBeInTheDocument();
     });
   });
 
@@ -305,9 +305,9 @@ describe("OrganizationDetailPage", () => {
       render(<OrganizationDetailPage params={resolvedParams} />, { wrapper });
     });
 
-    it("renders Informacion General heading", () => {
+    it("renders Informaci\u00f3n general heading", () => {
       expect(
-        screen.getByText("Informaci\u00f3n General")
+        screen.getByText("Informaci\u00f3n general")
       ).toBeInTheDocument();
     });
 
@@ -373,13 +373,14 @@ describe("OrganizationDetailPage", () => {
       const roleButtons = screen
         .getAllByRole("button")
         .map((button) => button.textContent?.trim())
-        .filter((text) => text === "Admin" || text === "Cashier");
+        .filter((text) => text === "Administrador" || text === "Cajero");
       expect(roleButtons.length).toBeGreaterThanOrEqual(1);
     });
 
     it("renders remove button for non-owner members", () => {
-      const removeButtons = screen.getAllByTitle("Remover miembro");
-      expect(removeButtons.length).toBeGreaterThan(0);
+      expect(
+        screen.getByRole("button", { name: "Acciones de Maria Lopez" })
+      ).toBeInTheDocument();
     });
 
     it("renders an add member button", () => {
