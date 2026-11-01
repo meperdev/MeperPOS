@@ -5,9 +5,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import OrganizationsPage from "./page";
 
 const pushMock = vi.fn();
+const { searchParamsRef } = vi.hoisted(() => ({
+  searchParamsRef: { current: new URLSearchParams() },
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => searchParamsRef.current,
 }));
 
 const {
@@ -111,6 +115,7 @@ function renderPage() {
 describe("OrganizationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    searchParamsRef.current = new URLSearchParams();
     setupMocks();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -139,6 +144,18 @@ describe("OrganizationsPage", () => {
 
     expect(screen.getByText("Cafetería Demo")).toBeInTheDocument();
     expect(screen.queryByText("Tienda Norte")).not.toBeInTheDocument();
+  });
+
+  it("starts filtered from the status query parameter", () => {
+    searchParamsRef.current = new URLSearchParams("status=SUSPENDED");
+    setupMocks([
+      org(),
+      org({ id: "org-2", name: "Tienda Norte", slug: "tienda-norte", status: "SUSPENDED" }),
+    ]);
+    renderPage();
+
+    expect(screen.getByText("Tienda Norte")).toBeInTheDocument();
+    expect(screen.queryByText("Cafetería Demo")).not.toBeInTheDocument();
   });
 
   it("shows the trial and billing state of a tenant", () => {

@@ -93,17 +93,26 @@ export interface TrialInfo {
   tone: "default" | "warning" | "danger";
 }
 
-/** Days left in the trial, read from the tenant's `trialEndsAt`. */
-export function trialInfo(trialEndsAt: string | null, now: Date = new Date()): TrialInfo {
+/** Days left in the trial, by calendar day, read from `trialEndsAt`. */
+export function trialDaysLeft(trialEndsAt: string | null, now: Date = new Date()): number | null {
   if (!trialEndsAt) {
-    return { label: "—", tone: "default" };
+    return null;
   }
 
   const dayMs = 86_400_000;
   const dayStart = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const days = Math.round((dayStart(new Date(trialEndsAt)) - dayStart(now)) / dayMs);
 
+  return Math.round((dayStart(new Date(trialEndsAt)) - dayStart(now)) / dayMs);
+}
+
+/** Days left in the trial, read from the tenant's `trialEndsAt`. */
+export function trialInfo(trialEndsAt: string | null, now: Date = new Date()): TrialInfo {
+  const days = trialDaysLeft(trialEndsAt, now);
+
+  if (days === null) {
+    return { label: "—", tone: "default" };
+  }
   if (days < 0) {
     return { label: "Vencido", tone: "danger" };
   }

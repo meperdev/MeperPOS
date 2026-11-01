@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -34,6 +34,7 @@ import {
   planOptions,
   statusDot,
   statusLabel,
+  statusLabels,
   statusOptions,
 } from "./labels";
 import {
@@ -54,6 +55,7 @@ const trialToneClass = {
 
 export default function OrganizationsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { data: organizations, isLoading, isError, refetch } = useOrganizations();
@@ -62,7 +64,9 @@ export default function OrganizationsPage() {
   const updatePlan = useUpdateOrganizationPlan();
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const statusParam = searchParams.get("status");
+  const initialStatus = statusParam && statusParam in statusLabels ? statusParam : "ALL";
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [planFilter, setPlanFilter] = useState("ALL");
   const [sort, setSort] = useState<OrganizationSort>("recent");
   const [page, setPage] = useState(1);

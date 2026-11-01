@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -104,7 +104,9 @@ export default function AdminLayout({
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">{children}</main>
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
+        <Suspense fallback={null}>{children}</Suspense>
+      </main>
     </div>
   );
 }
