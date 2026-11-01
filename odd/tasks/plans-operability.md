@@ -17,9 +17,9 @@ S5. The backfill is a script, dry-run by default; there is no automatic data mig
 
 | ID | Spec | Surface | Commit |
 | --- | --- | --- | --- |
-| P1 | S1, S3, S5 | Trial deadline on creation + trial constant + backfill script + admin hint | pending |
-| P3 | S1, S4 | `PAST_DUE` write block in the organization status guard | pending |
-| P7 | S1 | Plan-limit guard, billing controller and payment-records specs | pending |
+| P1 | S1, S3, S5 | Trial deadline on creation + trial constant + backfill script + admin hint | `afe6c80` |
+| P3 | S1, S4 | `PAST_DUE` write block in the organization status guard | `afb38e4` |
+| P7 | S1 | Plan-limit guard, billing controller and payment-records specs | `e927fe1` |
 
 ## Log
 
@@ -30,3 +30,5 @@ L2. Decision, verbatim: "SI arranca" after the proposed order (units 1 + 3 + 7 f
 L3. Exploration evidence: `trialEndsAt` and `pastDueAt` had zero writers; the billing cron is an explicit no-op; `PAST_DUE` was not enforced; the multi-sheet import bypasses `maxProducts`; downgrade flags are never cleared and excess cash registers are not deactivated; no plan-limit guard nor billing controller/payment-records specs. Stale docs: `docs/planes/...:702,924,937`.
 
 L4. Local dry run: `npm run backfill:trial-ends` reported 1 TRIAL organization without a deadline (Reports Golden Fixtures) and wrote nothing. Applying it remains the operator's decision.
+
+L5. Verification: backend 89/89 across 9 targeted suites, frontend admin 59/59, `tsc` and eslint clean on both sides, `nest build` green. The whole-app Next build stays pending for a normal terminal (session cgroup pids.max=64).
