@@ -19,6 +19,7 @@ S5. Behavior is preserved: same routes, mutations and destructive confirmation; 
 | T3 | S2, S3, S4 | Organizations list: page header, table alignment, row actions, skeleton | `frontend/src/app/admin/organizations/page.tsx` | `d62a05d` |
 | T4 | S2, S3, S4, S5 | Organization detail: header, sections, members table, copy fixes | `frontend/src/app/admin/organizations/[id]/page.tsx` (+ test copy) | `2abc932` |
 | T5 | All | Verify: admin vitest, tsc, eslint, build | - | vitest 26/26, tsc + eslint clean; build pending |
+| T6 | S2, S3 | Fix the clipped row menus: read-only table + edit dialog + shared labels | `organizations/page.tsx`, `organizations/labels.ts`, `organizations/[id]/page.tsx` | `ae39adf` |
 
 ## Log
 
@@ -35,3 +36,5 @@ L5. Delivery slices, recorded before the next commit: slice 1 = T1+T2 shell+pane
 L6. Verification environment: this session runs inside a cgroup capped at `pids.max=64` and `memory.max=3 GiB` (`memory.peak` reached 3.0 GiB, `memory.events.max=282`). Vitest's default fork pool cannot start there (`Failed to start forks worker ... Timeout waiting for worker to respond`), which also caused ~40 minutes of `fork: Resource temporarily unavailable` on plain shell commands. Verification therefore runs with `--pool=threads --maxWorkers=1` and `NODE_OPTIONS=--max-old-space-size=512`; if the sandbox still refuses, run the same commands in a normal terminal.
 
 L7. Verification evidence: `vitest run src/app/admin/organizations/[id]/page.test.tsx --pool=threads --maxWorkers=1 --no-isolate` → 26/26 passed; `npx tsc --noEmit` → exit 0, no output; `npx eslint` on every touched file → clean. `npm run build` (Next, whole app) was stopped after ~4 minutes: while its prerender workers ran, even a diagnostic `bash` failed with `EAGAIN` under the 64-PID ceiling. The whole-app build stays pending for a normal terminal: `cd frontend && npm run build`.
+
+L8. User review found the status menu clipped by the table's scroll container (`BentoSelect` positions its menu absolutely; no z-index escapes an overflow ancestor). T6 makes the table read-only and moves both mutations to an Editar organización dialog opened from a portal row menu, and shares the enum copy through `organizations/labels.ts`. New list test: 3 cases; suite 29/29, tsc and eslint clean (`ae39adf`).
