@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -25,6 +25,7 @@ import { SequenceModule } from './common/sequences/sequence.module';
 import { AdminModule } from './admin/admin.module';
 import { PlanLimitsModule } from './plan-limits/plan-limits.module';
 import { OrganizationStatusGuard } from './common/guards/organization-status.guard';
+import { OrganizationStatusInterceptor } from './common/interceptors/organization-status.interceptor';
 import { CookieCsrfGuard } from './common/guards/cookie-csrf.guard';
 import { CashRegistersModule } from './cash-registers/cash-registers.module';
 import { BillingModule } from './billing/billing.module';
@@ -88,9 +89,13 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
       provide: APP_GUARD,
       useClass: CookieCsrfGuard,
     },
+    // The status check must run AFTER route authentication: there is no global
+    // JwtAuthGuard, so a global guard would read `request.user` as undefined
+    // and let every request through. The interceptor runs after the route
+    // guards resolve the user, which is the first point the status exists.
     {
-      provide: APP_GUARD,
-      useClass: OrganizationStatusGuard,
+      provide: APP_INTERCEPTOR,
+      useClass: OrganizationStatusInterceptor,
     },
   ],
 })

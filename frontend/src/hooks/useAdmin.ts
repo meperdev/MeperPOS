@@ -45,8 +45,14 @@ export interface AdminMetrics {
   totalOrganizations: number;
   activeOrganizations: number;
   trialOrganizations: number;
+  pastDueOrganizations: number;
   suspendedOrganizations: number;
+  trialExpiringSoon: number;
+  trialExpired: number;
+  billingOverdue: number;
+  newOrganizationsThisMonth: number;
   totalUsers: number;
+  activeUsers: number;
   organizationsByPlan: Record<string, number>;
 }
 

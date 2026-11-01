@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { OrgRole, OrgStatus, PlanType } from '@prisma/client';
+import { BillingStatus, OrgRole, OrgStatus, PlanType } from '@prisma/client';
 import { DEFAULT_EXPENSE_TAXONOMY } from '../expenses/default-expense-categories';
 
 describe('AdminService', () => {
@@ -118,6 +118,8 @@ describe('AdminService', () => {
           data: expect.objectContaining({
             name: 'Test Org',
             slug: 'test-org',
+            status: OrgStatus.TRIAL,
+            trialEndsAt: expect.any(Date),
           }),
         }),
       );
@@ -538,12 +540,31 @@ describe('AdminService', () => {
   });
 
   describe('getMetrics', () => {
-    it('returns correct metrics', async () => {
-      prismaMock.organization.count.mockResolvedValueOnce(10);
-      prismaMock.organization.count.mockResolvedValueOnce(7);
-      prismaMock.organization.count.mockResolvedValueOnce(2);
-      prismaMock.organization.count.mockResolvedValueOnce(1);
-      prismaMock.user.count.mockResolvedValue(25);
+    it('returns the status counts, the risk counts and the user counts', async () => {
+      prismaMock.organization.count.mockImplementation(
+        (args: { where?: Record<string, unknown> } = {}) => {
+          const where = args.where ?? {};
+
+          if (where.status === OrgStatus.ACTIVE) return Promise.resolve(7);
+          if (where.status === OrgStatus.TRIAL) {
+            if (where.trialEndsAt) {
+              return Promise.resolve(
+                'lt' in (where.trialEndsAt as Record<string, unknown>) ? 1 : 2,
+              );
+            }
+            return Promise.resolve(2);
+          }
+          if (where.status === OrgStatus.PAST_DUE) return Promise.resolve(1);
+          if (where.status === OrgStatus.SUSPENDED) return Promise.resolve(1);
+          if (where.billingStatus === BillingStatus.OVERDUE) return Promise.resolve(3);
+          if (where.createdAt) return Promise.resolve(4);
+          return Promise.resolve(10);
+        },
+      );
+      prismaMock.user.count.mockImplementation(
+        (args?: { where?: Record<string, unknown> }) =>
+          Promise.resolve(args?.where ? 18 : 25),
+      );
       prismaMock.organization.groupBy.mockResolvedValue([
         { plan: PlanType.BASIC, _count: { id: 8 } },
         { plan: PlanType.PRO, _count: { id: 2 } },
@@ -555,12 +576,48 @@ describe('AdminService', () => {
         totalOrganizations: 10,
         activeOrganizations: 7,
         trialOrganizations: 2,
+        pastDueOrganizations: 1,
         suspendedOrganizations: 1,
+        trialExpiringSoon: 2,
+        trialExpired: 1,
+        billingOverdue: 3,
+        newOrganizationsThisMonth: 4,
         totalUsers: 25,
+        activeUsers: 18,
         organizationsByPlan: {
           [PlanType.BASIC]: 8,
           [PlanType.PRO]: 2,
         },
+      });
+    });
+
+    it('filters the risk counts by the expected where clauses', async () => {
+      prismaMock.organization.count.mockResolvedValue(0);
+      prismaMock.user.count.mockResolvedValue(0);
+      prismaMock.organization.groupBy.mockResolvedValue([]);
+
+      await service.getMetrics();
+
+      expect(prismaMock.organization.count).toHaveBeenCalledWith({
+        where: { status: OrgStatus.PAST_DUE },
+      });
+      expect(prismaMock.organization.count).toHaveBeenCalledWith({
+        where: {
+          status: OrgStatus.TRIAL,
+          trialEndsAt: { gte: expect.any(Date), lte: expect.any(Date) },
+        },
+      });
+      expect(prismaMock.organization.count).toHaveBeenCalledWith({
+        where: {
+          status: OrgStatus.TRIAL,
+          trialEndsAt: { lt: expect.any(Date) },
+        },
+      });
+      expect(prismaMock.organization.count).toHaveBeenCalledWith({
+        where: { billingStatus: BillingStatus.OVERDUE },
+      });
+      expect(prismaMock.user.count).toHaveBeenCalledWith({
+        where: { active: true, isSuperAdmin: false },
       });
     });
   });
