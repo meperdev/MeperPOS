@@ -20,6 +20,7 @@ S5. Behavior is preserved: same routes, mutations and destructive confirmation; 
 | T4 | S2, S3, S4, S5 | Organization detail: header, sections, members table, copy fixes | `frontend/src/app/admin/organizations/[id]/page.tsx` (+ test copy) | `2abc932` |
 | T5 | All | Verify: admin vitest, tsc, eslint, build | - | vitest 26/26, tsc + eslint clean; build pending |
 | T6 | S2, S3 | Fix the clipped row menus: read-only table + edit dialog + shared labels | `organizations/page.tsx`, `organizations/labels.ts`, `organizations/[id]/page.tsx` | `ae39adf` |
+| T7 | S2, S3, S4 | Filter, sort and page the list; trial/billing columns; open-as and copy-slug actions | `organizations/page.tsx`, `organizations/list.ts`, `lib/organizationScope.ts`, `layout/Sidebar.tsx` | `1fa87c4` |
 
 ## Log
 
@@ -38,3 +39,5 @@ L6. Verification environment: this session runs inside a cgroup capped at `pids.
 L7. Verification evidence: `vitest run src/app/admin/organizations/[id]/page.test.tsx --pool=threads --maxWorkers=1 --no-isolate` → 26/26 passed; `npx tsc --noEmit` → exit 0, no output; `npx eslint` on every touched file → clean. `npm run build` (Next, whole app) was stopped after ~4 minutes: while its prerender workers ran, even a diagnostic `bash` failed with `EAGAIN` under the 64-PID ceiling. The whole-app build stays pending for a normal terminal: `cd frontend && npm run build`.
 
 L8. User review found the status menu clipped by the table's scroll container (`BentoSelect` positions its menu absolutely; no z-index escapes an overflow ancestor). T6 makes the table read-only and moves both mutations to an Editar organización dialog opened from a portal row menu, and shares the enum copy through `organizations/labels.ts`. New list test: 3 cases; suite 29/29, tsc and eslint clean (`ae39adf`).
+
+L9. User chose all four UI-only additions. T7 adds an accent-insensitive search, status/plan filters with counts, sort, trial and billing columns, pagination, and the Abrir como organización / Copiar slug row actions. `applyOrganizationScope` moved out of `Sidebar.tsx` into `lib/organizationScope.ts` (Sidebar re-exports it) so the admin page resets the query scope through the same contract. `organizations/list.ts` holds the pure filter/sort/page/trial logic. 48/48 admin tests, tsc and eslint clean (`1fa87c4`). The Sidebar suite is unavailable in this sandbox: esbuild's Rust worker aborts with `OS can't spawn worker thread ... (os error 11)` under the 64-thread cgroup; the file type-checks and CI will run it.
