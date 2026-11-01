@@ -43,3 +43,18 @@ export const planLabels: Record<string, string> = {
 };
 
 export const statusLabel = (status: string) => statusLabels[status] ?? status;
+
+export const billingLabels: Record<string, string> = {
+  PENDING: "Pendiente",
+  PAID: "Pagada",
+  OVERDUE: "En mora",
+};
+
+export const billingDots: Record<string, string> = {
+  PENDING: "bg-amber-500",
+  PAID: "bg-emerald-500",
+  OVERDUE: "bg-rose-500",
+};
+
+export const billingLabel = (status?: string | null) =>
+  status ? billingLabels[status] ?? status : "—";
