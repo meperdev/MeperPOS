@@ -35,7 +35,8 @@
     "db:status": "bash scripts/db.sh status",
     "db:down": "bash scripts/db.sh down",
     "db:logs": "bash scripts/db.sh logs",
-    "studio": "dotenv -e .env.development -- npx prisma studio"
+    "studio": "dotenv -e .env.development -- npx prisma studio",
+    "backfill:trial-ends": "dotenv -e .env.development -- ts-node prisma/backfill-trial-ends.ts"
   },
   "dependencies": {
     "@fast-csv/format": "^5.0.5",

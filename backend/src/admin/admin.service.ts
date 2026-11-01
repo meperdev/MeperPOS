@@ -9,6 +9,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { BCRYPT_ROUNDS } from '../common/constants/security.constants';
+import { trialEndsAt } from '../common/constants/trial.constants';
 import { AuthService } from '../auth/auth.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationStatusDto } from './dto/update-organization-status.dto';
@@ -67,6 +68,8 @@ export class AdminService {
           name: dto.name,
           slug: dto.slug,
           plan: dto.plan ?? PlanType.BASIC,
+          status: OrgStatus.TRIAL,
+          trialEndsAt: trialEndsAt(),
         },
       });
 

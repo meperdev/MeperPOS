@@ -118,6 +118,8 @@ describe('AdminService', () => {
           data: expect.objectContaining({
             name: 'Test Org',
             slug: 'test-org',
+            status: OrgStatus.TRIAL,
+            trialEndsAt: expect.any(Date),
           }),
         }),
       );
