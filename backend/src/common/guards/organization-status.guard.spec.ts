@@ -111,12 +111,34 @@ describe('OrganizationStatusGuard', () => {
     await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it('allows all methods for PAST_DUE organization', async () => {
-    const context = createMockContext({
-      method: 'POST',
-      orgStatus: 'PAST_DUE',
+  it('blocks writes for PAST_DUE organization but keeps reads available', async () => {
+    const writeError = await guard
+      .canActivate(createMockContext({ method: 'POST', orgStatus: 'PAST_DUE' }))
+      .catch((error: unknown) => error);
+
+    expect(writeError).toBeInstanceOf(ForbiddenException);
+    expect(
+      (writeError as ForbiddenException).getResponse(),
+    ).toMatchObject({
+      status: 'PAST_DUE',
+      message:
+        'Organization is past due. Write operations are disabled until the payment is settled.',
     });
-    await expect(guard.canActivate(context)).resolves.toBe(true);
+
+    await expect(
+      guard.canActivate(createMockContext({ method: 'GET', orgStatus: 'PAST_DUE' })),
+    ).resolves.toBe(true);
+    await expect(
+      guard.canActivate(createMockContext({ method: 'HEAD', orgStatus: 'PAST_DUE' })),
+    ).resolves.toBe(true);
+  });
+
+  it('blocks every non-read method for PAST_DUE organization', async () => {
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      await expect(
+        guard.canActivate(createMockContext({ method, orgStatus: 'PAST_DUE' })),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    }
   });
 
   it('allows SuperAdmin bypass regardless of status', async () => {
