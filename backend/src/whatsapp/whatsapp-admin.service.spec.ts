@@ -134,6 +134,12 @@ function setup(
     generate?: jest.Mock;
     onDemand?: jest.Mock;
     supervisionSummary?: jest.Mock;
+    /** Defaults to a live account; `false` models a deactivated one. */
+    userActive?: boolean;
+    /** Defaults to a live organization; `false` models a deactivated one. */
+    organizationActive?: boolean;
+    /** Organization lifecycle status; SUSPENDED blocks the channel's only write. */
+    organizationStatus?: string;
   } = {},
 ) {
   const identities = options.identities ?? [];
@@ -176,6 +182,28 @@ function setup(
       deleteMany: forbidden('organizationUser.deleteMany'),
     },
     $transaction: forbidden('$transaction'),
+    user: {
+      findFirst: jest.fn(
+        ({ where }: { where: { id: string; active?: boolean } }) =>
+          options.userActive === false || where.active !== true
+            ? null
+            : { id: where.id },
+      ),
+      update: forbidden('user.update'),
+      updateMany: forbidden('user.updateMany'),
+      delete: forbidden('user.delete'),
+    },
+    organization: {
+      findFirst: jest.fn(
+        ({ where }: { where: { id: string; active?: boolean } }) =>
+          options.organizationActive === false || where.active !== true
+            ? null
+            : { status: options.organizationStatus ?? 'ACTIVE' },
+      ),
+      update: forbidden('organization.update'),
+      updateMany: forbidden('organization.updateMany'),
+      delete: forbidden('organization.delete'),
+    },
   };
 
   const reports = {
@@ -353,6 +381,7 @@ describe('WhatsAppAdminService', () => {
           organizationId: ORGANIZATION_ID,
           role,
           phone: PHONE,
+          deliveryAllowed: true,
         });
       }
     });
@@ -393,6 +422,7 @@ describe('WhatsAppAdminService', () => {
         organizationId: ORGANIZATION_ID,
         role: 'ADMIN',
         phone: PHONE,
+        deliveryAllowed: true,
       });
     });
 
@@ -409,6 +439,83 @@ describe('WhatsAppAdminService', () => {
         status: 'unlinked',
       });
     });
+
+    it('refuses a deactivated user even though the phone is still linked', async () => {
+      const { service, reports } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+        userActive: false,
+      });
+
+      await expect(service.authorize(PHONE)).resolves.toEqual({
+        status: 'forbidden',
+      });
+
+      // Switching the account off has to stop the reads, not only the login.
+      const answer = await service.answer({ status: 'forbidden' }, 'resumen');
+      expect(answer).toEqual({ status: 'refused', reason: 'forbidden' });
+      expect(reports.generate).not.toHaveBeenCalled();
+    });
+
+    it('refuses an inactive organization', async () => {
+      const { service } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+        organizationActive: false,
+      });
+
+      await expect(service.authorize(PHONE)).resolves.toEqual({
+        status: 'forbidden',
+      });
+    });
+
+    it('keeps the read tools for a suspended organization but refuses the document', async () => {
+      const { service, reports, delivery } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+        organizationStatus: 'SUSPENDED',
+      });
+
+      const context = await service.authorize(PHONE);
+      expect(context).toMatchObject({
+        status: 'authorized',
+        deliveryAllowed: false,
+      });
+
+      // The web guard allows GET/HEAD for a suspended organization, so the two
+      // read tools keep answering here as well.
+      const summary = await service.answer(context, 'resumen');
+      expect(summary.status).toBe('answered');
+      expect(reports.generate).toHaveBeenCalledTimes(1);
+
+      // The document is the channel's only write, so it is the one thing lost.
+      await expect(service.answer(context, 'pdf')).resolves.toEqual({
+        status: 'refused',
+        reason: 'forbidden',
+      });
+      expect(delivery.onDemand).not.toHaveBeenCalled();
+    });
+
+    it('delivers the document for an active organization', async () => {
+      const { service, delivery } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+      });
+
+      const context = await service.authorize(PHONE);
+      expect(context).toMatchObject({
+        status: 'authorized',
+        deliveryAllowed: true,
+      });
+
+      await expect(service.answer(context, 'pdf')).resolves.toEqual({
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: ORGANIZATION_ID,
+        delivery: 'sent',
+      });
+      expect(delivery.onDemand).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('the daily summary tool', () => {
@@ -418,6 +525,7 @@ describe('WhatsAppAdminService', () => {
       organizationId: ORGANIZATION_ID,
       role: 'ADMIN' as const,
       phone: PHONE,
+      deliveryAllowed: true,
     };
 
     it('answers with aggregates and the report date only', async () => {
@@ -619,6 +727,7 @@ describe('WhatsAppAdminService', () => {
       organizationId: ORGANIZATION_ID,
       role: 'ADMIN' as const,
       phone: PHONE,
+      deliveryAllowed: true,
     };
 
     it('answers every accepted phrasing with the aggregate summary', async () => {
@@ -771,6 +880,7 @@ describe('WhatsAppAdminService', () => {
       organizationId: ORGANIZATION_ID,
       role: 'ADMIN' as const,
       phone: PHONE,
+      deliveryAllowed: true,
     };
 
     it.each([
@@ -900,6 +1010,7 @@ describe('WhatsAppAdminService', () => {
           organizationId: ORGANIZATION_ID,
           role: 'ADMIN',
           phone: PHONE,
+          deliveryAllowed: true,
         },
         'resumen',
       );

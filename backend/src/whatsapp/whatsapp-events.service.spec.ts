@@ -16,6 +16,7 @@ import {
   type WhatsAppIngestionService,
 } from './whatsapp-ingestion.service';
 import type { WhatsAppSupervisionService } from './whatsapp-supervision.service';
+import { UnconfiguredWhatsAppModelProvider } from './whatsapp-intelligence-model';
 
 const commercialRow = {
   id: 'c1',
@@ -954,6 +955,12 @@ describe('WhatsAppEventsService', () => {
         organizationUser: {
           findFirst: jest.fn().mockResolvedValue(options.membership ?? null),
         },
+        // The gate also requires a live account and a live organization; these
+        // fakes answer the two lookups the real service makes.
+        user: { findFirst: jest.fn().mockResolvedValue({ id: 'user-1' }) },
+        organization: {
+          findFirst: jest.fn().mockResolvedValue({ status: 'ACTIVE' }),
+        },
         $transaction: jest.fn(
           async (run: (client: typeof tx) => Promise<unknown>) => run(tx),
         ),
@@ -974,6 +981,7 @@ describe('WhatsAppEventsService', () => {
         reports as unknown as DailyReportService,
         delivery as unknown as WhatsAppDeliveryService,
         supervision as unknown as WhatsAppSupervisionService,
+        new UnconfiguredWhatsAppModelProvider(),
       );
       const textSender = {
         sendText: jest.fn().mockResolvedValue({ providerMessageId: 'wamid-1' }),

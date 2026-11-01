@@ -118,6 +118,12 @@ export type WhatsAppAdminAuthorization =
        * only address an on-demand delivery can use is the phone that asked.
        */
       phone: string;
+      /**
+       * Whether this organization may receive the on-demand document. A suspended
+       * organization keeps read access in the web app and loses its writes, and
+       * the document is the only write this channel can cause.
+       */
+      deliveryAllowed: boolean;
     }
   | { status: 'unlinked' }
   | { status: 'forbidden' };
@@ -406,12 +412,43 @@ export class WhatsAppAdminService {
       return { status: 'forbidden' };
     }
 
+    // Being linked and being an administrator of that organization is not enough:
+    // the account and the business have to be live. The web app refuses a
+    // deactivated user at login and blocks writes for a suspended organization, so
+    // this channel honours the same state — otherwise a phone that was never
+    // unlinked keeps reading the business' figures after the account was switched
+    // off, which is exactly the access an operator believes they revoked.
+    const actor = await this.prisma.user.findFirst({
+      where: { id: identity.userId, active: true },
+      select: { id: true },
+    });
+    if (!actor) {
+      this.logger.warn({ event: 'whatsapp_admin', outcome: 'inactive_user' });
+      return { status: 'forbidden' };
+    }
+
+    const organization = await this.prisma.organization.findFirst({
+      where: { id: identity.organizationId, active: true },
+      select: { status: true },
+    });
+    if (!organization) {
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'inactive_organization',
+      });
+      return { status: 'forbidden' };
+    }
+
     return {
       status: 'authorized',
       userId: identity.userId,
       organizationId: identity.organizationId,
       role: membership.role,
       phone: contactPhone,
+      // Read tools stay available for a suspended organization, mirroring the web
+      // guard's GET/HEAD allowance; the document, which is this channel's only
+      // write, does not.
+      deliveryAllowed: organization.status !== 'SUSPENDED',
     };
   }
 
@@ -477,11 +514,14 @@ export class WhatsAppAdminService {
     let result: WhatsAppModelResult;
     try {
       result = await this.model.interpret(request);
-    } catch (error) {
+    } catch {
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'model_failed',
-        reason: error instanceof Error ? error.name : 'unknown',
+        // A fixed marker, never `error.name`: this error comes from an untrusted
+        // provider, and a name it controls could carry the administrator's text or
+        // an arbitrary length into a log line.
+        reason: 'provider_error',
       });
       return { status: 'unsupported' };
     }
@@ -554,6 +594,16 @@ export class WhatsAppAdminService {
   private async sendDailyReportPdf(
     context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
   ): Promise<WhatsAppAdminAnswer> {
+    if (!context.deliveryAllowed) {
+      // Silent, like every other refusal: the sender already knows who she is, but
+      // a reply would still confirm to a stranger that this number is in service.
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'delivery_blocked',
+      });
+      return { status: 'refused', reason: 'forbidden' };
+    }
+
     try {
       const outcome = await this.delivery.onDemand({
         organizationId: context.organizationId,

@@ -64,6 +64,11 @@ function buildService(interpret: jest.Mock) {
     organizationUser: {
       findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }),
     },
+    // A live account and a live organization, which the gate also requires.
+    user: { findFirst: jest.fn().mockResolvedValue({ id: USER_ID }) },
+    organization: {
+      findFirst: jest.fn().mockResolvedValue({ status: 'ACTIVE' }),
+    },
   };
   const reports = { generate: jest.fn().mockResolvedValue(report) };
   const delivery = {
