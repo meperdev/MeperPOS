@@ -32,6 +32,6 @@ L3. Exploration evidence: `trialEndsAt` and `pastDueAt` had zero writers; the bi
 
 L4. Local dry run: `npm run backfill:trial-ends` reported 1 TRIAL organization without a deadline (Reports Golden Fixtures) and wrote nothing. Applying it remains the operator's decision.
 
-L5. Verification: backend 89/89 across 9 targeted suites, frontend admin 59/59, eslint clean, `nest build` and `tsc -p tsconfig.build.json` green. `tsc -p tsconfig.json` still reports 23 pre-existing errors in untouched spec files. The whole-app Next build stays pending for a normal terminal (session cgroup pids.max=64).
+L5. Verification: backend 89/89 across 9 targeted suites, frontend admin 59/59, eslint clean, `nest build` and `tsc -p tsconfig.build.json` green. `tsc -p tsconfig.json` still reports 23 pre-existing errors in untouched spec files. The whole-app Next build stays pending for a normal terminal (session cgroup pids.max=64); it was closed green later (see L11 of `superadmin-redesign.md`).
 
 L6. Independent verifier found the blocking gap: `OrganizationStatusGuard` was a global `APP_GUARD`, which runs before route authentication, so `request.user` was undefined and PAST_DUE/SUSPENDED were only enforced on payroll/employees (the controllers that list the guard explicitly). P3b replaces the global guard with `OrganizationStatusInterceptor` after auth, adds a Nest+supertest wiring spec (PAST_DUE write 403, read 200, SUSPENDED 403, ACTIVE write 201, SuperAdmin bypass), and corrects `docs/planes` §0.7/§3.3.
