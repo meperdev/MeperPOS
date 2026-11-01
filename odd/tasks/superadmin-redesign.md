@@ -12,13 +12,13 @@ S5. Behavior is preserved: same routes, mutations and destructive confirmation; 
 
 ## Tasks
 
-| ID | Spec | Surface | Route |
-| --- | --- | --- | --- |
-| T1 | S2, S3 | Admin shell: brand, nav with active state, session, 32px rows, one keyline | `frontend/src/app/admin/layout.tsx` |
-| T2 | S2, S3, S4 | Panel: metric strip, plan composition, real error/empty states | `frontend/src/app/admin/page.tsx` |
-| T3 | S2, S3, S4 | Organizations list: page header, table alignment, row actions, skeleton | `frontend/src/app/admin/organizations/page.tsx` |
-| T4 | S2, S3, S4, S5 | Organization detail: header, sections, members table, copy fixes | `frontend/src/app/admin/organizations/[id]/page.tsx` (+ test copy) |
-| T5 | All | Verify: admin vitest, tsc, eslint, build | - |
+| ID | Spec | Surface | Route | Commit |
+| --- | --- | --- | --- | --- |
+| T1 | S2, S3 | Admin shell: brand, nav with active state, session, 32px rows, one keyline | `frontend/src/app/admin/layout.tsx` | `db15605` |
+| T2 | S2, S3, S4 | Panel: metric strip, plan composition, real error/empty states | `frontend/src/app/admin/page.tsx` | `db15605` |
+| T3 | S2, S3, S4 | Organizations list: page header, table alignment, row actions, skeleton | `frontend/src/app/admin/organizations/page.tsx` | `d62a05d` |
+| T4 | S2, S3, S4, S5 | Organization detail: header, sections, members table, copy fixes | `frontend/src/app/admin/organizations/[id]/page.tsx` (+ test copy) | `2abc932` |
+| T5 | All | Verify: admin vitest, tsc, eslint, build | - | vitest 26/26, tsc + eslint clean; build pending |
 
 ## Log
 
@@ -29,3 +29,9 @@ L2. User decisions, verbatim: "No sabia que era modo lectura global y pense quew
 L3. Validation evidence for S1 (read-only): `OrganizationRequiredGuard` passes SuperAdmin without org; `AdminOrganizationInterceptor` resolves `X-Organization-Id` > `?organizationId` > undefined; `RolesGuard` bypasses `@Roles` for SuperAdmin; permissive reads exist in products/customers/categories/suppliers/purchase-orders/exports; writes reject without org; reports/expenses/payroll require an org. No code change is part of this feature.
 
 L4. Design sources recovered: `odd`-external Engram `#2442` (unslop rules), `#2443` (module pass), `#2544` (shared-kit sweep), skill `.agents/skills/unslop-ui/SKILL.md`, guide repo `github.com/pbakaus/impeccable` v4.8.0 vendored untracked at `.agents/skills/impeccable/`, incumbent tokens `docs/design-system/KINETIC_BENTO_SPEC.md` + `frontend/src/app/globals.css`.
+
+L5. Delivery slices, recorded before the next commit: slice 1 = T1+T2 shell+panel (`db15605`, 323 authored lines); slice 2 = T3 list (`d62a05d`, 186 authored lines); slice 3 = T4 detail + test copy (`2abc932`, 375 authored lines). If a PR is opened, chain slice 1+2 and slice 3 so each review stays near the ~400-line budget.
+
+L6. Verification environment: this session runs inside a cgroup capped at `pids.max=64` and `memory.max=3 GiB` (`memory.peak` reached 3.0 GiB, `memory.events.max=282`). Vitest's default fork pool cannot start there (`Failed to start forks worker ... Timeout waiting for worker to respond`), which also caused ~40 minutes of `fork: Resource temporarily unavailable` on plain shell commands. Verification therefore runs with `--pool=threads --maxWorkers=1` and `NODE_OPTIONS=--max-old-space-size=512`; if the sandbox still refuses, run the same commands in a normal terminal.
+
+L7. Verification evidence: `vitest run src/app/admin/organizations/[id]/page.test.tsx --pool=threads --maxWorkers=1 --no-isolate` → 26/26 passed; `npx tsc --noEmit` → exit 0, no output; `npx eslint` on every touched file → clean. `npm run build` (Next, whole app) was stopped after ~4 minutes: while its prerender workers ran, even a diagnostic `bash` failed with `EAGAIN` under the 64-PID ceiling. The whole-app build stays pending for a normal terminal: `cd frontend && npm run build`.
