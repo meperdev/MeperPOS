@@ -511,6 +511,9 @@ export default function OrganizationsPage() {
             options={planOptions}
             onChange={(value) => setFormData({ ...formData, plan: value })}
           />
+          <p className="text-xs text-muted-foreground">
+            La organización arranca en periodo de prueba.
+          </p>
 
           <div className="flex items-center gap-2 pt-2">
             <input
