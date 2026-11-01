@@ -13,7 +13,7 @@ import { AuthService } from '../auth/auth.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationStatusDto } from './dto/update-organization-status.dto';
 import { UpdateOrganizationPlanDto } from './dto/update-organization-plan.dto';
-import { OrgRole, OrgStatus, PlanType, Prisma } from '@prisma/client';
+import { BillingStatus, OrgRole, OrgStatus, PlanType, Prisma } from '@prisma/client';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { PLAN_LIMITS, LimitType } from '../plan-limits/plan-limits.constants';
 import { DEFAULT_EXPENSE_TAXONOMY } from '../expenses/default-expense-categories';
@@ -325,21 +325,50 @@ export class AdminService {
   }
 
   async getMetrics() {
+    const now = new Date();
+    const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
     const [
       totalOrgs,
       activeOrgs,
       trialOrgs,
+      pastDueOrgs,
       suspendedOrgs,
+      trialExpiringSoon,
+      trialExpired,
+      billingOverdue,
+      newOrgsThisMonth,
       totalUsers,
+      activeUsers,
       orgsByPlan,
     ] = await Promise.all([
       this.prisma.organization.count(),
       this.prisma.organization.count({ where: { status: OrgStatus.ACTIVE } }),
       this.prisma.organization.count({ where: { status: OrgStatus.TRIAL } }),
+      this.prisma.organization.count({ where: { status: OrgStatus.PAST_DUE } }),
       this.prisma.organization.count({
         where: { status: OrgStatus.SUSPENDED },
       }),
+      this.prisma.organization.count({
+        where: {
+          status: OrgStatus.TRIAL,
+          trialEndsAt: { gte: now, lte: weekAhead },
+        },
+      }),
+      this.prisma.organization.count({
+        where: { status: OrgStatus.TRIAL, trialEndsAt: { lt: now } },
+      }),
+      this.prisma.organization.count({
+        where: { billingStatus: BillingStatus.OVERDUE },
+      }),
+      this.prisma.organization.count({
+        where: { createdAt: { gte: monthStart } },
+      }),
       this.prisma.user.count(),
+      this.prisma.user.count({
+        where: { active: true, isSuperAdmin: false },
+      }),
       this.prisma.organization.groupBy({
         by: ['plan'],
         _count: { id: true },
@@ -350,8 +379,14 @@ export class AdminService {
       totalOrganizations: totalOrgs,
       activeOrganizations: activeOrgs,
       trialOrganizations: trialOrgs,
+      pastDueOrganizations: pastDueOrgs,
       suspendedOrganizations: suspendedOrgs,
+      trialExpiringSoon,
+      trialExpired,
+      billingOverdue,
+      newOrganizationsThisMonth: newOrgsThisMonth,
       totalUsers,
+      activeUsers,
       organizationsByPlan: orgsByPlan.reduce(
         (acc, curr) => {
           acc[curr.plan] = curr._count.id;
