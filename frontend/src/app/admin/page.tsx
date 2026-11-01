@@ -1,91 +1,177 @@
 "use client";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { useRouter } from "next/navigation";
+import { Building2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { useAdminMetrics } from "@/hooks/useAdmin";
-import { Building2, Users, AlertTriangle, CheckCircle, Clock, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const planLabels: Record<string, string> = {
+  BASIC: "Básico",
+  PRO: "Pro",
+};
+
+const planDots: Record<string, string> = {
+  BASIC: "bg-slate-400",
+  PRO: "bg-primary",
+};
+
+// Deterministic reading order: the commercial plan first, then the entry plan,
+// then anything the billing module adds later.
+const planOrder = ["PRO", "BASIC"];
 
 export default function AdminPage() {
-  const { data: metrics, isLoading } = useAdminMetrics();
+  const router = useRouter();
+  const { data: metrics, isLoading, isError, refetch } = useAdminMetrics();
+
+  const header = (
+    <PageHeader
+      title="Panel"
+      subtitle="Organizaciones y usuarios del sistema"
+      actions={
+        <Button onClick={() => router.push("/admin/organizations")}>
+          Gestionar organizaciones
+        </Button>
+      }
+    />
+  );
 
   if (isLoading) {
-    return <LoadingState icon={<Loader2 className="h-8 w-8" />} message="Cargando métricas..." />;
+    return (
+      <div className="space-y-4">
+        {header}
+        <CardSkeleton
+          count={5}
+          label="Cargando métricas..."
+          className="sm:grid-cols-2 xl:grid-cols-5"
+        />
+      </div>
+    );
+  }
+
+  if (isError || !metrics) {
+    return (
+      <div className="space-y-4">
+        {header}
+        <ErrorState
+          message="No se pudieron cargar las métricas del sistema."
+          retryLabel="Reintentar"
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
   }
 
   const cards = [
     {
-      title: "Total Organizaciones",
-      value: metrics?.totalOrganizations ?? 0,
-      icon: Building2,
-      variant: "default" as const,
+      label: "Organizaciones",
+      value: metrics.totalOrganizations,
+      helper: "en el sistema",
     },
     {
-      title: "Activas",
-      value: metrics?.activeOrganizations ?? 0,
-      icon: CheckCircle,
-      variant: "success" as const,
+      label: "Activas",
+      value: metrics.activeOrganizations,
+      helper: "con acceso",
     },
     {
-      title: "En Trial",
-      value: metrics?.trialOrganizations ?? 0,
-      icon: Clock,
-      variant: "warning" as const,
+      label: "En prueba",
+      value: metrics.trialOrganizations,
+      helper: "en periodo trial",
     },
     {
-      title: "Suspendidas",
-      value: metrics?.suspendedOrganizations ?? 0,
-      icon: AlertTriangle,
-      variant: "danger" as const,
+      label: "Suspendidas",
+      value: metrics.suspendedOrganizations,
+      helper: "sin acceso",
     },
     {
-      title: "Usuarios Totales",
-      value: metrics?.totalUsers ?? 0,
-      icon: Users,
-      variant: "primary" as const,
+      label: "Usuarios",
+      value: metrics.totalUsers,
+      helper: "en todas las organizaciones",
     },
   ];
 
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
-        <Button onClick={() => window.location.href = '/admin/organizations'}>
-          Gestionar Organizaciones
-        </Button>
-      </div>
+  const plans = Object.entries(metrics.organizationsByPlan ?? {}).sort(([a], [b]) => {
+    const indexA = planOrder.indexOf(a);
+    const indexB = planOrder.indexOf(b);
+    if (indexA !== -1 || indexB !== -1) {
+      return (indexA === -1 ? planOrder.length : indexA) - (indexB === -1 ? planOrder.length : indexB);
+    }
+    return a.localeCompare(b);
+  });
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  return (
+    <div className="space-y-4">
+      {header}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {cards.map((card) => (
-          <Card key={card.title} className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted">
-              <card.icon className="h-6 w-6 text-primary-text" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
-              <p className="text-2xl font-bold text-foreground">{card.value}</p>
-            </div>
-          </Card>
+          <MetricCard
+            key={card.label}
+            label={card.label}
+            value={String(card.value)}
+            helper={card.helper}
+          />
         ))}
       </div>
 
-      {metrics?.organizationsByPlan && (
-        <Card>
-          <CardHeader>
-            <h3 className="text-lg font-semibold text-foreground">Organizaciones por Plan</h3>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3">
-              {Object.entries(metrics.organizationsByPlan).map(([plan, count]) => (
-                <Badge key={plan} variant="primary">
-                  {plan}: {count}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-medium text-foreground">Organizaciones por plan</h2>
+          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+            {metrics.totalOrganizations}
+          </span>
+        </CardHeader>
+        <CardContent className="p-0">
+          {plans.length === 0 ? (
+            <EmptyState
+              icon={<Building2 className="h-4 w-4" />}
+              title="Sin organizaciones registradas"
+              subtitle="Crea la primera organización desde la lista."
+            />
+          ) : (
+            <ul>
+              {plans.map(([plan, count]) => {
+                const share =
+                  metrics.totalOrganizations > 0
+                    ? Math.round((count / metrics.totalOrganizations) * 100)
+                    : 0;
+
+                return (
+                  <li
+                    key={plan}
+                    className="flex h-9 items-center justify-between gap-3 border-b border-border/50 px-5 text-[13px] last:border-b-0"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          planDots[plan] ?? "bg-muted-foreground/50",
+                        )}
+                      />
+                      <span className="text-foreground">{planLabels[plan] ?? plan}</span>
+                    </span>
+                    <span className="flex items-center gap-3">
+                      <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                        {share}%
+                      </span>
+                      <span className="w-8 text-right font-mono text-[13px] text-foreground tabular-nums">
+                        {count}
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
