@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OrgRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -8,6 +8,14 @@ import {
 import { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { normaliseContactPhone } from './whatsapp-ingestion.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
+import {
+  WHATSAPP_MODEL_PROVIDER,
+  buildModelRequest,
+  parseModelIntent,
+  type WhatsAppModelIntent,
+  type WhatsAppModelProvider,
+  type WhatsAppModelResult,
+} from './whatsapp-intelligence-model';
 import {
   WhatsAppSupervisionService,
   type WhatsAppSupervisionSummary,
@@ -363,6 +371,8 @@ export class WhatsAppAdminService {
     private readonly reports: DailyReportService,
     private readonly delivery: WhatsAppDeliveryService,
     private readonly supervision: WhatsAppSupervisionService,
+    @Inject(WHATSAPP_MODEL_PROVIDER)
+    private readonly model: WhatsAppModelProvider,
   ) {}
 
   /**
@@ -434,9 +444,64 @@ export class WhatsAppAdminService {
     }
 
     if (!DAILY_SUMMARY_COMMANDS.has(command)) {
+      return this.interpretWithModel(context, command);
+    }
+
+    return this.dailySummaryAnswer(context);
+  }
+
+  /**
+   * The model seam, reached only for a text the deterministic allowlist did not
+   * recognise. It can narrow nothing and widen nothing: the model picks one of
+   * the closed read tools, this side validates the answer, and the tool then runs
+   * with the organization from the verified identity — never from the model.
+   *
+   * While no provider is chosen the shipped binding answers `unavailable`, and
+   * this method returns exactly the `unsupported` answer the gate gave before the
+   * seam existed: an unrecognised command is still answered with the same
+   * sentence and still reads nothing. `unavailable` deliberately does not become
+   * a refusal message here, because no administrator should be told that an
+   * integration she never configured failed.
+   *
+   * A provider that throws is a warning with a fixed outcome and an
+   * `unsupported` answer: the webhook receipt for this message is already spent,
+   * so nothing may propagate and nothing is retried.
+   */
+  private async interpretWithModel(
+    context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
+    command: string,
+  ): Promise<WhatsAppAdminAnswer> {
+    const request = buildModelRequest(command);
+    if (!request) return { status: 'unsupported' };
+
+    let result: WhatsAppModelResult;
+    try {
+      result = await this.model.interpret(request);
+    } catch (error) {
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'model_failed',
+        reason: error instanceof Error ? error.name : 'unknown',
+      });
       return { status: 'unsupported' };
     }
 
+    if (result.status !== 'intent') return { status: 'unsupported' };
+
+    // The answer is validated again here, on this side of the boundary: a
+    // provider is untrusted output and its intent is never taken on trust.
+    const intent: WhatsAppModelIntent | null = parseModelIntent(result.intent);
+    if (!intent) return { status: 'unsupported' };
+
+    return intent.tool === 'daily_summary'
+      ? this.dailySummaryAnswer(context)
+      : this.supervisionAnswer(context);
+  }
+
+  /** The daily summary tool, shared by the allowlist and the model seam. */
+  private async dailySummaryAnswer(
+    context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
+  ): Promise<WhatsAppAdminAnswer> {
     const summary = await this.dailySummary(context.organizationId);
     if (!summary) return { status: 'refused', reason: 'unavailable' };
 

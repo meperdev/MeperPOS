@@ -21,6 +21,10 @@ import {
   WHATSAPP_PROVIDER,
   WHATSAPP_TEXT_SENDER,
 } from './whatsapp-provider';
+import {
+  UnconfiguredWhatsAppModelProvider,
+  WHATSAPP_MODEL_PROVIDER,
+} from './whatsapp-intelligence-model';
 import { WhatsAppRetentionScheduler } from './whatsapp-retention.scheduler';
 import { WhatsAppRetentionService } from './whatsapp-retention.service';
 import { WhatsAppSupervisionService } from './whatsapp-supervision.service';
@@ -75,6 +79,15 @@ const createWahaAdapter = () =>
     {
       provide: WHATSAPP_TEXT_SENDER,
       useFactory: createWahaAdapter,
+    },
+    {
+      // No model provider is chosen yet: provider, model, privacy, budget and
+      // where the text may be processed are still open decisions. This binding
+      // reaches nothing and always refuses, so the administrative channel keeps
+      // answering from its deterministic allowlist only. Replacing this one
+      // provider is the single change that turns the model seam on.
+      provide: WHATSAPP_MODEL_PROVIDER,
+      useClass: UnconfiguredWhatsAppModelProvider,
     },
   ],
 })

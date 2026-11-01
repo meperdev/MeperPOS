@@ -3,6 +3,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { DailyReportService } from '../reports/daily-report.service';
 import type { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
+import { UnconfiguredWhatsAppModelProvider } from './whatsapp-intelligence-model';
 import type { WhatsAppSupervisionService } from './whatsapp-supervision.service';
 import {
   normaliseCommand,
@@ -211,6 +212,7 @@ function setup(
       reports as unknown as DailyReportService,
       delivery as unknown as WhatsAppDeliveryService,
       supervision as unknown as WhatsAppSupervisionService,
+      new UnconfiguredWhatsAppModelProvider(),
     ),
   };
 }
