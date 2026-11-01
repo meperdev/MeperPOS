@@ -1,14 +1,21 @@
 import { Logger } from '@nestjs/common';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { WhatsAppAdminService } from './whatsapp-admin.service';
+import type { DailyReportService } from '../reports/daily-report.service';
+import { WhatsAppAdminService } from './whatsapp-admin.service';
 import type { WhatsAppConnectionsService } from './whatsapp-connections.service';
+import { INTELLIGENCE_SESSION } from './whatsapp-connections.service';
+import type { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { WhatsAppEventsService } from './whatsapp-events.service';
-import type { WhatsAppIdentityService } from './whatsapp-identity.service';
+import {
+  WhatsAppIdentityService,
+  hashLinkCode,
+} from './whatsapp-identity.service';
 import {
   DuplicateWhatsAppMessageError,
   type WhatsAppEventPayload,
   type WhatsAppIngestionService,
 } from './whatsapp-ingestion.service';
+import type { WhatsAppSupervisionService } from './whatsapp-supervision.service';
 
 const commercialRow = {
   id: 'c1',
@@ -52,12 +59,16 @@ function setup(row: unknown) {
       .mockResolvedValue({ status: 'refused', reason: 'unlinked' }),
   };
   const connections = { findBySessionName: jest.fn().mockResolvedValue(row) };
+  const textSender = {
+    sendText: jest.fn().mockResolvedValue({ providerMessageId: 'wamid-1' }),
+  };
   const service = new WhatsAppEventsService(
     prisma as unknown as PrismaService,
     connections as unknown as WhatsAppConnectionsService,
     ingestion as unknown as WhatsAppIngestionService,
     identity as unknown as WhatsAppIdentityService,
     admin as unknown as WhatsAppAdminService,
+    textSender,
   );
   return {
     prisma,
@@ -66,6 +77,7 @@ function setup(row: unknown) {
     identity,
     admin,
     connections,
+    textSender,
     committed,
     service,
   };
@@ -632,6 +644,635 @@ describe('WhatsAppEventsService', () => {
       } finally {
         warn.mockRestore();
       }
+    });
+  });
+
+  describe('deterministic text replies on the central channel', () => {
+    const authorized = {
+      status: 'authorized',
+      userId: 'user-1',
+      organizationId: 'org-1',
+      role: 'ADMIN',
+      phone: '573001112233',
+    };
+    const summary = {
+      reportDate: '2026-03-03',
+      cutoff: '2026-03-04T01:00:00.000Z',
+      salesTotal: '1234.56',
+      expenseTotal: '200.00',
+      salesCount: 1,
+      lowStockCount: 1,
+      pendingPurchaseOrderCount: 1,
+      loansDueCount: 1,
+    };
+    const summaryReply = [
+      'Resumen del día 2026-03-03',
+      'Ventas: $1.234,56 (1 venta)',
+      'Gastos: $200,00',
+      'Stock bajo: 1 producto',
+      'Compras pendientes: 1 orden',
+      'Préstamos por vencer: 1',
+    ].join('\n');
+
+    it('sends the rendered answer to the verified sender once', async () => {
+      const { prisma, admin, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      admin.authorize.mockResolvedValue(authorized);
+      admin.answer.mockResolvedValue({
+        status: 'answered',
+        tool: 'daily_summary',
+        organizationId: 'org-1',
+        summary,
+      });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-2', 'message.any', payload),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        admin: 'answered',
+      });
+
+      expect(textSender.sendText).toHaveBeenCalledTimes(1);
+      expect(textSender.sendText).toHaveBeenCalledWith(INTELLIGENCE_SESSION, {
+        chatId: '573001112233@c.us',
+        text: summaryReply,
+      });
+    });
+
+    it('derives the destination from the verified sender, never from the body', async () => {
+      const { prisma, admin, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      admin.authorize.mockResolvedValue(authorized);
+      admin.answer.mockResolvedValue({ status: 'unsupported' });
+
+      await service.handle('meper-intelligence', 'evt-2', 'message.any', {
+        ...payload,
+        body: 'resumen 573009998877',
+      });
+
+      expect(textSender.sendText).toHaveBeenCalledTimes(1);
+      expect(textSender.sendText.mock.calls[0][1]).toEqual({
+        chatId: '573001112233@c.us',
+        text: 'No entiendo ese comando. Escribe «resumen» para las cifras del día, «atencion» para las conversaciones o «pdf» para el reporte.',
+      });
+    });
+
+    it('tells an authorized sender when the figure is unavailable', async () => {
+      const { prisma, admin, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      admin.authorize.mockResolvedValue(authorized);
+      admin.answer.mockResolvedValue({
+        status: 'refused',
+        reason: 'unavailable',
+      });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-2', 'message.any', payload),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        admin: 'refused',
+      });
+      expect(textSender.sendText).toHaveBeenCalledWith(INTELLIGENCE_SESSION, {
+        chatId: '573001112233@c.us',
+        text: 'No pude obtener la información en este momento. Intenta de nuevo en unos minutos.',
+      });
+    });
+
+    it('never messages an unlinked or forbidden number', async () => {
+      for (const refused of [
+        {
+          context: { status: 'unlinked' },
+          answer: { status: 'refused', reason: 'unlinked' },
+        },
+        {
+          context: { status: 'forbidden' },
+          answer: { status: 'refused', reason: 'forbidden' },
+        },
+      ]) {
+        const { prisma, admin, textSender, service } = setup(intelligenceRow);
+        prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+        admin.authorize.mockResolvedValue(refused.context);
+        admin.answer.mockResolvedValue(refused.answer);
+
+        await expect(
+          service.handle('meper-intelligence', 'evt-2', 'message.any', payload),
+        ).resolves.toEqual({
+          status: 'recorded',
+          route: 'intelligence',
+          admin: 'refused',
+        });
+        expect(textSender.sendText).not.toHaveBeenCalled();
+      }
+    });
+
+    it('never answers its own outbound message, so no loop can start', async () => {
+      const { prisma, admin, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-2', 'message.any', {
+          ...payload,
+          fromMe: true,
+          body: 'resumen',
+        }),
+      ).resolves.toEqual({ status: 'recorded', route: 'intelligence' });
+      expect(admin.authorize).not.toHaveBeenCalled();
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it('never answers a non-text body', async () => {
+      const { prisma, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+
+      for (const body of [undefined, 42, null, '   ']) {
+        await service.handle('meper-intelligence', 'evt-2', 'message.any', {
+          ...payload,
+          body,
+        });
+      }
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it('sends once on the first delivery and nothing on a redelivery', async () => {
+      const { prisma, admin, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create
+        .mockResolvedValueOnce({ id: 'p1' })
+        .mockRejectedValueOnce({ code: 'P2002' });
+      admin.authorize.mockResolvedValue(authorized);
+      admin.answer.mockResolvedValue({ status: 'unsupported' });
+
+      await service.handle(
+        'meper-intelligence',
+        'evt-2',
+        'message.any',
+        payload,
+      );
+      await expect(
+        service.handle('meper-intelligence', 'evt-2', 'message.any', payload),
+      ).resolves.toEqual({ status: 'duplicate', route: 'intelligence' });
+
+      expect(textSender.sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the PDF as its own flow and sends no text for it', async () => {
+      const { prisma, admin, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      admin.authorize.mockResolvedValue(authorized);
+      admin.answer.mockResolvedValue({
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: 'org-1',
+        delivery: 'sent',
+      });
+
+      await service.handle('meper-intelligence', 'evt-2', 'message.any', {
+        ...payload,
+        body: 'pdf',
+      });
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it('never sends a reply when a linking code was just consumed', async () => {
+      const { prisma, identity, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      identity.consume.mockResolvedValue({ id: 'identity-1' });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-2', 'message.any', payload),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        identity: 'linked',
+      });
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it('keeps commercial traffic unchanged and never sends text on it', async () => {
+      const { tx, ingestion, admin, textSender, service } =
+        setup(commercialRow);
+      tx.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+
+      await expect(
+        service.handle('meper-commercial-abc', 'evt-1', 'message.any', payload),
+      ).resolves.toEqual({ status: 'recorded', route: 'commercial' });
+      expect(ingestion.ingest).toHaveBeenCalledTimes(1);
+      expect(admin.authorize).not.toHaveBeenCalled();
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it('survives a failed send without retrying or exposing the exchange', async () => {
+      const { prisma, admin, textSender, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      admin.authorize.mockResolvedValue(authorized);
+      admin.answer.mockResolvedValue({ status: 'unsupported' });
+      textSender.sendText.mockRejectedValue(
+        new Error('provider secret 573001112233 hola 1234.56'),
+      );
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      try {
+        // The receipt is already committed, so a transport failure is reported
+        // and never retried: one attempt, at most once, never a webhook error.
+        await expect(
+          service.handle('meper-intelligence', 'evt-2', 'message.any', payload),
+        ).resolves.toEqual({
+          status: 'recorded',
+          route: 'intelligence',
+          admin: 'refused',
+        });
+        expect(textSender.sendText).toHaveBeenCalledTimes(1);
+
+        const logged = warn.mock.calls
+          .map((args) => JSON.stringify(args))
+          .join(' ');
+        expect(logged).toContain('reply_failed');
+        expect(logged).not.toContain('573001112233');
+        expect(logged).not.toContain('hola');
+        expect(logged).not.toContain('1234.56');
+        expect(logged).not.toContain('provider secret');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
+  describe('the central path from an inbound message to a text reply', () => {
+    const report = {
+      date: '2026-03-03',
+      cutoff: new Date('2026-03-04T01:00:00.000Z'),
+      salesTotal: '1234.56',
+      expenseTotal: '200.00',
+      sales: [{ id: 'sale-1' }],
+      expenses: [],
+      lowStock: [],
+      purchaseOrders: [],
+      loans: [],
+    };
+
+    // The one code the fake challenge table accepts. Anything else, including a
+    // command body, finds no live challenge and takes the ordinary gate path.
+    const CHALLENGE_CODE = 'ABCDEFGHJK';
+
+    function pipeline(options: {
+      identity?: Record<string, unknown> | null;
+      membership?: Record<string, unknown> | null;
+      linkable?: boolean;
+    }) {
+      // The link claim finds no live challenge unless `linkable` is set, so every
+      // message below takes the ordinary gate path instead of redeeming a code.
+      const tx = {
+        whatsAppLinkChallenge: {
+          updateMany: jest.fn(async (args: { where: { codeHash: string } }) =>
+            options.linkable === true &&
+            args.where.codeHash === hashLinkCode(CHALLENGE_CODE)
+              ? { count: 1 }
+              : { count: 0 },
+          ),
+          findUnique: jest.fn().mockResolvedValue({
+            userId: 'user-1',
+            organizationId: 'org-1',
+          }),
+        },
+        whatsAppIdentity: {
+          upsert: jest.fn().mockResolvedValue({ id: 'identity-1' }),
+        },
+      };
+      const prisma = {
+        whatsAppProcessedEvent: {
+          create: jest.fn().mockResolvedValue({ id: 'p1' }),
+        },
+        whatsAppIdentity: {
+          findFirst: jest.fn(() => {
+            const identity = options.identity ?? null;
+            return identity && identity.status === 'VERIFIED' ? identity : null;
+          }),
+        },
+        organizationUser: {
+          findFirst: jest.fn().mockResolvedValue(options.membership ?? null),
+        },
+        $transaction: jest.fn(
+          async (run: (client: typeof tx) => Promise<unknown>) => run(tx),
+        ),
+      };
+      const connections = {
+        findBySessionName: jest.fn().mockResolvedValue(intelligenceRow),
+      };
+      const ingestion = { ingest: jest.fn() };
+      const identity = new WhatsAppIdentityService(
+        prisma as unknown as PrismaService,
+      );
+      const reports = { generate: jest.fn().mockResolvedValue(report) };
+      const delivery = { onDemand: jest.fn() };
+      const supervision = { summary: jest.fn() };
+      const admin = new WhatsAppAdminService(
+        prisma as unknown as PrismaService,
+        identity,
+        reports as unknown as DailyReportService,
+        delivery as unknown as WhatsAppDeliveryService,
+        supervision as unknown as WhatsAppSupervisionService,
+      );
+      const textSender = {
+        sendText: jest.fn().mockResolvedValue({ providerMessageId: 'wamid-1' }),
+      };
+      const service = new WhatsAppEventsService(
+        prisma as unknown as PrismaService,
+        connections as unknown as WhatsAppConnectionsService,
+        ingestion as unknown as WhatsAppIngestionService,
+        identity,
+        admin,
+        textSender,
+      );
+      return {
+        prisma,
+        tx,
+        reports,
+        delivery,
+        supervision,
+        textSender,
+        service,
+      };
+    }
+
+    const identity = {
+      id: 'identity-1',
+      phone: '573001112233',
+      userId: 'user-1',
+      organizationId: 'org-1',
+      status: 'VERIFIED',
+    };
+    const adminMembership = {
+      userId: 'user-1',
+      organizationId: 'org-1',
+      role: 'ADMIN',
+    };
+
+    it('answers an authorized administrator after identity and role checks', async () => {
+      const { prisma, reports, delivery, textSender, service } = pipeline({
+        identity,
+        membership: adminMembership,
+      });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-e2e', 'message.any', {
+          from: '573001112233@c.us',
+          fromMe: false,
+          source: 'app',
+          body: 'Resumen',
+          timestamp: 1_700_000_000,
+        }),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        admin: 'answered',
+      });
+
+      expect(reports.generate).toHaveBeenCalledWith('org-1');
+      expect(delivery.onDemand).not.toHaveBeenCalled();
+      expect(textSender.sendText).toHaveBeenCalledTimes(1);
+      expect(textSender.sendText).toHaveBeenCalledWith(INTELLIGENCE_SESSION, {
+        chatId: '573001112233@c.us',
+        text: [
+          'Resumen del día 2026-03-03',
+          'Ventas: $1.234,56 (1 venta)',
+          'Gastos: $200,00',
+          'Stock bajo: 0 productos',
+          'Compras pendientes: 0 órdenes',
+          'Préstamos por vencer: 0',
+        ].join('\n'),
+      });
+      // The receipt was committed before the reply, which is what makes the
+      // provider redelivery a duplicate rather than a second message.
+      expect(prisma.whatsAppProcessedEvent.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('gives a verified non-administrator no figures and no message', async () => {
+      const { reports, textSender, service } = pipeline({
+        identity,
+        membership: { ...adminMembership, role: 'CASHIER' },
+      });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-e2e', 'message.any', {
+          ...payload,
+          body: 'resumen',
+        }),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        admin: 'refused',
+      });
+      expect(reports.generate).not.toHaveBeenCalled();
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it('gives an unlinked number no message that could confirm it exists', async () => {
+      const { reports, textSender, service } = pipeline({});
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-e2e', 'message.any', {
+          ...payload,
+          body: 'resumen',
+        }),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        admin: 'refused',
+      });
+      expect(reports.generate).not.toHaveBeenCalled();
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['573001112233@c.us', '573001112233@c.us'],
+      ['573001112233@s.whatsapp.net', '573001112233@c.us'],
+      ['573001112233', '573001112233@c.us'],
+    ])(
+      'still answers a verified administrator who writes from %s',
+      async (from, chatId) => {
+        const { reports, delivery, textSender, service } = pipeline({
+          identity,
+          membership: adminMembership,
+        });
+
+        await expect(
+          service.handle('meper-intelligence', 'evt-e2e', 'message.any', {
+            ...payload,
+            from,
+            body: 'Resumen',
+          }),
+        ).resolves.toEqual({
+          status: 'recorded',
+          route: 'intelligence',
+          admin: 'answered',
+        });
+
+        expect(reports.generate).toHaveBeenCalledWith('org-1');
+        expect(delivery.onDemand).not.toHaveBeenCalled();
+        expect(textSender.sendText).toHaveBeenCalledTimes(1);
+        expect(textSender.sendText).toHaveBeenCalledWith(INTELLIGENCE_SESSION, {
+          chatId,
+          text: [
+            'Resumen del día 2026-03-03',
+            'Ventas: $1.234,56 (1 venta)',
+            'Gastos: $200,00',
+            'Stock bajo: 0 productos',
+            'Compras pendientes: 0 órdenes',
+            'Préstamos por vencer: 0',
+          ].join('\n'),
+        });
+      },
+    );
+
+    it('still links a phone sender that redeems a live challenge', async () => {
+      const { tx, textSender, service } = pipeline({
+        identity,
+        membership: adminMembership,
+        linkable: true,
+      });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-e2e', 'message.any', {
+          ...payload,
+          from: '573001112233@c.us',
+          body: CHALLENGE_CODE,
+        }),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        identity: 'linked',
+      });
+
+      // A real number is still bound to the challenge's authenticated owner and
+      // redeeming a code still sends nothing back.
+      expect(tx.whatsAppIdentity.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { phone: '573001112233' },
+          create: expect.objectContaining({
+            phone: '573001112233',
+            userId: 'user-1',
+            organizationId: 'org-1',
+            status: 'VERIFIED',
+          }),
+        }),
+      );
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    // WAHA reports a privacy identifier (`@lid`) for some chats. Its digits are
+    // opaque, and the ones below are exactly an authenticated administrator's
+    // verified phone: the collision this boundary has to refuse.
+    const opaqueFrom = '573001112233@lid';
+
+    it.each([
+      ['a link code', CHALLENGE_CODE],
+      ['a summary query', 'resumen'],
+      ['a PDF command', 'pdf'],
+      ['an unsupported command', 'hola'],
+    ])(
+      'refuses %s from an opaque LID that collides with the administrator phone',
+      async (_label, body) => {
+        const {
+          prisma,
+          tx,
+          reports,
+          delivery,
+          supervision,
+          textSender,
+          service,
+        } = pipeline({ identity, membership: adminMembership, linkable: true });
+        const warn = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+
+        try {
+          await expect(
+            service.handle('meper-intelligence', 'evt-lid', 'message.any', {
+              ...payload,
+              from: opaqueFrom,
+              body,
+            }),
+          ).resolves.toEqual({ status: 'ignored_unverified_sender' });
+
+          // A sender this channel can never identify is refused before the
+          // receipt, so it does not even fill the deduplication table.
+          expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
+          expect(prisma.$transaction).not.toHaveBeenCalled();
+
+          // No link: neither the challenge nor the identity row is touched.
+          expect(tx.whatsAppLinkChallenge.updateMany).not.toHaveBeenCalled();
+          expect(tx.whatsAppLinkChallenge.findUnique).not.toHaveBeenCalled();
+          expect(tx.whatsAppIdentity.upsert).not.toHaveBeenCalled();
+
+          // No query: identity, role, report, supervision and delivery are
+          // never consulted, so no figure and no document can be produced.
+          expect(prisma.whatsAppIdentity.findFirst).not.toHaveBeenCalled();
+          expect(prisma.organizationUser.findFirst).not.toHaveBeenCalled();
+          expect(reports.generate).not.toHaveBeenCalled();
+          expect(supervision.summary).not.toHaveBeenCalled();
+          expect(delivery.onDemand).not.toHaveBeenCalled();
+
+          // No reply of any kind, text or document.
+          expect(textSender.sendText).not.toHaveBeenCalled();
+
+          const logged = warn.mock.calls
+            .map((args) => JSON.stringify(args))
+            .join(' ');
+          expect(logged).toContain('unverified_sender');
+          expect(logged).not.toContain('573001112233');
+          expect(logged).not.toContain(opaqueFrom);
+          expect(logged).not.toContain(body);
+        } finally {
+          warn.mockRestore();
+        }
+      },
+    );
+
+    it('refuses a LID for an identity that was never linked', async () => {
+      const { prisma, tx, textSender, service } = pipeline({ linkable: true });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-lid', 'message.any', {
+          ...payload,
+          from: '145805600096353@lid',
+          body: 'resumen',
+        }),
+      ).resolves.toEqual({ status: 'ignored_unverified_sender' });
+
+      expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
+      expect(tx.whatsAppIdentity.upsert).not.toHaveBeenCalled();
+      expect(prisma.whatsAppIdentity.findFirst).not.toHaveBeenCalled();
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it('keeps commercial ingestion of an opaque LID unchanged', async () => {
+      const { tx, ingestion, identity, admin, textSender, service } =
+        setup(commercialRow);
+      tx.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      const commercialLid = { ...payload, from: opaqueFrom, body: 'hola' };
+
+      await expect(
+        service.handle(
+          'meper-commercial-abc',
+          'evt-1',
+          'message.any',
+          commercialLid,
+        ),
+      ).resolves.toEqual({ status: 'recorded', route: 'commercial' });
+
+      // The commercial channel still stores the opaque identifier as its own
+      // conversation key, and it never links, queries or answers.
+      expect(ingestion.ingest).toHaveBeenCalledWith(tx, commercialRow, {
+        providerMessageId: 'evt-1',
+        payload: commercialLid,
+      });
+      expect(identity.consume).not.toHaveBeenCalled();
+      expect(admin.authorize).not.toHaveBeenCalled();
+      expect(admin.answer).not.toHaveBeenCalled();
+      expect(textSender.sendText).not.toHaveBeenCalled();
     });
   });
 });

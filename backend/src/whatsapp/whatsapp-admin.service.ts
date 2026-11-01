@@ -172,6 +172,145 @@ function countOf(value: unknown): number {
   return Array.isArray(value) ? value.length : 0;
 }
 
+const REPORT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A non-negative whole count, or null when the value cannot be trusted. */
+function countText(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+/**
+ * Colombian peso formatting for a decimal string: `1234.56` becomes
+ * `$1.234,56`. Deliberately pure and locale-independent so the same figure
+ * always renders the same text on every host and in every test run.
+ */
+function copText(value: string): string {
+  const negative = value.startsWith('-');
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole, fraction = ''] = unsigned.split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const cents = fraction.padEnd(2, '0').slice(0, 2);
+  return `${negative ? '-' : ''}$${grouped},${cents}`;
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** Median duration in a chat-legible unit; `null` means there is no sample. */
+function durationText(medianMs: number | null): string {
+  if (medianMs === null) return 'sin datos';
+  if (medianMs < 1000) return `${medianMs} ms`;
+  const seconds = medianMs / 1000;
+  return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1).replace('.', ',')} s`;
+}
+
+const UNSUPPORTED_REPLY =
+  'No entiendo ese comando. Escribe «resumen» para las cifras del día, «atencion» para las conversaciones o «pdf» para el reporte.';
+const UNAVAILABLE_REPLY =
+  'No pude obtener la información en este momento. Intenta de nuevo en unos minutos.';
+
+function dailySummaryReply(summary: WhatsAppDailySummary): string | null {
+  if (!summary || !REPORT_DATE_PATTERN.test(summary.reportDate ?? ''))
+    return null;
+  const salesTotal = amountText(summary.salesTotal);
+  const expenseTotal = amountText(summary.expenseTotal);
+  const salesCount = countText(summary.salesCount);
+  const lowStockCount = countText(summary.lowStockCount);
+  const pendingPurchaseOrderCount = countText(
+    summary.pendingPurchaseOrderCount,
+  );
+  const loansDueCount = countText(summary.loansDueCount);
+  if (
+    !salesTotal ||
+    !expenseTotal ||
+    salesCount === null ||
+    lowStockCount === null ||
+    pendingPurchaseOrderCount === null ||
+    loansDueCount === null
+  )
+    return null;
+
+  return [
+    `Resumen del día ${summary.reportDate}`,
+    `Ventas: ${copText(salesTotal)} (${plural(salesCount, 'venta', 'ventas')})`,
+    `Gastos: ${copText(expenseTotal)}`,
+    `Stock bajo: ${plural(lowStockCount, 'producto', 'productos')}`,
+    `Compras pendientes: ${plural(pendingPurchaseOrderCount, 'orden', 'órdenes')}`,
+    `Préstamos por vencer: ${loansDueCount}`,
+  ].join('\n');
+}
+
+function supervisionReply(
+  supervision: WhatsAppSupervisionSummary,
+): string | null {
+  if (!supervision) return null;
+  const total = countText(supervision.totalConversations);
+  const automated = countText(supervision.byState?.AUTOMATED);
+  const human = countText(supervision.byState?.HUMAN);
+  const suspended = countText(supervision.byState?.SUSPENDED);
+  const clients = countText(supervision.byContactKind?.CLIENT);
+  const internal = countText(supervision.byContactKind?.INTERNAL);
+  const unknown = countText(supervision.byContactKind?.UNKNOWN);
+  const pending = countText(supervision.pendingAnswerCount);
+  const median = supervision.firstResponse?.medianMs ?? null;
+  if (
+    total === null ||
+    automated === null ||
+    human === null ||
+    suspended === null ||
+    clients === null ||
+    internal === null ||
+    unknown === null ||
+    pending === null ||
+    (median !== null && (!Number.isFinite(median) || median < 0))
+  )
+    return null;
+
+  return [
+    'Atención de las conversaciones',
+    `Total: ${total}`,
+    `Automáticas: ${automated}`,
+    `Humanas: ${human}`,
+    `Suspendidas: ${suspended}`,
+    `Clientes: ${clients}`,
+    `Internos: ${internal}`,
+    `Desconocidos: ${unknown}`,
+    `Esperando respuesta: ${pending}`,
+    `Primera respuesta (mediana): ${durationText(median)}`,
+  ].join('\n');
+}
+
+/**
+ * Render the deterministic chat reply for one gate answer, or `null` when the
+ * answer must not produce a text message.
+ *
+ * The two silent outcomes are decisions, not omissions:
+ *  - an `unlinked` or `forbidden` refusal is never answered, because any reply
+ *    would confirm to a stranger that this number is in service and could be used
+ *    to enumerate registered phones;
+ *  - a `delivered` PDF answer is silent because the document flow already sends
+ *    its own message, and adding a text would duplicate the side effect.
+ *
+ * Only aggregates and dates are rendered. Every figure comes from the reduced
+ * shapes above, so no customer, document, supplier, product, phone or free-text
+ * description can reach the message even if the report had one.
+ */
+export function renderAdminReply(answer: WhatsAppAdminAnswer): string | null {
+  if (answer.status === 'answered') {
+    return answer.tool === 'daily_summary'
+      ? dailySummaryReply(answer.summary)
+      : supervisionReply(answer.supervision);
+  }
+  if (answer.status === 'unsupported') return UNSUPPORTED_REPLY;
+  if (answer.status === 'refused') {
+    return answer.reason === 'unavailable' ? UNAVAILABLE_REPLY : null;
+  }
+  return null;
+}
+
 /**
  * Administrative gate for the central INTELLIGENCE channel: the first stage of the
  * administrative assistant.
