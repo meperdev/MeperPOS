@@ -27,6 +27,13 @@ import type { Organization } from "@/hooks/useAdmin";
 import { formatDate } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api";
 import {
+  planLabels,
+  planOptions,
+  statusLabel,
+  statusOptions,
+  statusTone,
+} from "../labels";
+import {
   ArrowLeft,
   Building2,
   ShieldAlert,
@@ -35,32 +42,6 @@ import {
   Users,
 } from "lucide-react";
 
-const statusOptions = [
-  { value: "TRIAL", label: "Trial" },
-  { value: "ACTIVE", label: "Activa" },
-  { value: "PAST_DUE", label: "Vencida" },
-  { value: "SUSPENDED", label: "Suspendida" },
-];
-
-const planOptions = [
-  { value: "BASIC", label: "Básico" },
-  { value: "PRO", label: "Pro" },
-];
-
-const statusLabels: Record<string, string> = {
-  TRIAL: "En prueba",
-  ACTIVE: "Activa",
-  PAST_DUE: "Vencida",
-  SUSPENDED: "Suspendida",
-};
-
-const statusTone: Record<string, "warning" | "success" | "danger" | "default"> = {
-  TRIAL: "warning",
-  ACTIVE: "success",
-  PAST_DUE: "danger",
-  SUSPENDED: "danger",
-};
-
 const roleOptions = [
   { value: "OWNER", label: "Propietario" },
   { value: "ADMIN", label: "Administrador" },
@@ -68,13 +49,6 @@ const roleOptions = [
   { value: "CASHIER", label: "Cajero" },
   { value: "INVENTORY_USER", label: "Inventario" },
 ];
-
-const statusLabel = (status: string) => statusLabels[status] ?? status;
-
-const planLabels: Record<string, string> = {
-  BASIC: "Básico",
-  PRO: "Pro",
-};
 
 export default function OrganizationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

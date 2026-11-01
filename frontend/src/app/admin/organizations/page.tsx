@@ -19,20 +19,16 @@ import {
   useUpdateOrganizationStatus,
   useUpdateOrganizationPlan,
 } from "@/hooks/useAdmin";
+import type { Organization } from "@/hooks/useAdmin";
 import { formatDate } from "@/lib/utils";
-import { Building2, Eye } from "lucide-react";
-
-const statusOptions = [
-  { value: "TRIAL", label: "Trial" },
-  { value: "ACTIVE", label: "Activa" },
-  { value: "PAST_DUE", label: "Vencida" },
-  { value: "SUSPENDED", label: "Suspendida" },
-];
-
-const planOptions = [
-  { value: "BASIC", label: "Básico" },
-  { value: "PRO", label: "Pro" },
-];
+import { Building2, Eye, Settings2 } from "lucide-react";
+import {
+  planLabels,
+  planOptions,
+  statusDot,
+  statusLabel,
+  statusOptions,
+} from "./labels";
 
 export default function OrganizationsPage() {
   const router = useRouter();
@@ -42,6 +38,9 @@ export default function OrganizationsPage() {
   const updatePlan = useUpdateOrganizationPlan();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Organization | null>(null);
+  const [statusDraft, setStatusDraft] = useState("TRIAL");
+  const [planDraft, setPlanDraft] = useState("BASIC");
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
@@ -101,6 +100,26 @@ export default function OrganizationsPage() {
     } catch {
       // Error handled by mutation
     }
+  };
+
+  const openEdit = (organization: Organization) => {
+    setEditing(organization);
+    setStatusDraft(organization.status);
+    setPlanDraft(organization.plan);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editing) {
+      return;
+    }
+
+    if (statusDraft !== editing.status) {
+      updateStatus.mutate({ id: editing.id, status: statusDraft });
+    }
+    if (planDraft !== editing.plan) {
+      updatePlan.mutate({ id: editing.id, plan: planDraft });
+    }
+    setEditing(null);
   };
 
   const header = (
@@ -181,24 +200,17 @@ export default function OrganizationsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <BentoSelect
-                          value={org.status}
-                          options={statusOptions}
-                          onChange={(value) =>
-                            updateStatus.mutate({ id: org.id, status: value })
-                          }
-                          className="w-32 [&>button]:h-8"
-                        />
+                        <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
+                          <span
+                            aria-hidden="true"
+                            className={statusDot[org.status] ?? "bg-slate-400"}
+                            style={{ height: 6, width: 6, borderRadius: 9999 }}
+                          />
+                          {statusLabel(org.status)}
+                        </span>
                       </TableCell>
-                      <TableCell>
-                        <BentoSelect
-                          value={org.plan}
-                          options={planOptions}
-                          onChange={(value) =>
-                            updatePlan.mutate({ id: org.id, plan: value })
-                          }
-                          className="w-32 [&>button]:h-8"
-                        />
+                      <TableCell className="text-xs text-foreground">
+                        {planLabels[org.plan] ?? org.plan}
                       </TableCell>
                       <TableCell className="text-right font-mono text-foreground tabular-nums">
                         {org.userCount ?? "—"}
@@ -209,12 +221,17 @@ export default function OrganizationsPage() {
                       <TableCell className="text-right">
                         <div className="flex justify-end">
                           <RowActions
+                            label={`Acciones de ${org.name}`}
                             items={[
+                              {
+                                label: "Editar estado y plan",
+                                icon: <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />,
+                                onSelect: () => openEdit(org),
+                              },
                               {
                                 label: "Ver detalle",
                                 icon: <Eye className="h-3.5 w-3.5" aria-hidden="true" />,
-                                onSelect: () =>
-                                  router.push(`/admin/organizations/${org.id}`),
+                                onSelect: () => router.push(`/admin/organizations/${org.id}`),
                               },
                             ]}
                           />
@@ -228,6 +245,40 @@ export default function OrganizationsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Modal
+        isOpen={editing !== null}
+        onClose={() => setEditing(null)}
+        title="Editar organización"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground">{editing?.name}</p>
+          <BentoSelect
+            label="Estado"
+            value={statusDraft}
+            options={statusOptions}
+            onChange={setStatusDraft}
+          />
+          <BentoSelect
+            label="Plan"
+            value={planDraft}
+            options={planOptions}
+            onChange={setPlanDraft}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={() => setEditing(null)}>
+              Cancelar
+            </Button>
+            <Button
+              loading={updateStatus.isPending || updatePlan.isPending}
+              onClick={handleSaveEdit}
+            >
+              Guardar
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
