@@ -1,210 +1,117 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { printThermalReceipt } from "./useReceipt";
-import type { Sale, SaleItem, Payment, Product } from "@/types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api } from "@/lib/api";
+import { downloadReceiptPdf, openReceiptPdf } from "./useReceipt";
 
-function makeProduct(name: string): Product {
-  return {
-    id: `prod-${name}`,
-    name,
-    sku: `sku-${name}`,
-    barcode: null,
-    description: null,
-    costPrice: 1000,
-    salePrice: 5000,
-    taxRate: 19,
-    stock: 10,
-    minStock: 1,
-    imageUrl: null,
-    categoryId: "cat-1",
-    active: true,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-    version: 1,
-  };
+vi.mock("@/lib/api", () => ({
+  api: { fetchBlob: vi.fn(), saveBlob: vi.fn() },
+}));
+
+const fetchBlob = vi.mocked(api.fetchBlob);
+const saveBlob = vi.mocked(api.saveBlob);
+
+function pdfBlob(content = "pdf"): Blob {
+  return new Blob([content], { type: "application/pdf" });
 }
 
-function makeItem(product: Product, quantity: number, unitPrice: number): SaleItem {
-  const subtotal = quantity * unitPrice;
-  return {
-    id: `item-${product.id}`,
-    saleId: "sale-1",
-    productId: product.id,
-    product,
-    quantity,
-    unitPrice,
-    taxRate: product.taxRate,
-    discountAmount: 0,
-    subtotal,
-    total: subtotal,
-  };
-}
-
-function makePayment(method: Payment["method"], amount: number): Payment {
-  return {
-    id: `pay-${method}-${amount}`,
-    saleId: "sale-1",
-    method,
-    amount,
-    createdAt: "2026-01-01T00:00:00.000Z",
-  };
-}
-
-function makeSale(overrides: Partial<Sale> = {}): Sale {
-  const product = makeProduct("Producto A");
-  return {
-    id: "sale-1",
-    saleNumber: 101,
-    customerId: null,
-    subtotal: 10000,
-    taxAmount: 1900,
-    discountAmount: 0,
-    total: 11900,
-    amountPaid: 11900,
-    change: 0,
-    status: "COMPLETED",
-    userId: "user-1",
-    items: [makeItem(product, 2, 5000)],
-    payments: [makePayment("CASH", 11900)],
-    createdAt: "2026-01-15T14:30:00.000Z",
-    updatedAt: "2026-01-15T14:30:00.000Z",
-    ...overrides,
-  };
-}
-
-describe("printThermalReceipt", () => {
-  const writeMock = vi.fn();
-  const closeMock = vi.fn();
-  const printMock = vi.fn();
-  const focusMock = vi.fn();
-
-  function mockPrintWindow() {
-    return {
-      document: { write: writeMock, close: closeMock },
-      print: printMock,
-      focus: focusMock,
-    } as unknown as Window;
-  }
+describe("receipt PDF helpers", () => {
+  const createObjectURL = vi.fn(() => "blob:receipt");
+  const revokeObjectURL = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectURL,
+    });
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it("opens a print window with the receipt content and triggers print", () => {
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(mockPrintWindow());
-    const sale = makeSale();
-
-    printThermalReceipt(sale, "Mi Tienda");
-
-    expect(openSpy).toHaveBeenCalledWith(
-      "",
-      "_blank",
-      expect.stringContaining("width=320"),
-    );
-    expect(writeMock).toHaveBeenCalledTimes(1);
-
-    const writtenHtml = writeMock.mock.calls[0]?.[0] as string;
-    expect(writtenHtml).toContain("Mi Tienda");
-    expect(writtenHtml).toContain("Comprobante #101");
-    expect(writtenHtml).toContain("Producto A");
-    expect(writtenHtml).toContain("2 x");
-    expect(writtenHtml).toContain("Total");
-    expect(writtenHtml).toContain("Efectivo");
-    expect(writtenHtml).toContain("@media print");
-    expect(writtenHtml).toContain("80mm");
-    expect(writtenHtml).toContain("window.print()");
-    expect(printMock).toHaveBeenCalledTimes(1);
-    expect(closeMock).toHaveBeenCalledTimes(1);
-  });
-
-  it.each(["load", "error", "timeout"])("waits for logo %s and prints only once", (event) => {
-    vi.useFakeTimers();
-    const image = document.createElement("img");
-    Object.defineProperty(image, "complete", { value: false });
-    const popup = mockPrintWindow();
-    popup.document.querySelector = vi.fn().mockReturnValue(image);
-    vi.spyOn(window, "open").mockReturnValue(popup);
-    printThermalReceipt(makeSale(), "Mi Tienda", {
-      logoUrl: 'https://res.cloudinary.com/demo/image/upload/logos/a.png?x="&y=1',
-    });
-    expect(writeMock.mock.calls[0][0]).toContain('class="receipt-logo"');
-    expect(writeMock.mock.calls[0][0]).toContain('&quot;&amp;y=1');
-    expect(writeMock.mock.calls[0][0]).not.toContain('<script>window.print();</script>');
-    expect(printMock).not.toHaveBeenCalled();
-    if (event === "timeout") vi.advanceTimersByTime(3000);
-    else image.dispatchEvent(new Event(event));
-    expect(printMock).toHaveBeenCalledTimes(1);
-    image.dispatchEvent(new Event("load"));
-    vi.runAllTimers();
-    expect(printMock).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
-  });
-
-  it.each([true, false])("prints once for an already settled logo (loaded: %s)", (loaded) => {
-    const image = document.createElement("img");
-    Object.defineProperty(image, "complete", { value: true });
-    Object.defineProperty(image, "naturalWidth", { value: loaded ? 100 : 0 });
-    const popup = mockPrintWindow();
-    popup.document.querySelector = vi.fn().mockReturnValue(image);
-    vi.spyOn(window, "open").mockReturnValue(popup);
-    printThermalReceipt(makeSale(), "Mi Tienda", { logoUrl: "https://cdn.example/logo.png" });
-    expect(printMock).toHaveBeenCalledTimes(1);
-    expect(image.style.display).toBe(loaded ? "" : "none");
-  });
-
-  it("rejects executable logo URLs", () => {
-    vi.spyOn(window, "open").mockReturnValue(mockPrintWindow());
-    printThermalReceipt(makeSale(), "Mi Tienda", { logoUrl: "javascript:alert(1)" });
-    expect(writeMock.mock.calls[0][0]).not.toContain('<img');
-    expect(printMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("includes custom header and footer when provided", () => {
-    vi.spyOn(window, "open").mockReturnValue(mockPrintWindow());
-    const sale = makeSale();
-
-    printThermalReceipt(sale, "Mi Tienda", {
-      header: "Bienvenidos",
-      footer: "Vuelva pronto",
+  it("downloads the server-generated PDF with its filename", async () => {
+    const blob = pdfBlob();
+    fetchBlob.mockResolvedValue({
+      blob,
+      filename: "comprobante_42.pdf",
     });
 
-    const writtenHtml = writeMock.mock.calls[0]?.[0] as string;
-    expect(writtenHtml).toContain("Bienvenidos");
-    expect(writtenHtml).toContain("Vuelva pronto");
+    await downloadReceiptPdf("sale-42");
+
+    expect(fetchBlob).toHaveBeenCalledWith("/sales/sale-42/receipt", {});
+    expect(saveBlob).toHaveBeenCalledWith(blob, "comprobante_42.pdf");
   });
 
-  it("prints the persisted change amount, and no change row when the server stored null", () => {
-    vi.spyOn(window, "open").mockReturnValue(mockPrintWindow());
+  it("keeps a meaningful filename when the header is unavailable", async () => {
+    const blob = pdfBlob();
+    fetchBlob.mockResolvedValue({
+      blob,
+      filename: "export_1793587105789",
+    });
 
-    printThermalReceipt(
-      makeSale({ amountPaid: 20000, change: 8100, payments: [makePayment("CASH", 20000)] }),
-      "Mi Tienda",
-    );
-    expect(writeMock.mock.calls[0]?.[0] as string).toContain("Cambio");
-    expect(writeMock.mock.calls[0]?.[0] as string).toContain("8.100");
+    await downloadReceiptPdf("sale-42");
 
-    // A mixed sale whose cash side under-tendered persists `change: null`. The receipt
-    // must print nothing for it rather than deriving a change from the tender mix.
-    writeMock.mockClear();
-    printThermalReceipt(
-      makeSale({
-        amountPaid: 11900,
-        change: null,
-        payments: [makePayment("CASH", 6000), makePayment("CARD", 5900)],
-      }),
-      "Mi Tienda",
-    );
-    expect(writeMock.mock.calls[0]?.[0] as string).not.toContain("Cambio");
+    expect(saveBlob).toHaveBeenCalledWith(blob, "comprobante.pdf");
   });
 
-  it("does not throw when the browser blocks the popup", () => {
+  it("opens the PDF in a new tab for preview and printing", async () => {
+    const blob = pdfBlob();
+    const receiptWindow = {
+      opener: {},
+      location: { href: "" },
+      close: vi.fn(),
+    } as unknown as Window;
+    fetchBlob.mockResolvedValue({
+      blob,
+      filename: "comprobante_42.pdf",
+    });
+    const open = vi.spyOn(window, "open").mockReturnValue(receiptWindow);
+
+    await openReceiptPdf("sale-42");
+
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    expect(createObjectURL).toHaveBeenCalledWith(blob);
+    expect(receiptWindow.location.href).toBe("blob:receipt");
+    expect(receiptWindow.opener).toBeNull();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("reports the popup blocker instead of silently doing nothing", async () => {
     vi.spyOn(window, "open").mockReturnValue(null);
-    const sale = makeSale();
 
-    expect(() => printThermalReceipt(sale, "Mi Tienda")).not.toThrow();
+    await expect(openReceiptPdf("sale-42")).rejects.toThrow(
+      "Permita las ventanas emergentes para ver el comprobante",
+    );
+    expect(fetchBlob).not.toHaveBeenCalled();
+  });
+
+  it("closes the reserved tab when the PDF request fails", async () => {
+    const receiptWindow = {
+      opener: {},
+      location: { href: "" },
+      close: vi.fn(),
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(receiptWindow);
+    fetchBlob.mockRejectedValue(new Error("500"));
+
+    await expect(openReceiptPdf("sale-42")).rejects.toThrow(
+      "Error al generar el comprobante",
+    );
+    expect(receiptWindow.close).toHaveBeenCalled();
+  });
+
+  it("wraps backend failures in a user-facing message", async () => {
+    fetchBlob.mockRejectedValue(new Error("500"));
+
+    await expect(downloadReceiptPdf("sale-42")).rejects.toThrow(
+      "Error al generar el comprobante",
+    );
+    expect(saveBlob).not.toHaveBeenCalled();
   });
 });

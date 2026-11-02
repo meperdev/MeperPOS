@@ -322,8 +322,8 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/hooks/useReceipt", () => ({
-  printReceipt: vi.fn(),
-  printThermalReceipt: vi.fn(),
+  downloadReceiptPdf: vi.fn(),
+  openReceiptPdf: vi.fn(),
 }));
 
 vi.mock("@/hooks/useSettings", () => ({
@@ -357,7 +357,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 import POSPage from "./page";
-import { printReceipt, printThermalReceipt } from "@/hooks/useReceipt";
+import { downloadReceiptPdf, openReceiptPdf } from "@/hooks/useReceipt";
 import * as nextDynamic from "next/dynamic";
 
 const resetDynamicChunks = () =>
@@ -1001,7 +1001,7 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(confirmButton).toBeTruthy();
   });
 
-  it("shows a thermal print button after checkout and calls printThermalReceipt", async () => {
+  it("opens the receipt PDF preview after checkout", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, totalPages: 1 } },
       isLoading: false,
@@ -1021,20 +1021,16 @@ describe("POS behavior evidence (#19, #18)", () => {
       expect(createSaleMutateMock).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole("button", { name: /imprimir recibo térmico/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ver \/ imprimir/i })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /imprimir recibo térmico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /ver \/ imprimir/i }));
 
     await waitFor(() => {
-      expect(printThermalReceipt).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "sale-1", saleNumber: 101 }),
-        "Mi Tienda",
-        expect.objectContaining({ header: null, footer: null, logoUrl: "https://res.cloudinary.com/demo/image/upload/logos/store.png" }),
-      );
+      expect(openReceiptPdf).toHaveBeenCalledWith("sale-1");
     });
   });
 
-  it("keeps the PDF fallback button that calls printReceipt", async () => {
+  it("downloads the receipt PDF after checkout", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, totalPages: 1 } },
       isLoading: false,
@@ -1059,7 +1055,7 @@ describe("POS behavior evidence (#19, #18)", () => {
     await userEvent.click(screen.getByRole("button", { name: /descargar pdf/i }));
 
     await waitFor(() => {
-      expect(printReceipt).toHaveBeenCalledWith("sale-1");
+      expect(downloadReceiptPdf).toHaveBeenCalledWith("sale-1");
     });
   });
 

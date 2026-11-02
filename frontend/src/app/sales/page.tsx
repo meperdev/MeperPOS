@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSales } from "@/hooks/useSales";
-import { printReceipt } from "@/hooks/useReceipt";
+import { downloadReceiptPdf, openReceiptPdf } from "@/hooks/useReceipt";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
@@ -138,11 +138,21 @@ function SalesPageContent() {
     setShowDetailModal(true);
   };
 
-  const handlePrintReceipt = async (saleId: string) => {
+  const handleDownloadReceipt = async (saleId: string) => {
     try {
-      await printReceipt(saleId);
+      await downloadReceiptPdf(saleId);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al generar el comprobante"));
+      toast.error(
+        getApiErrorMessage(error, "Error al descargar el comprobante"),
+      );
+    }
+  };
+
+  const handleOpenReceipt = async (saleId: string) => {
+    try {
+      await openReceiptPdf(saleId);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Error al abrir el comprobante"));
     }
   };
 
@@ -312,7 +322,16 @@ function SalesPageContent() {
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => handlePrintReceipt(sale.id)}
+                          onClick={() => handleOpenReceipt(sale.id)}
+                          className="w-7 px-0"
+                          title="Ver comprobante"
+                        >
+                          <Receipt className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleDownloadReceipt(sale.id)}
                           className="w-7 px-0"
                           title="Descargar comprobante"
                         >
@@ -437,7 +456,16 @@ function SalesPageContent() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => handlePrintReceipt(sale.id)}
+                                onClick={() => handleOpenReceipt(sale.id)}
+                                className="p-1.5 h-7 w-7 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                                title="Ver comprobante"
+                              >
+                                <Receipt className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDownloadReceipt(sale.id)}
                                 className="p-1.5 h-7 w-7 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
                                 title="Descargar comprobante"
                               >
@@ -644,9 +672,15 @@ function SalesPageContent() {
               )}
             </div>
 
-            <div className="flex justify-end pt-1">
-              <Button onClick={() => handlePrintReceipt(selectedSale.id)}>
-                <Download className="w-4 h-4" /> Descargar Comprobante
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="secondary"
+                onClick={() => handleOpenReceipt(selectedSale.id)}
+              >
+                <Receipt className="w-4 h-4" /> Ver comprobante
+              </Button>
+              <Button onClick={() => handleDownloadReceipt(selectedSale.id)}>
+                <Download className="w-4 h-4" /> Descargar
               </Button>
             </div>
           </div>

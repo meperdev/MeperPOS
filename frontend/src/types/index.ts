@@ -141,6 +141,9 @@ export interface Settings {
   organization: {
     name: string;
     logoUrl: string | null;
+    taxId?: string | null;
+    phone?: string | null;
+    address?: string | null;
   };
   invoicing: {
     printHeader: string;

@@ -33,6 +33,7 @@ async function bootstrap() {
   app.enableCors({
     origin: corsOrigins.length > 0 ? corsOrigins : defaultOrigins,
     credentials: true,
+    exposedHeaders: ['Content-Disposition'],
   });
 
   // Swagger is a development tool only; never expose the schema in production.
