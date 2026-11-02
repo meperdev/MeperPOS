@@ -153,41 +153,6 @@ h4 {
     background-color: var(--accent);
 }
 
-/* ─── Thermal Receipt Print Styles ─────────────────────── */
-.thermal-receipt {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.4;
-}
-
-@media print {
-    .thermal-receipt {
-        width: 80mm;
-        height: auto;
-        margin: 0 auto;
-        padding: 4mm;
-        box-sizing: border-box;
-        color: #000;
-        background: #fff;
-    }
-
-    .thermal-receipt .receipt-title {
-        font-size: 14px;
-        font-weight: bold;
-    }
-
-    .thermal-receipt .receipt-divider {
-        border: none;
-        border-top: 1px dashed #000;
-        margin: 8px 0;
-    }
-
-    .thermal-receipt .receipt-grand-total {
-        font-weight: bold;
-        font-size: 13px;
-    }
-}
-
 /* ─── Animations ───────────────────────────────────────── */
 @keyframes fade-in-up {
     from {

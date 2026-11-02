@@ -39,6 +39,9 @@ export interface SettingsView {
   organization: {
     name: string;
     logoUrl: string | null;
+    taxId: string | null;
+    phone: string | null;
+    address: string | null;
   };
   invoicing: InvoicingSettings;
   receipt: {

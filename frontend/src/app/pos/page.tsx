@@ -16,8 +16,10 @@ import { useCustomers } from "@/hooks/useCustomers";
 import { useCreateSale } from "@/hooks/useSales";
 import { useCreatePosLoan } from "@/hooks/useLoans";
 import { usePausedSales } from "@/hooks/usePausedSales";
-import { printReceipt, printThermalReceipt } from "@/hooks/useReceipt";
-import { useSettings } from "@/hooks/useSettings";
+import {
+  downloadReceiptPdf,
+  openReceiptPdf,
+} from "@/hooks/useReceipt";
 import { Input } from "@/components/ui/Input";
 import { SearchField } from "@/components/ui/SearchField";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
@@ -282,7 +284,6 @@ export default function POSPage() {
   });
   const { data: categoriesData } = useCategories({ limit: 100 });
   const { data: customersData } = useCustomers();
-  const { data: settings } = useSettings();
   const { pausedSales, pauseSale, resumeSale, deletePausedSale } =
     usePausedSales();
   const createSale = useCreateSale();
@@ -841,25 +842,27 @@ export default function POSPage() {
     }
   };
 
-  const handlePrintReceipt = async () => {
+  const handleDownloadReceipt = async () => {
     if (lastSale) {
       try {
-        await printReceipt(lastSale.id);
+        await downloadReceiptPdf(lastSale.id);
       } catch (error) {
         toast.error(
-          getApiErrorMessage(error, "Error al imprimir el comprobante"),
+          getApiErrorMessage(error, "Error al descargar el comprobante"),
         );
       }
     }
   };
 
-  const handlePrintThermalReceipt = () => {
+  const handleOpenReceipt = async () => {
     if (lastSale) {
-      printThermalReceipt(lastSale, settings?.organization?.name ?? "Mi Negocio", {
-        logoUrl: settings?.organization?.logoUrl,
-        header: settings?.invoicing?.printHeader,
-        footer: settings?.invoicing?.printFooter,
-      });
+      try {
+        await openReceiptPdf(lastSale.id);
+      } catch (error) {
+        toast.error(
+          getApiErrorMessage(error, "Error al abrir el comprobante"),
+        );
+      }
     }
   };
 
@@ -1627,11 +1630,11 @@ export default function POSPage() {
               >
                 Cerrar
               </Button>
-              <Button variant="secondary" onClick={handlePrintReceipt}>
+              <Button variant="secondary" onClick={handleDownloadReceipt}>
                 <FileDown className="w-4 h-4" /> Descargar PDF
               </Button>
-              <Button onClick={handlePrintThermalReceipt}>
-                <Printer className="w-4 h-4" /> Imprimir Recibo Térmico
+              <Button onClick={handleOpenReceipt}>
+                <Printer className="w-4 h-4" /> Ver / imprimir
               </Button>
             </div>
           </div>

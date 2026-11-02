@@ -25,16 +25,35 @@ const sampleItems = [
 function ReceiptPreview({
   organizationName,
   logoUrl,
+  taxId,
+  phone,
+  address,
   printHeader,
   printFooter,
   prefix,
 }: {
   organizationName: string;
   logoUrl: string | null;
+  taxId?: string | null;
+  phone?: string | null;
+  address?: string | null;
   printHeader: string;
   printFooter: string;
   prefix: string;
 }) {
+  const normalize = (value: string) =>
+    value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es-CO");
+  const headerLines = printHeader
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  while (
+    headerLines.length > 0 &&
+    normalize(headerLines[0]) === normalize(organizationName)
+  ) {
+    headerLines.shift();
+  }
+  const visibleHeader = headerLines.join("\n");
   const subtotal = sampleItems.reduce(
     (total, item) => total + item.quantity * item.price,
     0,
@@ -92,9 +111,14 @@ function ReceiptPreview({
             <h3 className="break-words text-base font-semibold tracking-tight text-foreground">
               {organizationName || "Nombre de la organización"}
             </h3>
-            {printHeader ? (
+            <div className="mt-1 space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
+              {taxId ? <p>NIT {taxId}</p> : null}
+              {address ? <p>{address}</p> : null}
+              {phone ? <p>Tel. {phone}</p> : null}
+            </div>
+            {visibleHeader ? (
               <p className="mt-1.5 whitespace-pre-line break-words text-xs leading-relaxed text-muted-foreground">
-                {printHeader}
+                {visibleHeader}
               </p>
             ) : (
               <p className="mt-1.5 text-xs text-muted-foreground/60">
@@ -280,6 +304,9 @@ export default function InvoicingSettingsPage() {
           <ReceiptPreview
             organizationName={settings.organization.name}
             logoUrl={settings.organization.logoUrl}
+            taxId={settings.organization.taxId}
+            phone={settings.organization.phone}
+            address={settings.organization.address}
             printHeader={printHeader}
             printFooter={printFooter}
             prefix={prefix}

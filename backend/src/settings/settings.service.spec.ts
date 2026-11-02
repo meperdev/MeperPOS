@@ -35,6 +35,9 @@ describe('SettingsService', () => {
       prismaMock.organization.findUnique.mockResolvedValue({
         name: 'Acme Corp',
         logoUrl: 'https://cdn/acme.png',
+        taxId: '900123456-7',
+        phone: '+57 300 123 4567',
+        address: 'Calle 1 # 2-3',
         settings: {
           printHeader: 'Acme - Comprobante',
           printFooter: 'Gracias por su compra',
@@ -52,7 +55,15 @@ describe('SettingsService', () => {
 
       expect(prismaMock.organization.findUnique).toHaveBeenCalledWith({
         where: { id: 'org-1' },
-        select: { name: true, logoUrl: true, settings: true, settingsVersion: true },
+        select: {
+          name: true,
+          logoUrl: true,
+          taxId: true,
+          phone: true,
+          address: true,
+          settings: true,
+          settingsVersion: true,
+        },
       });
       expect(prismaMock.organizationSequence.findFirst).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', type: 'SALE' },
@@ -60,10 +71,23 @@ describe('SettingsService', () => {
         select: { prefix: true },
       });
       expect(result).toEqual({
-        organization: { name: 'Acme Corp', logoUrl: 'https://cdn/acme.png' },
-        invoicing: { printHeader: 'Acme - Comprobante', printFooter: 'Gracias por su compra' },
+        organization: {
+          name: 'Acme Corp',
+          logoUrl: 'https://cdn/acme.png',
+          taxId: '900123456-7',
+          phone: '+57 300 123 4567',
+          address: 'Calle 1 # 2-3',
+        },
+        invoicing: {
+          printHeader: 'Acme - Comprobante',
+          printFooter: 'Gracias por su compra',
+        },
         receipt: { prefix: 'ACME' },
-        locale: { currency: 'COP', locale: 'es-CO', timezone: 'America/Bogota' },
+        locale: {
+          currency: 'COP',
+          locale: 'es-CO',
+          timezone: 'America/Bogota',
+        },
         custom: { theme: 'dark', legacyKey: 'preserved' },
       });
     });
@@ -89,10 +113,20 @@ describe('SettingsService', () => {
       const result = await service.find('org-1');
 
       expect(result).toEqual({
-        organization: { name: '', logoUrl: null },
+        organization: {
+          name: '',
+          logoUrl: null,
+          taxId: null,
+          phone: null,
+          address: null,
+        },
         invoicing: { printHeader: '', printFooter: '' },
         receipt: { prefix: null },
-        locale: { currency: 'COP', locale: 'es-CO', timezone: 'America/Bogota' },
+        locale: {
+          currency: 'COP',
+          locale: 'es-CO',
+          timezone: 'America/Bogota',
+        },
         custom: {},
       });
     });
@@ -250,7 +284,10 @@ describe('SettingsService', () => {
       prismaMock.organization.update.mockResolvedValue({ id: 'org-1' });
       prismaMock.organizationSequence.findFirst.mockResolvedValue(null);
 
-      const result = await service.updateOrganizationName('org-1', '  Acme Corp  ');
+      const result = await service.updateOrganizationName(
+        'org-1',
+        '  Acme Corp  ',
+      );
 
       expect(prismaMock.organization.update).toHaveBeenCalledWith({
         where: { id: 'org-1' },
@@ -381,10 +418,20 @@ describe('SettingsService', () => {
   describe('getDefaultSettings', () => {
     it('returns the defaults registry as a SettingsView', () => {
       expect(service.getDefaultSettings()).toEqual({
-        organization: { name: '', logoUrl: null },
+        organization: {
+          name: '',
+          logoUrl: null,
+          taxId: null,
+          phone: null,
+          address: null,
+        },
         invoicing: { printHeader: '', printFooter: '' },
         receipt: { prefix: null },
-        locale: { currency: 'COP', locale: 'es-CO', timezone: 'America/Bogota' },
+        locale: {
+          currency: 'COP',
+          locale: 'es-CO',
+          timezone: 'America/Bogota',
+        },
         custom: {},
       });
     });

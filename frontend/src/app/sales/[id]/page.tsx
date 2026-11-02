@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { useSale } from "@/hooks/useSales";
-import { printReceipt } from "@/hooks/useReceipt";
+import { downloadReceiptPdf, openReceiptPdf } from "@/hooks/useReceipt";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -57,16 +57,30 @@ export default function SaleDetailPage() {
     return getApiErrorMessage(error, "No se pudo cargar el detalle de la venta.");
   }, [error]);
 
-  const handlePrintReceipt = async () => {
+  const handleDownloadReceipt = async () => {
     if (!sale) {
       return;
     }
 
     try {
-      await printReceipt(sale.id);
+      await downloadReceiptPdf(sale.id);
     } catch (receiptError) {
       toast.error(
-        getApiErrorMessage(receiptError, "Error al generar el comprobante"),
+        getApiErrorMessage(receiptError, "Error al descargar el comprobante"),
+      );
+    }
+  };
+
+  const handleOpenReceipt = async () => {
+    if (!sale) {
+      return;
+    }
+
+    try {
+      await openReceiptPdf(sale.id);
+    } catch (receiptError) {
+      toast.error(
+        getApiErrorMessage(receiptError, "Error al abrir el comprobante"),
       );
     }
   };
@@ -235,9 +249,12 @@ export default function SaleDetailPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-1">
-                  <Button onClick={handlePrintReceipt}>
-                    <Download className="w-4 h-4" /> Descargar comprobante
+                <div className="flex flex-wrap justify-end gap-2 pt-1">
+                  <Button variant="secondary" onClick={handleOpenReceipt}>
+                    <Receipt className="w-4 h-4" /> Ver comprobante
+                  </Button>
+                  <Button onClick={handleDownloadReceipt}>
+                    <Download className="w-4 h-4" /> Descargar PDF
                   </Button>
                 </div>
               </CardContent>
