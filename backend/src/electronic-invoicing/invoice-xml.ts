@@ -732,7 +732,12 @@ export function buildInvoiceXml(input: DianInvoiceInput): string {
     element(1, 'cbc:ProfileID', PROFILE_ID),
     element(1, 'cbc:ProfileExecutionID', environment),
     element(1, 'cbc:ID', invoiceNumber),
-    attributeElement(1, 'cbc:UUID', { schemeName: CUFE_SCHEME_NAME }, cufe),
+    attributeElement(
+      1,
+      'cbc:UUID',
+      { schemeID: environment, schemeName: CUFE_SCHEME_NAME },
+      cufe,
+    ),
     element(1, 'cbc:IssueDate', issueDate),
     element(1, 'cbc:IssueTime', issueTime),
     element(1, 'cbc:InvoiceTypeCode', INVOICE_TYPE_CODE),

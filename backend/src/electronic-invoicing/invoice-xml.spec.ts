@@ -254,11 +254,24 @@ describe('buildInvoiceXml CUFE placement', () => {
     const xml = buildInvoiceXml(baseInput());
 
     expect(xml).toContain(
-      `<cbc:UUID schemeName="CUFE-SHA384">${CUFE}</cbc:UUID>`,
+      `<cbc:UUID schemeID="2" schemeName="CUFE-SHA384">${CUFE}</cbc:UUID>`,
     );
     expect(valueAtDepth(xml, 'cbc:UUID', 1)).toEqual([CUFE]);
     expect(xml.split('<cbc:UUID').length - 1).toBe(1);
   });
+
+  it.each(['1', '2'] as const)(
+    'uses the profile environment %s as the CUFE schemeID',
+    (environment) => {
+      const xml = buildInvoiceXml(baseInput({ environment }));
+      expect(valueAtDepth(xml, 'cbc:ProfileExecutionID', 1)).toEqual([
+        environment,
+      ]);
+      expect(xml).toContain(
+        `<cbc:UUID schemeID="${environment}" schemeName="CUFE-SHA384">${CUFE}</cbc:UUID>`,
+      );
+    },
+  );
 });
 
 describe('buildInvoiceXml party identification', () => {
@@ -597,13 +610,12 @@ describe('buildInvoiceXml determinism', () => {
   });
 
   it('keeps the unsigned default document byte-identical', () => {
-    // Frozen from the committed generator (77de8a5) before the opt-in
-    // extension block existed. The hash is the contract: opting in must not
-    // move a single byte of the document that does not opt in.
+    // Updated for FAD07: UUID now carries the selected environment as schemeID.
+    // Opt-in extensions must not otherwise change the unsigned default output.
     const xml = buildInvoiceXml(baseInput());
 
     expect(createHash('sha256').update(xml, 'utf8').digest('hex')).toBe(
-      'c6c7a56d86f9c7696cc1254dcd66160858a1c62eb12208dcfeaba828f279c75e',
+      '811f5fb60126c20ae57a27830844cad820d8fc4fc549c0f27cf9b2f8db67e499',
     );
   });
 });
