@@ -63,6 +63,9 @@ function setup(row: unknown) {
   const textSender = {
     sendText: jest.fn().mockResolvedValue({ providerMessageId: 'wamid-1' }),
   };
+  const lidResolver = {
+    resolveLid: jest.fn().mockRejectedValue(new Error('unavailable')),
+  };
   const service = new WhatsAppEventsService(
     prisma as unknown as PrismaService,
     connections as unknown as WhatsAppConnectionsService,
@@ -70,6 +73,7 @@ function setup(row: unknown) {
     identity as unknown as WhatsAppIdentityService,
     admin as unknown as WhatsAppAdminService,
     textSender,
+    lidResolver,
   );
   return {
     prisma,
@@ -79,6 +83,7 @@ function setup(row: unknown) {
     admin,
     connections,
     textSender,
+    lidResolver,
     committed,
     service,
   };
@@ -229,6 +234,149 @@ describe('WhatsAppEventsService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(ingestion.ingest).not.toHaveBeenCalled();
     expect(committed).toEqual([]);
+  });
+
+  describe('central message direction', () => {
+    it.each(['12025550123@c.us', '999999999999999@lid'])(
+      'only acts on literal false for %s',
+      async (from) => {
+        for (const direction of [true, undefined, null, 'false', 0]) {
+          const { service, lidResolver, identity, admin, textSender } =
+            setup(intelligenceRow);
+          lidResolver.resolveLid.mockResolvedValue('12025550123');
+          await service.handle(
+            'meper-intelligence',
+            'direction',
+            'message.any',
+            {
+              ...payload,
+              from,
+              fromMe: direction,
+            },
+          );
+          expect(lidResolver.resolveLid).not.toHaveBeenCalled();
+          expect(identity.consume).not.toHaveBeenCalled();
+          expect(admin.authorize).not.toHaveBeenCalled();
+          expect(textSender.sendText).not.toHaveBeenCalled();
+        }
+        const { service, lidResolver, identity, admin } =
+          setup(intelligenceRow);
+        lidResolver.resolveLid.mockResolvedValue('12025550123');
+        await service.handle('meper-intelligence', 'inbound', 'message.any', {
+          ...payload,
+          from,
+          fromMe: false,
+        });
+        expect(lidResolver.resolveLid).toHaveBeenCalledTimes(
+          from.endsWith('@lid') ? 1 : 0,
+        );
+        expect(identity.consume).toHaveBeenCalledWith('12025550123', 'hola');
+        expect(admin.authorize).toHaveBeenCalledWith('12025550123');
+      },
+    );
+
+    it.each([true, false, undefined, null, 'false'])(
+      'keeps commercial direction %s',
+      async (fromMe) => {
+        const { service, ingestion, lidResolver } = setup(commercialRow);
+        const event = { ...payload, from: '999999999999999@lid', fromMe };
+        await service.handle(
+          'meper-commercial-abc',
+          'evt',
+          'message.any',
+          event,
+        );
+        expect(ingestion.ingest).toHaveBeenCalledWith(
+          expect.anything(),
+          commercialRow,
+          { providerMessageId: 'evt', payload: event },
+        );
+        expect(lidResolver.resolveLid).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('mapped LID on the central channel', () => {
+    it('uses the mapped phone for linking and authorization, never the LID digits', async () => {
+      const { service, lidResolver, identity, admin } = setup(intelligenceRow);
+      lidResolver.resolveLid.mockResolvedValue('573001112233');
+      await expect(
+        service.handle('meper-intelligence', 'evt-map', 'message.any', {
+          ...payload,
+          from: '999999999999999@lid',
+        }),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        admin: 'refused',
+      });
+      expect(lidResolver.resolveLid).toHaveBeenCalledWith(
+        'meper-intelligence',
+        '999999999999999@lid',
+      );
+      expect(identity.consume).toHaveBeenCalledWith('573001112233', 'hola');
+      expect(admin.authorize).toHaveBeenCalledWith('573001112233');
+    });
+
+    it.each([null, '', '0123456789', '123@c.us', '12345678\n'])(
+      'refuses invalid resolver result %s',
+      async (phone) => {
+        const { service, lidResolver, prisma, identity, admin, textSender } =
+          setup(intelligenceRow);
+        lidResolver.resolveLid.mockResolvedValue(phone);
+        await expect(
+          service.handle('meper-intelligence', 'evt', 'message.any', {
+            ...payload,
+            from: '999999999999999@lid',
+          }),
+        ).resolves.toEqual({ status: 'ignored_unverified_sender' });
+        expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
+        expect(identity.consume).not.toHaveBeenCalled();
+        expect(admin.authorize).not.toHaveBeenCalled();
+        expect(textSender.sendText).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not resolve outbound LIDs or expose resolver errors in logs', async () => {
+      const { service, lidResolver, prisma, identity } = setup(intelligenceRow);
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        const event = { ...payload, from: '999999999999999@lid' };
+        await service.handle('meper-intelligence', 'out', 'message.any', {
+          ...event,
+          fromMe: true,
+        });
+        expect(lidResolver.resolveLid).not.toHaveBeenCalled();
+        const error = new Error('sensitive-value');
+        error.name = 'sensitive-value';
+        lidResolver.resolveLid.mockRejectedValue(error);
+        await expect(
+          service.handle('meper-intelligence', 'in', 'message.any', event),
+        ).resolves.toEqual({ status: 'ignored_unverified_sender' });
+        expect(JSON.stringify(warn.mock.calls)).not.toContain(
+          'sensitive-value',
+        );
+        expect(prisma.whatsAppProcessedEvent.create).not.toHaveBeenCalled();
+        expect(identity.consume).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('does not consult WAHA or act when the commercial sender is a LID', async () => {
+      const { service, lidResolver, ingestion, identity, admin } =
+        setup(commercialRow);
+      const event = { ...payload, from: '999999999999999@lid' };
+      await expect(
+        service.handle('meper-commercial-abc', 'evt-map', 'message.any', event),
+      ).resolves.toEqual({ status: 'recorded', route: 'commercial' });
+      expect(lidResolver.resolveLid).not.toHaveBeenCalled();
+      expect(ingestion.ingest).toHaveBeenCalled();
+      expect(identity.consume).not.toHaveBeenCalled();
+      expect(admin.authorize).not.toHaveBeenCalled();
+    });
   });
 
   describe('non-conversational chats', () => {
@@ -993,6 +1141,7 @@ describe('WhatsAppEventsService', () => {
         identity,
         admin,
         textSender,
+        { resolveLid: jest.fn().mockRejectedValue(new Error('unavailable')) },
       );
       return {
         prisma,

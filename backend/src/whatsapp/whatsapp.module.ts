@@ -18,6 +18,7 @@ import { WhatsAppIdentityService } from './whatsapp-identity.service';
 import { WhatsAppIngestionService } from './whatsapp-ingestion.service';
 import {
   WHATSAPP_FILE_SENDER,
+  WHATSAPP_LID_RESOLVER,
   WHATSAPP_PROVIDER,
   WHATSAPP_TEXT_SENDER,
 } from './whatsapp-provider';
@@ -70,6 +71,10 @@ const createWahaAdapter = () =>
     },
     {
       provide: WHATSAPP_PROVIDER,
+      useFactory: createWahaAdapter,
+    },
+    {
+      provide: WHATSAPP_LID_RESOLVER,
       useFactory: createWahaAdapter,
     },
     {

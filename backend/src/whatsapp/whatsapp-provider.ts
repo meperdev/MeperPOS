@@ -1,5 +1,12 @@
 export const WHATSAPP_PROVIDER = Symbol('WHATSAPP_PROVIDER');
 
+export const WHATSAPP_LID_RESOLVER = Symbol('WHATSAPP_LID_RESOLVER');
+
+/** Resolve a provider-scoped opaque identifier to a validated phone, or throw. */
+export interface WhatsAppLidResolver {
+  resolveLid(session: string, lid: string): Promise<string>;
+}
+
 /**
  * Outbound document delivery. Kept as its own port instead of growing the
  * session-lifecycle port above: every existing lifecycle double stays valid,

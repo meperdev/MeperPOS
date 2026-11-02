@@ -18,6 +18,8 @@ import {
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
 import {
   WHATSAPP_TEXT_SENDER,
+  WHATSAPP_LID_RESOLVER,
+  type WhatsAppLidResolver,
   type WhatsAppTextSender,
 } from './whatsapp-provider';
 
@@ -73,6 +75,8 @@ export class WhatsAppEventsService {
     private readonly admin: WhatsAppAdminService,
     @Inject(WHATSAPP_TEXT_SENDER)
     private readonly textSender: WhatsAppTextSender,
+    @Inject(WHATSAPP_LID_RESOLVER)
+    private readonly lidResolver: WhatsAppLidResolver,
   ) {}
 
   /**
@@ -83,9 +87,7 @@ export class WhatsAppEventsService {
    * channel spends its receipt first and then, for a message the administrator
    * sends from her own phone, attempts the administrative link and, when the
    * sender is an authorized administrator, at most one deterministic text reply.
-   * The central channel only ever acts on a real phone JID: an opaque `@lid` is
-   * refused before the receipt, because it is not a number and must not be
-   * matched against one.
+   * An opaque LID must resolve to a validated phone before the receipt.
    */
   async handle(
     sessionName: string,
@@ -119,22 +121,33 @@ export class WhatsAppEventsService {
       return { status: 'ignored_non_conversational' };
     }
 
-    // The central channel acts on *who the sender is*: it links an identity to
-    // the sender's number and then reads that identity's organization. WAHA also
-    // reports a privacy identifier (`@lid`) whose digits are opaque — they are
-    // not a telephone number and can coincide with a verified phone, so treating
-    // one as a number would let an unrelated sender inherit that identity. Until
-    // a trustworthy LID-to-phone mapping exists, an opaque sender is refused
-    // here, before the receipt: it cannot link, cannot reach the administrative
-    // gate, cannot cause a read and cannot receive text or a document. The
-    // commercial channel is untouched, because it stores a LID as its own
-    // opaque conversation key and never matches it against a phone.
-    if (route === 'intelligence' && sender.kind !== 'phone') {
-      this.logger.warn({
-        event: 'whatsapp_event',
-        outcome: 'unverified_sender',
-      });
-      return { status: 'ignored_unverified_sender' };
+    // Only an exact provider association can turn an opaque LID into a phone.
+    // Never resolve outbound traffic or pass the LID digits to identity checks.
+    let centralPayload = payload;
+    if (route === 'intelligence' && sender.kind === 'lid') {
+      let phone: unknown;
+      if (
+        payload.fromMe === false &&
+        typeof payload.from === 'string' &&
+        /^[0-9]{1,20}@lid$(?![\s\S])/.test(payload.from)
+      ) {
+        try {
+          phone = await this.lidResolver.resolveLid(sessionName, payload.from);
+        } catch {
+          // Provider-controlled errors must never be logged.
+        }
+      }
+      if (
+        typeof phone !== 'string' ||
+        !/^[1-9][0-9]{7,14}$(?![\s\S])/.test(phone)
+      ) {
+        this.logger.warn({
+          event: 'whatsapp_event',
+          outcome: 'unverified_sender',
+        });
+        return { status: 'ignored_unverified_sender' };
+      }
+      centralPayload = { ...payload, from: `${phone}@c.us` };
     }
 
     if (route === 'intelligence') {
@@ -153,11 +166,11 @@ export class WhatsAppEventsService {
       }
       // The receipt is committed, so this event is spent: nothing below can
       // cause a redelivery and nothing below is retried.
-      if (await this.linkIdentity(payload)) {
+      if (await this.linkIdentity(centralPayload)) {
         return { status: 'recorded', route, identity: 'linked' };
       }
 
-      const admin = await this.answerAdministrativeQuery(payload);
+      const admin = await this.answerAdministrativeQuery(centralPayload);
       return admin
         ? { status: 'recorded', route, admin }
         : { status: 'recorded', route };
@@ -200,19 +213,15 @@ export class WhatsAppEventsService {
    * starts from this one boundary, so linking and the administrative gate can
    * never disagree about what counts as an inbound text message.
    *
-   * Only a phone JID produces a number here. The route gate above already
-   * refuses an opaque `@lid` before it can reach this method, and repeating the
-   * rule here is what keeps the two from ever drifting apart: a LID's digits are
-   * an opaque identifier, so a caller must not be able to hand them to the
-   * identity table or to the administrative gate as if they were a phone.
+   * Only a phone JID produces a number here. The route gate replaces an
+   * authenticated LID mapping with its validated phone before this method.
    */
   private inboundText(
     payload: WhatsAppEventPayload,
   ): { phone: string; text: string } | null {
-    // `fromMe` is the same boundary ingestion uses: only an inbound message can
-    // carry a code or a question, so our own outbound traffic can never link a
-    // number and can never be treated as an instruction.
-    if (payload.fromMe === true) return null;
+    // Only a literal false establishes inbound direction. Missing or malformed
+    // direction and outbound messages cannot link or issue instructions.
+    if (payload.fromMe !== false) return null;
     if (typeof payload.body !== 'string') return null;
     const text = payload.body.trim();
     if (text.length === 0) return null;
@@ -235,14 +244,13 @@ export class WhatsAppEventsService {
       return (
         (await this.identity.consume(inbound.phone, inbound.text)) !== null
       );
-    } catch (error) {
+    } catch {
       // The event itself was recorded; a linking failure must not turn it into an
       // error the provider redelivers forever. Nothing about the code, its hash,
       // the phone or the identity reaches the log.
       this.logger.warn({
         event: 'whatsapp_identity',
         outcome: 'link_error',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
       return false;
     }
@@ -283,11 +291,10 @@ export class WhatsAppEventsService {
         if (reply) await this.deliverReply(context.phone, reply);
       }
       return answer.status === 'answered' ? 'answered' : 'refused';
-    } catch (error) {
+    } catch {
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'gate_error',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
       return 'refused';
     }
@@ -298,8 +305,8 @@ export class WhatsAppEventsService {
    *
    * The destination is derived from the verified phone, never from the message
    * body, and the session is the fixed central one. A provider refusal or an
-   * unexpected transport error is a warning with a fixed outcome and the error
-   * name only; it never becomes an exception, because the event receipt is
+   * unexpected transport error is a warning with a fixed outcome only; it
+   * never becomes an exception, because the event receipt is
    * already spent and a retry would duplicate a message that may have left.
    */
   private async deliverReply(phone: string, text: string): Promise<void> {
@@ -308,11 +315,10 @@ export class WhatsAppEventsService {
     try {
       await this.textSender.sendText(INTELLIGENCE_SESSION, { chatId, text });
       this.logger.log({ event: 'whatsapp_admin', outcome: 'reply_sent' });
-    } catch (error) {
+    } catch {
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'reply_failed',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
     }
   }

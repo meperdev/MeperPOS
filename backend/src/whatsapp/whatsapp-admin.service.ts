@@ -574,11 +574,10 @@ export class WhatsAppAdminService {
         organizationId: context.organizationId,
         supervision,
       };
-    } catch (error) {
+    } catch {
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'supervision_failed',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
       return { status: 'refused', reason: 'unavailable' };
     }
@@ -620,11 +619,10 @@ export class WhatsAppAdminService {
               ? 'failed'
               : outcome.status,
       };
-    } catch (error) {
+    } catch {
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'delivery_failed',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
       return { status: 'refused', reason: 'unavailable' };
     }
@@ -644,13 +642,12 @@ export class WhatsAppAdminService {
     let report: DailyReport;
     try {
       report = await this.reports.generate(organizationId);
-    } catch (error) {
+    } catch {
       // A report failure is a refusal, not a webhook error: the provider must
       // not be invited to redeliver a message whose receipt is already spent.
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'report_failed',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
       return null;
     }

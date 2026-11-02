@@ -3,6 +3,7 @@ import {
   isWhatsAppSessionStatus,
   type WhatsAppFileMessage,
   type WhatsAppFileSender,
+  type WhatsAppLidResolver,
   type WhatsAppProvider,
   type WhatsAppSessionStatus,
   type WhatsAppTextMessage,
@@ -48,7 +49,11 @@ const QR_TIMEOUT_MS = 20_000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export class WahaAdapter
-  implements WhatsAppProvider, WhatsAppFileSender, WhatsAppTextSender
+  implements
+    WhatsAppProvider,
+    WhatsAppFileSender,
+    WhatsAppTextSender,
+    WhatsAppLidResolver
 {
   private readonly logger = new Logger(WahaAdapter.name);
 
@@ -149,6 +154,36 @@ export class WahaAdapter
       return JSON.parse(text);
     } catch {
       throw new InvalidResponse();
+    }
+  }
+
+  async resolveLid(session: string, lid: string): Promise<string> {
+    if (!SESSION_NAME.test(session)) throw this.failure('invalid_session');
+    if (!/^[0-9]{1,20}@lid$(?![\s\S])/.test(lid))
+      throw this.failure('invalid_response');
+    const response = await this.call(
+      `/api/${session}/lids/${encodeURIComponent(lid)}`,
+    );
+    if (!response.ok) {
+      this.discard(response);
+      throw this.failure('provider_rejected');
+    }
+    try {
+      const parsed = await this.readJson(response, ME_LIMIT);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error();
+      const mapping = parsed as { lid?: unknown; pn?: unknown };
+      if (mapping.lid !== lid || typeof mapping.pn !== 'string')
+        throw new Error();
+      const phone = /^([1-9][0-9]{7,14})@c\.us$(?![\s\S])/.exec(mapping.pn);
+      if (!phone) throw new Error();
+      return phone[1];
+    } catch (error) {
+      throw this.failure(
+        error instanceof ResponseTooLarge
+          ? 'response_too_large'
+          : 'invalid_response',
+      );
     }
   }
 

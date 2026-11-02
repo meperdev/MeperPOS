@@ -18,7 +18,10 @@ import {
 } from './whatsapp-connections.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
 import { WhatsAppIngestionService } from './whatsapp-ingestion.service';
-import { WHATSAPP_TEXT_SENDER } from './whatsapp-provider';
+import {
+  WHATSAPP_LID_RESOLVER,
+  WHATSAPP_TEXT_SENDER,
+} from './whatsapp-provider';
 import { deriveWebhookKey } from './waha-signature';
 
 const MASTER = 'master-webhook-key';
@@ -223,6 +226,12 @@ const textSender = { sendText: jest.fn() };
     { provide: WhatsAppIdentityService, useValue: identity },
     { provide: WhatsAppAdminService, useValue: admin },
     { provide: WHATSAPP_TEXT_SENDER, useValue: textSender },
+    {
+      provide: WHATSAPP_LID_RESOLVER,
+      useValue: {
+        resolveLid: jest.fn().mockRejectedValue(new Error('unavailable')),
+      },
+    },
     { provide: APP_GUARD, useClass: CookieCsrfGuard },
   ],
 })
