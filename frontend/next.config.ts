@@ -17,6 +17,8 @@ const CLOUDINARY_ORIGIN = "https://res.cloudinary.com";
 const DEV_API_ORIGINS = [
   "http://localhost:3001",
   "http://127.0.0.1:3001",
+  "http://localhost:3004",
+  "http://127.0.0.1:3004",
 ] as const;
 
 const isProduction = process.env.NODE_ENV === "production";
