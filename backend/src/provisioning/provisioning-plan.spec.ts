@@ -5,6 +5,7 @@ import {
   planProvisioning,
 } from './provisioning-plan';
 import type {
+  ProvisioningPasswordFile,
   ProvisioningPlan,
   ProvisioningRefusal,
 } from './provisioning-plan';
@@ -19,10 +20,12 @@ import type {
  *
  * Precedence is fixed and explicit:
  *   1. email presence
- *   2. explicit reset (SUPERADMIN_RESET_PASSWORD): target must exist and already
- *      be a SuperAdmin, then the password rules apply
+ *   2. explicit reset (SUPERADMIN_RESET_PASSWORD): the target must exist and
+ *      already be a SuperAdmin, and SUPERADMIN_PROMOTE must not also be set,
+ *      then the password source and the password rules apply
  *   3. existing user  -> noop / promote / refuse (no password needed)
- *   4. password presence
+ *   4. password source (SUPERADMIN_PASSWORD_FILE or SUPERADMIN_PASSWORD, never
+ *      both) and presence
  *   5. known default or documented sample  (more specific than length)
  *   6. whitespace-only  (satisfies any length rule while hiding nothing)
  *   7. surrounding whitespace  (invisible at login, and padding would fake length)
@@ -419,5 +422,203 @@ describe('production provisioning plan (criterion #2)', () => {
     expect(actions).toEqual(
       new Set(['create', 'noop', 'promote', 'reset-password', 'refuse']),
     );
+  });
+});
+
+/**
+ * Secret source and conflicting-intent rules (risk item 2: credentials and
+ * permissions).
+ *
+ * The password may travel through a file instead of SUPERADMIN_PASSWORD, so it
+ * never reaches /proc/<pid>/environ, `ps eww` or a CI log. The file is only
+ * trusted when it is a regular file and no one but its owner can read it, and
+ * the two sources are never mixed.
+ */
+describe('provisioning password source (risk item 2)', () => {
+  const email = 'owner@meperpos.com';
+  const secret = 'ClaveSegura1';
+
+  function passwordFile(
+    overrides: Partial<ProvisioningPasswordFile> = {},
+  ): ProvisioningPasswordFile {
+    return {
+      path: '/run/secrets/superadmin',
+      exists: true,
+      isFile: true,
+      mode: 0o600,
+      content: secret,
+      ...overrides,
+    };
+  }
+
+  it('refuses when the environment variable and the file are both set', () => {
+    const plan = asRefusal(
+      planProvisioning({
+        email,
+        password: secret,
+        passwordFile: passwordFile(),
+      }),
+    );
+
+    expect(plan.code).toBe('PASSWORD_SOURCE_AMBIGUOUS');
+    expect(plan.reason).toContain('SUPERADMIN_PASSWORD_FILE');
+  });
+
+  it('reads the password from the file when the variable is absent', () => {
+    const plan = planProvisioning({
+      email,
+      password: undefined,
+      passwordFile: passwordFile(),
+    });
+
+    expect(plan).toEqual({ action: 'create', email, password: secret });
+  });
+
+  it('treats an empty variable as absent instead of as a conflict', () => {
+    const plan = planProvisioning({
+      email,
+      password: '',
+      passwordFile: passwordFile(),
+    });
+
+    expect(plan.action).toBe('create');
+  });
+
+  it('strips exactly one trailing newline from the file content', () => {
+    for (const content of [`${secret}\n`, `${secret}\r\n`]) {
+      const plan = planProvisioning({
+        email,
+        passwordFile: passwordFile({ content }),
+      });
+
+      expect(plan).toEqual({ action: 'create', email, password: secret });
+    }
+  });
+
+  it('refuses a file that still ends with whitespace after that single newline', () => {
+    const plan = asRefusal(
+      planProvisioning({
+        email,
+        passwordFile: passwordFile({ content: `${secret}\n\n` }),
+      }),
+    );
+
+    expect(plan.code).toBe('PASSWORD_SURROUNDING_WHITESPACE');
+  });
+
+  it('refuses a file that does not exist', () => {
+    const plan = asRefusal(
+      planProvisioning({
+        email,
+        passwordFile: passwordFile({ exists: false, content: null }),
+      }),
+    );
+
+    expect(plan.code).toBe('PASSWORD_FILE_MISSING');
+    expect(plan.reason).toContain('/run/secrets/superadmin');
+  });
+
+  it('refuses a path that is not a regular file', () => {
+    const plan = asRefusal(
+      planProvisioning({
+        email,
+        passwordFile: passwordFile({ isFile: false }),
+      }),
+    );
+
+    expect(plan.code).toBe('PASSWORD_FILE_NOT_REGULAR');
+  });
+
+  it('refuses a file any account other than its owner can read', () => {
+    for (const mode of [0o644, 0o640, 0o604, 0o660]) {
+      const plan = asRefusal(
+        planProvisioning({ email, passwordFile: passwordFile({ mode }) }),
+      );
+
+      expect(plan.code).toBe('PASSWORD_FILE_TOO_PERMISSIVE');
+      expect(plan.reason).toContain('chmod 600');
+    }
+  });
+
+  it('accepts owner-only permissions, including read-only owner modes', () => {
+    for (const mode of [0o600, 0o400]) {
+      const plan = planProvisioning({
+        email,
+        passwordFile: passwordFile({ mode }),
+      });
+
+      expect(plan.action).toBe('create');
+    }
+  });
+
+  it('skips the permission rules when the platform exposes no POSIX mode', () => {
+    const plan = planProvisioning({
+      email,
+      passwordFile: passwordFile({ mode: null }),
+    });
+
+    expect(plan.action).toBe('create');
+  });
+
+  it('refuses a file that could not be read', () => {
+    const plan = asRefusal(
+      planProvisioning({
+        email,
+        passwordFile: passwordFile({ content: null }),
+      }),
+    );
+
+    expect(plan.code).toBe('PASSWORD_FILE_UNREADABLE');
+  });
+
+  it('applies the shared password rules to the file content', () => {
+    const weak = asRefusal(
+      planProvisioning({
+        email,
+        passwordFile: passwordFile({ content: 'admin123\n' }),
+      }),
+    );
+    const short = asRefusal(
+      planProvisioning({
+        email,
+        passwordFile: passwordFile({ content: 'ClaveSegur1\n' }),
+      }),
+    );
+    const documented = asRefusal(
+      planProvisioning({
+        email,
+        passwordFile: passwordFile({
+          content: 'cambiar-esta-clave-produccion',
+        }),
+      }),
+    );
+
+    expect(weak.code).toBe('PASSWORD_KNOWN_DEFAULT');
+    expect(short.code).toBe('PASSWORD_TOO_SHORT');
+    expect(documented.code).toBe('PASSWORD_KNOWN_DEFAULT');
+  });
+
+  it('never demands a password when the action needs none', () => {
+    const plan = planProvisioning({
+      email,
+      passwordFile: passwordFile({ exists: false, content: null }),
+      existingUser: { id: 'u', email, isSuperAdmin: true },
+    });
+
+    expect(plan.action).toBe('noop');
+  });
+
+  it('refuses a reset and a promote requested together', () => {
+    const plan = asRefusal(
+      planProvisioning({
+        email,
+        password: secret,
+        resetPassword: true,
+        promoteExistingUser: true,
+        existingUser: { id: 'u', email, isSuperAdmin: true },
+      }),
+    );
+
+    expect(plan.code).toBe('RESET_AND_PROMOTE_CONFLICT');
   });
 });

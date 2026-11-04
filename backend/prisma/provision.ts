@@ -1,12 +1,16 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import * as fs from 'node:fs';
 import { BCRYPT_ROUNDS } from '../src/common/constants/security.constants';
 import {
   MIN_SUPERADMIN_PASSWORD_LENGTH,
   normalizeSuperAdminEmail,
   planProvisioning,
 } from '../src/provisioning/provisioning-plan';
-import type { ProvisioningPlan } from '../src/provisioning/provisioning-plan';
+import type {
+  ProvisioningPasswordFile,
+  ProvisioningPlan,
+} from '../src/provisioning/provisioning-plan';
 
 /**
  * Production SuperAdmin provisioning CLI (issue #116 / AUDIT-FINDING-010,
@@ -18,6 +22,12 @@ import type { ProvisioningPlan } from '../src/provisioning/provisioning-plan';
  *  - resets the password of an existing SuperAdmin only when
  *    SUPERADMIN_RESET_PASSWORD=true, revoking its live sessions, or
  *  - does nothing when the account is already a SuperAdmin (idempotent).
+ *
+ * The secret is read from SUPERADMIN_PASSWORD or, preferably, from the file named
+ * by SUPERADMIN_PASSWORD_FILE, so the plaintext never has to live in the process
+ * environment (`/proc/<pid>/environ`, `ps eww`, CI logs). A file is only accepted
+ * when it is a regular file no other account can read, and the two sources are
+ * never combined.
  *
  * It never creates demo organizations, demo catalogs or demo users, never uses
  * faker, never prints the password, and exits non-zero on any refusal. The
@@ -31,6 +41,53 @@ import type { ProvisioningPlan } from '../src/provisioning/provisioning-plan';
 const prisma = new PrismaClient();
 
 const LOG_PREFIX = '[provision]';
+
+/**
+ * Probes SUPERADMIN_PASSWORD_FILE once and hands the pure planner a description
+ * instead of a live path, so every permission rule stays unit-testable.
+ *
+ * The content is read only after the mode rule passes: a world-readable file is
+ * refused before its secret is ever loaded into this process.
+ */
+function probePasswordFile(): ProvisioningPasswordFile | null {
+  const rawPath = process.env.SUPERADMIN_PASSWORD_FILE?.trim();
+
+  if (!rawPath) {
+    return null;
+  }
+
+  const probe: ProvisioningPasswordFile = {
+    path: rawPath,
+    exists: false,
+    isFile: false,
+    mode: null,
+    content: null,
+  };
+
+  try {
+    const stat = fs.statSync(rawPath);
+
+    probe.exists = true;
+    probe.isFile = stat.isFile();
+    // Windows has no POSIX mode; the planner then skips the permission rule.
+    probe.mode = process.platform === 'win32' ? null : stat.mode & 0o777;
+  } catch {
+    // Missing or unstattable: the planner refuses with PASSWORD_FILE_MISSING.
+    return probe;
+  }
+
+  if (probe.mode !== null && (probe.mode & 0o077) !== 0) {
+    return probe;
+  }
+
+  try {
+    probe.content = fs.readFileSync(rawPath, 'utf8');
+  } catch {
+    // Readable at stat time but not now: the planner reports it as unreadable.
+  }
+
+  return probe;
+}
 
 async function findExistingUser(email: string) {
   if (!email) {
@@ -198,6 +255,7 @@ async function run(): Promise<void> {
     const plan = planProvisioning({
       email,
       password: process.env.SUPERADMIN_PASSWORD,
+      passwordFile: probePasswordFile(),
       promoteExistingUser: process.env.SUPERADMIN_PROMOTE === 'true',
       resetPassword: process.env.SUPERADMIN_RESET_PASSWORD === 'true',
       existingUser: await findExistingUser(email),

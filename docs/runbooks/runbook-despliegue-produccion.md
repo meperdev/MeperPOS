@@ -55,7 +55,7 @@ Este runbook aplica a todo el equipo tecnico (desarrollo y operacion).
 
 **Nota:** no definir `PORT` en Railway (Railway lo inyecta automaticamente).
 
-**Nota:** `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `SUPERADMIN_NAME`, `SUPERADMIN_PROMOTE` y `SUPERADMIN_RESET_PASSWORD` son variables de la provision y del restablecimiento del SuperAdmin (seccion 4.1), no de runtime: se definen solo para ejecutar `npm run provision:prod`. Quitar `SUPERADMIN_PASSWORD`, `SUPERADMIN_PROMOTE` y `SUPERADMIN_RESET_PASSWORD` del entorno cuando el comando termina.
+**Nota:** `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `SUPERADMIN_PASSWORD_FILE`, `SUPERADMIN_NAME`, `SUPERADMIN_PROMOTE` y `SUPERADMIN_RESET_PASSWORD` son variables de la provision y del restablecimiento del SuperAdmin (seccion 4.1), no de runtime: se definen solo para ejecutar `npm run provision:prod`. Quitar `SUPERADMIN_PASSWORD`, `SUPERADMIN_PASSWORD_FILE`, `SUPERADMIN_PROMOTE` y `SUPERADMIN_RESET_PASSWORD` del entorno cuando el comando termina.
 
 ### 3.2 Vercel (frontend)
 
@@ -145,11 +145,34 @@ railway run npm run provision:prod
 unset SUPERADMIN_PASSWORD SUPERADMIN_RESET_PASSWORD
 ```
 
+   En produccion se prefiere `SUPERADMIN_PASSWORD_FILE`: apuntar a un archivo que
+   contenga solo la clave. Asi el secreto nunca entra al entorno del proceso, que
+   `/proc/<pid>/environ`, `ps eww` y los logs de CI pueden leer. El mismo archivo
+   sirve para crear y para restablecer:
+
+```bash
+PWFILE="$(mktemp)"
+read -rsp 'SUPERADMIN_PASSWORD: ' P; echo
+printf '%s\n' "$P" > "$PWFILE"; unset P
+export SUPERADMIN_PASSWORD_FILE="$PWFILE"
+railway run npm run provision:prod
+unset SUPERADMIN_PASSWORD_FILE
+rm -f "$PWFILE"
+```
+
+   El script rechaza el archivo si no existe, si no es un archivo regular o si otra
+   cuenta puede leerlo (por ejemplo modo 0644): hay que dejarlo en 0600, como lo
+   crea `mktemp`. No definir `SUPERADMIN_PASSWORD` y `SUPERADMIN_PASSWORD_FILE` a
+   la vez: el comando falla con `PASSWORD_SOURCE_AMBIGUOUS` en vez de elegir una
+   fuente por su cuenta.
+
    El restablecimiento solo actua sobre un email que ya sea
    SuperAdmin: reemplaza el hash, incrementa `tokenVersion` y revoca los refresh
    tokens activos de esa cuenta, de modo que las sesiones previas quedan
    cerradas. Falla si el email no existe o si pertenece a un usuario comun, asi
-   que no puede crear ni promover cuentas. Confirmar el acceso con el login real
+   que no puede crear ni promover cuentas. Tampoco se combina con
+   `SUPERADMIN_PROMOTE`: definir las dos falla con `RESET_AND_PROMOTE_CONFLICT` en
+   vez de aplicar una sola en silencio. Confirmar el acceso con el login real
    antes de dar la recuperacion por cerrada. `BACKEND_URL` es el dominio publico
    del backend (Railway: Settings > Networking > Public Networking, o
    `railway status` en `backend/` imprime la `url` del servicio); definirlo una
