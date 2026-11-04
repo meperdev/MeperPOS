@@ -1,7 +1,11 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { OrgRole, type Category, type Product } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
-import { resolveEffectiveTaxRate } from '../common/utils/tax.util';
+import {
+  type DianTaxCode,
+  resolveEffectiveTaxCode,
+  resolveEffectiveTaxRate,
+} from '../common/utils/tax.util';
 import { computeEffectiveSalePrice } from '../products/products.service';
 import type { SaleItemDto } from './dto/sales.dto';
 
@@ -17,7 +21,13 @@ export type SalePricingProduct = Pick<
   | 'promotionValue'
   | 'taxable'
   | 'taxRate'
-> & { category: Pick<Category, 'taxable' | 'defaultTaxRate'> | null };
+  | 'taxCode'
+> & {
+  category: Pick<
+    Category,
+    'taxable' | 'defaultTaxRate' | 'defaultTaxCode'
+  > | null;
+};
 
 /** Shared POS permission; overrides never grant catalog editing rights. */
 export function canOverrideSalePrice(user: RequestUser | undefined): boolean {
@@ -81,6 +91,10 @@ export function resolveSaleItemPricing(
 
   const itemSubtotal = grossSubtotal - itemDiscount;
   const effectiveTaxRate = resolveEffectiveTaxRate(product, product.category);
+  // Resolved from the same product/category as the rate, by the same util, so
+  // the persisted code and the persisted rate can never describe two different
+  // taxes. `null` means "no tax", never "unknown tax".
+  const effectiveTaxCode = resolveEffectiveTaxCode(product, product.category);
   const itemTax = itemSubtotal * (effectiveTaxRate / 100);
   const itemTotal = itemSubtotal + itemTax;
   return {
@@ -92,6 +106,7 @@ export function resolveSaleItemPricing(
       unitPrice,
       costPriceSnapshot: product.costPrice,
       taxRate: effectiveTaxRate,
+      taxCode: effectiveTaxCode,
       discountAmount: itemDiscount,
       subtotal: itemSubtotal,
       total: itemTotal,
@@ -105,6 +120,50 @@ export function resolveSaleItemPricing(
 export type PricedSaleItem = ReturnType<
   typeof resolveSaleItemPricing
 >['pricedItem'];
+
+/** The per-line fiscal facts `SaleItem` stores, and nothing else. */
+export interface PersistedLineTax {
+  taxCode: DianTaxCode | null;
+  taxAmount: number | null;
+}
+
+/**
+ * The only place where a line becomes persisted fiscal facts.
+ *
+ * Invariant: a persisted `taxCode` iff the persisted `taxAmount` is greater than
+ * zero. It is enforced here, once, so no caller can persist a code that no tax
+ * justifies or a tax that carries no code:
+ *
+ *   - no tax (an untaxed line, or a taxed rate on a zero-subtotal line) → both
+ *     NULL, because a code may never accompany a zero amount (T4a decision);
+ *   - tax without a resolved code → throw, since guessing IVA is exactly the
+ *     defect T4b removes;
+ *   - tax with a code → both persisted.
+ *
+ * The amount is rounded to cents first, because that is what `DECIMAL(10,2)`
+ * stores; deciding on the unrounded value could persist a code next to a 0.00
+ * amount for a sub-cent tax.
+ */
+export function toPersistedLineTax(
+  taxCode: DianTaxCode | null,
+  taxAmount: number,
+): PersistedLineTax {
+  if (!Number.isFinite(taxAmount)) {
+    throw new Error(
+      `Invalid line tax amount: expected a finite number, received ${taxAmount}`,
+    );
+  }
+  const persistedAmount = Math.round(taxAmount * 100) / 100;
+  if (persistedAmount <= 0) {
+    return { taxCode: null, taxAmount: null };
+  }
+  if (taxCode === null) {
+    throw new Error(
+      'Cannot persist a taxed sale line without a tax code: resolved a positive tax amount but no DIAN tax code',
+    );
+  }
+  return { taxCode, taxAmount: persistedAmount };
+}
 
 /** In-memory value only: copies server-resolved prices, without sale activation. */
 export function buildSaleQuote(

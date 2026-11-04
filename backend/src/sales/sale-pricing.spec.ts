@@ -3,7 +3,11 @@ import { Category, Prisma, Product, PromotionType } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateSaleDto, SaleItemDto } from './dto/sales.dto';
 import { SalesService } from './sales.service';
-import { buildSaleQuote, resolveSaleItemPricing } from './sale-pricing';
+import {
+  buildSaleQuote,
+  resolveSaleItemPricing,
+  toPersistedLineTax,
+} from './sale-pricing';
 
 type PricingProduct = Pick<
   Product,
@@ -18,7 +22,10 @@ type PricingProduct = Pick<
   | 'promotionValue'
   | 'taxable'
   | 'taxRate'
-> & { category: Pick<Category, 'taxable' | 'defaultTaxRate'> };
+  | 'taxCode'
+> & {
+  category: Pick<Category, 'taxable' | 'defaultTaxRate' | 'defaultTaxCode'>;
+};
 
 const productFixture = (
   overrides: Partial<PricingProduct> = {},
@@ -34,7 +41,12 @@ const productFixture = (
   promotionValue: new Prisma.Decimal(20),
   taxable: true,
   taxRate: new Prisma.Decimal(19),
-  category: { taxable: true, defaultTaxRate: new Prisma.Decimal(10) },
+  taxCode: null,
+  category: {
+    taxable: true,
+    defaultTaxRate: new Prisma.Decimal(10),
+    defaultTaxCode: null,
+  },
   ...overrides,
 });
 
@@ -270,6 +282,7 @@ describe('resolveSaleItemPricing contract', () => {
           unitPrice: expected.unitPrice ?? 80,
           costPriceSnapshot: new Prisma.Decimal(40),
           taxRate: 19,
+          taxCode: 'IVA',
           discountAmount: 10,
           subtotal: expected.subtotal,
           total: expected.total,
@@ -344,4 +357,83 @@ describe('SalesService.create pricing characterization (before persistence)', ()
       expect(sequence.nextNumber).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('resolveSaleItemPricing tax code (T4b)', () => {
+  const pricedCode = (product: Partial<PricingProduct>) =>
+    resolveSaleItemPricing(
+      productFixture(product),
+      { quantity: 1, discountAmount: 0 },
+      false,
+    ).pricedItem;
+
+  it.each([
+    {
+      name: 'product code travels with the product rate',
+      product: { taxCode: 'INC' as const, taxRate: new Prisma.Decimal(8) },
+      expected: { taxRate: 8, taxCode: 'INC' },
+    },
+    {
+      name: 'a taxable product without a stored code resolves to IVA',
+      product: {},
+      expected: { taxRate: 19, taxCode: 'IVA' },
+    },
+    {
+      name: 'category code travels with the category rate',
+      product: { taxable: false },
+      expected: { taxRate: 10, taxCode: 'IVA' },
+    },
+    {
+      // The decisive case: a taxable product with a zero rate loses to the
+      // category, so the category also supplies the code. Taking the product
+      // code here would pair a rate of 10 with INC.
+      name: 'code and rate always come from the same source',
+      product: {
+        taxable: true,
+        taxRate: new Prisma.Decimal(0),
+        taxCode: 'INC' as const,
+      },
+      expected: { taxRate: 10, taxCode: 'IVA' },
+    },
+    {
+      name: 'an untaxed line carries no code at all',
+      product: {
+        taxable: false,
+        category: {
+          taxable: false,
+          defaultTaxRate: null,
+          defaultTaxCode: 'ICA' as const,
+        },
+      },
+      expected: { taxRate: 0, taxCode: null },
+    },
+  ])('$name', ({ product, expected }) => {
+    expect(pricedCode(product)).toMatchObject(expected);
+  });
+});
+
+describe('toPersistedLineTax (T4b persisted invariant)', () => {
+  it('persists the code next to a positive amount', () => {
+    expect(toPersistedLineTax('INC', 8.5)).toEqual({
+      taxCode: 'INC',
+      taxAmount: 8.5,
+    });
+  });
+
+  it('persists no code and no amount when the line carries no tax', () => {
+    // A taxable rate on a zero-subtotal line, and an untaxed line, both end up
+    // here: a code may never accompany a zero amount (T4a decision, L56).
+    expect(toPersistedLineTax('IVA', 0)).toEqual({
+      taxCode: null,
+      taxAmount: null,
+    });
+    expect(toPersistedLineTax(null, 0)).toEqual({
+      taxCode: null,
+      taxAmount: null,
+    });
+  });
+
+  it('throws rather than persisting a taxed line without a code', () => {
+    expect(() => toPersistedLineTax(null, 19)).toThrow(/tax code/);
+  });
 });

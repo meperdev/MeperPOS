@@ -1,6 +1,7 @@
 import { computeCufe } from './cufe';
 import {
   CufeSaleFacts,
+  CufeSaleTaxLine,
   formatDianAmount,
   normalizeDianIdentification,
   resolveCufeInput,
@@ -62,7 +63,9 @@ describe('resolveCufeInput', () => {
     invoiceNumber: 323200000129,
     issuedAt: new Date('2019-01-16T15:53:10Z'),
     lineExtensionAmount: '1500000.00',
-    taxAmount: '285000.00',
+    // The annex example has a single IVA bucket, so the persisted rows that
+    // reproduce it are IVA lines summing to the published 285000.00.
+    items: [{ taxCode: 'IVA', taxAmount: '285000.00' }] as CufeSaleTaxLine[],
     payableAmount: '1785000.00',
     issuerTaxId: '700.085.371',
     buyerTaxId: '800.199.436',
@@ -108,20 +111,13 @@ describe('resolveCufeInput', () => {
     expect(input.totalAmount).toBe('1785000.00');
   });
 
-  it('books the whole tax as IVA and zeroes the other two tax codes', () => {
-    const input = resolveCufeInput(facts);
-    expect(input.vatAmount).toBe('285000.00');
-    expect(input.consumptionTaxAmount).toBe('0.00');
-    expect(input.icaAmount).toBe('0.00');
-  });
-
   it('defaults to the test environment and rejects unknown ones', () => {
     const withoutEnvironment: CufeSaleFacts = {
       invoicePrefix: facts.invoicePrefix,
       invoiceNumber: facts.invoiceNumber,
       issuedAt: facts.issuedAt,
       lineExtensionAmount: facts.lineExtensionAmount,
-      taxAmount: facts.taxAmount,
+      items: facts.items,
       payableAmount: facts.payableAmount,
       issuerTaxId: facts.issuerTaxId,
       buyerTaxId: facts.buyerTaxId,
@@ -137,5 +133,109 @@ describe('resolveCufeInput', () => {
     expect(() =>
       resolveCufeInput({ ...facts, issuedAt: new Date('nope') }),
     ).toThrow();
+  });
+});
+
+/**
+ * T4b rule 4/5: the three DIAN tax totals come from the persisted SaleItem
+ * rows, never from one sale-level amount booked as IVA.
+ */
+describe('resolveCufeInput persisted tax codes', () => {
+  const facts = {
+    invoicePrefix: null as string | null,
+    invoiceNumber: 323200000129,
+    issuedAt: new Date('2019-01-16T15:53:10Z'),
+    lineExtensionAmount: '1500000.00',
+    payableAmount: '1785000.00',
+    issuerTaxId: '700.085.371',
+    buyerTaxId: '800.199.436',
+    technicalKey: '693ff6f2a553c3646a063436fd4dd9ded0311471',
+    environment: '2' as const,
+  };
+  const withItems = (items: CufeSaleTaxLine[]) =>
+    resolveCufeInput({ ...facts, items });
+
+  it('sums the persisted IVA lines into ValImp1', () => {
+    const input = withItems([
+      { taxCode: 'IVA', taxAmount: '190000.00' },
+      { taxCode: 'IVA', taxAmount: '95000.00' },
+    ]);
+    expect(input.vatAmount).toBe('285000.00');
+    expect(input.consumptionTaxAmount).toBe('0.00');
+    expect(input.icaAmount).toBe('0.00');
+  });
+
+  it('routes persisted INC to ValImp2 and ICA to ValImp3', () => {
+    const input = withItems([
+      { taxCode: 'INC', taxAmount: '38000.00' },
+      { taxCode: 'ICA', taxAmount: '1000.00' },
+      { taxCode: 'IVA', taxAmount: '190000.00' },
+      { taxCode: null, taxAmount: null },
+    ]);
+    expect(input.vatAmount).toBe('190000.00');
+    expect(input.consumptionTaxAmount).toBe('38000.00');
+    expect(input.icaAmount).toBe('1000.00');
+  });
+
+  it('keeps every tax as IVA when no persisted line carries a code', () => {
+    // Pre-feature sale (spec S7): historical rows stay NULL and are never
+    // reclassified, so the old IVA-only behaviour is preserved exactly.
+    const input = withItems([
+      { taxCode: null, taxAmount: '190000.00' },
+      { taxCode: null, taxAmount: '95000.00' },
+    ]);
+    expect(input.vatAmount).toBe('285000.00');
+    expect(input.consumptionTaxAmount).toBe('0.00');
+    expect(input.icaAmount).toBe('0.00');
+  });
+
+  it('throws when a coded sale has a taxed line without a code', () => {
+    // At least one code makes the persisted codes authoritative: guessing IVA
+    // here is exactly the defect this rule removes.
+    expect(() =>
+      withItems([
+        { taxCode: 'INC', taxAmount: '38000.00' },
+        { taxCode: null, taxAmount: '190000.00' },
+      ]),
+    ).toThrow(/tax code/);
+  });
+
+  it('counts a coded line with no tax money as zero instead of failing', () => {
+    // `DECIMAL(10,2)` rounds a sub-cent tax down to 0.00 while the code stays.
+    // The code is a recorded fact, not a guess, so it contributes nothing and
+    // the sale stays invoiceable.
+    const input = withItems([
+      { taxCode: 'INC', taxAmount: '0.00' },
+      { taxCode: 'ICA', taxAmount: null },
+      { taxCode: 'IVA', taxAmount: '190000.00' },
+    ]);
+    expect(input.consumptionTaxAmount).toBe('0.00');
+    expect(input.icaAmount).toBe('0.00');
+    expect(input.vatAmount).toBe('190000.00');
+  });
+
+  it('throws on a sale with no persisted line instead of hashing zero tax', () => {
+    expect(() => withItems([])).toThrow(/at least one/);
+  });
+
+  it('truncates each persisted amount to cents before summing', () => {
+    // Money never goes through Number: 0.999 and 0.005 contribute 0.99 + 0.00.
+    const input = withItems([
+      { taxCode: 'IVA', taxAmount: '0.999' },
+      { taxCode: 'IVA', taxAmount: '0.005' },
+    ]);
+    expect(input.vatAmount).toBe('0.99');
+  });
+
+  it('rejects a persisted code that is not IVA, INC or ICA', () => {
+    expect(() =>
+      withItems([{ taxCode: 'RENTA' as never, taxAmount: '10.00' }]),
+    ).toThrow(/tax code/);
+  });
+
+  it('rejects a persisted amount that is not a plain decimal', () => {
+    expect(() =>
+      withItems([{ taxCode: 'IVA', taxAmount: '1,900.00' }]),
+    ).toThrow(/Invalid DIAN amount/);
   });
 });

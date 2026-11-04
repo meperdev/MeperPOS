@@ -18,11 +18,20 @@
  * The caller supplies already-decided money as decimal strings, so no floating
  * point arithmetic ever touches a fiscal amount.
  *
- * Known limitation, pending confirmation (spec S6): MeperPOS stores one
- * `taxAmount` per sale and one `taxRate` per product, with no tax code. The
- * whole tax is therefore reported as IVA (01) and INC/ICA as 0.00. A sale that
- * mixed IVA with INC would produce a CUFE that does not match its own XML.
+ * The three tax totals are derived by summing the PERSISTED `SaleItem` rows,
+ * routed by each row's `taxCode`, so the CUFE can never book a consumption tax
+ * (INC) or an industry-and-commerce tax (ICA) as IVA. Null/mixed policy, pinned
+ * by tests:
+ *
+ *   - every row's `taxCode` is null → a pre-feature sale (spec S7). Those rows
+ *     are never reclassified, so today's behaviour is kept exactly: the whole
+ *     tax is booked as IVA and INC/ICA stay 0.00.
+ *   - at least one row carries a code → the persisted codes are authoritative.
+ *     Every taxed row must carry one, otherwise this throws instead of guessing
+ *     a tribute code. A coded row whose amount is 0.00 (what `DECIMAL(10,2)`
+ *     stores for a sub-cent tax) contributes nothing rather than failing.
  */
+import { type DianTaxCode, dianTributeCode } from '../common/utils/tax.util';
 import { CufeInput } from './cufe';
 
 const BOGOTA_TIME_ZONE = 'America/Bogota';
@@ -30,14 +39,25 @@ const BOGOTA_TIME_ZONE = 'America/Bogota';
 const BOGOTA_UTC_OFFSET = '-05:00';
 const PLAIN_DECIMAL = /^([0-9]+)(?:\.([0-9]+))?$/;
 
+export interface CufeSaleTaxLine {
+  /** Persisted `SaleItem.taxCode`; null on a pre-feature sale or untaxed line. */
+  taxCode: DianTaxCode | null;
+  /**
+   * Persisted `SaleItem.taxAmount` as a plain decimal string, or null when the
+   * line carries no tax. The caller stringifies the Prisma `Decimal`; this
+   * module never converts money through `Number`.
+   */
+  taxAmount: string | null;
+}
+
 export interface CufeSaleFacts {
   invoicePrefix: string | null;
   invoiceNumber: string | number;
   issuedAt: Date;
   /** Sale.subtotal: the sum of the line extension amounts, before taxes. */
   lineExtensionAmount: string;
-  /** Sale.taxAmount: booked as IVA (01) until a tax code exists. */
-  taxAmount: string;
+  /** The sale's persisted `SaleItem` rows, the only source of the tax totals. */
+  items: readonly CufeSaleTaxLine[];
   /** Sale.total: the amount the buyer actually pays. */
   payableAmount: string;
   issuerTaxId: string;
@@ -116,6 +136,88 @@ function requireValidDate(value: Date): Date {
   return value;
 }
 
+/** The three DIAN tribute codes, as narrowable keys. */
+type TributeCode = ReturnType<typeof dianTributeCode>;
+
+const TAX_CODES: readonly DianTaxCode[] = ['IVA', 'INC', 'ICA'];
+
+/**
+ * Integer cents, so money is added without ever going through floating point.
+ * The amount is truncated to two decimals first, exactly as the annex asks.
+ */
+function toCents(value: string): bigint {
+  const [units, decimals] = formatDianAmount(value).split('.');
+  return BigInt(units) * 100n + BigInt(decimals);
+}
+
+function fromCents(cents: bigint): string {
+  const units = cents / 100n;
+  const decimals = cents % 100n;
+  return `${units}.${String(decimals).padStart(2, '0')}`;
+}
+
+function requireTaxCode(value: unknown, line: number): DianTaxCode | null {
+  if (value === null) {
+    return null;
+  }
+  if (!TAX_CODES.includes(value as DianTaxCode)) {
+    throw new Error(
+      `Invalid CUFE tax lines: line ${line + 1} carries an unknown tax code`,
+    );
+  }
+  return value as DianTaxCode;
+}
+
+/**
+ * Sums the persisted tax rows into the three DIAN buckets. See the module
+ * comment for the null/mixed policy that decides between the two modes.
+ */
+function persistedTaxTotals(
+  items: readonly CufeSaleTaxLine[],
+): Record<TributeCode, bigint> {
+  // `Array.isArray` is avoided on purpose: it narrows a `readonly` array to
+  // `any[]` and would silently untype every element below.
+  if (!items || items.length === 0) {
+    throw new Error(
+      'Invalid CUFE tax lines: expected at least one persisted sale line',
+    );
+  }
+
+  const totals: Record<TributeCode, bigint> = { '01': 0n, '04': 0n, '03': 0n };
+  const hasPersistedCode = items.some((item) => item.taxCode != null);
+
+  items.forEach((item, index) => {
+    const code = requireTaxCode(item.taxCode, index);
+    const cents =
+      item.taxAmount === null || item.taxAmount === undefined
+        ? 0n
+        : toCents(item.taxAmount);
+
+    // Pre-feature sale: no row carries a code, so nothing is reclassified and
+    // the whole tax is reported as IVA, exactly as before tax codes existed.
+    if (!hasPersistedCode) {
+      totals['01'] += cents;
+      return;
+    }
+
+    if (code === null) {
+      if (cents > 0n) {
+        throw new Error(
+          `Invalid CUFE tax lines: line ${index + 1} is taxed but carries no tax code`,
+        );
+      }
+      return;
+    }
+
+    // A code with no money is a recorded fact, not a guess: `DECIMAL(10,2)` can
+    // round a sub-cent tax down to 0.00 while the code stays. It contributes
+    // nothing, and failing here would make such a sale impossible to invoice.
+    totals[dianTributeCode(code)] += cents;
+  });
+
+  return totals;
+}
+
 function buildInvoiceNumber(
   prefix: string | null,
   consecutive: string | number,
@@ -144,6 +246,7 @@ function buildInvoiceNumber(
 export function resolveCufeInput(facts: CufeSaleFacts): CufeInput {
   const issuedAt = requireValidDate(facts.issuedAt);
   const parts = bogotaParts(issuedAt);
+  const taxes = persistedTaxTotals(facts.items);
   // Default to the test environment: no production issuance until the fiscal
   // requirements are confirmed (spec S6). Reject anything else here, where the
   // mistake is made, instead of deferring it to the hash step.
@@ -159,9 +262,9 @@ export function resolveCufeInput(facts: CufeSaleFacts): CufeInput {
     issueDate: `${parts.year}-${parts.month}-${parts.day}`,
     issueTime: `${parts.hour}:${parts.minute}:${parts.second}${BOGOTA_UTC_OFFSET}`,
     taxableAmount: formatDianAmount(facts.lineExtensionAmount),
-    vatAmount: formatDianAmount(facts.taxAmount),
-    consumptionTaxAmount: '0.00',
-    icaAmount: '0.00',
+    vatAmount: fromCents(taxes['01']),
+    consumptionTaxAmount: fromCents(taxes['04']),
+    icaAmount: fromCents(taxes['03']),
     totalAmount: formatDianAmount(facts.payableAmount),
     issuerTaxId: normalizeDianIdentification(facts.issuerTaxId),
     buyerId: normalizeDianIdentification(facts.buyerTaxId),

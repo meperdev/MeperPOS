@@ -34,16 +34,20 @@
  * 6.1, table rows FAD01-FAD04. Section 11.2.2 fixes the CUFE location:
  * `/Invoice/cbc:UUID`.
  *
- * ## Known limitation: the tax model is IVA-only
+ * ## Tax schemes
  *
- * MeperPOS stores a single tax amount and a single tax rate per product, with
- * no tax code. The whole tax is therefore reported as one `cac:TaxSubtotal`
- * whose `cac:TaxCategory/cac:TaxScheme/cbc:ID` is "01" (IVA). Consumption tax
- * (INC, 04) and industry and commerce tax (ICA, 03) are reported nowhere.
- * This is only correct for a sale whose taxed items are all IVA; a mixed sale
- * would produce an XML whose tax breakdown does not match the CUFE, which
- * hashes the three buckets separately. Solving that needs a tax code in the
- * data model, not a change here.
+ * A line that carries a persisted `SaleItem.taxCode` emits that code's DIAN tax
+ * scheme in its own `cac:TaxTotal` (`01` IVA, `04` INC, `03` ICA, mapped by the
+ * single `dianTributeCode` table in `common/utils/tax.util.ts`). A line without a
+ * code keeps scheme `01`, which is what this module emitted before tax codes
+ * existed and what a pre-feature sale (spec S7) still means.
+ *
+ * The invoice-level `cac:TaxTotal` remains one bucket: this module never sums
+ * line money (`Line amounts are trusted as given`), so a per-code invoice
+ * breakdown has to be supplied by the caller and is not implemented here. A
+ * mixed sale therefore renders per-line truthfully and a header that still
+ * reports one IVA bucket; wiring the header breakdown belongs with the caller
+ * that builds the document.
  *
  * Two consequences of the same gap are also recorded rather than hidden:
  * `LegalMonetaryTotal/TaxExclusiveAmount` repeats the line extension total and
@@ -61,6 +65,11 @@
  *   caller bug and throws instead of emitting a self-inconsistent document.
  */
 
+import {
+  type DianTaxCode,
+  type DianTributeCode,
+  dianTributeCode,
+} from '../common/utils/tax.util';
 import {
   DIAN_AGENCY_ID,
   DIAN_AGENCY_NAME,
@@ -101,8 +110,13 @@ export interface DianInvoiceLine {
   lineExtensionAmount: string;
   /** DIAN-formatted unit price, e.g. "500000.00". */
   unitPrice: string;
-  /** DIAN-formatted IVA for this line. */
+  /** DIAN-formatted tax for this line, in the scheme named by `taxCode`. */
   taxAmount: string;
+  /**
+   * The persisted `SaleItem.taxCode`. Absent or null keeps scheme 01 (IVA),
+   * which is this module's behaviour before tax codes existed.
+   */
+  taxCode?: DianTaxCode | null;
   description: string;
   sellerItemId?: string;
 }
@@ -153,6 +167,29 @@ const CHECK_DIGIT = /^[0-9]{1,5}$/;
 /** DIAN tax scheme 01 = IVA. */
 const IVA_CODE = '01';
 const IVA_NAME = 'IVA';
+
+/** The scheme label DIAN publishes beside each tribute code. */
+const TAX_SCHEME_NAMES: Record<DianTaxCode, string> = {
+  IVA: IVA_NAME,
+  INC: 'INC',
+  ICA: 'ICA',
+};
+
+interface TaxScheme {
+  code: DianTributeCode;
+  name: string;
+}
+
+/**
+ * One tax scheme per catalog code, with the numeric code taken from the single
+ * `dianTributeCode` mapping so this module cannot disagree with the CUFE.
+ */
+function taxScheme(code: DianTaxCode): TaxScheme {
+  return { code: dianTributeCode(code), name: TAX_SCHEME_NAMES[code] };
+}
+
+/** What a line without a persisted code keeps emitting. */
+const DEFAULT_TAX_SCHEME: TaxScheme = taxScheme('IVA');
 /** UN/ECE Recommendation 20 "unit". */
 const UNIT_CODE = '94';
 const INDENT_UNIT = '  ';
@@ -323,6 +360,16 @@ function requireParty(field: string, value: unknown): DianParty {
   };
 }
 
+function requireTaxCode(field: string, value: unknown): DianTaxCode | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (value !== 'IVA' && value !== 'INC' && value !== 'ICA') {
+    fail(field, 'expected IVA, INC or ICA, or nothing at all', value);
+  }
+  return value;
+}
+
 function requireLine(
   field: string,
   value: unknown,
@@ -338,6 +385,7 @@ function requireLine(
   );
   const unitPrice = requireAmount(`${field}.unitPrice`, line.unitPrice);
   const taxAmount = requireAmount(`${field}.taxAmount`, line.taxAmount);
+  const taxCode = requireTaxCode(`${field}.taxCode`, line.taxCode);
   const description = requireText(`${field}.description`, line.description);
 
   if (
@@ -374,6 +422,7 @@ function requireLine(
     lineExtensionAmount,
     unitPrice,
     taxAmount,
+    taxCode,
     description,
     sellerItemId,
   };
@@ -484,29 +533,119 @@ function party(
 }
 
 /**
- * A single IVA bucket. `taxable` is the amount this tax was computed on, which
- * under the IVA-only limitation documented above is the line extension amount.
+ * One tax bucket. `taxable` is the amount this tax was computed on, which is the
+ * line extension amount: no allowance or charge is emitted anywhere.
  */
 function taxTotal(
   depth: number,
   currency: string,
   amount: string,
   taxable: string,
+  scheme: TaxScheme = DEFAULT_TAX_SCHEME,
 ): string[] {
   return container(depth, 'cac:TaxTotal', [
     amountElement(depth + 1, 'cbc:TaxAmount', currency, amount),
-    ...container(depth + 1, 'cac:TaxSubtotal', [
-      amountElement(depth + 2, 'cbc:TaxableAmount', currency, taxable),
-      amountElement(depth + 2, 'cbc:TaxAmount', currency, amount),
-      ...container(depth + 2, 'cac:TaxCategory', [
-        element(depth + 3, 'cbc:ID', IVA_CODE),
-        element(depth + 3, 'cbc:Name', IVA_NAME),
-        ...container(depth + 3, 'cac:TaxScheme', [
-          element(depth + 4, 'cbc:ID', IVA_CODE),
-          element(depth + 4, 'cbc:Name', IVA_NAME),
-        ]),
+    ...taxSubtotal(depth + 1, currency, taxable, amount, scheme),
+  ]);
+}
+
+/** One `cac:TaxSubtotal` under a `cac:TaxTotal`. */
+function taxSubtotal(
+  depth: number,
+  currency: string,
+  taxable: string,
+  amount: string,
+  scheme: TaxScheme,
+): string[] {
+  return container(depth, 'cac:TaxSubtotal', [
+    amountElement(depth + 1, 'cbc:TaxableAmount', currency, taxable),
+    amountElement(depth + 1, 'cbc:TaxAmount', currency, amount),
+    ...container(depth + 1, 'cac:TaxCategory', [
+      element(depth + 2, 'cbc:ID', scheme.code),
+      element(depth + 2, 'cbc:Name', scheme.name),
+      ...container(depth + 2, 'cac:TaxScheme', [
+        element(depth + 3, 'cbc:ID', scheme.code),
+        element(depth + 3, 'cbc:Name', scheme.name),
       ]),
     ]),
+  ]);
+}
+
+/** DIAN amounts are strict two-decimal strings, so they parse without floats. */
+const AMOUNT_PATTERN = /^([0-9]+)\.([0-9]{2})$/;
+
+function toCents(value: string): bigint {
+  const match = AMOUNT_PATTERN.exec(value);
+  if (!match) {
+    throw new Error(`Invalid DIAN amount for a tax subtotal: ${value}`);
+  }
+  return BigInt(match[1]) * 100n + BigInt(match[2]);
+}
+
+function fromCents(cents: bigint): string {
+  const units = cents / 100n;
+  const decimals = cents % 100n;
+  return `${units}.${String(decimals).padStart(2, '0')}`;
+}
+
+interface TaxBucket {
+  scheme: TaxScheme;
+  taxable: string;
+  amount: string;
+}
+
+/**
+ * Groups the lines by their persisted code, in first-appearance order, so the
+ * invoice-level `cac:TaxTotal` stops contradicting its own lines: one subtotal
+ * per tribute code. A line without a code counts as IVA, which is this
+ * module's behaviour before tax codes existed.
+ */
+function invoiceTaxBuckets(lines: DianInvoiceLine[]): TaxBucket[] {
+  const buckets: Array<{
+    code: DianTaxCode;
+    taxable: bigint;
+    amount: bigint;
+  }> = [];
+
+  for (const line of lines) {
+    const code: DianTaxCode = line.taxCode ?? 'IVA';
+    const existing = buckets.find((bucket) => bucket.code === code);
+    if (existing === undefined) {
+      buckets.push({
+        code,
+        taxable: toCents(line.lineExtensionAmount),
+        amount: toCents(line.taxAmount),
+      });
+      continue;
+    }
+    existing.taxable += toCents(line.lineExtensionAmount);
+    existing.amount += toCents(line.taxAmount);
+  }
+
+  return buckets.map(({ code, taxable, amount }) => ({
+    scheme: taxScheme(code),
+    taxable: fromCents(taxable),
+    amount: fromCents(amount),
+  }));
+}
+
+function invoiceTaxTotal(
+  depth: number,
+  currency: string,
+  amount: string,
+  buckets: TaxBucket[],
+): string[] {
+  return container(depth, 'cac:TaxTotal', [
+    amountElement(depth + 1, 'cbc:TaxAmount', currency, amount),
+    ...buckets.flatMap((bucket) =>
+      taxSubtotal(
+        depth + 1,
+        currency,
+        bucket.taxable,
+        bucket.amount,
+        bucket.scheme,
+      ),
+    ),
   ]);
 }
 
@@ -566,7 +705,16 @@ function invoiceLine(
       currency,
       line.lineExtensionAmount,
     ),
-    ...taxTotal(depth + 1, currency, line.taxAmount, line.lineExtensionAmount),
+    ...taxTotal(
+      depth + 1,
+      currency,
+      line.taxAmount,
+      line.lineExtensionAmount,
+      // A persisted code emits its own scheme; no code keeps 01.
+      line.taxCode === null || line.taxCode === undefined
+        ? DEFAULT_TAX_SCHEME
+        : taxScheme(line.taxCode),
+    ),
     ...container(depth + 1, 'cac:Item', item),
     ...container(depth + 1, 'cac:Price', [
       amountElement(depth + 2, 'cbc:PriceAmount', currency, line.unitPrice),
@@ -745,7 +893,7 @@ export function buildInvoiceXml(input: DianInvoiceInput): string {
     element(1, 'cbc:LineCountNumeric', String(lines.length)),
     ...party(1, 'cac:AccountingSupplierParty', issuer, extensions?.prefix),
     ...party(1, 'cac:AccountingCustomerParty', buyer),
-    ...taxTotal(1, currency, taxAmount, lineExtensionAmount),
+    ...invoiceTaxTotal(1, currency, taxAmount, invoiceTaxBuckets(lines)),
     ...legalMonetaryTotal(1, currency, lineExtensionAmount, payableAmount),
     ...lines.flatMap((line) => invoiceLine(1, currency, line)),
     '</Invoice>',

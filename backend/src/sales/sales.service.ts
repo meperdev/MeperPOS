@@ -17,7 +17,12 @@ import {
 import { CacheService } from '../common/services/cache.service';
 import { SettingsService } from '../settings/settings.service';
 import { computeSkipTake } from '../common/utils/pagination';
-import { canOverrideSalePrice, resolveSaleItemPricing } from './sale-pricing';
+import {
+  canOverrideSalePrice,
+  resolveSaleItemPricing,
+  toPersistedLineTax,
+} from './sale-pricing';
+import type { DianTaxCode } from '../common/utils/tax.util';
 import { tracksStock } from '../products/product-type.logic';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { SequenceService } from '../common/sequences/sequence.service';
@@ -161,6 +166,8 @@ export class SalesService {
       unitPrice: number;
       costPriceSnapshot: Prisma.Decimal;
       taxRate: number;
+      taxCode: DianTaxCode | null;
+      taxAmount: number | null;
       discountAmount: number;
       subtotal: number;
       total: number;
@@ -202,7 +209,12 @@ export class SalesService {
       if (override) priceOverrides.push(override);
       subtotal += pricedItem.subtotal;
       totalTax += taxAmount;
-      saleItems.push(pricedItem);
+      // The fiscal facts are derived once, from the priced line, and enforced by
+      // `toPersistedLineTax`: a code iff the amount is greater than zero.
+      saleItems.push({
+        ...pricedItem,
+        ...toPersistedLineTax(pricedItem.taxCode, taxAmount),
+      });
     }
 
     const total = subtotal + totalTax - discountAmount;
@@ -273,6 +285,11 @@ export class SalesService {
                 unitPrice: saleItem.unitPrice,
                 costPriceSnapshot: saleItem.costPriceSnapshot,
                 taxRate: saleItem.taxRate,
+                // Persisted inside the sale transaction, beside the line they
+                // belong to: the CUFE and the XML read these rows, never the
+                // catalog, so a later product edit cannot rewrite history.
+                taxCode: saleItem.taxCode,
+                taxAmount: saleItem.taxAmount,
                 discountAmount: saleItem.discountAmount,
                 subtotal: saleItem.subtotal,
                 total: saleItem.total,

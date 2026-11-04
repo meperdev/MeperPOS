@@ -603,6 +603,117 @@ describe('SalesService', () => {
     );
   });
 
+  // T4b: the per-line fiscal facts are written with the same transaction that
+  // writes the line, so a CUFE or an XML built from the sale can never see a
+  // code that the sale does not have.
+  const persistableTxMock = () => ({
+    sale: { create: jest.fn() },
+    saleItem: { create: jest.fn() },
+    product: {
+      findFirst: jest.fn().mockResolvedValue(stockRow()),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    inventoryMovement: { create: jest.fn() },
+    payment: { create: jest.fn() },
+  });
+
+  const runCreate = async (
+    txMock: ReturnType<typeof persistableTxMock>,
+    product: Record<string, unknown>,
+    amount: number,
+  ) => {
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: unknown) => unknown) => callback(txMock),
+    );
+    sequenceServiceMock.nextNumber.mockResolvedValue({
+      number: 45,
+      formatted: '45',
+    });
+    prismaMock.product.findFirst.mockResolvedValue(product);
+    prismaMock.customer.findFirst.mockResolvedValue({ id: 'cust-1' });
+    txMock.sale.create.mockResolvedValue({ id: 'sale-new', saleNumber: 45 });
+    prismaMock.sale.findFirst.mockResolvedValue({
+      id: 'sale-new',
+      saleNumber: 45,
+      userId: 'user-1',
+      user: { id: 'user-1', name: 'User', email: 'user@example.com' },
+      customer: null,
+      items: [],
+      payments: [],
+    });
+
+    await service.create(
+      {
+        customerId: 'cust-1',
+        items: [{ productId: 'prod-1', quantity: 1, discountAmount: 0 }],
+        discountAmount: 0,
+        payments: [{ method: 'CASH' as const, amount }],
+      },
+      'user-1',
+      'org-1',
+    );
+  };
+
+  it('create persists the resolved tax code and tax amount per line', async () => {
+    const txMock = persistableTxMock();
+
+    await runCreate(
+      txMock,
+      {
+        id: 'prod-1',
+        name: 'INC Product',
+        active: true,
+        salePrice: 100,
+        taxable: true,
+        taxRate: 5,
+        taxCode: 'INC',
+        stock: 10,
+        category: { taxable: true, defaultTaxRate: 10, defaultTaxCode: null },
+      },
+      105,
+    );
+
+    expect(txMock.saleItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taxRate: 5,
+          taxCode: 'INC',
+          taxAmount: 5,
+        }),
+      }),
+    );
+  });
+
+  it('create persists no code and no amount for an untaxed line', async () => {
+    const txMock = persistableTxMock();
+
+    await runCreate(
+      txMock,
+      {
+        id: 'prod-1',
+        name: 'Untaxed Product',
+        active: true,
+        salePrice: 100,
+        taxable: false,
+        taxRate: 0,
+        taxCode: 'ICA',
+        stock: 10,
+        category: {
+          taxable: false,
+          defaultTaxRate: null,
+          defaultTaxCode: 'ICA',
+        },
+      },
+      100,
+    );
+
+    expect(txMock.saleItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ taxCode: null, taxAmount: null }),
+      }),
+    );
+  });
+
   it('create honors an ADMIN price override instead of product salePrice, and audits it', async () => {
     const txMock = {
       sale: { create: jest.fn() },
@@ -711,7 +822,10 @@ describe('SalesService', () => {
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: unknown) => unknown) => callback(txMock),
     );
-    sequenceServiceMock.nextNumber.mockResolvedValue({ number: 45, formatted: '45' });
+    sequenceServiceMock.nextNumber.mockResolvedValue({
+      number: 45,
+      formatted: '45',
+    });
     prismaMock.product.findFirst.mockResolvedValue({
       id: 'prod-1',
       name: 'Cost Provenance Product',
@@ -777,7 +891,10 @@ describe('SalesService', () => {
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: unknown) => unknown) => callback(txMock),
     );
-    sequenceServiceMock.nextNumber.mockResolvedValue({ number: 46, formatted: '46' });
+    sequenceServiceMock.nextNumber.mockResolvedValue({
+      number: 46,
+      formatted: '46',
+    });
     prismaMock.product.findFirst.mockResolvedValue({
       id: 'prod-1',
       name: 'Immutable Cost Product',
@@ -809,7 +926,8 @@ describe('SalesService', () => {
       'org-1',
     );
 
-    const persistedSnapshot = txMock.saleItem.create.mock.calls[0][0].data.costPriceSnapshot;
+    const persistedSnapshot =
+      txMock.saleItem.create.mock.calls[0][0].data.costPriceSnapshot;
     expect(persistedSnapshot).toBe(37.25);
     expect(persistedSnapshot).not.toBe(80);
   });
@@ -1250,7 +1368,9 @@ describe('SalesService', () => {
       await expect(
         service.create(
           {
-            items: [{ productId: 'prod-1', quantity: 1, discountAmount: 8000.01 }],
+            items: [
+              { productId: 'prod-1', quantity: 1, discountAmount: 8000.01 },
+            ],
             discountAmount: 0,
             payments: [{ method: 'CASH' as const, amount: 8000 }],
           },
@@ -1337,38 +1457,41 @@ describe('SalesService', () => {
       expect(tx.sale.create).not.toHaveBeenCalled();
     });
 
-    it.each([adminUser, cashierUser])('accepts a $role override down to 0 and audits original + new + actor', async (actor) => {
-      const tx = buildTx();
-      primeCreate(tx);
+    it.each([adminUser, cashierUser])(
+      'accepts a $role override down to 0 and audits original + new + actor',
+      async (actor) => {
+        const tx = buildTx();
+        primeCreate(tx);
 
-      await service.create(dtoWithPrice(0), 'user-1', 'org-1', actor);
+        await service.create(dtoWithPrice(0), 'user-1', 'org-1', actor);
 
-      expect(tx.saleItem.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            unitPrice: 0,
-            subtotal: 0,
-            total: 0,
+        expect(tx.saleItem.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              unitPrice: 0,
+              subtotal: 0,
+              total: 0,
+            }),
           }),
-        }),
-      );
-      expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
-      const auditRow = tx.auditLog.create.mock.calls[0][0].data;
-      expect(auditRow.userId).toBe('user-1');
-      expect(auditRow.action).toBe('SALE_PRICE_OVERRIDE');
-      expect(auditRow.resource).toBe('Sale');
-      expect(auditRow.resourceId).toBe('sale-new');
-      expect(auditRow.organizationId).toBe('org-1');
-      expect(auditRow.metadata).toMatchObject({
-        saleId: 'sale-new',
-        productId: 'prod-1',
-        productName: 'Plain Product',
-        quantity: 1,
-        originalUnitPrice: 100000,
-        overriddenUnitPrice: 0,
-        actorRole: actor.role,
-      });
-    });
+        );
+        expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
+        const auditRow = tx.auditLog.create.mock.calls[0][0].data;
+        expect(auditRow.userId).toBe('user-1');
+        expect(auditRow.action).toBe('SALE_PRICE_OVERRIDE');
+        expect(auditRow.resource).toBe('Sale');
+        expect(auditRow.resourceId).toBe('sale-new');
+        expect(auditRow.organizationId).toBe('org-1');
+        expect(auditRow.metadata).toMatchObject({
+          saleId: 'sale-new',
+          productId: 'prod-1',
+          productName: 'Plain Product',
+          quantity: 1,
+          originalUnitPrice: 100000,
+          overriddenUnitPrice: 0,
+          actorRole: actor.role,
+        });
+      },
+    );
 
     it('writes no audit row when the client price matches the server price', async () => {
       const tx = buildTx();
