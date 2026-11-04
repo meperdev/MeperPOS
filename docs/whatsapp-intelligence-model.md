@@ -69,11 +69,14 @@ A refusal is not an error message to the administrator: the gate answers with th
 | Limit | Value | Where it is enforced |
 |---|---|---|
 | Request size | 512 characters | `buildModelRequest`, before any call |
-| Deadline per interpretation | 5 s | declared in the request, honoured by the adapter |
+| Deadline per interpretation | 5 s | enforced by the gate; the adapter must also honour the request deadline |
 | Calls per inbound message | 1, no retries | single call site; the webhook receipt is already spent |
 | Tools selectable | 2 read-only | closed catalogue + `parseModelIntent` |
 | Parameters per tool | 0 | the intent type has no parameter field |
 | Document delivery from a model | impossible | the PDF tool is not in the catalogue |
+
+The gate stops waiting at the deadline, but cannot cancel an adapter's underlying
+request. Adapters must enforce their own transport deadline to limit resource use.
 
 Cost is therefore bounded by one interpretation per inbound message that the allowlist
 did not already answer. The remaining cost question is the price of that call, which
