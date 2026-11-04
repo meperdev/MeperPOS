@@ -411,7 +411,7 @@ describe('SalesService', () => {
     };
 
     prismaMock.$transaction.mockImplementation(
-      async (callback: (tx: unknown) => unknown, _options: unknown) => {
+      async (callback: (tx: unknown) => unknown) => {
         return callback(txMock);
       },
     );
@@ -621,6 +621,11 @@ describe('SalesService', () => {
     txMock: ReturnType<typeof persistableTxMock>,
     product: Record<string, unknown>,
     amount: number,
+    items: Array<{
+      productId: string;
+      quantity: number;
+      discountAmount: number;
+    }> = [{ productId: 'prod-1', quantity: 1, discountAmount: 0 }],
   ) => {
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: unknown) => unknown) => callback(txMock),
@@ -645,7 +650,7 @@ describe('SalesService', () => {
     await service.create(
       {
         customerId: 'cust-1',
-        items: [{ productId: 'prod-1', quantity: 1, discountAmount: 0 }],
+        items,
         discountAmount: 0,
         payments: [{ method: 'CASH' as const, amount }],
       },
@@ -653,6 +658,51 @@ describe('SalesService', () => {
       'org-1',
     );
   };
+
+  it('rounds each line before summing so Sale.taxAmount matches the persisted lines', async () => {
+    const txMock = persistableTxMock();
+
+    // Two lines whose tax is 0.005 each: the raw sum is 0.01 but each line
+    // stores 0.01, so the persisted lines add up to 0.02. Sale.taxAmount must
+    // agree with them, because the CUFE and the XML sum the persisted rows.
+    await runCreate(
+      txMock,
+      {
+        id: 'prod-1',
+        name: 'Fractional Product',
+        active: true,
+        salePrice: 0.1,
+        taxable: true,
+        taxRate: 5,
+        taxCode: 'IVA',
+        stock: 10,
+        category: {
+          taxable: false,
+          defaultTaxRate: null,
+          defaultTaxCode: null,
+        },
+      },
+      0.22,
+      [
+        { productId: 'prod-1', quantity: 1, discountAmount: 0 },
+        { productId: 'prod-1', quantity: 1, discountAmount: 0 },
+      ],
+    );
+
+    expect(txMock.saleItem.create).toHaveBeenCalledTimes(2);
+    for (const call of txMock.saleItem.create.mock.calls) {
+      expect(call[0]).toEqual(
+        expect.objectContaining({
+          data: expect.objectContaining({ taxAmount: 0.01 }),
+        }),
+      );
+    }
+    expect(txMock.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ taxAmount: 0.02 }),
+      }),
+    );
+  });
 
   it('create persists the resolved tax code and tax amount per line', async () => {
     const txMock = persistableTxMock();
@@ -1114,7 +1164,7 @@ describe('SalesService', () => {
       },
     );
 
-    const result = await service.update(
+    await service.update(
       'sale-1',
       { status: 'CANCELLED', cancelReason: 'Cliente arrepentido' },
       'user-1',
@@ -1150,8 +1200,8 @@ describe('SalesService', () => {
       taxRate: 0,
       stock: 10,
       category: { taxable: false, defaultTaxRate: null },
-      promotionType: 'PERCENTAGE',
-      promotionValue: 20,
+      promotionType: 'PERCENTAGE' as string | null,
+      promotionValue: 20 as number | null,
     };
 
     const buildTx = () => ({

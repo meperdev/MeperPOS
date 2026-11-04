@@ -24,8 +24,9 @@
  * by tests:
  *
  *   - every row's `taxCode` is null → a pre-feature sale (spec S7). Those rows
- *     are never reclassified, so today's behaviour is kept exactly: the whole
- *     tax is booked as IVA and INC/ICA stay 0.00.
+ *     were written before tax codes existed and store no line tax at all, so
+ *     the sale-level `taxAmount` is the only truth left: the whole tax is
+ *     booked as IVA exactly as before, and INC/ICA stay 0.00.
  *   - at least one row carries a code → the persisted codes are authoritative.
  *     Every taxed row must carry one, otherwise this throws instead of guessing
  *     a tribute code. A coded row whose amount is 0.00 (what `DECIMAL(10,2)`
@@ -56,6 +57,11 @@ export interface CufeSaleFacts {
   issuedAt: Date;
   /** Sale.subtotal: the sum of the line extension amounts, before taxes. */
   lineExtensionAmount: string;
+  /**
+   * Sale.taxAmount: the invoice-level tax. A line-level sum is NOT used here,
+   * because it is zero for sales written before tax codes existed.
+   */
+  taxAmount: string;
   /** The sale's persisted `SaleItem` rows, the only source of the tax totals. */
   items: readonly CufeSaleTaxLine[];
   /** Sale.total: the amount the buyer actually pays. */
@@ -174,6 +180,7 @@ function requireTaxCode(value: unknown, line: number): DianTaxCode | null {
  */
 function persistedTaxTotals(
   items: readonly CufeSaleTaxLine[],
+  saleTaxAmount: string,
 ): Record<TributeCode, bigint> {
   // `Array.isArray` is avoided on purpose: it narrows a `readonly` array to
   // `any[]` and would silently untype every element below.
@@ -185,6 +192,14 @@ function persistedTaxTotals(
 
   const totals: Record<TributeCode, bigint> = { '01': 0n, '04': 0n, '03': 0n };
   const hasPersistedCode = items.some((item) => item.taxCode != null);
+
+  // Pre-feature sale (S7): no row carries a code and no row stores a line
+  // amount, so summing the rows would report 0.00 and silently erase the
+  // invoice's tax. The sale-level amount is booked as IVA, as before.
+  if (!hasPersistedCode) {
+    totals['01'] = toCents(saleTaxAmount);
+    return totals;
+  }
 
   items.forEach((item, index) => {
     const code = requireTaxCode(item.taxCode, index);
@@ -246,7 +261,7 @@ function buildInvoiceNumber(
 export function resolveCufeInput(facts: CufeSaleFacts): CufeInput {
   const issuedAt = requireValidDate(facts.issuedAt);
   const parts = bogotaParts(issuedAt);
-  const taxes = persistedTaxTotals(facts.items);
+  const taxes = persistedTaxTotals(facts.items, facts.taxAmount);
   // Default to the test environment: no production issuance until the fiscal
   // requirements are confirmed (spec S6). Reject anything else here, where the
   // mistake is made, instead of deferring it to the hash step.

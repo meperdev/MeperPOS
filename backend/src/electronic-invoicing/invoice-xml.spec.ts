@@ -402,6 +402,19 @@ describe('buildInvoiceXml totals', () => {
     expect(valueAtDepth(category, 'cbc:Name', 4)).toEqual(['INC']);
   });
 
+  it('refuses a sale-level tax that disagrees with its own subtotals', () => {
+    const base = baseInput();
+
+    expect(() =>
+      buildInvoiceXml(
+        baseInput({
+          taxAmount: '284000.00',
+          lines: base.lines.map((line) => ({ ...line, taxCode: 'IVA' })),
+        }),
+      ),
+    ).toThrow(/tax total/i);
+  });
+
   it('writes the LegalMonetaryTotal amounts verbatim and in sequence', () => {
     const xml = buildInvoiceXml(baseInput());
     const total = block(xml, 'cac:LegalMonetaryTotal', 1);
@@ -486,6 +499,12 @@ describe('buildInvoiceXml lines', () => {
           description: 'Sticker',
         },
       ],
+      // The extra line adds 3800.00 of tax, so the sale-level amounts have to
+      // follow it: the document is refused when its header contradicts the
+      // lines it renders.
+      lineExtensionAmount: '1520000.00',
+      taxAmount: '288800.00',
+      payableAmount: '1808800.00',
     });
     const xml = buildInvoiceXml(threeLines);
 

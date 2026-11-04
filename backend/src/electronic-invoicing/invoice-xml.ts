@@ -42,19 +42,17 @@
  * code keeps scheme `01`, which is what this module emitted before tax codes
  * existed and what a pre-feature sale (spec S7) still means.
  *
- * The invoice-level `cac:TaxTotal` remains one bucket: this module never sums
- * line money (`Line amounts are trusted as given`), so a per-code invoice
- * breakdown has to be supplied by the caller and is not implemented here. A
- * mixed sale therefore renders per-line truthfully and a header that still
- * reports one IVA bucket; wiring the header breakdown belongs with the caller
- * that builds the document.
+ * The invoice-level `cac:TaxTotal` carries one `cac:TaxSubtotal` per persisted
+ * code, in first-appearance order, each with the `TaxableAmount` and
+ * `TaxAmount` summed from the lines in that code's group. That is the only
+ * arithmetic this module performs on money, and it is done in integer cents.
+ * The sale-level tax the caller passes is compared against that sum and any
+ * disagreement throws: a document whose header contradicts its own subtotals is
+ * worse than no document, because the CUFE is built from the same lines.
  *
- * Two consequences of the same gap are also recorded rather than hidden:
  * `LegalMonetaryTotal/TaxExclusiveAmount` repeats the line extension total and
  * `TaxInclusiveAmount` repeats the payable amount, because allowances, charges
- * and prepayments are out of scope, so no arithmetic is performed on money.
- * Line amounts are trusted as given and never summed or rounded here: the
- * caller owns the numbers, this module only renders them.
+ * and prepayments are out of scope.
  *
  * ## Other stated assumptions
  *
@@ -635,6 +633,17 @@ function invoiceTaxTotal(
   amount: string,
   buckets: TaxBucket[],
 ): string[] {
+  const declared = toCents(amount);
+  const summed = buckets.reduce(
+    (total, bucket) => total + toCents(bucket.amount),
+    0n,
+  );
+  if (declared !== summed) {
+    throw new Error(
+      `Invalid invoice tax total: the sale reports ${fromCents(declared)} but its lines sum to ${fromCents(summed)}`,
+    );
+  }
+
   return container(depth, 'cac:TaxTotal', [
     amountElement(depth + 1, 'cbc:TaxAmount', currency, amount),
     ...buckets.flatMap((bucket) =>

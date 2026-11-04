@@ -63,6 +63,9 @@ describe('resolveCufeInput', () => {
     invoiceNumber: 323200000129,
     issuedAt: new Date('2019-01-16T15:53:10Z'),
     lineExtensionAmount: '1500000.00',
+    // The sale-level tax. A pre-feature sale has no line-level amounts, so this
+    // is the only value that can become ValImp1 for it.
+    taxAmount: '285000.00',
     // The annex example has a single IVA bucket, so the persisted rows that
     // reproduce it are IVA lines summing to the published 285000.00.
     items: [{ taxCode: 'IVA', taxAmount: '285000.00' }] as CufeSaleTaxLine[],
@@ -117,6 +120,7 @@ describe('resolveCufeInput', () => {
       invoiceNumber: facts.invoiceNumber,
       issuedAt: facts.issuedAt,
       lineExtensionAmount: facts.lineExtensionAmount,
+      taxAmount: facts.taxAmount,
       items: facts.items,
       payableAmount: facts.payableAmount,
       issuerTaxId: facts.issuerTaxId,
@@ -146,6 +150,7 @@ describe('resolveCufeInput persisted tax codes', () => {
     invoiceNumber: 323200000129,
     issuedAt: new Date('2019-01-16T15:53:10Z'),
     lineExtensionAmount: '1500000.00',
+    taxAmount: '285000.00',
     payableAmount: '1785000.00',
     issuerTaxId: '700.085.371',
     buyerTaxId: '800.199.436',
@@ -154,6 +159,24 @@ describe('resolveCufeInput persisted tax codes', () => {
   };
   const withItems = (items: CufeSaleTaxLine[]) =>
     resolveCufeInput({ ...facts, items });
+
+  it('books the whole sale-level tax as IVA for a pre-feature sale', () => {
+    // Rows written before tax codes existed carry neither a code nor a line
+    // amount, so the sale-level tax is the only truth left. Adding the zero
+    // cents of those rows would silently drop the invoice's IVA total.
+    const input = resolveCufeInput({
+      ...facts,
+      taxAmount: '285000.00',
+      items: [
+        { taxCode: null, taxAmount: null },
+        { taxCode: null, taxAmount: null },
+      ],
+    });
+
+    expect(input.vatAmount).toBe('285000.00');
+    expect(input.consumptionTaxAmount).toBe('0.00');
+    expect(input.icaAmount).toBe('0.00');
+  });
 
   it('sums the persisted IVA lines into ValImp1', () => {
     const input = withItems([

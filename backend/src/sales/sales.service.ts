@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { OrgRole, Prisma, PrismaClient, ProductType } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto, UpdateSaleDto } from './dto/sales.dto';
 import type { Response } from 'express';
@@ -207,14 +207,15 @@ export class SalesService {
         this.canOverridePrice(user),
       );
       if (override) priceOverrides.push(override);
-      subtotal += pricedItem.subtotal;
-      totalTax += taxAmount;
       // The fiscal facts are derived once, from the priced line, and enforced by
-      // `toPersistedLineTax`: a code iff the amount is greater than zero.
-      saleItems.push({
-        ...pricedItem,
-        ...toPersistedLineTax(pricedItem.taxCode, taxAmount),
-      });
+      // `toPersistedLineTax`: a code iff the amount is greater than zero. The
+      // rounded value is what gets persisted, so the rounded value is also what
+      // accumulates: the CUFE and the invoice sum the persisted rows, and
+      // `Sale.taxAmount` has to agree with them to the cent.
+      const persistedTax = toPersistedLineTax(pricedItem.taxCode, taxAmount);
+      subtotal += pricedItem.subtotal;
+      totalTax += persistedTax.taxAmount ?? 0;
+      saleItems.push({ ...pricedItem, ...persistedTax });
     }
 
     const total = subtotal + totalTax - discountAmount;
