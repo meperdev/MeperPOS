@@ -6,22 +6,29 @@
  * makes the CUFE reproducible and the document diffable.
  *
  * The document is structurally UBL-valid and validates against
- * `UBL-Invoice-2.1.xsd`, but it is NOT yet submittable to DIAN: the
- * `ext:UBLExtensions` block (`sts:DianExtensions` with the numbering range and
- * software identifier) and the XADES-EPES `ds:Signature` are both absent. That
- * is deliberate — they belong to a separate unit that needs the signing
- * certificate, and emitting an unsigned stub would produce a document that
- * looks signed but is not. Do not "fix" this by adding a placeholder.
+ * `UBL-Invoice-2.1.xsd`, but it is NOT submittable to DIAN: the XADES-EPES
+ * `ds:Signature` is always absent, and the `ext:UBLExtensions` block
+ * (`sts:DianExtensions`) is emitted only when the caller opts in through
+ * `dianExtensions`. That is deliberate — the signature belongs to a unit that
+ * needs the signing certificate, and emitting an unsigned stub would produce a
+ * document that looks signed but is not. Do not "fix" this by adding a
+ * placeholder.
+ *
+ * An opt-in document is still one `ext:UBLExtension` node short of what DIAN
+ * asks for: FAC01 requires a second node carrying `ds:Signature`. See
+ * `dian-extensions.ts` for the extension rules and for the list of annex rows
+ * that are recorded rather than enforced.
  *
  * Element order follows `InvoiceType` in UBL-Invoice-2.1.xsd, an `xs:sequence`:
  * one element out of place makes the whole document invalid. Only these are
  * emitted, in this relative order:
  *
- *   cbc:UBLVersionID, cbc:CustomizationID, cbc:ProfileID,
- *   cbc:ProfileExecutionID, cbc:ID, cbc:UUID, cbc:IssueDate, cbc:IssueTime,
- *   cbc:InvoiceTypeCode, cbc:DocumentCurrencyCode, cbc:LineCountNumeric,
- *   cac:AccountingSupplierParty, cac:AccountingCustomerParty, cac:TaxTotal,
- *   cac:LegalMonetaryTotal, cac:InvoiceLine+
+ *   ext:UBLExtensions (opt-in), cbc:UBLVersionID, cbc:CustomizationID,
+ *   cbc:ProfileID, cbc:ProfileExecutionID, cbc:ID, cbc:UUID, cbc:IssueDate,
+ *   cbc:IssueTime, cbc:InvoiceTypeCode, cbc:DocumentCurrencyCode,
+ *   cbc:LineCountNumeric, cac:AccountingSupplierParty,
+ *   cac:AccountingCustomerParty, cac:TaxTotal, cac:LegalMonetaryTotal,
+ *   cac:InvoiceLine+
  *
  * DIAN literals come from Anexo Tecnico v1.9 (Resolucion 000165/2023), section
  * 6.1, table rows FAD01-FAD04. Section 11.2.2 fixes the CUFE location:
@@ -53,6 +60,23 @@
  * - `DianInvoiceLine.id` must be the line's 1-based position; a mismatch is a
  *   caller bug and throws instead of emitting a self-inconsistent document.
  */
+
+import {
+  DIAN_AGENCY_ID,
+  DIAN_AGENCY_NAME,
+  DIAN_AUTHORIZATION_PROVIDER_CHECK_DIGIT,
+  DIAN_AUTHORIZATION_PROVIDER_ID,
+  DIAN_NIT_SCHEME,
+  DIAN_SOURCE_COUNTRY_CODE,
+  DIAN_SOURCE_LIST_AGENCY_ID,
+  DIAN_SOURCE_LIST_AGENCY_NAME,
+  DIAN_SOURCE_LIST_SCHEME_URI,
+  DianExtensionsInput,
+  EXT_NAMESPACE,
+  ResolvedDianExtensions,
+  STS_NAMESPACE,
+  resolveDianExtensions,
+} from './dian-extensions';
 
 export interface DianParty {
   /** Identification without punctuation and without the check digit. */
@@ -105,6 +129,11 @@ export interface DianInvoiceInput {
   taxAmount: string;
   /** Invoice-level total to pay. */
   payableAmount: string;
+  /**
+   * Opt-in `sts:DianExtensions` block. Absent means the document is emitted
+   * exactly as before this block existed — byte for byte.
+   */
+  dianExtensions?: DianExtensionsInput;
 }
 
 /** Anexo Tecnico 1.9 section 6.1, rows FAD01-FAD04. */
@@ -408,12 +437,29 @@ function amountElement(
  * Both parties are rendered identically: DIAN wants the identification in
  * `PartyIdentification`, the legal name in `PartyTaxScheme/RegistrationName`
  * with the taxing scheme, and the name repeated in `PartyLegalEntity`.
+ *
+ * `branchCode` is the supplier's only: FAB10a requires `sts:Prefix` to equal
+ * `PartyLegalEntity/CorporateRegistrationScheme/cbc:ID`, so the extension block
+ * and this element are written from one value.
  */
 function party(
   depth: number,
   tag: 'cac:AccountingSupplierParty' | 'cac:AccountingCustomerParty',
   value: DianParty,
+  branchCode?: string,
 ): string[] {
+  const legalEntity: string[] = [
+    element(depth + 3, 'cbc:RegistrationName', value.name),
+    nitElement(depth + 3, 'cbc:CompanyID', value),
+  ];
+  if (branchCode !== undefined) {
+    legalEntity.push(
+      ...container(depth + 3, 'cac:CorporateRegistrationScheme', [
+        element(depth + 4, 'cbc:ID', branchCode),
+      ]),
+    );
+  }
+
   return container(
     depth,
     tag,
@@ -432,10 +478,7 @@ function party(
           element(depth + 4, 'cbc:Name', IVA_NAME),
         ]),
       ]),
-      ...container(depth + 2, 'cac:PartyLegalEntity', [
-        element(depth + 3, 'cbc:RegistrationName', value.name),
-        nitElement(depth + 3, 'cbc:CompanyID', value),
-      ]),
+      ...container(depth + 2, 'cac:PartyLegalEntity', legalEntity),
     ]),
   );
 }
@@ -537,6 +580,108 @@ function invoiceLine(
   ]);
 }
 
+/**
+ * The `sts:DianExtensions` block, in the order of annex rows FAB04-FAB36.
+ *
+ * One `ext:UBLExtension` carries it, and nothing else: FAC01 wants a second
+ * node for `ds:Signature`, which this module cannot produce. The prefix is
+ * rendered only when the range has one, because FAB10 is optional while
+ * FAB11/FAB12 are not.
+ */
+function dianExtensionsBlock(
+  depth: number,
+  extensions: ResolvedDianExtensions,
+): string[] {
+  const agency = {
+    schemeAgencyID: DIAN_AGENCY_ID,
+    schemeAgencyName: DIAN_AGENCY_NAME,
+  };
+
+  return container(depth, 'ext:UBLExtensions', [
+    ...container(depth + 1, 'ext:UBLExtension', [
+      ...container(depth + 2, 'ext:ExtensionContent', [
+        ...container(depth + 3, 'sts:DianExtensions', [
+          ...container(depth + 4, 'sts:InvoiceControl', [
+            element(
+              depth + 5,
+              'sts:InvoiceAuthorization',
+              extensions.invoiceAuthorization,
+            ),
+            ...container(depth + 5, 'sts:AuthorizationPeriod', [
+              element(
+                depth + 6,
+                'cbc:StartDate',
+                extensions.authorizationStartDate,
+              ),
+              element(
+                depth + 6,
+                'cbc:EndDate',
+                extensions.authorizationEndDate,
+              ),
+            ]),
+            ...container(depth + 5, 'sts:AuthorizedInvoices', [
+              ...(extensions.prefix === undefined
+                ? []
+                : [element(depth + 6, 'sts:Prefix', extensions.prefix)]),
+              element(depth + 6, 'sts:From', extensions.from),
+              element(depth + 6, 'sts:To', extensions.to),
+            ]),
+          ]),
+          ...container(depth + 4, 'sts:InvoiceSource', [
+            attributeElement(
+              depth + 5,
+              'cbc:IdentificationCode',
+              {
+                listAgencyID: DIAN_SOURCE_LIST_AGENCY_ID,
+                listAgencyName: DIAN_SOURCE_LIST_AGENCY_NAME,
+                listSchemeURI: DIAN_SOURCE_LIST_SCHEME_URI,
+              },
+              DIAN_SOURCE_COUNTRY_CODE,
+            ),
+          ]),
+          ...container(depth + 4, 'sts:SoftwareProvider', [
+            attributeElement(
+              depth + 5,
+              'sts:ProviderID',
+              {
+                ...agency,
+                schemeID: extensions.providerCheckDigit,
+                schemeName: DIAN_NIT_SCHEME,
+              },
+              extensions.providerId,
+            ),
+            attributeElement(
+              depth + 5,
+              'sts:SoftwareID',
+              agency,
+              extensions.softwareId,
+            ),
+          ]),
+          attributeElement(
+            depth + 4,
+            'sts:SoftwareSecurityCode',
+            agency,
+            extensions.softwareSecurityCode,
+          ),
+          ...container(depth + 4, 'sts:AuthorizationProvider', [
+            attributeElement(
+              depth + 5,
+              'sts:AuthorizationProviderID',
+              {
+                ...agency,
+                schemeID: DIAN_AUTHORIZATION_PROVIDER_CHECK_DIGIT,
+                schemeName: DIAN_NIT_SCHEME,
+              },
+              DIAN_AUTHORIZATION_PROVIDER_ID,
+            ),
+          ]),
+          element(depth + 4, 'sts:QRCode', extensions.qrCode),
+        ]),
+      ]),
+    ]),
+  ]);
+}
+
 export function buildInvoiceXml(input: DianInvoiceInput): string {
   const invoiceNumber = requireInvoiceNumber(input.invoiceNumber);
   const cufe = requireCufe(input.cufe);
@@ -553,24 +698,52 @@ export function buildInvoiceXml(input: DianInvoiceInput): string {
   );
   const taxAmount = requireAmount('taxAmount', input.taxAmount);
   const payableAmount = requireAmount('payableAmount', input.payableAmount);
+  const extensions =
+    input.dianExtensions === undefined
+      ? undefined
+      : resolveDianExtensions(input.dianExtensions, {
+          invoiceNumber,
+          issueDate,
+          cufe,
+          environment,
+        });
+
+  // The prefixes must be declared on the document header (annex table 1), and
+  // they exist only when the block that uses them does.
+  const rootTag = [
+    '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"',
+    `${pad(4)}xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"`,
+    `${pad(4)}xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"`,
+    ...(extensions === undefined
+      ? []
+      : [
+          `${pad(4)}xmlns:ext="${EXT_NAMESPACE}"`,
+          `${pad(4)}xmlns:sts="${STS_NAMESPACE}"`,
+        ]),
+  ];
+  rootTag[rootTag.length - 1] = `${rootTag[rootTag.length - 1]}>`;
 
   const document = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"',
-    `${pad(4)}xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"`,
-    `${pad(4)}xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">`,
+    ...rootTag,
+    ...(extensions === undefined ? [] : dianExtensionsBlock(1, extensions)),
     element(1, 'cbc:UBLVersionID', UBL_VERSION_ID),
     element(1, 'cbc:CustomizationID', CUSTOMIZATION_ID),
     element(1, 'cbc:ProfileID', PROFILE_ID),
     element(1, 'cbc:ProfileExecutionID', environment),
     element(1, 'cbc:ID', invoiceNumber),
-    attributeElement(1, 'cbc:UUID', { schemeName: CUFE_SCHEME_NAME }, cufe),
+    attributeElement(
+      1,
+      'cbc:UUID',
+      { schemeID: environment, schemeName: CUFE_SCHEME_NAME },
+      cufe,
+    ),
     element(1, 'cbc:IssueDate', issueDate),
     element(1, 'cbc:IssueTime', issueTime),
     element(1, 'cbc:InvoiceTypeCode', INVOICE_TYPE_CODE),
     element(1, 'cbc:DocumentCurrencyCode', currency),
     element(1, 'cbc:LineCountNumeric', String(lines.length)),
-    ...party(1, 'cac:AccountingSupplierParty', issuer),
+    ...party(1, 'cac:AccountingSupplierParty', issuer, extensions?.prefix),
     ...party(1, 'cac:AccountingCustomerParty', buyer),
     ...taxTotal(1, currency, taxAmount, lineExtensionAmount),
     ...legalMonetaryTotal(1, currency, lineExtensionAmount, payableAmount),
