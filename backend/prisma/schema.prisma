@@ -453,6 +453,7 @@ model Category {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   defaultTaxRate Decimal?     @db.Decimal(5, 2)
+  defaultTaxCode DianTaxCode?
   taxable        Boolean      @default(false)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -471,6 +472,7 @@ model Product {
   costPrice           Decimal             @db.Decimal(10, 2)
   salePrice           Decimal             @db.Decimal(10, 2)
   taxRate             Decimal             @default(0) @db.Decimal(5, 2)
+  taxCode             DianTaxCode?
   taxable             Boolean             @default(false)
   stock               Int                 @default(0)
   reservedStock       Int                 @default(0)
@@ -1156,6 +1158,14 @@ enum ProductType {
 enum PromotionType {
   PERCENTAGE
   FIXED_PRICE
+}
+
+/// Colombian tribute codes MeperPOS can attach to a catalog item. The DIAN
+/// numeric codes (01/04/03) live in `common/utils/tax.util.ts`, never here.
+enum DianTaxCode {
+  IVA
+  INC
+  ICA
 }
 
 enum MovementType {
