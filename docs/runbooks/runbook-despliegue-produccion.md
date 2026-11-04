@@ -55,7 +55,7 @@ Este runbook aplica a todo el equipo tecnico (desarrollo y operacion).
 
 **Nota:** no definir `PORT` en Railway (Railway lo inyecta automaticamente).
 
-**Nota:** `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `SUPERADMIN_NAME` y `SUPERADMIN_PROMOTE` son variables de la provision inicial (seccion 4.1), no de runtime: se definen solo para ejecutar `npm run provision:prod`. Quitar `SUPERADMIN_PASSWORD` del entorno cuando la provision termina.
+**Nota:** `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `SUPERADMIN_NAME`, `SUPERADMIN_PROMOTE` y `SUPERADMIN_RESET_PASSWORD` son variables de la provision y del restablecimiento del SuperAdmin (seccion 4.1), no de runtime: se definen solo para ejecutar `npm run provision:prod`. Quitar `SUPERADMIN_PASSWORD`, `SUPERADMIN_PROMOTE` y `SUPERADMIN_RESET_PASSWORD` del entorno cuando el comando termina.
 
 ### 3.2 Vercel (frontend)
 
@@ -95,21 +95,72 @@ railway run npx prisma migrate status
    arrancar; si la migracion falla, el contenedor no arranca y el deploy queda
    marcado como fallido.
 
-6. Crear el primer SuperAdmin con el provisioner de produccion. Definir en el
-   entorno `SUPERADMIN_EMAIL` y `SUPERADMIN_PASSWORD` (minimo 12 caracteres), y
-   opcionalmente `SUPERADMIN_NAME`:
+6. Crear el primer SuperAdmin con el provisioner de produccion. `SUPERADMIN_EMAIL`
+   y `SUPERADMIN_PASSWORD` (minimo 12 caracteres) no son variables de runtime:
+   exportarlas en el mismo shell que ejecuta el comando, porque `railway run`
+   solo inyecta las variables del servicio y el script las lee del entorno local.
+   Opcionalmente `SUPERADMIN_NAME`:
 
 ```bash
+export SUPERADMIN_EMAIL='owner@tu-dominio.com'
+read -rsp 'SUPERADMIN_PASSWORD: ' SUPERADMIN_PASSWORD; echo
+export SUPERADMIN_PASSWORD
 railway run npm run provision:prod
+unset SUPERADMIN_PASSWORD
 ```
+
+   Si el email de la cuenta no se recuerda, listarlo antes de restablecer:
+
+```bash
+railway run bash -lc 'psql "${DATABASE_URL%%\?*}" -Atc "select email from \"User\" where \"isSuperAdmin\";"'
+```
+
+   `DATABASE_URL` lleva parametros de Prisma (`connection_limit`, `pool_timeout`)
+   que libpq rechaza como `invalid URI query parameter`; el `${DATABASE_URL%%\?*}`
+   los recorta y deja la URL que `psql` acepta.
 
    No usar claves conocidas ni valores de ejemplo como
    `cambiar-esta-clave-produccion`: el script rechaza los defaults conocidos y las
    claves documentadas en este repositorio. El comando es idempotente: si el email
    ya es SuperAdmin no cambia nada. Si el email pertenece a un usuario que no es
    SuperAdmin, falla en vez de promoverlo en silencio; para promoverlo de forma
-   explicita hay que definir `SUPERADMIN_PROMOTE=true`. Imprime un resumen sin
+   explicita hay que definir `SUPERADMIN_PROMOTE=true`. Si el email no existe,
+   crea una cuenta nueva: cuando ya habia otros SuperAdmins, imprime un aviso con
+   sus emails, para que confirmes que no fue un error de tipeo antes de dar la
+   recuperacion por buena. La busqueda del email ignora mayusculas y minusculas;
+   si dos usuarios coinciden por diferencia de capitalizacion, el comando falla
+   en vez de elegir uno. Imprime un resumen sin
    secretos y termina con codigo distinto de cero si rechaza la operacion.
+
+   Si se pierde la clave del SuperAdmin, el mismo comando la restablece: exportar
+   la nueva clave en `SUPERADMIN_PASSWORD` (minimo 12 caracteres) junto con
+   `SUPERADMIN_EMAIL` y `SUPERADMIN_RESET_PASSWORD=true`:
+
+```bash
+export SUPERADMIN_EMAIL='owner@tu-dominio.com'
+export SUPERADMIN_RESET_PASSWORD=true
+read -rsp 'Nueva SUPERADMIN_PASSWORD: ' SUPERADMIN_PASSWORD; echo
+export SUPERADMIN_PASSWORD
+railway run npm run provision:prod
+unset SUPERADMIN_PASSWORD SUPERADMIN_RESET_PASSWORD
+```
+
+   El restablecimiento solo actua sobre un email que ya sea
+   SuperAdmin: reemplaza el hash, incrementa `tokenVersion` y revoca los refresh
+   tokens activos de esa cuenta, de modo que las sesiones previas quedan
+   cerradas. Falla si el email no existe o si pertenece a un usuario comun, asi
+   que no puede crear ni promover cuentas. Confirmar el acceso con el login real
+   antes de dar la recuperacion por cerrada. `BACKEND_URL` es el dominio publico
+   del backend (Railway: Settings > Networking > Public Networking, o
+   `railway status` en `backend/` imprime la `url` del servicio); definirlo una
+   vez y el paso 7 lo reutiliza:
+
+```bash
+export BACKEND_URL='https://<dominio-del-backend>.up.railway.app'
+curl -sS -X POST "$BACKEND_URL/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"<email-del-superadmin>","password":"<clave-nueva>"}'
+```
 
 7. Crear la primera organizacion con la API de administracion (solo SuperAdmin),
    autenticado con el SuperAdmin del paso 6:

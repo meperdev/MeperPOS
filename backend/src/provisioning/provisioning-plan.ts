@@ -52,7 +52,9 @@ export type ProvisioningRefusalCode =
   | 'PASSWORD_KNOWN_DEFAULT'
   | 'PASSWORD_BLANK'
   | 'PASSWORD_SURROUNDING_WHITESPACE'
-  | 'EXISTING_USER_NOT_SUPERADMIN';
+  | 'EXISTING_USER_NOT_SUPERADMIN'
+  | 'RESET_USER_NOT_FOUND'
+  | 'RESET_TARGET_NOT_SUPERADMIN';
 
 export interface ProvisioningRefusal {
   action: 'refuse';
@@ -79,11 +81,24 @@ export interface ProvisioningPromotePlan {
   userId: string;
 }
 
+/**
+ * Replaces the password of an existing SuperAdmin. Only reachable with the
+ * explicit SUPERADMIN_RESET_PASSWORD=true opt-in, and only for an account that
+ * is already a SuperAdmin: a lost password must never create or promote one.
+ */
+export interface ProvisioningResetPasswordPlan {
+  action: 'reset-password';
+  email: string;
+  password: string;
+  userId: string;
+}
+
 export type ProvisioningPlan =
   | ProvisioningRefusal
   | ProvisioningCreatePlan
   | ProvisioningNoopPlan
-  | ProvisioningPromotePlan;
+  | ProvisioningPromotePlan
+  | ProvisioningResetPasswordPlan;
 
 export interface ProvisioningExistingUser {
   id: string;
@@ -96,6 +111,8 @@ export interface ProvisioningInput {
   password?: string | null;
   /** Set from SUPERADMIN_PROMOTE === 'true'. Explicit consent is required. */
   promoteExistingUser?: boolean;
+  /** Set from SUPERADMIN_RESET_PASSWORD === 'true'. Explicit consent is required. */
+  resetPassword?: boolean;
   existingUser?: ProvisioningExistingUser | null;
 }
 
@@ -116,45 +133,23 @@ function refuse(
 }
 
 /**
- * Decides what the production bootstrap must do. Never throws, never returns
- * the password inside a refusal, and never adopts an existing non-SuperAdmin
- * account without explicit opt-in.
+ * Password rules shared by the create and the reset paths, so a reset cannot
+ * accept a value the bootstrap would have refused.
+ *
+ * Returns the validated secret or a refusal; the ordering below is the contract
+ * pinned by provisioning-plan.spec.ts.
  */
-export function planProvisioning(input: ProvisioningInput): ProvisioningPlan {
-  const email = normalizeSuperAdminEmail(input.email);
-
-  if (!email) {
-    return refuse(
-      'MISSING_SUPERADMIN_EMAIL',
-      'SUPERADMIN_EMAIL is required: set it to the address that will own the production SuperAdmin account and run the command again.',
-    );
-  }
-
-  const existingUser = input.existingUser ?? null;
-
-  // Idempotency: an existing SuperAdmin is left untouched, and no password is
-  // needed to re-run the command.
-  if (existingUser && existingUser.isSuperAdmin) {
-    return { action: 'noop', email, userId: existingUser.id };
-  }
-
-  if (existingUser) {
-    if (input.promoteExistingUser) {
-      return { action: 'promote', email, userId: existingUser.id };
-    }
-
-    return refuse(
-      'EXISTING_USER_NOT_SUPERADMIN',
-      `A user already exists for ${email} and is not a SuperAdmin. Set SUPERADMIN_PROMOTE=true to grant SuperAdmin on purpose, or choose a different SUPERADMIN_EMAIL.`,
-    );
-  }
-
-  const password = input.password ?? '';
+function validatePassword(
+  rawPassword: string | null | undefined,
+  intent: 'create' | 'reset',
+): { password: string } | ProvisioningRefusal {
+  const password = rawPassword ?? '';
+  const action = intent === 'create' ? 'create' : 'reset';
 
   if (password.length === 0) {
     return refuse(
       'MISSING_SUPERADMIN_PASSWORD',
-      `SUPERADMIN_PASSWORD is required to create the SuperAdmin: set a unique value of at least ${MIN_SUPERADMIN_PASSWORD_LENGTH} characters.`,
+      `SUPERADMIN_PASSWORD is required to ${action} the SuperAdmin: export a unique value of at least ${MIN_SUPERADMIN_PASSWORD_LENGTH} characters in the shell that runs this command.`,
     );
   }
 
@@ -195,5 +190,80 @@ export function planProvisioning(input: ProvisioningInput): ProvisioningPlan {
     );
   }
 
-  return { action: 'create', email, password };
+  return { password };
+}
+
+/**
+ * Decides what the production bootstrap must do. Never throws, never returns
+ * the password inside a refusal, and never adopts an existing non-SuperAdmin
+ * account without explicit opt-in.
+ */
+export function planProvisioning(input: ProvisioningInput): ProvisioningPlan {
+  const email = normalizeSuperAdminEmail(input.email);
+
+  if (!email) {
+    return refuse(
+      'MISSING_SUPERADMIN_EMAIL',
+      'SUPERADMIN_EMAIL is required: export the address that owns the production SuperAdmin account in the shell that runs this command (railway run does not inject it), then run it again.',
+    );
+  }
+
+  const existingUser = input.existingUser ?? null;
+
+  // A reset is destructive to live sessions, so it requires the explicit
+  // SUPERADMIN_RESET_PASSWORD opt-in. This branch runs before the idempotent
+  // one: an operator who lost the password must not get the `noop` that leaves
+  // the old hash in place. It never creates or promotes an account, so a lost
+  // password cannot widen who is a SuperAdmin.
+  if (input.resetPassword) {
+    if (!existingUser) {
+      return refuse(
+        'RESET_USER_NOT_FOUND',
+        `No user exists for ${email}, so there is no SuperAdmin password to reset. Run the provisioning command without SUPERADMIN_RESET_PASSWORD to create the account first.`,
+      );
+    }
+
+    if (!existingUser.isSuperAdmin) {
+      return refuse(
+        'RESET_TARGET_NOT_SUPERADMIN',
+        `The user for ${email} is not a SuperAdmin, so this command will not reset its password. Use the SuperAdmin address, or grant SuperAdmin on purpose with SUPERADMIN_PROMOTE=true.`,
+      );
+    }
+
+    const validated = validatePassword(input.password, 'reset');
+    if ('action' in validated) {
+      return validated;
+    }
+
+    return {
+      action: 'reset-password',
+      email,
+      password: validated.password,
+      userId: existingUser.id,
+    };
+  }
+
+  // Idempotency: an existing SuperAdmin is left untouched, and no password is
+  // needed to re-run the command.
+  if (existingUser && existingUser.isSuperAdmin) {
+    return { action: 'noop', email, userId: existingUser.id };
+  }
+
+  if (existingUser) {
+    if (input.promoteExistingUser) {
+      return { action: 'promote', email, userId: existingUser.id };
+    }
+
+    return refuse(
+      'EXISTING_USER_NOT_SUPERADMIN',
+      `A user already exists for ${email} and is not a SuperAdmin. Set SUPERADMIN_PROMOTE=true to grant SuperAdmin on purpose, or choose a different SUPERADMIN_EMAIL.`,
+    );
+  }
+
+  const validated = validatePassword(input.password, 'create');
+  if ('action' in validated) {
+    return validated;
+  }
+
+  return { action: 'create', email, password: validated.password };
 }

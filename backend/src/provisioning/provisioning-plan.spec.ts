@@ -19,14 +19,16 @@ import type {
  *
  * Precedence is fixed and explicit:
  *   1. email presence
- *   2. existing user  -> noop / promote / refuse (no password needed)
- *   3. password presence
- *   4. known default or documented sample  (more specific than length)
- *   5. whitespace-only  (satisfies any length rule while hiding nothing)
- *   6. surrounding whitespace  (invisible at login, and padding would fake length)
- *   7. minimum length
+ *   2. explicit reset (SUPERADMIN_RESET_PASSWORD): target must exist and already
+ *      be a SuperAdmin, then the password rules apply
+ *   3. existing user  -> noop / promote / refuse (no password needed)
+ *   4. password presence
+ *   5. known default or documented sample  (more specific than length)
+ *   6. whitespace-only  (satisfies any length rule while hiding nothing)
+ *   7. surrounding whitespace  (invisible at login, and padding would fake length)
+ *   8. minimum length
  *
- * Rules 5 and 6 run before the length rule on purpose: once a password has been
+ * Rules 6 and 7 run before the length rule on purpose: once a password has been
  * proven to have no surrounding whitespace, its raw and effective lengths are
  * the same, so the minimum-length rule cannot be satisfied by padding.
  */
@@ -80,7 +82,10 @@ describe('production provisioning plan (criterion #2)', () => {
   });
 
   it('accepts a password exactly at the minimum length', () => {
-    const plan = planProvisioning({ email: validEmail, password: validPassword });
+    const plan = planProvisioning({
+      email: validEmail,
+      password: validPassword,
+    });
     expect(validPassword.length).toBe(MIN_SUPERADMIN_PASSWORD_LENGTH);
     expect(plan.action).toBe('create');
   });
@@ -89,9 +94,7 @@ describe('production provisioning plan (criterion #2)', () => {
     // 'admin123' is hardcoded in backend/prisma/seed.ts and is also shorter than
     // the minimum. The known-default rule is more specific, so it wins.
     for (const password of ['admin123', 'ADMIN123', ' admin123 ']) {
-      const plan = asRefusal(
-        planProvisioning({ email: validEmail, password }),
-      );
+      const plan = asRefusal(planProvisioning({ email: validEmail, password }));
       expect(plan.code).toBe('PASSWORD_KNOWN_DEFAULT');
     }
   });
@@ -279,6 +282,93 @@ describe('production provisioning plan (criterion #2)', () => {
     expect(plan.email).toBe(validEmail);
   });
 
+  it('resets the password of an existing SuperAdmin only on explicit opt-in', () => {
+    const existingUser = {
+      id: 'user-1',
+      email: validEmail,
+      isSuperAdmin: true,
+    };
+
+    // Without the flag the command stays idempotent: a lost password is not
+    // silently replaced by re-running the normal bootstrap.
+    expect(
+      planProvisioning({
+        email: validEmail,
+        password: validPassword,
+        existingUser,
+      }).action,
+    ).toBe('noop');
+
+    const plan = planProvisioning({
+      email: '  Owner@MeperPOS.com  ',
+      password: validPassword,
+      existingUser,
+      resetPassword: true,
+    });
+
+    expect(plan.action).toBe('reset-password');
+    if (plan.action !== 'reset-password') {
+      throw new Error('unreachable');
+    }
+    expect(plan.userId).toBe(existingUser.id);
+    expect(plan.email).toBe(validEmail);
+    expect(plan.password).toBe(validPassword);
+  });
+
+  it('refuses a reset when no user exists for the email', () => {
+    const plan = asRefusal(
+      planProvisioning({
+        email: validEmail,
+        password: validPassword,
+        existingUser: null,
+        resetPassword: true,
+      }),
+    );
+
+    expect(plan.code).toBe('RESET_USER_NOT_FOUND');
+  });
+
+  it('refuses a reset on an existing non-SuperAdmin, even with SUPERADMIN_PROMOTE=true', () => {
+    const existingUser = {
+      id: 'user-2',
+      email: validEmail,
+      isSuperAdmin: false,
+    };
+
+    const plan = asRefusal(
+      planProvisioning({
+        email: validEmail,
+        password: validPassword,
+        existingUser,
+        promoteExistingUser: true,
+        resetPassword: true,
+      }),
+    );
+
+    expect(plan.code).toBe('RESET_TARGET_NOT_SUPERADMIN');
+  });
+
+  it.each([
+    ['short', 'corta', 'PASSWORD_TOO_SHORT'],
+    ['known default', 'admin123', 'PASSWORD_KNOWN_DEFAULT'],
+    ['whitespace-only', '            ', 'PASSWORD_BLANK'],
+    ['padded', '  ClaveSegura1  ', 'PASSWORD_SURROUNDING_WHITESPACE'],
+  ])(
+    'applies the create password rules to a %s reset password',
+    (_label, password, code) => {
+      const plan = asRefusal(
+        planProvisioning({
+          email: validEmail,
+          password,
+          existingUser: { id: 'user-1', email: validEmail, isSuperAdmin: true },
+          resetPassword: true,
+        }),
+      );
+
+      expect(plan.code).toBe(code);
+    },
+  );
+
   it('never returns an ambiguous action and always carries an actionable refusal', () => {
     const refusals: ProvisioningPlan[] = [
       planProvisioning({ email: undefined, password: validPassword }),
@@ -317,9 +407,17 @@ describe('production provisioning plan (criterion #2)', () => {
         existingUser: { id: 'u', email: validEmail, isSuperAdmin: false },
         promoteExistingUser: true,
       }).action,
+      planProvisioning({
+        email: validEmail,
+        password: validPassword,
+        existingUser: { id: 'u', email: validEmail, isSuperAdmin: true },
+        resetPassword: true,
+      }).action,
       planProvisioning({ email: validEmail, password: 'admin123' }).action,
     ]);
 
-    expect(actions).toEqual(new Set(['create', 'noop', 'promote', 'refuse']));
+    expect(actions).toEqual(
+      new Set(['create', 'noop', 'promote', 'reset-password', 'refuse']),
+    );
   });
 });
