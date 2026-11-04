@@ -640,6 +640,54 @@ describe('WhatsAppEventsService', () => {
       expect(admin.answer).toHaveBeenCalledWith(authorized, 'hola');
     });
 
+    it('marks the dispatch as delivered for the document command', async () => {
+      const { prisma, identity, admin, service, textSender } =
+        setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      identity.consume.mockResolvedValue(null);
+      admin.authorize.mockResolvedValue(authorized);
+      admin.answer.mockResolvedValue({
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: 'org-1',
+        delivery: 'sent',
+      });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-2', 'message.any', payload),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        admin: 'delivered',
+      });
+      // The document is the flow's own side effect, so the gate sends no text
+      // for it; reporting the outcome as a refusal is what this test forbids.
+      expect(textSender.sendText).not.toHaveBeenCalled();
+    });
+
+    it('does not report the document as delivered when the send failed', async () => {
+      const { prisma, identity, admin, service } = setup(intelligenceRow);
+      prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });
+      identity.consume.mockResolvedValue(null);
+      admin.authorize.mockResolvedValue(authorized);
+      admin.answer.mockResolvedValue({
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: 'org-1',
+        delivery: 'failed',
+      });
+
+      await expect(
+        service.handle('meper-intelligence', 'evt-2', 'message.any', payload),
+      ).resolves.toEqual({
+        status: 'recorded',
+        route: 'intelligence',
+        // The gate handed the document to the delivery flow, but no document
+        // left: the marker may not claim a delivery that did not happen.
+        admin: 'refused',
+      });
+    });
+
     it('marks the dispatch as refused for an unlinked phone', async () => {
       const { prisma, identity, admin, service } = setup(intelligenceRow);
       prisma.whatsAppProcessedEvent.create.mockResolvedValue({ id: 'p1' });

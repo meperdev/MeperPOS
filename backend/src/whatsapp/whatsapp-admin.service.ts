@@ -11,10 +11,10 @@ import { WhatsAppIdentityService } from './whatsapp-identity.service';
 import {
   WHATSAPP_MODEL_PROVIDER,
   buildModelRequest,
+  callWithDeadline,
   parseModelIntent,
   type WhatsAppModelIntent,
   type WhatsAppModelProvider,
-  type WhatsAppModelResult,
 } from './whatsapp-intelligence-model';
 import {
   WhatsAppSupervisionService,
@@ -503,6 +503,11 @@ export class WhatsAppAdminService {
    * A provider that throws is a warning with a fixed outcome and an
    * `unsupported` answer: the webhook receipt for this message is already spent,
    * so nothing may propagate and nothing is retried.
+   *
+   * The deadline is enforced here, not merely declared in the request: a
+   * provider that never settles is cut at `MODEL_TIMEOUT_MS` and answered like
+   * any other failure, because an unbounded call would hold the webhook response
+   * open while the provider decides. One call, one timer, no retry.
    */
   private async interpretWithModel(
     context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
@@ -511,10 +516,20 @@ export class WhatsAppAdminService {
     const request = buildModelRequest(command);
     if (!request) return { status: 'unsupported' };
 
-    let result: WhatsAppModelResult;
-    try {
-      result = await this.model.interpret(request);
-    } catch {
+    const outcome = await callWithDeadline(
+      () => this.model.interpret(request),
+      request.timeoutMs,
+    );
+
+    if (outcome.status === 'timed_out') {
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'model_timeout',
+      });
+      return { status: 'unsupported' };
+    }
+
+    if (outcome.status === 'failed') {
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'model_failed',
@@ -526,6 +541,7 @@ export class WhatsAppAdminService {
       return { status: 'unsupported' };
     }
 
+    const result = outcome.value;
     if (result.status !== 'intent') return { status: 'unsupported' };
 
     // The answer is validated again here, on this side of the boundary: a

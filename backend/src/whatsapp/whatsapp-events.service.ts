@@ -45,11 +45,13 @@ export type WhatsAppDispatch =
       /**
        * Present only when an inbound text message on the central channel went
        * through the administrative gate: `answered` when a read-only tool
-       * produced a figure, `refused` for every other outcome. This reports what
-       * the gate resolved, not whether a text reply reached the phone: at most
-       * one send is attempted after the receipt, with no delivery confirmation.
+       * produced a figure, `delivered` when the report document was sent,
+       * `refused` for every other outcome, including a document whose send
+       * failed or was skipped. The `answered` and `delivered` markers report
+       * what the gate resolved; no marker is a delivery confirmation for the
+       * text reply, which is attempted at most once after the receipt.
        */
-      admin?: 'answered' | 'refused';
+      admin?: 'answered' | 'delivered' | 'refused';
     };
 
 /**
@@ -279,7 +281,7 @@ export class WhatsAppEventsService {
    */
   private async answerAdministrativeQuery(
     payload: WhatsAppEventPayload,
-  ): Promise<'answered' | 'refused' | null> {
+  ): Promise<'answered' | 'delivered' | 'refused' | null> {
     const inbound = this.inboundText(payload);
     if (!inbound) return null;
 
@@ -290,7 +292,15 @@ export class WhatsAppEventsService {
         const reply = renderAdminReply(answer);
         if (reply) await this.deliverReply(context.phone, reply);
       }
-      return answer.status === 'answered' ? 'answered' : 'refused';
+      // The document command resolves as `delivered` only when a document
+      // actually left; a failed or skipped send keeps the `refused` marker it had
+      // before. Reporting what the gate resolved is not a licence to claim a
+      // delivery that did not happen.
+      if (answer.status === 'answered') return 'answered';
+      if (answer.status === 'delivered') {
+        return answer.delivery === 'sent' ? 'delivered' : 'refused';
+      }
+      return 'refused';
     } catch {
       this.logger.warn({
         event: 'whatsapp_admin',

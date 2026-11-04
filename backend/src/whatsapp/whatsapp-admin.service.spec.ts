@@ -440,6 +440,23 @@ describe('WhatsAppAdminService', () => {
       });
     });
 
+    it('refuses an opaque LID instead of reducing it to phone digits', async () => {
+      // The LID below carries exactly the digits of a VERIFIED administrator's
+      // phone. If the gate reduced it, the identifier would be compared with a
+      // stored phone and an unrelated sender would inherit that identity.
+      const { service } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+      });
+
+      await expect(service.authorize(`${PHONE}@lid`)).resolves.toEqual({
+        status: 'unlinked',
+      });
+      await expect(
+        service.answer(await service.authorize(`${PHONE}@lid`), 'resumen'),
+      ).resolves.toEqual({ status: 'refused', reason: 'unlinked' });
+    });
+
     it('refuses a deactivated user even though the phone is still linked', async () => {
       const { service, reports } = setup({
         identities: [verifiedIdentity()],

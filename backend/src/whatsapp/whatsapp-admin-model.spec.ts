@@ -7,10 +7,11 @@ import {
   renderAdminReply,
   WhatsAppAdminService,
 } from './whatsapp-admin.service';
-import type {
-  WhatsAppModelProvider,
-  WhatsAppModelRequest,
-  WhatsAppModelResult,
+import {
+  MODEL_TIMEOUT_MS,
+  type WhatsAppModelProvider,
+  type WhatsAppModelRequest,
+  type WhatsAppModelResult,
 } from './whatsapp-intelligence-model';
 
 /**
@@ -232,6 +233,48 @@ describe('administrative gate with the model seam', () => {
     expect(answer.status).toBe('unsupported');
     expect(reports.generate).not.toHaveBeenCalled();
     expect(delivery.onDemand).not.toHaveBeenCalled();
+  });
+
+  it('answers a provider that throws synchronously instead of going silent', async () => {
+    // The pre-deadline code awaited the call inside a `try`, so a provider that
+    // threw before returning a promise was a warning and the fixed sentence. The
+    // deadline must not move that call outside the boundary: silence would look
+    // to the administrator like the number is dead.
+    const interpret = jest.fn((): Promise<WhatsAppModelResult> => {
+      throw new Error('provider exploded before returning');
+    });
+    const { service, reports, delivery } = buildService(interpret);
+    const context = await service.authorize(PHONE);
+
+    const answer = await service.answer(context, 'dame los numeros');
+
+    expect(answer.status).toBe('unsupported');
+    expect(renderAdminReply(answer)).toBe(UNSUPPORTED_REPLY);
+    expect(reports.generate).not.toHaveBeenCalled();
+    expect(delivery.onDemand).not.toHaveBeenCalled();
+  });
+
+  it('cuts a provider that never answers at the declared deadline', async () => {
+    jest.useFakeTimers();
+    try {
+      // A provider that settles neither way: without a real deadline the gate
+      // would hold the webhook response open for as long as it liked.
+      const interpret = jest.fn(
+        () => new Promise<WhatsAppModelResult>(() => undefined),
+      );
+      const { service, reports, delivery } = buildService(interpret);
+      const context = await service.authorize(PHONE);
+
+      const pending = service.answer(context, 'dame los numeros');
+      await jest.advanceTimersByTimeAsync(MODEL_TIMEOUT_MS);
+
+      await expect(pending).resolves.toEqual({ status: 'unsupported' });
+      expect(interpret).toHaveBeenCalledTimes(1);
+      expect(reports.generate).not.toHaveBeenCalled();
+      expect(delivery.onDemand).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('never asks the model for a command the allowlist already answers', async () => {

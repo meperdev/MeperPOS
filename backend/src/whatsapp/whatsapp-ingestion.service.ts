@@ -75,15 +75,21 @@ export function parseContactJid(from: unknown): WhatsAppContactJid | null {
 }
 
 /**
- * Reduce a JID to the digits an existing phone-keyed column stores. Kept for the
- * callers that only need that reduction (administrative identity and delivery);
- * ingestion uses `parseContactJid` so a LID is never mistaken for a phone.
- * Groups and unknown families still yield null, exactly as before.
+ * Reduce a phone JID to the digits an existing phone-keyed column stores, and
+ * nothing else. Kept for the two callers that only accept a phone — the
+ * administrative identity and the delivery destination; ingestion uses
+ * `parseContactJid` so a LID is never mistaken for a phone.
+ *
+ * A LID yields `null` on purpose. Its digits are an opaque identifier that
+ * belongs to no telephone number, so reducing them would let whoever owns those
+ * digits inherit a verified administrator's identity, or receive that
+ * organization's document. Both callers fail closed on `null`. Groups and
+ * unknown families still yield null, exactly as before.
  */
 export function normaliseContactPhone(from: unknown): string | null {
   const parsed = parseContactJid(from);
   if (!parsed) return null;
-  if (parsed.kind !== 'phone' && parsed.kind !== 'lid') return null;
+  if (parsed.kind !== 'phone') return null;
   return parsed.digits;
 }
 

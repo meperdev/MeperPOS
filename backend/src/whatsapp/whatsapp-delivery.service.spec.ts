@@ -351,6 +351,7 @@ describe('WhatsAppDeliveryService', () => {
       expect(chatIdFor(PHONE)).toBe('573001112233@c.us');
       expect(chatIdFor('573001112233@c.us')).toBe('573001112233@c.us');
       expect(chatIdFor('120363000000000000@g.us')).toBeNull();
+      expect(chatIdFor('573001112233@lid')).toBeNull();
       expect(chatIdFor('')).toBeNull();
     });
   });
@@ -691,7 +692,14 @@ describe('WhatsAppDeliveryService', () => {
     it('is a distinct outcome when the context carries no usable phone', async () => {
       const { service, sender } = setup();
 
-      for (const phone of ['', '120363000000000000@g.us', undefined as never]) {
+      for (const phone of [
+        '',
+        '120363000000000000@g.us',
+        // An opaque LID carries digits that belong to no phone: reducing them
+        // would address the document to whoever happens to own that number.
+        '573001112233@lid',
+        undefined as never,
+      ]) {
         await expect(
           service.onDemand({ organizationId: ORGANIZATION_ID, phone }),
         ).resolves.toEqual({ status: 'no_identity' });

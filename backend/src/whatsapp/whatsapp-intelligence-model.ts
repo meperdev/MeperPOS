@@ -77,6 +77,58 @@ export const MODEL_TIMEOUT_MS = 5_000;
  */
 export const MODEL_CALLS_PER_MESSAGE = 1;
 
+/**
+ * What one bounded provider call concluded. `failed` and `timed_out` are kept
+ * apart because they are different operational facts — a broken adapter versus
+ * a slow one — while the gate answers both identically, so a sender never learns
+ * anything about the integration.
+ */
+export type WhatsAppModelCallOutcome<T> =
+  | { status: 'settled'; value: T }
+  | { status: 'failed' }
+  | { status: 'timed_out' };
+
+/**
+ * Enforce the deadline the request already declares, on this side of the
+ * boundary.
+ *
+ * `MODEL_TIMEOUT_MS` travels inside the request so a provider cannot pick its
+ * own, but a request field is a promise, not a bound: an adapter that never
+ * settles would hold the webhook response open forever. This wraps exactly one
+ * call — one interpretation per message, never a retry — and always clears its
+ * timer, so a fast answer leaves no handle behind. The losing promise is
+ * already handled here, so a provider that rejects after the deadline cannot
+ * surface as an unhandled rejection.
+ *
+ * The call is passed as a thunk, not as a promise, because a provider is
+ * untrusted code and may throw before returning a promise at all. Invoking it
+ * inside this boundary makes a synchronous throw the same `failed` outcome as a
+ * rejection: the gate must answer the administrator, never go silent.
+ */
+export function callWithDeadline<T>(
+  call: () => Promise<T>,
+  timeoutMs: number,
+): Promise<WhatsAppModelCallOutcome<T>> {
+  let settled: Promise<WhatsAppModelCallOutcome<T>>;
+  try {
+    settled = call().then(
+      (value): WhatsAppModelCallOutcome<T> => ({ status: 'settled', value }),
+      (): WhatsAppModelCallOutcome<T> => ({ status: 'failed' }),
+    );
+  } catch {
+    return Promise.resolve({ status: 'failed' });
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<WhatsAppModelCallOutcome<T>>((resolve) => {
+    timer = setTimeout(() => resolve({ status: 'timed_out' }), timeoutMs);
+  });
+
+  return Promise.race([settled, deadline]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 export const WHATSAPP_MODEL_PROVIDER = Symbol('WHATSAPP_MODEL_PROVIDER');
 
 /**
