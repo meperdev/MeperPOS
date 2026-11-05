@@ -3,9 +3,11 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { DailyReportService } from '../reports/daily-report.service';
 import type { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
+import { UnconfiguredWhatsAppModelProvider } from './whatsapp-intelligence-model';
 import type { WhatsAppSupervisionService } from './whatsapp-supervision.service';
 import {
   normaliseCommand,
+  renderAdminReply,
   WhatsAppAdminService,
   type WhatsAppAdminAnswer,
 } from './whatsapp-admin.service';
@@ -132,6 +134,12 @@ function setup(
     generate?: jest.Mock;
     onDemand?: jest.Mock;
     supervisionSummary?: jest.Mock;
+    /** Defaults to a live account; `false` models a deactivated one. */
+    userActive?: boolean;
+    /** Defaults to a live organization; `false` models a deactivated one. */
+    organizationActive?: boolean;
+    /** Organization lifecycle status; SUSPENDED blocks the channel's only write. */
+    organizationStatus?: string;
   } = {},
 ) {
   const identities = options.identities ?? [];
@@ -174,6 +182,28 @@ function setup(
       deleteMany: forbidden('organizationUser.deleteMany'),
     },
     $transaction: forbidden('$transaction'),
+    user: {
+      findFirst: jest.fn(
+        ({ where }: { where: { id: string; active?: boolean } }) =>
+          options.userActive === false || where.active !== true
+            ? null
+            : { id: where.id },
+      ),
+      update: forbidden('user.update'),
+      updateMany: forbidden('user.updateMany'),
+      delete: forbidden('user.delete'),
+    },
+    organization: {
+      findFirst: jest.fn(
+        ({ where }: { where: { id: string; active?: boolean } }) =>
+          options.organizationActive === false || where.active !== true
+            ? null
+            : { status: options.organizationStatus ?? 'ACTIVE' },
+      ),
+      update: forbidden('organization.update'),
+      updateMany: forbidden('organization.updateMany'),
+      delete: forbidden('organization.delete'),
+    },
   };
 
   const reports = {
@@ -210,6 +240,7 @@ function setup(
       reports as unknown as DailyReportService,
       delivery as unknown as WhatsAppDeliveryService,
       supervision as unknown as WhatsAppSupervisionService,
+      new UnconfiguredWhatsAppModelProvider(),
     ),
   };
 }
@@ -350,6 +381,7 @@ describe('WhatsAppAdminService', () => {
           organizationId: ORGANIZATION_ID,
           role,
           phone: PHONE,
+          deliveryAllowed: true,
         });
       }
     });
@@ -390,6 +422,7 @@ describe('WhatsAppAdminService', () => {
         organizationId: ORGANIZATION_ID,
         role: 'ADMIN',
         phone: PHONE,
+        deliveryAllowed: true,
       });
     });
 
@@ -406,6 +439,100 @@ describe('WhatsAppAdminService', () => {
         status: 'unlinked',
       });
     });
+
+    it('refuses an opaque LID instead of reducing it to phone digits', async () => {
+      // The LID below carries exactly the digits of a VERIFIED administrator's
+      // phone. If the gate reduced it, the identifier would be compared with a
+      // stored phone and an unrelated sender would inherit that identity.
+      const { service } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('ADMIN')],
+      });
+
+      await expect(service.authorize(`${PHONE}@lid`)).resolves.toEqual({
+        status: 'unlinked',
+      });
+      await expect(
+        service.answer(await service.authorize(`${PHONE}@lid`), 'resumen'),
+      ).resolves.toEqual({ status: 'refused', reason: 'unlinked' });
+    });
+
+    it('refuses a deactivated user even though the phone is still linked', async () => {
+      const { service, reports } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+        userActive: false,
+      });
+
+      await expect(service.authorize(PHONE)).resolves.toEqual({
+        status: 'forbidden',
+      });
+
+      // Switching the account off has to stop the reads, not only the login.
+      const answer = await service.answer({ status: 'forbidden' }, 'resumen');
+      expect(answer).toEqual({ status: 'refused', reason: 'forbidden' });
+      expect(reports.generate).not.toHaveBeenCalled();
+    });
+
+    it('refuses an inactive organization', async () => {
+      const { service } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+        organizationActive: false,
+      });
+
+      await expect(service.authorize(PHONE)).resolves.toEqual({
+        status: 'forbidden',
+      });
+    });
+
+    it('keeps the read tools for a suspended organization but refuses the document', async () => {
+      const { service, reports, delivery } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+        organizationStatus: 'SUSPENDED',
+      });
+
+      const context = await service.authorize(PHONE);
+      expect(context).toMatchObject({
+        status: 'authorized',
+        deliveryAllowed: false,
+      });
+
+      // The web guard allows GET/HEAD for a suspended organization, so the two
+      // read tools keep answering here as well.
+      const summary = await service.answer(context, 'resumen');
+      expect(summary.status).toBe('answered');
+      expect(reports.generate).toHaveBeenCalledTimes(1);
+
+      // The document is the channel's only write, so it is the one thing lost.
+      await expect(service.answer(context, 'pdf')).resolves.toEqual({
+        status: 'refused',
+        reason: 'forbidden',
+      });
+      expect(delivery.onDemand).not.toHaveBeenCalled();
+    });
+
+    it('delivers the document for an active organization', async () => {
+      const { service, delivery } = setup({
+        identities: [verifiedIdentity()],
+        memberships: [membership('OWNER')],
+      });
+
+      const context = await service.authorize(PHONE);
+      expect(context).toMatchObject({
+        status: 'authorized',
+        deliveryAllowed: true,
+      });
+
+      await expect(service.answer(context, 'pdf')).resolves.toEqual({
+        status: 'delivered',
+        tool: 'daily_report_pdf',
+        organizationId: ORGANIZATION_ID,
+        delivery: 'sent',
+      });
+      expect(delivery.onDemand).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('the daily summary tool', () => {
@@ -415,6 +542,7 @@ describe('WhatsAppAdminService', () => {
       organizationId: ORGANIZATION_ID,
       role: 'ADMIN' as const,
       phone: PHONE,
+      deliveryAllowed: true,
     };
 
     it('answers with aggregates and the report date only', async () => {
@@ -616,6 +744,7 @@ describe('WhatsAppAdminService', () => {
       organizationId: ORGANIZATION_ID,
       role: 'ADMIN' as const,
       phone: PHONE,
+      deliveryAllowed: true,
     };
 
     it('answers every accepted phrasing with the aggregate summary', async () => {
@@ -768,6 +897,7 @@ describe('WhatsAppAdminService', () => {
       organizationId: ORGANIZATION_ID,
       role: 'ADMIN' as const,
       phone: PHONE,
+      deliveryAllowed: true,
     };
 
     it.each([
@@ -897,6 +1027,7 @@ describe('WhatsAppAdminService', () => {
           organizationId: ORGANIZATION_ID,
           role: 'ADMIN',
           phone: PHONE,
+          deliveryAllowed: true,
         },
         'resumen',
       );
@@ -974,6 +1105,181 @@ describe('WhatsAppAdminService', () => {
       ]) {
         expect(logged).not.toContain(secret);
       }
+    });
+  });
+
+  describe('deterministic text reply', () => {
+    const summary = {
+      reportDate: '2026-03-03',
+      cutoff: '2026-03-04T01:00:00.000Z',
+      salesTotal: '1234.56',
+      expenseTotal: '200.00',
+      salesCount: 1,
+      lowStockCount: 1,
+      pendingPurchaseOrderCount: 1,
+      loansDueCount: 1,
+    };
+    const summaryAnswer: WhatsAppAdminAnswer = {
+      status: 'answered',
+      tool: 'daily_summary',
+      organizationId: ORGANIZATION_ID,
+      summary,
+    };
+
+    it('renders the daily summary as sentence-case Spanish with COP amounts', () => {
+      expect(renderAdminReply(summaryAnswer)).toBe(
+        [
+          'Resumen del día 2026-03-03',
+          'Ventas: $1.234,56 (1 venta)',
+          'Gastos: $200,00',
+          'Stock bajo: 1 producto',
+          'Compras pendientes: 1 orden',
+          'Préstamos por vencer: 1',
+        ].join('\n'),
+      );
+    });
+
+    it('pluralises counts instead of printing an invariant label', () => {
+      const reply = renderAdminReply({
+        status: 'answered',
+        tool: 'daily_summary',
+        organizationId: ORGANIZATION_ID,
+        summary: {
+          ...summary,
+          salesTotal: '0.00',
+          salesCount: 3,
+          lowStockCount: 2,
+          pendingPurchaseOrderCount: 4,
+          loansDueCount: 5,
+        },
+      });
+
+      expect(reply).toContain('Ventas: $0,00 (3 ventas)');
+      expect(reply).toContain('Stock bajo: 2 productos');
+      expect(reply).toContain('Compras pendientes: 4 órdenes');
+      expect(reply).toContain('Préstamos por vencer: 5');
+    });
+
+    it('renders the supervision summary from aggregates only', () => {
+      const reply = renderAdminReply({
+        status: 'answered',
+        tool: 'supervision_summary',
+        organizationId: ORGANIZATION_ID,
+        supervision: {
+          totalConversations: 4,
+          byState: { AUTOMATED: 2, HUMAN: 1, SUSPENDED: 1 },
+          byContactKind: { CLIENT: 2, INTERNAL: 1, UNKNOWN: 1 },
+          pendingAnswerCount: 1,
+          firstResponse: { sampleCount: 3, medianMs: 3000 },
+        },
+      });
+
+      expect(reply).toBe(
+        [
+          'Atención de las conversaciones',
+          'Total: 4',
+          'Automáticas: 2',
+          'Humanas: 1',
+          'Suspendidas: 1',
+          'Clientes: 2',
+          'Internos: 1',
+          'Desconocidos: 1',
+          'Esperando respuesta: 1',
+          'Primera respuesta (mediana): 3 s',
+        ].join('\n'),
+      );
+      for (const secret of [PHONE, 'Ana Cliente', '1020304050']) {
+        expect(reply).not.toContain(secret);
+      }
+    });
+
+    it('renders a missing median as no data and a sub-second median in ms', () => {
+      const base = {
+        status: 'answered' as const,
+        tool: 'supervision_summary' as const,
+        organizationId: ORGANIZATION_ID,
+        supervision: {
+          totalConversations: 0,
+          byState: { AUTOMATED: 0, HUMAN: 0, SUSPENDED: 0 },
+          byContactKind: { CLIENT: 0, INTERNAL: 0, UNKNOWN: 0 },
+          pendingAnswerCount: 0,
+          firstResponse: { sampleCount: 0, medianMs: null },
+        },
+      };
+
+      expect(renderAdminReply(base)).toContain(
+        'Primera respuesta (mediana): sin datos',
+      );
+      expect(
+        renderAdminReply({
+          ...base,
+          supervision: {
+            ...base.supervision,
+            firstResponse: { sampleCount: 1, medianMs: 300 },
+          },
+        }),
+      ).toContain('Primera respuesta (mediana): 300 ms');
+    });
+
+    it('answers an unsupported command with the closed command list', () => {
+      expect(renderAdminReply({ status: 'unsupported' })).toBe(
+        'No entiendo ese comando. Escribe «resumen» para las cifras del día, «atencion» para las conversaciones o «pdf» para el reporte.',
+      );
+    });
+
+    it('answers an unavailable figure with a retry and no detail', () => {
+      expect(
+        renderAdminReply({ status: 'refused', reason: 'unavailable' }),
+      ).toBe(
+        'No pude obtener la información en este momento. Intenta de nuevo en unos minutos.',
+      );
+    });
+
+    it('stays silent for a refusal that could confirm the number is registered', () => {
+      expect(
+        renderAdminReply({ status: 'refused', reason: 'unlinked' }),
+      ).toBeNull();
+      expect(
+        renderAdminReply({ status: 'refused', reason: 'forbidden' }),
+      ).toBeNull();
+    });
+
+    it('stays silent for the PDF flow, which sends its own document', () => {
+      expect(
+        renderAdminReply({
+          status: 'delivered',
+          tool: 'daily_report_pdf',
+          organizationId: ORGANIZATION_ID,
+          delivery: 'sent',
+        }),
+      ).toBeNull();
+      expect(
+        renderAdminReply({
+          status: 'delivered',
+          tool: 'daily_report_pdf',
+          organizationId: ORGANIZATION_ID,
+          delivery: 'failed',
+        }),
+      ).toBeNull();
+    });
+
+    it('refuses to render a summary it cannot reduce to plain figures', () => {
+      expect(
+        renderAdminReply({
+          status: 'answered',
+          tool: 'daily_summary',
+          organizationId: ORGANIZATION_ID,
+          summary: { ...summary, salesTotal: 'Ana Cliente' },
+        }),
+      ).toBeNull();
+      expect(
+        renderAdminReply({
+          status: 'answered',
+          tool: 'daily_summary',
+          organizationId: ORGANIZATION_ID,
+          summary: { ...summary, salesCount: Number.NaN },
+        }),
+      ).toBeNull();
     });
   });
 });

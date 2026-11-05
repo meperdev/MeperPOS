@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OrgRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -8,6 +8,14 @@ import {
 import { WhatsAppDeliveryService } from './whatsapp-delivery.service';
 import { normaliseContactPhone } from './whatsapp-ingestion.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
+import {
+  WHATSAPP_MODEL_PROVIDER,
+  buildModelRequest,
+  callWithDeadline,
+  parseModelIntent,
+  type WhatsAppModelIntent,
+  type WhatsAppModelProvider,
+} from './whatsapp-intelligence-model';
 import {
   WhatsAppSupervisionService,
   type WhatsAppSupervisionSummary,
@@ -110,6 +118,12 @@ export type WhatsAppAdminAuthorization =
        * only address an on-demand delivery can use is the phone that asked.
        */
       phone: string;
+      /**
+       * Whether this organization may receive the on-demand document. A suspended
+       * organization keeps read access in the web app and loses its writes, and
+       * the document is the only write this channel can cause.
+       */
+      deliveryAllowed: boolean;
     }
   | { status: 'unlinked' }
   | { status: 'forbidden' };
@@ -172,6 +186,145 @@ function countOf(value: unknown): number {
   return Array.isArray(value) ? value.length : 0;
 }
 
+const REPORT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A non-negative whole count, or null when the value cannot be trusted. */
+function countText(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+/**
+ * Colombian peso formatting for a decimal string: `1234.56` becomes
+ * `$1.234,56`. Deliberately pure and locale-independent so the same figure
+ * always renders the same text on every host and in every test run.
+ */
+function copText(value: string): string {
+  const negative = value.startsWith('-');
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole, fraction = ''] = unsigned.split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const cents = fraction.padEnd(2, '0').slice(0, 2);
+  return `${negative ? '-' : ''}$${grouped},${cents}`;
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** Median duration in a chat-legible unit; `null` means there is no sample. */
+function durationText(medianMs: number | null): string {
+  if (medianMs === null) return 'sin datos';
+  if (medianMs < 1000) return `${medianMs} ms`;
+  const seconds = medianMs / 1000;
+  return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1).replace('.', ',')} s`;
+}
+
+const UNSUPPORTED_REPLY =
+  'No entiendo ese comando. Escribe «resumen» para las cifras del día, «atencion» para las conversaciones o «pdf» para el reporte.';
+const UNAVAILABLE_REPLY =
+  'No pude obtener la información en este momento. Intenta de nuevo en unos minutos.';
+
+function dailySummaryReply(summary: WhatsAppDailySummary): string | null {
+  if (!summary || !REPORT_DATE_PATTERN.test(summary.reportDate ?? ''))
+    return null;
+  const salesTotal = amountText(summary.salesTotal);
+  const expenseTotal = amountText(summary.expenseTotal);
+  const salesCount = countText(summary.salesCount);
+  const lowStockCount = countText(summary.lowStockCount);
+  const pendingPurchaseOrderCount = countText(
+    summary.pendingPurchaseOrderCount,
+  );
+  const loansDueCount = countText(summary.loansDueCount);
+  if (
+    !salesTotal ||
+    !expenseTotal ||
+    salesCount === null ||
+    lowStockCount === null ||
+    pendingPurchaseOrderCount === null ||
+    loansDueCount === null
+  )
+    return null;
+
+  return [
+    `Resumen del día ${summary.reportDate}`,
+    `Ventas: ${copText(salesTotal)} (${plural(salesCount, 'venta', 'ventas')})`,
+    `Gastos: ${copText(expenseTotal)}`,
+    `Stock bajo: ${plural(lowStockCount, 'producto', 'productos')}`,
+    `Compras pendientes: ${plural(pendingPurchaseOrderCount, 'orden', 'órdenes')}`,
+    `Préstamos por vencer: ${loansDueCount}`,
+  ].join('\n');
+}
+
+function supervisionReply(
+  supervision: WhatsAppSupervisionSummary,
+): string | null {
+  if (!supervision) return null;
+  const total = countText(supervision.totalConversations);
+  const automated = countText(supervision.byState?.AUTOMATED);
+  const human = countText(supervision.byState?.HUMAN);
+  const suspended = countText(supervision.byState?.SUSPENDED);
+  const clients = countText(supervision.byContactKind?.CLIENT);
+  const internal = countText(supervision.byContactKind?.INTERNAL);
+  const unknown = countText(supervision.byContactKind?.UNKNOWN);
+  const pending = countText(supervision.pendingAnswerCount);
+  const median = supervision.firstResponse?.medianMs ?? null;
+  if (
+    total === null ||
+    automated === null ||
+    human === null ||
+    suspended === null ||
+    clients === null ||
+    internal === null ||
+    unknown === null ||
+    pending === null ||
+    (median !== null && (!Number.isFinite(median) || median < 0))
+  )
+    return null;
+
+  return [
+    'Atención de las conversaciones',
+    `Total: ${total}`,
+    `Automáticas: ${automated}`,
+    `Humanas: ${human}`,
+    `Suspendidas: ${suspended}`,
+    `Clientes: ${clients}`,
+    `Internos: ${internal}`,
+    `Desconocidos: ${unknown}`,
+    `Esperando respuesta: ${pending}`,
+    `Primera respuesta (mediana): ${durationText(median)}`,
+  ].join('\n');
+}
+
+/**
+ * Render the deterministic chat reply for one gate answer, or `null` when the
+ * answer must not produce a text message.
+ *
+ * The two silent outcomes are decisions, not omissions:
+ *  - an `unlinked` or `forbidden` refusal is never answered, because any reply
+ *    would confirm to a stranger that this number is in service and could be used
+ *    to enumerate registered phones;
+ *  - a `delivered` PDF answer is silent because the document flow already sends
+ *    its own message, and adding a text would duplicate the side effect.
+ *
+ * Only aggregates and dates are rendered. Every figure comes from the reduced
+ * shapes above, so no customer, document, supplier, product, phone or free-text
+ * description can reach the message even if the report had one.
+ */
+export function renderAdminReply(answer: WhatsAppAdminAnswer): string | null {
+  if (answer.status === 'answered') {
+    return answer.tool === 'daily_summary'
+      ? dailySummaryReply(answer.summary)
+      : supervisionReply(answer.supervision);
+  }
+  if (answer.status === 'unsupported') return UNSUPPORTED_REPLY;
+  if (answer.status === 'refused') {
+    return answer.reason === 'unavailable' ? UNAVAILABLE_REPLY : null;
+  }
+  return null;
+}
+
 /**
  * Administrative gate for the central INTELLIGENCE channel: the first stage of the
  * administrative assistant.
@@ -224,6 +377,8 @@ export class WhatsAppAdminService {
     private readonly reports: DailyReportService,
     private readonly delivery: WhatsAppDeliveryService,
     private readonly supervision: WhatsAppSupervisionService,
+    @Inject(WHATSAPP_MODEL_PROVIDER)
+    private readonly model: WhatsAppModelProvider,
   ) {}
 
   /**
@@ -257,12 +412,43 @@ export class WhatsAppAdminService {
       return { status: 'forbidden' };
     }
 
+    // Being linked and being an administrator of that organization is not enough:
+    // the account and the business have to be live. The web app refuses a
+    // deactivated user at login and blocks writes for a suspended organization, so
+    // this channel honours the same state — otherwise a phone that was never
+    // unlinked keeps reading the business' figures after the account was switched
+    // off, which is exactly the access an operator believes they revoked.
+    const actor = await this.prisma.user.findFirst({
+      where: { id: identity.userId, active: true },
+      select: { id: true },
+    });
+    if (!actor) {
+      this.logger.warn({ event: 'whatsapp_admin', outcome: 'inactive_user' });
+      return { status: 'forbidden' };
+    }
+
+    const organization = await this.prisma.organization.findFirst({
+      where: { id: identity.organizationId, active: true },
+      select: { status: true },
+    });
+    if (!organization) {
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'inactive_organization',
+      });
+      return { status: 'forbidden' };
+    }
+
     return {
       status: 'authorized',
       userId: identity.userId,
       organizationId: identity.organizationId,
       role: membership.role,
       phone: contactPhone,
+      // Read tools stay available for a suspended organization, mirroring the web
+      // guard's GET/HEAD allowance; the document, which is this channel's only
+      // write, does not.
+      deliveryAllowed: organization.status !== 'SUSPENDED',
     };
   }
 
@@ -295,9 +481,83 @@ export class WhatsAppAdminService {
     }
 
     if (!DAILY_SUMMARY_COMMANDS.has(command)) {
+      return this.interpretWithModel(context, command);
+    }
+
+    return this.dailySummaryAnswer(context);
+  }
+
+  /**
+   * The model seam, reached only for a text the deterministic allowlist did not
+   * recognise. It can narrow nothing and widen nothing: the model picks one of
+   * the closed read tools, this side validates the answer, and the tool then runs
+   * with the organization from the verified identity — never from the model.
+   *
+   * While no provider is chosen the shipped binding answers `unavailable`, and
+   * this method returns exactly the `unsupported` answer the gate gave before the
+   * seam existed: an unrecognised command is still answered with the same
+   * sentence and still reads nothing. `unavailable` deliberately does not become
+   * a refusal message here, because no administrator should be told that an
+   * integration she never configured failed.
+   *
+   * A provider that throws is a warning with a fixed outcome and an
+   * `unsupported` answer: the webhook receipt for this message is already spent,
+   * so nothing may propagate and nothing is retried.
+   *
+   * The deadline is enforced here, not merely declared in the request: a
+   * provider that never settles is cut at `MODEL_TIMEOUT_MS` and answered like
+   * any other failure, because an unbounded call would hold the webhook response
+   * open while the provider decides. One call, one timer, no retry.
+   */
+  private async interpretWithModel(
+    context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
+    command: string,
+  ): Promise<WhatsAppAdminAnswer> {
+    const request = buildModelRequest(command);
+    if (!request) return { status: 'unsupported' };
+
+    const outcome = await callWithDeadline(
+      () => this.model.interpret(request),
+      request.timeoutMs,
+    );
+
+    if (outcome.status === 'timed_out') {
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'model_timeout',
+      });
       return { status: 'unsupported' };
     }
 
+    if (outcome.status === 'failed') {
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'model_failed',
+        // A fixed marker, never `error.name`: this error comes from an untrusted
+        // provider, and a name it controls could carry the administrator's text or
+        // an arbitrary length into a log line.
+        reason: 'provider_error',
+      });
+      return { status: 'unsupported' };
+    }
+
+    const result = outcome.value;
+    if (result.status !== 'intent') return { status: 'unsupported' };
+
+    // The answer is validated again here, on this side of the boundary: a
+    // provider is untrusted output and its intent is never taken on trust.
+    const intent: WhatsAppModelIntent | null = parseModelIntent(result.intent);
+    if (!intent) return { status: 'unsupported' };
+
+    return intent.tool === 'daily_summary'
+      ? this.dailySummaryAnswer(context)
+      : this.supervisionAnswer(context);
+  }
+
+  /** The daily summary tool, shared by the allowlist and the model seam. */
+  private async dailySummaryAnswer(
+    context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
+  ): Promise<WhatsAppAdminAnswer> {
     const summary = await this.dailySummary(context.organizationId);
     if (!summary) return { status: 'refused', reason: 'unavailable' };
 
@@ -330,11 +590,10 @@ export class WhatsAppAdminService {
         organizationId: context.organizationId,
         supervision,
       };
-    } catch (error) {
+    } catch {
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'supervision_failed',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
       return { status: 'refused', reason: 'unavailable' };
     }
@@ -350,6 +609,16 @@ export class WhatsAppAdminService {
   private async sendDailyReportPdf(
     context: Extract<WhatsAppAdminAuthorization, { status: 'authorized' }>,
   ): Promise<WhatsAppAdminAnswer> {
+    if (!context.deliveryAllowed) {
+      // Silent, like every other refusal: the sender already knows who she is, but
+      // a reply would still confirm to a stranger that this number is in service.
+      this.logger.warn({
+        event: 'whatsapp_admin',
+        outcome: 'delivery_blocked',
+      });
+      return { status: 'refused', reason: 'forbidden' };
+    }
+
     try {
       const outcome = await this.delivery.onDemand({
         organizationId: context.organizationId,
@@ -366,11 +635,10 @@ export class WhatsAppAdminService {
               ? 'failed'
               : outcome.status,
       };
-    } catch (error) {
+    } catch {
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'delivery_failed',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
       return { status: 'refused', reason: 'unavailable' };
     }
@@ -390,13 +658,12 @@ export class WhatsAppAdminService {
     let report: DailyReport;
     try {
       report = await this.reports.generate(organizationId);
-    } catch (error) {
+    } catch {
       // A report failure is a refusal, not a webhook error: the provider must
       // not be invited to redeliver a message whose receipt is already spent.
       this.logger.warn({
         event: 'whatsapp_admin',
         outcome: 'report_failed',
-        reason: error instanceof Error ? error.name : 'unknown',
       });
       return null;
     }

@@ -257,11 +257,15 @@ describe('WhatsAppIngestionService', () => {
       });
     });
 
+    // The digits are the conversation key, not a claim that the sender has a
+    // phone: for an opaque `@lid` they are an identifier and the raw JID is what
+    // proves the contact family. `normaliseContactPhone`, which the gate and the
+    // delivery destination use, rejects a LID outright.
     it.each([
       ['+57 300 111 2233@s.whatsapp.net', '573001112233'],
       ['573001112233@lid', '573001112233'],
       ['573001112233', '573001112233'],
-    ])('normalises %s to digits only', async (from, expected) => {
+    ])('keys the conversation on the digits of %s', async (from, expected) => {
       const { ingest, conversationCreated } = setup();
 
       await ingest(event({ from }));

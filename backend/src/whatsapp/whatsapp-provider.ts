@@ -1,11 +1,25 @@
 export const WHATSAPP_PROVIDER = Symbol('WHATSAPP_PROVIDER');
 
+export const WHATSAPP_LID_RESOLVER = Symbol('WHATSAPP_LID_RESOLVER');
+
+/** Resolve a provider-scoped opaque identifier to a validated phone, or throw. */
+export interface WhatsAppLidResolver {
+  resolveLid(session: string, lid: string): Promise<string>;
+}
+
 /**
  * Outbound document delivery. Kept as its own port instead of growing the
  * session-lifecycle port above: every existing lifecycle double stays valid,
  * and a caller that only drives sessions cannot accidentally send a document.
  */
 export const WHATSAPP_FILE_SENDER = Symbol('WHATSAPP_FILE_SENDER');
+
+/**
+ * Outbound plain-text delivery. A separate port from the document one because
+ * the administrative reply answers a chat message and never builds a file: the
+ * PDF flow stays its own path, and a text double cannot send a document.
+ */
+export const WHATSAPP_TEXT_SENDER = Symbol('WHATSAPP_TEXT_SENDER');
 
 /**
  * Provider session statuses. Mirrors WAHA's documented set, including the
@@ -73,5 +87,26 @@ export interface WhatsAppFileSender {
   sendFile(
     session: string,
     file: WhatsAppFileMessage,
+  ): Promise<{ providerMessageId: string | null }>;
+}
+
+/** One chat message. `chatId` is the provider's identifier of the recipient. */
+export interface WhatsAppTextMessage {
+  chatId: string;
+  text: string;
+}
+
+export interface WhatsAppTextSender {
+  /**
+   * Send one plain-text message into an existing chat. The call is the delivery
+   * boundary: when it resolves, the message was accepted by the provider, not
+   * confirmed as read. A 2xx without a readable body is reported without a
+   * message id rather than turned into a failure the caller would retry, so a
+   * caller must treat delivery as at most once and must never claim exactly-once
+   * semantics.
+   */
+  sendText(
+    session: string,
+    message: WhatsAppTextMessage,
   ): Promise<{ providerMessageId: string | null }>;
 }

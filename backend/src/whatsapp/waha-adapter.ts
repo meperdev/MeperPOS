@@ -3,8 +3,11 @@ import {
   isWhatsAppSessionStatus,
   type WhatsAppFileMessage,
   type WhatsAppFileSender,
+  type WhatsAppLidResolver,
   type WhatsAppProvider,
   type WhatsAppSessionStatus,
+  type WhatsAppTextMessage,
+  type WhatsAppTextSender,
 } from './whatsapp-provider';
 
 export interface WahaConfig {
@@ -45,7 +48,13 @@ const CALL_TIMEOUT_MS = 5_000;
 const QR_TIMEOUT_MS = 20_000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
-export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
+export class WahaAdapter
+  implements
+    WhatsAppProvider,
+    WhatsAppFileSender,
+    WhatsAppTextSender,
+    WhatsAppLidResolver
+{
   private readonly logger = new Logger(WahaAdapter.name);
 
   constructor(private readonly config: WahaConfig) {}
@@ -145,6 +154,36 @@ export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
       return JSON.parse(text);
     } catch {
       throw new InvalidResponse();
+    }
+  }
+
+  async resolveLid(session: string, lid: string): Promise<string> {
+    if (!SESSION_NAME.test(session)) throw this.failure('invalid_session');
+    if (!/^[0-9]{1,20}@lid$(?![\s\S])/.test(lid))
+      throw this.failure('invalid_response');
+    const response = await this.call(
+      `/api/${session}/lids/${encodeURIComponent(lid)}`,
+    );
+    if (!response.ok) {
+      this.discard(response);
+      throw this.failure('provider_rejected');
+    }
+    try {
+      const parsed = await this.readJson(response, ME_LIMIT);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error();
+      const mapping = parsed as { lid?: unknown; pn?: unknown };
+      if (mapping.lid !== lid || typeof mapping.pn !== 'string')
+        throw new Error();
+      const phone = /^([1-9][0-9]{7,14})@c\.us$(?![\s\S])/.exec(mapping.pn);
+      if (!phone) throw new Error();
+      return phone[1];
+    } catch (error) {
+      throw this.failure(
+        error instanceof ResponseTooLarge
+          ? 'response_too_large'
+          : 'invalid_response',
+      );
     }
   }
 
@@ -281,36 +320,20 @@ export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
   }
 
   /**
-   * Deliver one document into an existing chat.
-   *
-   * WAHA documents `POST /api/sendFile` with the session named in the body and
-   * the payload as `{ session, chatId, file: { mimetype, filename, data } }`,
-   * where `data` is raw base64 without a `data:` prefix. Those four field names,
-   * the instance-level path (not `/api/{session}/...`) and reading the message id
-   * from the `id` property are the parts most likely to differ in the installed
-   * WAHA version; a mismatch surfaces as `503 WhatsApp provider unavailable`
-   * instead of a silent drop.
+   * Deliver one message into an existing chat and read its provider id.
    *
    * A non-2xx response is `provider_rejected` and its body is discarded unread,
-   * so no provider text, URL, session name or credential can reach a caller or a
-   * log line. A 2xx whose body cannot be read is still a delivered document: the
-   * message id is reported as absent rather than turned into a failure the
-   * caller would retry.
+   * so no provider text, URL, session name, chat id or message body can reach a
+   * caller or a log line. A 2xx whose body cannot be read is still a message that
+   * left: the id is reported as absent instead of becoming a failure the caller
+   * would retry. That is the honest bound — the request was sent at most once,
+   * and its delivery is not confirmed.
    */
-  async sendFile(
-    session: string,
-    file: WhatsAppFileMessage,
+  private async sendMessage(
+    path: string,
+    body: unknown,
   ): Promise<{ providerMessageId: string | null }> {
-    if (!SESSION_NAME.test(session)) throw this.failure('invalid_session');
-    const response = await this.call('/api/sendFile', 'POST', {
-      session,
-      chatId: file.chatId,
-      file: {
-        mimetype: file.mimetype,
-        filename: file.filename,
-        data: file.base64,
-      },
-    });
+    const response = await this.call(path, 'POST', body);
     if (!response.ok) {
       this.discard(response);
       throw this.failure('provider_rejected');
@@ -322,5 +345,52 @@ export class WahaAdapter implements WhatsAppProvider, WhatsAppFileSender {
     } catch {
       return { providerMessageId: null };
     }
+  }
+
+  /**
+   * Deliver one document into an existing chat.
+   *
+   * WAHA documents `POST /api/sendFile` with the session named in the body and
+   * the payload as `{ session, chatId, file: { mimetype, filename, data } }`,
+   * where `data` is raw base64 without a `data:` prefix. Those four field names,
+   * the instance-level path (not `/api/{session}/...`) and reading the message id
+   * from the `id` property are the parts most likely to differ in the installed
+   * WAHA version; a mismatch surfaces as `503 WhatsApp provider unavailable`
+   * instead of a silent drop.
+   */
+  async sendFile(
+    session: string,
+    file: WhatsAppFileMessage,
+  ): Promise<{ providerMessageId: string | null }> {
+    if (!SESSION_NAME.test(session)) throw this.failure('invalid_session');
+    return this.sendMessage('/api/sendFile', {
+      session,
+      chatId: file.chatId,
+      file: {
+        mimetype: file.mimetype,
+        filename: file.filename,
+        data: file.base64,
+      },
+    });
+  }
+
+  /**
+   * Deliver one plain-text message, used only by the administrative reply.
+   *
+   * WAHA documents `POST /api/sendText` with `{ session, chatId, text }`, the
+   * session in the body and the instance-level path. The same ambiguity applies
+   * as for documents: a 2xx we cannot parse means the message left and its id is
+   * unknown, so this never retries and never reports more than one attempt.
+   */
+  async sendText(
+    session: string,
+    message: WhatsAppTextMessage,
+  ): Promise<{ providerMessageId: string | null }> {
+    if (!SESSION_NAME.test(session)) throw this.failure('invalid_session');
+    return this.sendMessage('/api/sendText', {
+      session,
+      chatId: message.chatId,
+      text: message.text,
+    });
   }
 }

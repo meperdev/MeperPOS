@@ -305,4 +305,77 @@ describe('WahaAdapter', () => {
       }),
     );
   });
+
+  describe('sendText', () => {
+    const message = { chatId: '573001112233@c.us', text: 'Resumen del día' };
+
+    it('posts the text to the instance endpoint with the session in the body', async () => {
+      global.fetch = jest.fn().mockResolvedValue(
+        new Response(JSON.stringify({ id: 'wamid-text-1', body: 'ignored' }), {
+          status: 200,
+        }),
+      );
+
+      await expect(
+        new WahaAdapter(config).sendText('meper-intelligence', message),
+      ).resolves.toEqual({ providerMessageId: 'wamid-text-1' });
+
+      const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [
+        string,
+        RequestInit,
+      ];
+      expect(url).toBe('http://waha:3000/api/sendText');
+      expect(init.method).toBe('POST');
+      expect(init.headers).toMatchObject({
+        'X-Api-Key': 'private-api-key',
+        'Content-Type': 'application/json',
+      });
+      expect(JSON.parse(init.body as string)).toEqual({
+        session: 'meper-intelligence',
+        chatId: '573001112233@c.us',
+        text: 'Resumen del día',
+      });
+      expect(url).not.toContain('meper-intelligence');
+    });
+
+    it.each([
+      ['an empty object', new Response(JSON.stringify({}), { status: 200 })],
+      ['a non-JSON body', new Response('<html>sent</html>', { status: 200 })],
+    ])(
+      'reports a sent text without a message id for %s',
+      async (_label, response) => {
+        global.fetch = jest.fn().mockResolvedValue(response);
+
+        await expect(
+          new WahaAdapter(config).sendText('meper-intelligence', message),
+        ).resolves.toEqual({ providerMessageId: null });
+      },
+    );
+
+    it('rejects a non-2xx send and logs only a fixed reason', async () => {
+      const log = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        global.fetch = jest.fn().mockResolvedValue(
+          new Response('private-api-key private-chat-id secret-body', {
+            status: 500,
+          }),
+        );
+
+        await expect(
+          new WahaAdapter(config).sendText('meper-intelligence', message),
+        ).rejects.toThrow('WhatsApp provider unavailable');
+        expect(log).toHaveBeenCalledWith({
+          event: 'waha_provider_failure',
+          reason: 'provider_rejected',
+        });
+        expect(JSON.stringify(log.mock.calls)).not.toMatch(
+          /private-api-key|private-chat-id|secret-body|meper-intelligence|573001112233|Resumen/,
+        );
+      } finally {
+        log.mockRestore();
+      }
+    });
+  });
 });

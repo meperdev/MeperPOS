@@ -146,6 +146,8 @@ describe('WahaAdapter lifecycle', () => {
         () => adapter.me(name),
         () => adapter.ensureStarted(name, 'private-webhook-key'),
         () => adapter.sendFile(name, reportFile),
+        () =>
+          adapter.sendText(name, { chatId: '573001112233@c.us', text: 'x' }),
       ];
       // The write methods reject synchronously, the read methods return a
       // rejected promise; both must fail before any request is attempted.
