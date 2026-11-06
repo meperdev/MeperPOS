@@ -303,6 +303,11 @@ async function ensureOrganization(
     }
   }
 
+  const existingDefault = await tx.cashRegister.findFirst({
+    where: { organizationId, isDefault: true },
+    select: { id: true },
+  });
+
   for (const name of plan.organization.cashRegisters) {
     const found = await tx.cashRegister.findFirst({
       where: { organizationId, name },
@@ -313,7 +318,8 @@ async function ensureOrganization(
         data: {
           organizationId,
           name,
-          isDefault: name === plan.organization.cashRegisters[0],
+          isDefault:
+            name === plan.organization.cashRegisters[0] && !existingDefault,
         },
       });
     }

@@ -256,4 +256,74 @@ describe('sandbox seed plan', () => {
       ),
     ).toBe(true);
   });
+
+  it('pins the exact dataset contract', () => {
+    const plan = buildPlan();
+
+    expect(plan.organization).toMatchObject({
+      plan: 'PRO',
+      status: 'ACTIVE',
+      billingStatus: 'PAID',
+    });
+    expect(
+      plan.organization.sequences.map((sequence) => sequence.type).sort(),
+    ).toEqual(['PO', 'SALE']);
+    expect(plan.organization.cashRegisters).toHaveLength(2);
+
+    expect(
+      plan.products.filter((product) => product.type === 'PRODUCT'),
+    ).toHaveLength(24);
+    expect(
+      plan.products.filter((product) => product.type === 'SERVICE'),
+    ).toHaveLength(2);
+    expect(plan.sales).toHaveLength(181);
+    expect(
+      new Set(plan.sales.map((sale) => sale.createdAt.slice(0, 10))).size,
+    ).toBe(75);
+
+    expect(plan.employees).toHaveLength(6);
+    expect(plan.employees.filter((employee) => !employee.active)).toHaveLength(
+      1,
+    );
+    expect(
+      plan.employees.reduce((sum, employee) => sum + employee.shifts.length, 0),
+    ).toBe(45);
+
+    expect(
+      plan.expenses.filter((expense) => expense.supplierKey !== null),
+    ).toHaveLength(1);
+    expect(
+      plan.expenses.filter((expense) => expense.purchaseOrderKey !== null),
+    ).toHaveLength(1);
+  });
+
+  it('stores loan event results that match the running balance', () => {
+    const plan = buildPlan();
+    const money = (cents: number): string =>
+      `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+
+    for (const loan of plan.moneyLoans) {
+      const totalCents = Math.round(loan.amount * 100);
+      let collectedCents = 0;
+
+      for (const event of loan.events) {
+        if (event.type !== 'COLLECTED') continue;
+        collectedCents += Math.round((event.amount ?? 0) * 100);
+        const result = event.result as {
+          collected: string;
+          balance: string;
+        };
+        expect(result.collected).toBe(money(collectedCents));
+        expect(result.balance).toBe(money(totalCents - collectedCents));
+      }
+    }
+  });
+
+  it('covers every task status', () => {
+    const plan = buildPlan();
+
+    expect(new Set(plan.tasks.map((task) => task.status))).toEqual(
+      new Set(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
+    );
+  });
 });
