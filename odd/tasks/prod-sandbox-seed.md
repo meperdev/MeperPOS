@@ -19,7 +19,7 @@ S5. Organization. Creates the sandbox organization with `plan = PRO`, `status = 
 
 S6. Users and roles. Owner, admin, cashier, inventory user and member, all created with the `SEED_DEMO_PASSWORD` hash. The owner email is `SEED_OWNER_EMAIL` when provided, otherwise `owner@<slug>.demo`. Staff emails use `@<slug>.demo`. An existing user with the same email is reused and only its missing membership is added.
 
-S7. Catalog. Six categories and twenty-six products (twenty-five stocked products plus two services) with deterministic names, SKUs, barcodes, costs, prices, stock, minimum stock, tax treatment and two promotions. SKUs and barcodes are unique. At least two products are at or below minimum stock. No existing product row is modified.
+S7. Catalog. Six categories and twenty-six products (twenty-four stocked products plus two services) with deterministic names, SKUs, barcodes, costs, prices, stock, minimum stock, tax treatment and two promotions. SKUs and barcodes are unique. At least two products are at or below minimum stock. No existing product row is modified.
 
 S8. Counterparties. Ten customers with unique document numbers and all four segments, and four suppliers with unique document numbers and bank data.
 
@@ -45,11 +45,11 @@ S17. Verification. The pure plan has RED-first Jest tests for every invariant th
 
 | ID | Spec | Route | Status |
 | --- | --- | --- | --- |
-| T1 | S1, S2, S3, S17 | inline | done (`86dadc8`, `e9ed94c`) |
+| T1 | S1, S2, S3, S17 | inline | done (`86dadc8`, `e9ed94c`, `374d7a2`) |
 | T2 | S5, S6, S7, S8 | inline | done (`e9ed94c`) |
 | T3 | S9, S10, S11 | inline | done (`e9ed94c`) |
 | T4 | S12, S13, S14, S15 | inline | done (`e9ed94c`) |
-| T5 | S16 | inline | done (`e9ed94c`) |
+| T5 | S16 | inline | done (`e9ed94c`, `374d7a2`) |
 | T6 | docs + scripts | inline | done (`b1d048e`) |
 
 ## Log
@@ -65,4 +65,7 @@ L4. Scratch-database verification. A throwaway `sandbox_seed_verify` database wa
 L5. Verification evidence. Focused plan suite: 14 passed. Full backend suite: 200 suites passed, 2 skipped, 4242 tests passed, 17 skipped. One first run showed a `reports.golden` failure that passed in isolation and on the next full run; it is a pre-existing parallel-database flake, not caused by this change. `npx eslint` on the three touched files is clean. `npx tsc -p tsconfig.json --noEmit` reports only pre-existing spec errors, none in the new files.
 
 L6. Guard verification. `NODE_ENV=production` without `SEED_ALLOW_NON_DEV` refuses before touching the database; with the flag but without `SEED_SANDBOX_SLUG` it refuses; `--apply` without a 12+ character password refuses. The `deployment-runbook.content.spec.ts` contract forbids naming a `npm run seed*` command as a production path, so the scripts are `sandbox:seed` and `sandbox:seed:prod`; the guard test was left untouched rather than weakened.
+
+L7. Independent verification (`gentle-ai-verify`): PASS, no change-caused blocker. Its probes ran in a scratch copy and confirmed the focused suite 14/14, eslint clean, the tsc filter empty, all four guard refusals, the dry run writing zero rows, and 10 negative plan mutations rejected. Advisories accepted: the S7 arithmetic was corrected (twenty-four stocked plus two services), and the cash-register default is now only set when the organization has no default yet. The verifier's durable probes were materialized as `src/seeding/seed-sandbox.guards.spec.ts` and three contract tests in `sandbox-seed.plan.spec.ts`; the full suite then passed 201 suites / 4249 tests.
+
 
