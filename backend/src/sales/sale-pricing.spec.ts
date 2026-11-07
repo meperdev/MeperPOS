@@ -1,11 +1,18 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Category, Prisma, Product, PromotionType } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateSaleDto, SaleItemDto } from './dto/sales.dto';
 import { SalesService } from './sales.service';
 import {
   buildSaleQuote,
+  reconcileLineTaxes,
   resolveSaleItemPricing,
+  saleLinesReconcile,
+  saleMoneyReconciles,
   toPersistedLineTax,
 } from './sale-pricing';
 
@@ -144,6 +151,7 @@ describe('buildSaleQuote value ownership', () => {
           resolvedUnitPrice: 80,
           discountAmount: 10,
           taxRate: 19,
+          taxCode: 'IVA',
           costPriceSnapshot: new Prisma.Decimal(40),
         },
         {
@@ -152,6 +160,7 @@ describe('buildSaleQuote value ownership', () => {
           resolvedUnitPrice: 0,
           discountAmount: 0.125,
           taxRate: 19,
+          taxCode: 'IVA',
           costPriceSnapshot: new Prisma.Decimal(40),
         },
       ],
@@ -165,6 +174,7 @@ describe('buildSaleQuote value ownership', () => {
         'productId',
         'quantity',
         'resolvedUnitPrice',
+        'taxCode',
         'taxRate',
       ]);
     }
@@ -216,6 +226,7 @@ describe('buildSaleQuote value ownership', () => {
           resolvedUnitPrice: 80,
           discountAmount: 0,
           taxRate: 19,
+          taxCode: 'IVA',
           costPriceSnapshot: new Prisma.Decimal(40),
         },
       ],
@@ -245,6 +256,7 @@ describe('buildSaleQuote value ownership', () => {
         resolvedUnitPrice: 80,
         discountAmount: 10,
         taxRate: 19,
+        taxCode: 'IVA',
         costPriceSnapshot: resolved.costPriceSnapshot,
       }),
     );
@@ -254,9 +266,32 @@ describe('buildSaleQuote value ownership', () => {
       'productId',
       'quantity',
       'resolvedUnitPrice',
+      'taxCode',
       'taxRate',
     ]);
     expect(Object.isFrozen(quote.items[0])).toBe(true);
+  });
+
+  // The code and the rate travel together, including the absence of both: an
+  // untaxed line must not inherit an invented IVA code the quote cannot justify.
+  it('keeps a null tax code for an untaxed line', () => {
+    const product = productFixture({
+      taxable: false,
+      category: {
+        taxable: false,
+        defaultTaxRate: null,
+        defaultTaxCode: null,
+      },
+    });
+    const resolved = resolveSaleItemPricing(
+      product,
+      { quantity: 1, discountAmount: 0 },
+      false,
+    ).pricedItem;
+    const quote = buildSaleQuote([resolved], 100);
+    expect(quote.items[0]).toEqual(
+      expect.objectContaining({ taxRate: 0, taxCode: null }),
+    );
   });
 });
 
@@ -435,5 +470,294 @@ describe('toPersistedLineTax (T4b persisted invariant)', () => {
 
   it('throws rather than persisting a taxed line without a code', () => {
     expect(() => toPersistedLineTax(null, 19)).toThrow(/tax code/);
+  });
+
+  // This helper is shared with the cash sale path, whose money is derived from
+  // JS floats. Its rounding is part of that behaviour and must not change: the
+  // float product of 0.40499999999999997 is exactly 40.5, so the historical
+  // answer is 0.41, and an exact decimal half cent still under-rounds because
+  // 1.005 * 100 is 100.49999999999999. Financed cents are computed from
+  // `Decimal` by `reconcileLineTaxes` instead of being re-rounded here.
+  it('keeps the established rounding of a float-derived half cent', () => {
+    expect(toPersistedLineTax('IVA', 0.40499999999999997)).toEqual({
+      taxCode: 'IVA',
+      taxAmount: 0.41,
+    });
+  });
+
+  it('keeps the established rounding of an exact decimal half cent', () => {
+    expect(toPersistedLineTax('IVA', 1.005)).toEqual({
+      taxCode: 'IVA',
+      taxAmount: 1,
+    });
+  });
+});
+
+describe('reconcileLineTaxes (financed sales: fixed payable, consistent lines)', () => {
+  const sum = (lines: ReturnType<typeof reconcileLineTaxes>) =>
+    lines
+      .reduce(
+        (total, line) => total.plus(line.taxAmount ?? 0),
+        new Prisma.Decimal(0),
+      )
+      .toFixed(2);
+
+  it('leaves every line on its own cent when the roundings already add up', () => {
+    const lines = reconcileLineTaxes(
+      [{ taxCode: 'IVA', taxAmount: new Prisma.Decimal('28.50') }],
+      new Prisma.Decimal('28.50'),
+    );
+    expect(lines).toEqual([{ taxCode: 'IVA', taxAmount: 28.5 }]);
+  });
+
+  // Three lines of 33.33 at 19%: exact tax 18.9981, agreed tax 19.00, and each
+  // line rounds to 6.33. The cent that per-line rounding loses is the only thing
+  // standing between a valid financed sale and a 409.
+  it('allocates the cent per-line rounding loses, keeping the invoice tax exact', () => {
+    const exact = new Prisma.Decimal('6.3327');
+    const lines = reconcileLineTaxes(
+      [
+        { taxCode: 'IVA', taxAmount: exact },
+        { taxCode: 'IVA', taxAmount: exact },
+        { taxCode: 'IVA', taxAmount: exact },
+      ],
+      new Prisma.Decimal('19.00'),
+    );
+    expect(lines).toEqual([
+      { taxCode: 'IVA', taxAmount: 6.34 },
+      { taxCode: 'IVA', taxAmount: 6.33 },
+      { taxCode: 'IVA', taxAmount: 6.33 },
+    ]);
+    expect(sum(lines)).toBe('19.00');
+  });
+
+  it('never gives a cent to a line that carries no tax code', () => {
+    const lines = reconcileLineTaxes(
+      [
+        { taxCode: 'IVA', taxAmount: new Prisma.Decimal('6.3327') },
+        { taxCode: null, taxAmount: new Prisma.Decimal(0) },
+      ],
+      new Prisma.Decimal('6.33'),
+    );
+    expect(lines).toEqual([
+      { taxCode: 'IVA', taxAmount: 6.33 },
+      { taxCode: null, taxAmount: null },
+    ]);
+  });
+
+  // Two lines of 0.03 at 19%: exact tax 0.0114, agreed tax 0.01, and each line
+  // rounds to 0.01. The sale still pays 0.01, so one line takes the cent and the
+  // other honestly carries none.
+  // A taxed line whose exact tax rounds to zero cannot keep its code, and the
+  // DIAN semantics of a zero-amount line with a positive rate are unproven
+  // (L72), so the sale fails closed instead of relabelling the line as untaxed.
+  it('fails closed when a taxed line would keep a rate but lose its code', () => {
+    expect(() =>
+      reconcileLineTaxes(
+        [
+          { taxCode: 'IVA', taxAmount: new Prisma.Decimal('0.0057') },
+          { taxCode: 'IVA', taxAmount: new Prisma.Decimal('0.0057') },
+        ],
+        new Prisma.Decimal('0.01'),
+      ),
+    ).toThrow(ConflictException);
+  });
+
+  it('refuses to place a fractional cent on a line that has no code', () => {
+    expect(() =>
+      reconcileLineTaxes(
+        [{ taxCode: null, taxAmount: new Prisma.Decimal('0.0057') }],
+        new Prisma.Decimal('0.01'),
+      ),
+    ).toThrow(ConflictException);
+  });
+
+  it('fails closed when the coded lines cannot carry the invoice tax', () => {
+    expect(() =>
+      reconcileLineTaxes(
+        [
+          { taxCode: 'IVA', taxAmount: new Prisma.Decimal('0.01') },
+          { taxCode: null, taxAmount: new Prisma.Decimal(0) },
+        ],
+        new Prisma.Decimal('0.05'),
+      ),
+    ).toThrow(ConflictException);
+  });
+
+  it('fails closed on an empty line list', () => {
+    expect(() => reconcileLineTaxes([], new Prisma.Decimal('0.01'))).toThrow(
+      ConflictException,
+    );
+  });
+
+  it.each(['0.005', '-0.01'])(
+    'fails closed on the invoice tax %s',
+    (invoiceTax) => {
+      expect(() =>
+        reconcileLineTaxes(
+          [{ taxCode: 'IVA', taxAmount: new Prisma.Decimal('0.01') }],
+          new Prisma.Decimal(invoiceTax),
+        ),
+      ).toThrow(ConflictException);
+    },
+  );
+
+  it('fails closed when the invoice tax is not a decimal value', () => {
+    expect(() =>
+      reconcileLineTaxes(
+        [{ taxCode: 'IVA', taxAmount: new Prisma.Decimal('0.01') }],
+        'not money' as unknown as Prisma.Decimal,
+      ),
+    ).toThrow(ConflictException);
+  });
+
+  it('is deterministic: the same quote always allocates the same cents', () => {
+    const exact = new Prisma.Decimal('1.005');
+    const input = [
+      { taxCode: 'IVA' as const, taxAmount: exact },
+      { taxCode: 'INC' as const, taxAmount: exact },
+    ];
+    const first = reconcileLineTaxes(input, new Prisma.Decimal('2.01'));
+    const second = reconcileLineTaxes(input, new Prisma.Decimal('2.01'));
+    expect(first).toEqual(second);
+    expect(first).toEqual([
+      { taxCode: 'IVA', taxAmount: 1.01 },
+      { taxCode: 'INC', taxAmount: 1 },
+    ]);
+    expect(sum(first)).toBe('2.01');
+  });
+});
+
+describe('saleMoneyReconciles (invoice identity to the cent)', () => {
+  it('accepts money whose parts add up to the payable', () => {
+    expect(
+      saleMoneyReconciles({
+        lineExtensionAmount: 100,
+        taxAmount: 19,
+        discountAmount: 0,
+        payableAmount: 119,
+      }),
+    ).toBe(true);
+    // Decimal and string inputs are the same money as the numbers.
+    expect(
+      saleMoneyReconciles({
+        lineExtensionAmount: new Prisma.Decimal('2826.30'),
+        taxAmount: new Prisma.Decimal('141.31'),
+        discountAmount: new Prisma.Decimal('1569.23'),
+        payableAmount: new Prisma.Decimal('1398.38'),
+      }),
+    ).toBe(true);
+  });
+
+  // A sale-wide discount with a fraction of a cent is stored as 0.01 while the
+  // payable keeps its own rounding: the document would contradict itself.
+  it('rejects a fractional-cent discount that breaks the identity', () => {
+    expect(
+      saleMoneyReconciles({
+        lineExtensionAmount: 10,
+        taxAmount: 0,
+        discountAmount: 0.005,
+        payableAmount: 10,
+      }),
+    ).toBe(false);
+    expect(
+      saleMoneyReconciles({
+        lineExtensionAmount: 100,
+        taxAmount: 19,
+        discountAmount: 0.005,
+        payableAmount: 119,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts the same discount once it lands on a whole cent', () => {
+    expect(
+      saleMoneyReconciles({
+        lineExtensionAmount: 10,
+        taxAmount: 0,
+        discountAmount: 0.01,
+        payableAmount: 9.99,
+      }),
+    ).toBe(true);
+  });
+
+  it('fails closed on an unreadable amount instead of answering safe', () => {
+    expect(
+      saleMoneyReconciles({
+        lineExtensionAmount: 10,
+        taxAmount: 0,
+        discountAmount: 0,
+        payableAmount: 'not money' as unknown as Prisma.Decimal,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('saleLinesReconcile (invoice money equals its own lines)', () => {
+  const facts = {
+    lineExtensionAmount: 200,
+    taxAmount: 38,
+    discountAmount: 0,
+    payableAmount: 238,
+  };
+
+  it('accepts lines whose persisted cents add up to the invoice facts', () => {
+    expect(
+      saleLinesReconcile(
+        [
+          { subtotal: 100, taxAmount: 19 },
+          { subtotal: 100, taxAmount: 19 },
+        ],
+        facts,
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts an untaxed line without a tax fact', () => {
+    expect(
+      saleLinesReconcile(
+        [
+          { subtotal: 200, taxAmount: 38 },
+          { subtotal: 0, taxAmount: null },
+        ],
+        facts,
+      ),
+    ).toBe(true);
+  });
+
+  // Two lines of 99.995 are stored as 100.00 each while a header subtotal of
+  // 199.99 keeps its own rounding: the totals can satisfy their own identity
+  // and still describe lines that do not add up to them.
+  it('rejects lines whose own rounding disagrees with the header', () => {
+    expect(
+      saleLinesReconcile(
+        [
+          { subtotal: 99.995, taxAmount: 0 },
+          { subtotal: 99.995, taxAmount: 0 },
+        ],
+        {
+          lineExtensionAmount: 199.99,
+          taxAmount: 0,
+          discountAmount: 0,
+          payableAmount: 199.99,
+        },
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects a line tax that disagrees with the invoice tax', () => {
+    expect(saleLinesReconcile([{ subtotal: 200, taxAmount: 19 }], facts)).toBe(
+      false,
+    );
+  });
+
+  it('fails closed on an empty or unreadable line set', () => {
+    expect(saleLinesReconcile([], facts)).toBe(false);
+    expect(
+      saleLinesReconcile(
+        [{ subtotal: 'not money' as unknown as Prisma.Decimal, taxAmount: 0 }],
+        facts,
+      ),
+    ).toBe(false);
   });
 });
