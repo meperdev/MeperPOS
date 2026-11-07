@@ -17,6 +17,7 @@ describe('AdminController', () => {
     updateMemberRole: jest.fn(),
     removeOrganizationMember: jest.fn(),
     deleteOrganization: jest.fn(),
+    updateElectronicInvoicing: jest.fn(),
   };
 
   const createContext = (
@@ -54,6 +55,42 @@ describe('AdminController', () => {
     expect(
       guard.canActivate(
         createContext(controller.getMetrics, 'SUPER_ADMIN', true),
+      ),
+    ).toBe(true);
+  });
+
+  it('denies non-super-admin access to the electronic invoicing switch', () => {
+    const controller = new AdminController(adminServiceMock as never);
+    const guard = new RolesGuard(new Reflector());
+
+    // Every persisted role, including OWNER, is refused: activation is not an
+    // organization privilege (spec S9).
+    for (const role of [
+      'OWNER',
+      'ADMIN',
+      'MEMBER',
+      'CASHIER',
+      'INVENTORY_USER',
+    ]) {
+      expect(() =>
+        guard.canActivate(
+          createContext(controller.updateElectronicInvoicing, role),
+        ),
+      ).toThrow(ForbiddenException);
+    }
+  });
+
+  it('allows SuperAdmin access to the electronic invoicing switch', () => {
+    const controller = new AdminController(adminServiceMock as never);
+    const guard = new RolesGuard(new Reflector());
+
+    expect(
+      guard.canActivate(
+        createContext(
+          controller.updateElectronicInvoicing,
+          'SUPER_ADMIN',
+          true,
+        ),
       ),
     ).toBe(true);
   });
@@ -215,6 +252,25 @@ describe('AdminController', () => {
       controller.deleteOrganization('org-1', dto),
     ).resolves.toEqual(expected);
     expect(adminServiceMock.deleteOrganization).toHaveBeenCalledWith(
+      'org-1',
+      dto,
+    );
+  });
+
+  it('delegates updateElectronicInvoicing to the service', async () => {
+    const controller = new AdminController(adminServiceMock as never);
+    const dto = { enabled: true };
+    const expected = {
+      organizationId: 'org-1',
+      electronicInvoicing: { enabled: true },
+    };
+
+    adminServiceMock.updateElectronicInvoicing.mockResolvedValue(expected);
+
+    await expect(
+      controller.updateElectronicInvoicing('org-1', dto),
+    ).resolves.toEqual(expected);
+    expect(adminServiceMock.updateElectronicInvoicing).toHaveBeenCalledWith(
       'org-1',
       dto,
     );
