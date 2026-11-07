@@ -150,11 +150,18 @@ read -rsp 'SEED_DEMO_PASSWORD: ' P; echo
 printf '%s\n' "$P" > "$PWFILE"; unset P
 chmod 600 "$PWFILE"
 export SEED_DEMO_PASSWORD_FILE="$PWFILE"
-railway run -- npm run sandbox:seed:prod
-railway run -- npm run sandbox:seed:prod -- --apply
+railway run -- npm run sandbox:seed:railway
+railway run -- npm run sandbox:seed:railway -- --apply
 unset SEED_DEMO_PASSWORD_FILE
 rm -f "$PWFILE"
 ```
+
+   `railway run` ejecuta el comando **en tu maquina** con las variables del
+   servicio linkeado, no dentro del contenedor: necesita el branch local con
+   `node_modules` instalados y conectividad desde tu equipo a `DATABASE_URL`
+   (el pooler de Supabase del runbook sirve; una URL `*.railway.internal` no
+   resuelve desde fuera de Railway). `sandbox:seed:railway` no usa
+   `.env.production`: toma `DATABASE_URL` del entorno inyectado por Railway.
 
    El login del owner usa `SEED_OWNER_EMAIL` y la password elegida; los usuarios
    demo usan el dominio `SEED_SANDBOX_EMAIL_DOMAIN` (por defecto `<slug>.demo`).

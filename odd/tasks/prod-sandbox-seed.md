@@ -7,7 +7,7 @@ Runners: backend Jest (`npm run test`) for the pure plan; `npx tsc -p tsconfig.j
 
 ## Specs
 
-S1. Entry point. New CLI `backend/prisma/seed-sandbox.ts`, wired as `sandbox:seed` (development env file) and `sandbox:seed:prod` (`.env.production`). It follows the `prisma/backfill-services.ts` shape: the decision logic lives in a pure, tested module under `backend/src/seeding/`, and the CLI only reads arguments/environment, runs one plan and reports it. The `sandbox:` prefix keeps the deployment guard that forbids naming a `npm run seed*` command as a production path untouched.
+S1. Entry point. New CLI `backend/prisma/seed-sandbox.ts`, wired as `sandbox:seed` (development env file), `sandbox:seed:railway` (ambient environment injected by `railway run`) and `sandbox:seed:prod` (`.env.production`). It follows the `prisma/backfill-services.ts` shape: the decision logic lives in a pure, tested module under `backend/src/seeding/`, and the CLI only reads arguments/environment, runs one plan and reports it. The `sandbox:` prefix keeps the deployment guard that forbids naming a `npm run seed*` command as a production path untouched.
 
 S2. Dry run is the default. A naked `npm run sandbox:seed` writes nothing and prints the dataset summary plus whether the target organization already exists. Only the exact `--apply` flag writes.
 
