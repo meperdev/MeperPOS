@@ -61,7 +61,11 @@ describe('SalesService — selling services', () => {
 
   const buildTx = () => ({
     sale: {
-      create: jest.fn().mockResolvedValue({ id: 'sale-new', saleNumber: 42 }),
+      create: jest.fn().mockResolvedValue({
+        id: 'sale-new',
+        saleNumber: 42,
+        createdAt: new Date('2026-11-04T15:20:31.000Z'),
+      }),
     },
     saleItem: { create: jest.fn() },
     product: {
@@ -71,6 +75,12 @@ describe('SalesService — selling services', () => {
     },
     inventoryMovement: { create: jest.fn() },
     payment: { create: jest.fn() },
+    // Spec S9: this organization has not activated electronic invoicing, so the
+    // ordinary sale path reads the flag and writes no fiscal record.
+    organization: {
+      findFirst: jest.fn().mockResolvedValue({ taxId: null, settings: {} }),
+    },
+    fiscalDocument: { create: jest.fn() },
   });
 
   const wireTransaction = (txMock: ReturnType<typeof buildTx>) => {
@@ -345,6 +355,81 @@ describe('SalesService — selling services', () => {
       items: [{ id: 'si-1', productId, quantity }],
     });
 
+    // Spec S8: cancellation voids the pending fiscal document in the same
+    // transaction; it can never leave a pending document behind a cancelled sale.
+    it('voids the pending fiscal document in the same transaction', async () => {
+      const tx = {
+        sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        fiscalDocument: {
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({ id: 'fiscal-1', status: 'PENDING' }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        product: {
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({ ...productRow(), tracksStock: false }),
+          updateMany: jest.fn(),
+        },
+        inventoryMovement: { create: jest.fn() },
+      };
+      prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
+      prismaMock.$transaction.mockImplementation(
+        (callback: (tx: unknown) => unknown) => callback(tx),
+      );
+
+      await service.update(
+        'sale-1',
+        { status: 'CANCELLED' },
+        'user-1',
+        'org-1',
+      );
+
+      expect(tx.fiscalDocument.findFirst).toHaveBeenCalledWith({
+        where: { saleId: 'sale-1', organizationId: 'org-1' },
+        select: { id: true, status: true },
+      });
+      expect(tx.fiscalDocument.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'fiscal-1',
+          organizationId: 'org-1',
+          status: 'PENDING',
+        },
+        data: { status: 'VOIDED', resolvedAt: expect.any(Date) },
+      });
+    });
+
+    it('refuses to cancel a sale whose fiscal document is already accepted', async () => {
+      const tx = {
+        sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        fiscalDocument: {
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({ id: 'fiscal-1', status: 'ACCEPTED' }),
+          updateMany: jest.fn(),
+        },
+        product: {
+          findFirst: jest.fn(),
+          updateMany: jest.fn(),
+        },
+        inventoryMovement: { create: jest.fn() },
+      };
+      prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
+      prismaMock.$transaction.mockImplementation(
+        (callback: (tx: unknown) => unknown) => callback(tx),
+      );
+
+      await expect(
+        service.update('sale-1', { status: 'CANCELLED' }, 'user-1', 'org-1'),
+      ).rejects.toThrow(ConflictException);
+
+      expect(tx.fiscalDocument.updateMany).not.toHaveBeenCalled();
+      expect(tx.product.findFirst).not.toHaveBeenCalled();
+      expect(tx.product.updateMany).not.toHaveBeenCalled();
+      expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+    });
+
     it.each([false, true])(
       'stops a losing cancellation before any effects (prior winner: %s)',
       async (priorWinner) => {
@@ -352,6 +437,10 @@ describe('SalesService — selling services', () => {
           sale: {
             update: jest.fn(),
             updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+          },
+          fiscalDocument: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            updateMany: jest.fn(),
           },
           product: {
             findFirst: jest.fn(),
@@ -401,6 +490,10 @@ describe('SalesService — selling services', () => {
           update: jest.fn(),
           updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
+        fiscalDocument: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          updateMany: jest.fn(),
+        },
         product: {
           findFirst: jest
             .fn()
@@ -426,6 +519,10 @@ describe('SalesService — selling services', () => {
     it('refuses restocking with a missing live reservation counter', async () => {
       const tx = {
         sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        fiscalDocument: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          updateMany: jest.fn(),
+        },
         product: {
           findFirst: jest.fn().mockResolvedValue({ stock: 5, version: 7 }),
           updateMany: jest.fn(),
@@ -475,6 +572,10 @@ describe('SalesService — selling services', () => {
         prismaMock.sale.update.mockResolvedValue({ status });
         const tx = {
           sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+          fiscalDocument: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            updateMany: jest.fn(),
+          },
           posLoanSaleIntent: prismaMock.posLoanSaleIntent,
           product: {
             findFirst: jest.fn().mockResolvedValue(productRow({ stock: 5 })),
@@ -512,6 +613,10 @@ describe('SalesService — selling services', () => {
     it('cancels an untracked product without stock effects', async () => {
       const tx = {
         sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        fiscalDocument: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          updateMany: jest.fn(),
+        },
         product: {
           findFirst: jest
             .fn()
@@ -542,6 +647,10 @@ describe('SalesService — selling services', () => {
         },
         inventoryMovement: { create: jest.fn() },
         sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        fiscalDocument: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          updateMany: jest.fn(),
+        },
       };
       prismaMock.sale.findFirst
         .mockResolvedValueOnce(saleWithItem('serv-1', 2))
@@ -578,6 +687,10 @@ describe('SalesService — selling services', () => {
         },
         inventoryMovement: { create: jest.fn() },
         sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        fiscalDocument: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          updateMany: jest.fn(),
+        },
       };
       prismaMock.sale.findFirst
         .mockResolvedValueOnce(saleWithItem('prod-1', 2))
