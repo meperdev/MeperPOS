@@ -131,6 +131,25 @@ describe('SettingsService', () => {
       });
     });
 
+    it('never surfaces system keys as custom settings', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        name: 'Acme Corp',
+        logoUrl: null,
+        settings: {
+          printHeader: 'Acme - Comprobante',
+          electronicInvoicing: { enabled: true },
+          downgradeFlags: { usersOverLimit: true },
+          custom: { theme: 'dark' },
+        },
+        settingsVersion: 1,
+      });
+      prismaMock.organizationSequence.findFirst.mockResolvedValue(null);
+
+      const result = await service.find('org-1');
+
+      expect(result.custom).toEqual({ theme: 'dark' });
+    });
+
     it('returns a default view without an organizationId and skips the query', async () => {
       const result = await service.find(undefined);
 
@@ -140,6 +159,20 @@ describe('SettingsService', () => {
   });
 
   describe('update', () => {
+    /** The version-guarded settings write the merge-on-write actually sent. */
+    function lastWrite(): {
+      where: Record<string, unknown>;
+      data: { settings: Record<string, unknown>; settingsVersion: unknown };
+    } {
+      const calls = prismaMock.organization.updateMany.mock.calls as [
+        {
+          where: Record<string, unknown>;
+          data: { settings: Record<string, unknown>; settingsVersion: unknown };
+        },
+      ][];
+      return calls[0][0];
+    }
+
     it('merges typed params into existing settings without full-replace', async () => {
       prismaMock.organization.findUnique.mockResolvedValue({
         name: 'Acme Corp',
@@ -208,6 +241,90 @@ describe('SettingsService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(prismaMock.organization.findUnique).not.toHaveBeenCalled();
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects writes to the electronicInvoicing system key', async () => {
+      const attempts = [
+        { electronicInvoicing: { enabled: true } },
+        { electronicInvoicing: { enabled: false } },
+        { electronicInvoicing: { enabled: 'true' } },
+      ];
+
+      for (const payload of attempts) {
+        const rejection = service.update('org-1', payload as never);
+
+        await expect(rejection).rejects.toBeInstanceOf(BadRequestException);
+        await expect(rejection).rejects.toThrow(
+          "Setting 'electronicInvoicing' is system-managed and cannot be updated",
+        );
+      }
+
+      // Rejected before any read or write: a user settings PUT can neither
+      // activate invoicing nor switch an activated pilot off (spec S9).
+      expect(prismaMock.organization.findUnique).not.toHaveBeenCalled();
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps an existing electronicInvoicing activation on an ordinary update', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        name: 'Acme Corp',
+        logoUrl: null,
+        settings: {
+          printHeader: 'Acme - Comprobante',
+          electronicInvoicing: { enabled: true },
+          downgradeFlags: { usersOverLimit: false },
+          custom: { theme: 'light' },
+        },
+        settingsVersion: 7,
+      });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.organizationSequence.findFirst.mockResolvedValue(null);
+
+      const result = await service.update('org-1', {
+        printFooter: 'Gracias por su compra',
+      } as never);
+
+      const write = lastWrite();
+      expect(write.where).toEqual({ id: 'org-1', settingsVersion: 7 });
+      expect(write.data.settingsVersion).toEqual({ increment: 1 });
+      expect(write.data.settings).toEqual({
+        printHeader: 'Acme - Comprobante',
+        electronicInvoicing: { enabled: true },
+        downgradeFlags: { usersOverLimit: false },
+        printFooter: 'Gracias por su compra',
+        custom: { theme: 'light' },
+      });
+      expect(result.invoicing.printFooter).toBe('Gracias por su compra');
+      // The system key stays a root key; it is never re-homed under `custom`
+      // where a later ordinary write could treat it as user-owned.
+      expect(result.custom).toEqual({ theme: 'light' });
+    });
+
+    it('keeps a disabled activation state and unrelated system keys on a custom-only update', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        name: 'Acme Corp',
+        logoUrl: null,
+        settings: {
+          electronicInvoicing: { enabled: false },
+          downgradeFlags: { salesOverLimit: true },
+          custom: { theme: 'dark' },
+        },
+        settingsVersion: 3,
+      });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.organizationSequence.findFirst.mockResolvedValue(null);
+
+      const result = await service.update('org-1', {
+        custom: { lang: 'es' },
+      } as never);
+
+      expect(lastWrite().data.settings).toEqual({
+        electronicInvoicing: { enabled: false },
+        downgradeFlags: { salesOverLimit: true },
+        custom: { theme: 'dark', lang: 'es' },
+      });
+      expect(result.custom).toEqual({ theme: 'dark', lang: 'es' });
     });
 
     it('throws ConflictException when the optimistic lock detects a concurrent write', async () => {
@@ -462,5 +579,37 @@ describe('applySystemKeys', () => {
 
     expect(existing).toEqual({ printHeader: 'A' });
     expect(existing).not.toHaveProperty('downgradeFlags');
+  });
+
+  it('keeps the activation state when a downgrade overlays downgradeFlags', () => {
+    const existing = {
+      printHeader: 'Mi Negocio',
+      electronicInvoicing: { enabled: true },
+    };
+
+    const result = applySystemKeys(existing, { downgradeFlags: { users: 2 } });
+
+    expect(result).toEqual({
+      printHeader: 'Mi Negocio',
+      electronicInvoicing: { enabled: true },
+      downgradeFlags: { users: 2 },
+    });
+  });
+
+  it('keeps downgradeFlags when activation overlays the system key', () => {
+    const existing = {
+      printHeader: 'Mi Negocio',
+      downgradeFlags: { users: 2 },
+    };
+
+    const result = applySystemKeys(existing, {
+      electronicInvoicing: { enabled: true },
+    });
+
+    expect(result).toEqual({
+      printHeader: 'Mi Negocio',
+      downgradeFlags: { users: 2 },
+      electronicInvoicing: { enabled: true },
+    });
   });
 });
