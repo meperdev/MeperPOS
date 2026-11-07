@@ -150,8 +150,8 @@ read -rsp 'SEED_DEMO_PASSWORD: ' P; echo
 printf '%s\n' "$P" > "$PWFILE"; unset P
 chmod 600 "$PWFILE"
 export SEED_DEMO_PASSWORD_FILE="$PWFILE"
-railway run npm run sandbox:seed:prod
-railway run npm run sandbox:seed:prod -- --apply
+railway run -- npm run sandbox:seed:prod
+railway run -- npm run sandbox:seed:prod -- --apply
 unset SEED_DEMO_PASSWORD_FILE
 rm -f "$PWFILE"
 ```
