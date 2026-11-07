@@ -11,6 +11,7 @@ const makeRows = () => [
     unitPrice: 10.005,
     discountAmount: 0.005,
     taxRate: 19,
+    taxCode: 'IVA' as const,
     costPriceSnapshot: new Prisma.Decimal(5),
   },
   {
@@ -19,6 +20,7 @@ const makeRows = () => [
     unitPrice: 0,
     discountAmount: 0,
     taxRate: 0,
+    taxCode: null,
     costPriceSnapshot: new Prisma.Decimal(0),
   },
 ];
@@ -50,6 +52,7 @@ describe('prepareSaleQuoteForStorage', () => {
         resolvedUnitPrice: '10.01',
         discountAmount: '0.01',
         taxRate: 19,
+        taxCode: 'IVA',
         costPriceSnapshot: '5.00',
       },
       {
@@ -58,6 +61,7 @@ describe('prepareSaleQuoteForStorage', () => {
         resolvedUnitPrice: '0.00',
         discountAmount: '0.00',
         taxRate: 0,
+        taxCode: null,
         costPriceSnapshot: '0.00',
       },
     ]);
@@ -167,10 +171,11 @@ describe('prepareSaleQuoteForStorage', () => {
     const quote = {
       ...input,
       taxRate: 19,
-      items: input.items.map((item) => ({
+      items: input.items.map((item, index) => ({
         ...item,
         productId: ` ${item.productId} `,
-        taxRate: 19,
+        // The code and the rate stay a pair: the second row is untaxed.
+        taxRate: index === 0 ? 19 : 0,
         costPriceSnapshot: new Prisma.Decimal(5),
       })),
     };
@@ -191,6 +196,7 @@ describe('prepareSaleQuoteForStorage', () => {
         'productId',
         'quantity',
         'resolvedUnitPrice',
+        'taxCode',
         'taxRate',
       ]);
     }
@@ -278,6 +284,7 @@ describe('prepareSaleQuoteForStorage', () => {
     expect(prepared.snapshot.items[0]).toEqual(
       expect.objectContaining({
         taxRate: 19,
+        taxCode: 'IVA',
         costPriceSnapshot: '5.00',
       }),
     );
@@ -287,7 +294,36 @@ describe('prepareSaleQuoteForStorage', () => {
       'productId',
       'quantity',
       'resolvedUnitPrice',
+      'taxCode',
       'taxRate',
     ]);
+  });
+
+  // The quote owns the tribute code with the rate, so a later catalog edit
+  // cannot change which tax the financed sale was agreed under.
+  it('rejects a stored tax code outside the catalog enum', () => {
+    const quote = makeQuote();
+    const tampered = {
+      ...quote,
+      items: [{ ...quote.items[0], taxCode: 'IVA ' }],
+    };
+    expect(() => prepareSaleQuoteForStorage(tampered as never)).toThrow(
+      BadRequestException,
+    );
+  });
+
+  // A code beside a zero rate and a taxed row with no code can never be
+  // completed as a fiscal document, so the boundary refuses both instead of
+  // storing a quote that fails later, mid-financing.
+  it('rejects a stored tax code that carries no rate', () => {
+    expect(() =>
+      prepareSaleQuoteForStorage(withItem({ taxCode: 'IVA', taxRate: 0 })),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects a stored tax rate that carries no code', () => {
+    expect(() =>
+      prepareSaleQuoteForStorage(withItem({ taxCode: null, taxRate: 19 })),
+    ).toThrow(BadRequestException);
   });
 });

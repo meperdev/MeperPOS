@@ -26,14 +26,22 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 import {
   buildSaleQuote,
   canOverrideSalePrice,
+  reconcileLineTaxes,
   resolveSaleItemPricing,
+  saleLinesReconcile,
 } from '../sales/sale-pricing';
 import {
   prepareSaleQuoteForStorage,
   type PreparedSaleQuote,
 } from '../sales/sale-quote-storage';
+import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emission';
+import { DianTaxCode } from '../common/utils/tax.util';
 import { tracksStock } from '../products/product-type.logic';
 import { SequenceService } from '../common/sequences/sequence.service';
+import { isElectronicInvoicingActive } from '../settings/schema';
+
+/** The catalog tribute codes a stored quote row may carry. */
+const DIAN_TAX_CODES: readonly string[] = Object.values(DianTaxCode);
 
 const personSelect = { id: true, name: true } as const;
 const loanSelect = {
@@ -244,6 +252,30 @@ export class LoansService {
               'La cotización histórica no contiene impuestos y costos',
             );
           }
+          // Spec S9: activation decides whether this completion has to produce
+          // fiscal facts. An organization that does not invoice keeps the exact
+          // previous behaviour, including quotes stored before tax codes.
+          const issuer = await tx.organization.findFirst({
+            where: { id: orgId },
+            select: { settings: true, taxId: true },
+          });
+          const electronicInvoicingActive = isElectronicInvoicingActive(
+            issuer?.settings,
+          );
+          // A quote written before this feature carries the rate but not the
+          // DIAN tribute code. For an activated organization, guessing IVA would
+          // tax the financed sale under a code it never agreed to, so a taxed row
+          // is refused instead (spec S7/S8: no silent reclassification). A row
+          // that carries no tax needs no code and completes unchanged, and a
+          // non-activated organization never needed the code at all.
+          const legacyUnclassified = quote.items.some(
+            (item) => !Object.hasOwn(item, 'taxCode') && item.taxRate !== 0,
+          );
+          if (electronicInvoicingActive && legacyUnclassified) {
+            throw new ConflictException(
+              'La cotización histórica no contiene códigos de impuesto y la facturación electrónica está activa',
+            );
+          }
           const money = (value: Prisma.Decimal) => {
             const rounded = value.toDecimalPlaces(
               2,
@@ -256,7 +288,7 @@ export class LoansService {
             }
             return rounded;
           };
-          const items = quote.items.map((item) => {
+          const priced = quote.items.map((item) => {
             const unitPrice = new Prisma.Decimal(item.resolvedUnitPrice);
             const discountAmount = new Prisma.Decimal(item.discountAmount);
             const subtotal = money(
@@ -268,33 +300,105 @@ export class LoansService {
               unitPrice,
               discountAmount,
               taxRate: item.taxRate,
+              taxCode: item.taxCode,
               costPriceSnapshot: new Prisma.Decimal(item.costPriceSnapshot),
               subtotal,
-              total: money(
-                subtotal.plus(subtotal.times(item.taxRate).div(100)),
-              ),
+              rawTax: subtotal.times(item.taxRate).div(100),
             };
           });
           const subtotal = money(
-            items.reduce(
-              (sum, item) => sum.plus(item.subtotal),
+            priced.reduce(
+              (sum, line) => sum.plus(line.subtotal),
               new Prisma.Decimal(0),
             ),
           );
-          const rawTax = items.reduce(
-            (sum, item) => sum.plus(item.subtotal.times(item.taxRate).div(100)),
+          const rawTax = priced.reduce(
+            (sum, line) => sum.plus(line.rawTax),
             new Prisma.Decimal(0),
           );
-          const taxAmount = money(rawTax);
           const discountAmount = new Prisma.Decimal(quote.discountAmount);
-          const total = money(subtotal.plus(rawTax).minus(discountAmount));
-          if (
-            !total.eq(loan.amount) ||
-            !total.eq(intent.agreedCustomerTotal!) ||
-            total.lte(0)
-          ) {
+          // The payable is the agreement: the POS quoted it before this sale
+          // existed, so completion never re-negotiates it. Both stored copies
+          // of it have to be the same number.
+          const agreed = intent.agreedCustomerTotal;
+          if (!agreed || !agreed.eq(loan.amount) || agreed.lte(0)) {
             throw new ConflictException(
               'La cotización no reconstruye el importe acordado',
+            );
+          }
+          // One reconstruction for every organization, and it is never adjusted
+          // to fit: `Sale.taxAmount` is one rounding of the unrounded line tax,
+          // and the payable is rebuilt from the same numbers. The tax is never
+          // derived from the agreed payable and the payable is never moved, so a
+          // quote whose stored agreement disagrees with its own decimals fails
+          // closed instead of inventing either side of the cent difference.
+          // Disclosed limitation (L75): a quote whose payable was rounded from
+          // JS floats at initiation can land one cent away (284.34x10-17.10 at
+          // 5% minus a 1569.23 discount is 1398.38 at the POS and 1398.39 from
+          // the decimals); such a quote is refused for every organization until
+          // fiscal policy for that cent difference is supported.
+          const taxAmount = money(rawTax);
+          const total = money(subtotal.plus(rawTax).minus(discountAmount));
+          if (!total.eq(loan.amount) || !total.eq(agreed) || total.lte(0)) {
+            throw new ConflictException(
+              'La cotización no reconstruye el importe acordado',
+            );
+          }
+          // An activated organization also persists per-line fiscal facts, and
+          // the invoice compares them with `Sale.taxAmount` and with the payable.
+          // The reconstructed tax is what the lines share, so the cent that
+          // per-line rounding loses or gains is allocated to the largest
+          // remainders; neither the tax nor the payable is ever derived from the
+          // other (spec S8). A taxed line that would lose its code fails closed
+          // inside the allocator.
+          const lineTaxes = electronicInvoicingActive
+            ? reconcileLineTaxes(
+                priced.map((line) => ({
+                  taxCode: line.taxCode ?? null,
+                  taxAmount: line.rawTax,
+                })),
+                taxAmount,
+              )
+            : null;
+          const items = priced.map((line, index) => {
+            const lineTax = lineTaxes?.[index];
+            return {
+              productId: line.productId,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice,
+              discountAmount: line.discountAmount,
+              taxRate: line.taxRate,
+              costPriceSnapshot: line.costPriceSnapshot,
+              subtotal: line.subtotal,
+              // Each line reports the tax that was actually persisted for it, so
+              // the lines of an activated organization add up to `Sale.total`.
+              total: money(
+                electronicInvoicingActive
+                  ? line.subtotal.plus(lineTax?.taxAmount ?? 0)
+                  : line.subtotal.plus(line.rawTax),
+              ),
+              // The same funnel as a cash sale: a code iff a positive amount, so
+              // the persisted line can never disagree with `Sale.taxAmount`.
+              // Nothing is added when the organization does not invoice, which is
+              // the exact row shape this path wrote before the feature.
+              ...(lineTax ?? {}),
+            };
+          });
+          // Enabled organizations fail closed: a document whose own money does
+          // not reconcile (lineExtension + tax - discount = payable, and the
+          // lines summing to the invoice tax) cannot be issued, and the
+          // agreement is never moved to make it fit.
+          if (
+            electronicInvoicingActive &&
+            !saleLinesReconcile(items, {
+              lineExtensionAmount: subtotal,
+              taxAmount,
+              discountAmount,
+              payableAmount: total,
+            })
+          ) {
+            throw new ConflictException(
+              'La cotización no concilia impuestos al centavo para facturar electrónicamente',
             );
           }
           const user = await tx.user.findFirst({
@@ -339,6 +443,47 @@ export class LoansService {
             await tx.saleItem.create({
               data: { ...item, saleId: sale.id, organizationId: orgId },
             });
+          }
+          // The buyer identification is a fiscal fact of the sale, read now
+          // because the customer row may be edited afterwards.
+          const buyer = await tx.customer.findFirst({
+            where: { id: loan.customerId, organizationId: orgId },
+            select: { documentNumber: true },
+          });
+          // Spec S8: the financed sale registers its fiscal document in this
+          // same transaction, from the frozen quote facts, exactly like a cash
+          // sale. Spec S9: only an activated organization has one; a non-activated
+          // organization completes exactly as it did before the feature.
+          if (electronicInvoicingActive) {
+            const emitted = await emitFiscalDocumentForSale(tx, {
+              saleId: sale.id,
+              saleNumber,
+              organizationId: orgId,
+              issuedAt: sale.createdAt,
+              buyerTaxId: buyer?.documentNumber ?? null,
+              lineExtensionAmount: subtotal,
+              taxAmount,
+              discountAmount,
+              payableAmount: total,
+              amountPaid: total,
+              change: null,
+              lines: items.map((item) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                discountAmount: item.discountAmount,
+                subtotal: item.subtotal,
+                taxRate: item.taxRate,
+                taxCode: item.taxCode ?? null,
+                taxAmount: item.taxAmount ?? null,
+                total: item.total,
+              })),
+            });
+            if (!emitted) {
+              throw new ConflictException(
+                'La facturación electrónica dejó de estar activa durante la venta',
+              );
+            }
           }
           const linked = await tx.posLoanSaleIntent.updateMany({
             where: {
@@ -1309,6 +1454,31 @@ export class LoansService {
     )
       return conflict();
     const extended = Object.hasOwn(snapshot, 'discountAmount');
+    // A third quote generation adds the DIAN tribute code to every row. It is
+    // detected from the row itself, so the two earlier generations keep
+    // replaying byte-for-byte.
+    const items = snapshot.items;
+    const fiscal =
+      extended &&
+      Array.isArray(items) &&
+      items.length > 0 &&
+      object(items[0]) &&
+      Object.hasOwn(items[0], 'taxCode');
+    const rowKeys = fiscal ? 7 : extended ? 6 : 4;
+    // The quote's own invariant: a tribute code iff the rate is positive. A
+    // tampered row cannot smuggle a code under a zero rate or a taxed rate with
+    // no code, because the sale would persist a tax nobody agreed to.
+    const fiscalTaxConsistent = (item: Prisma.JsonObject): boolean => {
+      const code = item.taxCode;
+      const rate = item.taxRate;
+      if (code === null) return rate === 0;
+      return (
+        typeof code === 'string' &&
+        DIAN_TAX_CODES.includes(code) &&
+        typeof rate === 'number' &&
+        rate > 0
+      );
+    };
     if (
       Object.keys(result).length !== 6 ||
       Object.keys(snapshot).length !== (extended ? 3 : 2) ||
@@ -1322,14 +1492,15 @@ export class LoansService {
       intent.agreedCustomerTotal.lte(0) ||
       snapshot.agreedCustomerTotal !== result.agreedCustomerTotal ||
       !isDeepStrictEqual(result.quoteSnapshot, snapshot) ||
-      !Array.isArray(snapshot.items) ||
-      !snapshot.items.length
+      !Array.isArray(items) ||
+      !items.length
     )
       return conflict();
-    for (const item of snapshot.items) {
+    for (const item of items) {
       if (
         !object(item) ||
-        Object.keys(item).length !== (extended ? 6 : 4) ||
+        Object.keys(item).length !== rowKeys ||
+        (fiscal && !fiscalTaxConsistent(item)) ||
         typeof item.productId !== 'string' ||
         !item.productId.trim() ||
         typeof item.quantity !== 'number' ||
