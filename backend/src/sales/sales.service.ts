@@ -20,6 +20,7 @@ import { computeSkipTake } from '../common/utils/pagination';
 import {
   canOverrideSalePrice,
   resolveSaleItemPricing,
+  saleLinesReconcile,
   toPersistedLineTax,
 } from './sale-pricing';
 import type { DianTaxCode } from '../common/utils/tax.util';
@@ -28,6 +29,9 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { SequenceService } from '../common/sequences/sequence.service';
 import { PLAN_LIMITS } from '../plan-limits/plan-limits.constants';
 import { ReceiptsService } from '../receipts/receipts.service';
+import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emission';
+import { voidSaleFiscalDocument } from '../electronic-invoicing/fiscal-document.service';
+import { isElectronicInvoicingActive } from '../settings/schema';
 
 /**
  * A POS-financed sale carries no cash/card rows, so the derived flag travels
@@ -240,6 +244,10 @@ export class SalesService {
       .reduce((sum, p) => sum + p.amount, 0);
     const change = cashPaid > total ? cashPaid - total : null;
 
+    // The buyer identification is a fiscal fact of the sale, captured now
+    // because the customer row may be edited afterwards.
+    let customerDocumentNumber: string | null = null;
+
     if (customerId) {
       const customer = await this.prisma.customer.findFirst({
         where: { id: customerId, organizationId },
@@ -247,6 +255,7 @@ export class SalesService {
       if (!customer) {
         throw new NotFoundException('Customer not found');
       }
+      customerDocumentNumber = customer.documentNumber;
     }
 
     const year = new Date().getFullYear();
@@ -401,6 +410,66 @@ export class SalesService {
               },
             });
           }
+
+          // Spec S8: an activated organization's sale is snapshotted with its
+          // four money facts recorded separately, so they have to add up to the
+          // cent. A sale-wide discount with a fraction of a cent can break that
+          // (a 0.005 discount on a 10.00 sale is stored as 0.01 while the
+          // payable keeps its own rounding), and recording a document that
+          // contradicts itself is worse than refusing the sale. Spec S9: an
+          // organization that has not activated electronic invoicing writes no
+          // document and keeps its previous behaviour exactly, including such a
+          // discount.
+          const activation = await tx.organization.findFirst({
+            where: { id: organizationId },
+            select: { settings: true },
+          });
+          if (
+            isElectronicInvoicingActive(activation?.settings) &&
+            !saleLinesReconcile(saleItems, {
+              lineExtensionAmount: subtotal,
+              taxAmount: totalTax,
+              discountAmount,
+              payableAmount: total,
+            })
+          ) {
+            throw new ConflictException(
+              'La venta no concilia sus importes al centavo para facturar electrónicamente',
+            );
+          }
+          // Spec S8: every activated organization's sale emits its fiscal
+          // document at sale registration, inside this transaction, so a sale
+          // can never exist without it and a document can never describe a sale
+          // that rolled back. Spec S9: an organization that has not activated
+          // electronic invoicing emits nothing and its sale proceeds unchanged.
+          // No CUFE is computed here: the technical key is not available
+          // (spec S6).
+          await emitFiscalDocumentForSale(tx, {
+            saleId: createdSale.id,
+            saleNumber,
+            organizationId,
+            issuedAt: createdSale.createdAt,
+            buyerTaxId: customerDocumentNumber,
+            // The values this transaction persisted, not a re-derivation: the
+            // snapshot has to describe the sale it belongs to.
+            lineExtensionAmount: subtotal,
+            taxAmount: totalTax,
+            discountAmount,
+            payableAmount: total,
+            amountPaid: totalPaid,
+            change,
+            lines: saleItems.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              discountAmount: item.discountAmount,
+              subtotal: item.subtotal,
+              taxRate: item.taxRate,
+              taxCode: item.taxCode,
+              taxAmount: item.taxAmount,
+              total: item.total,
+            })),
+          });
 
           return createdSale;
         },
@@ -645,6 +714,13 @@ export class SalesService {
         if (claimed.count === 0) {
           throw new BadRequestException('Only completed sales can be updated');
         }
+        // Spec S8: cancelling the sale voids its pending document in the same
+        // transaction. A document already resolved cannot be voided, and the
+        // cancellation is refused instead of leaving the two records disagreeing.
+        await voidSaleFiscalDocument(tx, {
+          saleId: existingSale.id,
+          organizationId: existingSale.organizationId,
+        });
         for (const item of existingSale.items) {
           const product = await tx.product.findFirst({
             where: {

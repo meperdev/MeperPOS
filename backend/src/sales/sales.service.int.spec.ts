@@ -1,10 +1,11 @@
-import { Prisma } from '@prisma/client';
-import { NotFoundException } from '@nestjs/common';
+import { FiscalDocumentStatus, Prisma } from '@prisma/client';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { SequenceService } from '../common/sequences/sequence.service';
 import { CacheService } from '../common/services/cache.service';
 import { SettingsService } from '../settings/settings.service';
 import { ReceiptsService } from '../receipts/receipts.service';
+import { FiscalDocumentService } from '../electronic-invoicing/fiscal-document.service';
 import {
   setupTwoOrgFixture,
   type TwoOrgFixture,
@@ -152,6 +153,13 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
 
   afterAll(() =>
     fixture.teardown(async () => {
+      // T4h: the fiscal document is preserved by the database on both sides
+      // (`ON DELETE RESTRICT` for the organization and for the sale), so a
+      // fixture that intends to remove its sales deletes exactly its own fiscal
+      // records first. Nothing else in the chain may cascade them away.
+      await prisma.fiscalDocument.deleteMany({
+        where: { organizationId: { in: [fixture.orgAId, fixture.orgBId] } },
+      });
       await prisma.saleItem.deleteMany({
         where: {
           sale: { organizationId: { in: [fixture.orgAId, fixture.orgBId] } },
@@ -347,5 +355,169 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
 
     expect(legacy.taxCode).toBeNull();
     expect(legacy.taxAmount).toBeNull();
+  });
+
+  // T4c + spec S9 — «solo para quienes la tienen activa». Activation is the
+  // backend-managed `settings.electronicInvoicing` system key, read inside the
+  // sale transaction, so the two organizations in this fixture diverge on
+  // purpose: org A is a pilot, org B is not.
+  describe('fiscal document emission and lifecycle', () => {
+    const enableElectronicInvoicing = (organizationId: string) =>
+      prisma.organization.update({
+        where: { id: organizationId },
+        data: { settings: { electronicInvoicing: { enabled: true } } },
+      });
+
+    it('registers one PENDING fiscal document and reads it only inside its organization', async () => {
+      await enableElectronicInvoicing(fixture.orgAId);
+
+      const sale = await salesService.create(
+        buildSaleDto(productId, customerId),
+        fixture.userAId,
+        fixture.orgAId,
+      );
+
+      const document = await prisma.fiscalDocument.findFirstOrThrow({
+        where: { saleId: sale.id, organizationId: fixture.orgAId },
+      });
+      expect(document.status).toBe('PENDING');
+      expect(document.cufe).toBeNull();
+      expect(document.invoiceNumber).toBeNull();
+      expect(document.issuedAt.getTime()).toBe(sale.createdAt.getTime());
+      expect(document.snapshot).toMatchObject({
+        version: 1,
+        saleId: sale.id,
+        saleNumber: sale.saleNumber,
+        organizationId: fixture.orgAId,
+        currency: 'COP',
+        payableAmount: sale.total.toFixed(2),
+        lineExtensionAmount: sale.subtotal.toFixed(2),
+      });
+
+      const service = new FiscalDocumentService(prisma as never);
+      await expect(
+        service.findBySaleId(sale.id, fixture.orgAId),
+      ).resolves.toMatchObject({ id: document.id });
+      // Another organization never learns that the document exists.
+      await expect(
+        service.findBySaleId(sale.id, fixture.orgBId),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        service.transition(
+          document.id,
+          fixture.orgBId,
+          FiscalDocumentStatus.SENT,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(
+        await prisma.fiscalDocument.findFirstOrThrow({
+          where: { id: document.id },
+          select: { status: true },
+        }),
+      ).toEqual({ status: 'PENDING' });
+    });
+
+    it('registers no document for an organization that has not activated electronic invoicing', async () => {
+      // Org B was never enabled, and its sale predates this test.
+      expect(
+        await prisma.fiscalDocument.findFirst({
+          where: { saleId: saleBOrgId, organizationId: fixture.orgBId },
+        }),
+      ).toBeNull();
+
+      const sale = await salesService.create(
+        buildSaleDto(productBOrgId, customerBOrgId),
+        fixture.userBId,
+        fixture.orgBId,
+      );
+      expect(
+        await prisma.fiscalDocument.findFirst({
+          where: { saleId: sale.id, organizationId: fixture.orgBId },
+        }),
+      ).toBeNull();
+    });
+
+    it('rejects a document that points at another organization sale', async () => {
+      // Org B is not activated, so its sale has no document yet and the unique
+      // `saleId` guard cannot mask the foreign key: the pair (org A, sale of
+      // org B) simply does not exist, so the database refuses it.
+      expect(
+        await prisma.fiscalDocument.findFirst({
+          where: { saleId: saleBOrgId },
+        }),
+      ).toBeNull();
+
+      await expect(
+        prisma.fiscalDocument.create({
+          data: {
+            organizationId: fixture.orgAId,
+            saleId: saleBOrgId,
+            status: 'PENDING',
+            issuedAt: new Date(),
+            snapshot: { forged: true },
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'P2003' });
+    });
+
+    it('voids the pending document in the transaction that cancels the sale', async () => {
+      await enableElectronicInvoicing(fixture.orgAId);
+      const sale = await salesService.create(
+        buildSaleDto(productId, customerId),
+        fixture.userAId,
+        fixture.orgAId,
+      );
+
+      await salesService.update(
+        sale.id,
+        { status: 'CANCELLED', cancelReason: 'Cliente desistió' },
+        fixture.userAId,
+        fixture.orgAId,
+      );
+
+      const document = await prisma.fiscalDocument.findFirstOrThrow({
+        where: { saleId: sale.id, organizationId: fixture.orgAId },
+      });
+      expect(document.status).toBe('VOIDED');
+      expect(document.resolvedAt).not.toBeNull();
+    });
+
+    it('refuses to cancel a sale whose fiscal document was already resolved', async () => {
+      await enableElectronicInvoicing(fixture.orgAId);
+      const sale = await salesService.create(
+        buildSaleDto(productId, customerId),
+        fixture.userAId,
+        fixture.orgAId,
+      );
+      const document = await prisma.fiscalDocument.findFirstOrThrow({
+        where: { saleId: sale.id, organizationId: fixture.orgAId },
+      });
+      await prisma.fiscalDocument.update({
+        where: { id: document.id },
+        data: { status: 'ACCEPTED', resolvedAt: new Date() },
+      });
+
+      await expect(
+        salesService.update(
+          sale.id,
+          { status: 'CANCELLED' },
+          fixture.userAId,
+          fixture.orgAId,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(
+        await prisma.sale.findFirstOrThrow({
+          where: { id: sale.id },
+          select: { status: true },
+        }),
+      ).toEqual({ status: 'COMPLETED' });
+      expect(
+        await prisma.fiscalDocument.findFirstOrThrow({
+          where: { id: document.id },
+          select: { status: true },
+        }),
+      ).toEqual({ status: 'ACCEPTED' });
+    });
   });
 });
