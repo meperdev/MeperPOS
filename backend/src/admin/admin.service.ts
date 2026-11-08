@@ -14,11 +14,50 @@ import { AuthService } from '../auth/auth.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationStatusDto } from './dto/update-organization-status.dto';
 import { UpdateOrganizationPlanDto } from './dto/update-organization-plan.dto';
-import { BillingStatus, OrgRole, OrgStatus, PlanType, Prisma } from '@prisma/client';
+import {
+  BillingStatus,
+  OrgRole,
+  OrgStatus,
+  PlanType,
+  Prisma,
+} from '@prisma/client';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { PLAN_LIMITS, LimitType } from '../plan-limits/plan-limits.constants';
 import { DEFAULT_EXPENSE_TAXONOMY } from '../expenses/default-expense-categories';
 import { applySystemKeys } from '../settings/settings.service';
+import {
+  ELECTRONIC_INVOICING_KEY,
+  isElectronicInvoicingActive,
+} from '../settings/schema';
+import { UpdateElectronicInvoicingDto } from './dto/update-electronic-invoicing.dto';
+
+/** `1 fiscal document` / `3 fiscal documents`, for the delete conflict. */
+function describeFiscalDocuments(count: number): string {
+  return `${count} fiscal document${count === 1 ? '' : 's'}`;
+}
+
+/**
+ * Whether a failed write was refused by the fiscal document constraint.
+ *
+ * Only that constraint is translated into a conflict here: other restricted
+ * relations (payroll, for one) are real failures with their own diagnosis and
+ * must keep it.
+ */
+function isFiscalDocumentReference(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+  if (error.code !== 'P2003') {
+    return false;
+  }
+  // Prisma 6 reports the violated constraint name in `meta.constraint`, e.g.
+  // `FiscalDocument_organizationId_fkey`. The runtime type is not part of the
+  // public type, so it is narrowed instead of coerced.
+  const constraint: unknown = error.meta?.constraint;
+  return (
+    typeof constraint === 'string' && constraint.includes('FiscalDocument')
+  );
+}
 
 @Injectable()
 export class AdminService {
@@ -111,12 +150,18 @@ export class AdminService {
         },
       });
 
-      for (const [groupName, labels] of Object.entries(DEFAULT_EXPENSE_TAXONOMY)) {
+      for (const [groupName, labels] of Object.entries(
+        DEFAULT_EXPENSE_TAXONOMY,
+      )) {
         const group = await tx.expenseGroup.create({
           data: { name: groupName, organizationId: organization.id },
         });
         await tx.expenseLabel.createMany({
-          data: labels.map((name) => ({ name, groupId: group.id, organizationId: organization.id })),
+          data: labels.map((name) => ({
+            name,
+            groupId: group.id,
+            organizationId: organization.id,
+          })),
         });
       }
 
@@ -209,27 +254,61 @@ export class AdminService {
       throw new NotFoundException('Organization not found');
     }
 
-    const existingSettings =
-      organization.settings && typeof organization.settings === 'object'
-        ? (organization.settings as Record<string, unknown>)
-        : {};
+    const isDowngrade =
+      organization.plan === PlanType.PRO && dto.plan === PlanType.BASIC;
 
-    const data: {
-      plan: PlanType;
-      settings?: Prisma.InputJsonValue;
-    } = { plan: dto.plan };
+    // PRO -> BASIC is the only transition that recomputes the downgrade flags.
+    // Upgrades and no-ops keep the historically retained flags and never
+    // rewrite the settings blob.
+    let settings: Prisma.InputJsonObject | undefined;
 
-    if (organization.plan === PlanType.PRO && dto.plan === PlanType.BASIC) {
-      const downgradeFlags = await this.calculateDowngradeFlags(id);
-      data.settings = applySystemKeys(existingSettings, {
-        downgradeFlags,
+    if (isDowngrade) {
+      const existingSettings =
+        organization.settings && typeof organization.settings === 'object'
+          ? (organization.settings as Record<string, unknown>)
+          : {};
+
+      settings = applySystemKeys(existingSettings, {
+        downgradeFlags: await this.calculateDowngradeFlags(id),
       }) as Prisma.InputJsonObject;
     }
 
-    return this.prisma.organization.update({
-      where: { id },
-      data,
-    });
+    try {
+      // Every plan change, including the one that writes no settings, takes
+      // part in the `settingsVersion` guard (spec S9). A single atomic
+      // `UPDATE ... RETURNING` gives three properties the previous shapes
+      // could not have at once:
+      //
+      // - the version read above and the write are one statement, so a
+      //   plan-only change cannot overwrite a downgrade that landed in between
+      //   (nor the reverse), and a concurrent activation or settings write must
+      //   retry instead of clobbering;
+      // - every plan change consumes the version, so those writers notice it
+      //   even though the plan-only path leaves the blob untouched;
+      // - the response is the exact row this statement wrote, never a second
+      //   read that another writer could have changed in between.
+      return await this.prisma.organization.update({
+        where: { id, settingsVersion: organization.settingsVersion },
+        data: {
+          plan: dto.plan,
+          ...(settings === undefined ? {} : { settings }),
+          settingsVersion: { increment: 1 },
+        },
+      });
+    } catch (error) {
+      // `update` with a non-unique version filter reports a lost race as P2025
+      // ("record to update not found"), exactly like a stale CAS. Anything else
+      // is a real failure and must not be disguised as a conflict.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new ConflictException(
+          'Organization plan or settings were modified concurrently. Reload and try again.',
+        );
+      }
+      throw error;
+    }
   }
 
   private async calculateDowngradeFlags(organizationId: string) {
@@ -436,6 +515,74 @@ export class AdminService {
     });
   }
 
+  /**
+   * Spec S9 — activation is a SUPER_ADMIN decision, not an organization one.
+   *
+   * The flag lives in the backend-managed `electronicInvoicing` system key, so
+   * the user settings PUT can neither read nor write it. Its only effect is
+   * local: a registered sale writes an internal PENDING fiscal record through
+   * `emitFiscalDocumentForSale`. Nothing is signed, numbered or sent, and this
+   * method never creates a fiscal document or contacts DIAN (spec S6).
+   *
+   * The write is guarded by `settingsVersion`, exactly like `SettingsService`,
+   * so activation cannot silently clobber a concurrent settings write and a
+   * concurrent write cannot resurrect a stale flag.
+   */
+  async updateElectronicInvoicing(
+    id: string,
+    dto: UpdateElectronicInvoicingDto,
+  ) {
+    // Defence in depth: the DTO already refuses anything but a JSON boolean,
+    // and a caller that bypasses the HTTP boundary must not activate with a
+    // truthy string either.
+    if (typeof dto.enabled !== 'boolean') {
+      throw new BadRequestException(
+        'Electronic invoicing activation requires an explicit boolean',
+      );
+    }
+
+    const organization = await this.prisma.organization.findUnique({
+      where: { id },
+      select: { id: true, settings: true, settingsVersion: true },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    // A malformed blob must not stop activation: a non-object becomes an empty
+    // blob. Otherwise every existing key is preserved and only the activation
+    // key is overlaid (`applySystemKeys` never full-replaces).
+    const existingSettings =
+      organization.settings &&
+      typeof organization.settings === 'object' &&
+      !Array.isArray(organization.settings)
+        ? (organization.settings as Record<string, unknown>)
+        : {};
+
+    const settings = applySystemKeys(existingSettings, {
+      [ELECTRONIC_INVOICING_KEY]: { enabled: dto.enabled },
+    }) as Prisma.InputJsonObject;
+
+    const changed = await this.prisma.organization.updateMany({
+      where: { id, settingsVersion: organization.settingsVersion },
+      data: { settings, settingsVersion: { increment: 1 } },
+    });
+
+    if (changed.count === 0) {
+      throw new ConflictException(
+        'Organization settings were modified concurrently. Reload and try again.',
+      );
+    }
+
+    return {
+      organizationId: organization.id,
+      // Read back through the same helper the sale path uses, so the response
+      // reports what a reader will actually see.
+      electronicInvoicing: { enabled: isElectronicInvoicingActive(settings) },
+    };
+  }
+
   async addOrganizationMember(
     organizationId: string,
     dto: {
@@ -472,13 +619,12 @@ export class AdminService {
       });
     }
 
-    const existingMembership =
-      await this.prisma.organizationUser.findFirst({
-        where: {
-          organizationId,
-          userId: user.id,
-        },
-      });
+    const existingMembership = await this.prisma.organizationUser.findFirst({
+      where: {
+        organizationId,
+        userId: user.id,
+      },
+    });
 
     if (existingMembership) {
       throw new ConflictException(
@@ -512,9 +658,7 @@ export class AdminService {
     });
 
     if (!membership) {
-      throw new NotFoundException(
-        'User is not a member of this organization',
-      );
+      throw new NotFoundException('User is not a member of this organization');
     }
 
     return this.prisma.organizationUser.update({
@@ -529,9 +673,7 @@ export class AdminService {
     });
 
     if (!membership) {
-      throw new NotFoundException(
-        'User is not a member of this organization',
-      );
+      throw new NotFoundException('User is not a member of this organization');
     }
 
     if (membership.isPrimaryOwner) {
@@ -565,9 +707,31 @@ export class AdminService {
       );
     }
 
-    await this.prisma.organization.delete({
-      where: { id },
+    // A fiscal document is evidence of what the organization declared, so it
+    // must survive the organization that issued it. The rule itself lives in the
+    // database (`FiscalDocument_organizationId_fkey` is ON DELETE RESTRICT); this
+    // count only turns that refusal into an answer the caller can act on. A
+    // count that went stale between the read and the delete still lands on the
+    // same conflict, because the constraint is what actually decides.
+    const fiscalDocuments = await this.prisma.fiscalDocument.count({
+      where: { organizationId: id },
     });
+    if (fiscalDocuments > 0) {
+      throw new ConflictException(
+        `Organization cannot be deleted: it still holds ${describeFiscalDocuments(fiscalDocuments)}`,
+      );
+    }
+
+    try {
+      await this.prisma.organization.delete({ where: { id } });
+    } catch (error) {
+      if (isFiscalDocumentReference(error)) {
+        throw new ConflictException(
+          'Organization cannot be deleted: it still holds fiscal documents',
+        );
+      }
+      throw error;
+    }
 
     return { success: true };
   }

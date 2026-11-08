@@ -9,6 +9,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
 import { CustomersModule } from './customers/customers.module';
 import { SalesModule } from './sales/sales.module';
+import { ElectronicInvoicingModule } from './electronic-invoicing/electronic-invoicing.module';
 import { ReportsModule } from './reports/reports.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { throttlerModuleOptions } from './common/throttling/throttler-storage.factory';
@@ -51,6 +52,9 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     ProductsModule,
     CustomersModule,
     SalesModule,
+    // Internal only: registers the fiscal document state machine. It exposes no
+    // route, so nothing here claims a DIAN answer (spec S6).
+    ElectronicInvoicingModule,
     ReportsModule,
     SettingsModule,
     ExportsModule,

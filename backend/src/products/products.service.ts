@@ -19,7 +19,11 @@ import {
 } from './product-type.logic';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { resolveEffectiveTaxRate } from '../common/utils/tax.util';
+import {
+  DianTaxCode,
+  resolveEffectiveTaxCode,
+  resolveEffectiveTaxRate,
+} from '../common/utils/tax.util';
 import { computeSkipTake } from '../common/utils/pagination';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 
@@ -187,6 +191,7 @@ export class ProductsService {
       categoryId,
       taxRate,
       taxable,
+      taxCode,
       type: rawType,
       stock,
       tracksStock: rawTracksStock,
@@ -236,6 +241,13 @@ export class ProductsService {
     } else {
       resolvedTaxRate = 0;
     }
+    // Same precedent, second field: a tribute code may only exist on a taxable
+    // product. A taxable product may omit it and resolve to IVA at read time.
+    if (!resolvedTaxable && taxCode != null) {
+      throw new BadRequestException(
+        'taxCode cannot be set when taxable is false',
+      );
+    }
 
     // A service carries no stock. Whatever the payload asked for is normalised away
     // rather than stored, so neither the inventory valuation nor the kárdex can be
@@ -267,6 +279,7 @@ export class ProductsService {
         organizationId,
         taxable: resolvedTaxable,
         taxRate: resolvedTaxRate,
+        taxCode: resolvedTaxable ? (taxCode ?? null) : null,
         type: resolvedType,
         stock: resolvedStock,
         tracksStock: resolvedTracksStock,
@@ -424,6 +437,7 @@ export class ProductsService {
       );
     }
     assertNoReservationInput(updateProductDto);
+    const { taxCode: requestedTaxCode, ...updateFields } = updateProductDto;
     const existingProduct = await this.prisma.product.findFirst({
       where: { id, organizationId, active: true },
     });
@@ -501,7 +515,16 @@ export class ProductsService {
     });
 
     // Apply the same opt-in tax invariant as create: `taxable=true` requires a
-    // positive rate; `taxable=false` forces the stored rate back to 0.
+    // positive rate; `taxable=false` forces the stored rate back to 0 and clears
+    // the tribute code. Keeping a code on a non-taxable product is rejected,
+    // exactly like a rate would be meaningless there.
+    const resultingTaxable =
+      updateProductDto.taxable ?? existingProduct.taxable;
+    if (!resultingTaxable && requestedTaxCode != null) {
+      throw new BadRequestException(
+        'taxCode cannot be set when taxable is false',
+      );
+    }
     const taxData =
       updateProductDto.taxable === true
         ? (() => {
@@ -514,8 +537,12 @@ export class ProductsService {
             return { taxable: true, taxRate: Number(rate) };
           })()
         : updateProductDto.taxable === false
-          ? { taxable: false, taxRate: 0 }
+          ? { taxable: false, taxRate: 0, taxCode: null }
           : {};
+    // Omitted means "leave whatever the row already stores"; an explicit null
+    // is a request to clear the code.
+    const taxCodeData =
+      requestedTaxCode === undefined ? {} : { taxCode: requestedTaxCode };
 
     assertValidPromotion(
       updateProductDto.promotionType,
@@ -538,8 +565,9 @@ export class ProductsService {
           active: true,
         },
         data: {
-          ...updateProductDto,
+          ...updateFields,
           ...taxData,
+          ...taxCodeData,
           stock: newStock,
           tracksStock: effectiveTracksStock,
           barcode: normalizedBarcode,
@@ -745,7 +773,9 @@ export class ProductsService {
       availableStock: availableStock(p),
       taxable: p.taxable,
       taxRate: p.taxRate,
+      taxCode: p.taxCode,
       effectiveTaxRate: resolveEffectiveTaxRate(p, p.category),
+      effectiveTaxCode: resolveEffectiveTaxCode(p, p.category),
       minStock: p.minStock,
       type: p.type,
       tracksStock: p.tracksStock,
@@ -793,7 +823,9 @@ export class ProductsService {
       availableStock: availableStock(product),
       taxable: product.taxable,
       taxRate: product.taxRate,
+      taxCode: product.taxCode,
       effectiveTaxRate: resolveEffectiveTaxRate(product, product.category),
+      effectiveTaxCode: resolveEffectiveTaxCode(product, product.category),
       minStock: product.minStock,
       type: product.type,
       tracksStock: product.tracksStock,
@@ -807,25 +839,35 @@ export class ProductsService {
   }
 
   /**
-   * Enriches a product with effective tax rate information.
+   * Enriches a product with effective tax information.
    *
-   * Uses the shared `resolveEffectiveTaxRate(product, category)` so the
-   * read-time value agrees with sale-time resolution (opt-in precedence:
-   * product.taxable → category.taxable → 0).
+   * Uses the shared `resolveEffectiveTaxRate(product, category)` and
+   * `resolveEffectiveTaxCode(product, category)` so the read-time values agree
+   * with sale-time resolution (opt-in precedence: product.taxable →
+   * category.taxable → no tax), and a taxable row without a stored code reads
+   * as IVA.
    */
   private enrichWithEffectiveTax<
     T extends {
       taxable: boolean;
       taxRate: Prisma.Decimal | number;
+      taxCode?: DianTaxCode | null;
       category?: {
         taxable: boolean;
         defaultTaxRate: Prisma.Decimal | null;
+        defaultTaxCode?: DianTaxCode | null;
       } | null;
     },
-  >(product: T): T & { effectiveTaxRate: number } {
+  >(
+    product: T,
+  ): T & {
+    effectiveTaxRate: number;
+    effectiveTaxCode: DianTaxCode | null;
+  } {
     return {
       ...product,
       effectiveTaxRate: resolveEffectiveTaxRate(product, product.category),
+      effectiveTaxCode: resolveEffectiveTaxCode(product, product.category),
     };
   }
 
@@ -860,7 +902,7 @@ export class ProductsService {
 
   /**
    * The single response shape for a persisted product row: promo-aware price, effective
-   * tax rate, physical low-stock flag and reservation-aware availability. Every read that
+   * tax rate + resolved tax code, physical low-stock flag and reservation-aware availability. Every read that
    * returns whole product rows (create,
    * findAll, findOne, update) goes through here, so a new derived field cannot reach only
    * some of the endpoints and leave the client to guess.
@@ -870,11 +912,13 @@ export class ProductsService {
       AvailabilitySubject & {
         taxable: boolean;
         taxRate: Prisma.Decimal | number;
+        taxCode?: DianTaxCode | null;
         stock: number;
         minStock: number;
         category?: {
           taxable: boolean;
           defaultTaxRate: Prisma.Decimal | null;
+          defaultTaxCode?: DianTaxCode | null;
         } | null;
       },
   >(product: T) {

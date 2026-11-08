@@ -5,10 +5,21 @@ import {
   IsOptional,
   IsBoolean,
   IsNumber,
+  IsEnum,
   Min,
   Max,
   ValidateIf,
 } from 'class-validator';
+import { DianTaxCode } from '../../common/utils/tax.util';
+
+const DEFAULT_TAX_CODE_API_PROPERTY = {
+  enum: DianTaxCode,
+  enumName: 'DianTaxCode',
+  required: false,
+  nullable: true,
+  description:
+    'DIAN tribute code products of this category inherit. Omitted on a taxable category resolves to IVA.',
+} as const;
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'Electronics' })
@@ -35,6 +46,11 @@ export class CreateCategoryDto {
   @IsOptional()
   @Type(() => Number)
   defaultTaxRate?: number;
+
+  @ApiProperty(DEFAULT_TAX_CODE_API_PROPERTY)
+  @IsEnum(DianTaxCode)
+  @IsOptional()
+  defaultTaxCode?: DianTaxCode | null;
 }
 
 export class UpdateCategoryDto {
@@ -71,4 +87,9 @@ export class UpdateCategoryDto {
   @Min(0)
   @Max(100)
   defaultTaxRate?: number | null;
+
+  @ApiProperty(DEFAULT_TAX_CODE_API_PROPERTY)
+  @IsEnum(DianTaxCode)
+  @IsOptional()
+  defaultTaxCode?: DianTaxCode | null;
 }

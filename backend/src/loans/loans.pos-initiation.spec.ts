@@ -77,7 +77,12 @@ type State = {
   intents: Row[];
   holds: Row[];
   audits: Row[];
-  customers: { id: string; organizationId: string; active: boolean }[];
+  customers: {
+    id: string;
+    organizationId: string;
+    active: boolean;
+    documentNumber?: string | null;
+  }[];
 };
 // Only the scalar predicates used by this unit are modeled; unknown operators fail.
 function matches(row: Row, where: Row): boolean {
@@ -103,8 +108,23 @@ function fixture() {
     holds: [],
     audits: [],
     customers: [
-      { id: request().customerId, organizationId: 'org', active: true },
+      {
+        id: request().customerId,
+        organizationId: 'org',
+        active: true,
+        documentNumber: '900.111.222-3',
+      },
     ],
+  };
+  // Spec S9: the financed sale honours the same activation decision as a cash
+  // sale, so the fixture owns one organization row the tests can switch.
+  const organization = {
+    id: 'org',
+    taxId: '900123456',
+    settings: { electronicInvoicing: { enabled: true } } as Record<
+      string,
+      unknown
+    >,
   };
   let pending = committed;
   let visibleWinner: Row | null = null;
@@ -241,8 +261,19 @@ function fixture() {
         return data;
       }),
     },
-    sale: { create: jest.fn().mockResolvedValue({ id: 'sale' }) },
+    sale: {
+      create: jest.fn().mockResolvedValue({
+        id: 'sale',
+        createdAt: new Date('2026-11-04T15:20:31.000Z'),
+      }),
+    },
     saleItem: { create: jest.fn() },
+    organization: {
+      findFirst: jest.fn(() => Promise.resolve(organization)),
+    },
+    fiscalDocument: {
+      create: jest.fn(({ data }: { data: Row }) => Promise.resolve(data)),
+    },
     payment: { create: jest.fn() },
     inventoryMovement: { create: jest.fn() },
   };
@@ -280,6 +311,8 @@ function fixture() {
     auditLog: { create: outsideWrite },
     sale: { create: outsideWrite },
     saleItem: { create: outsideWrite },
+    organization: outsideWrite,
+    fiscalDocument: { ...tx.fiscalDocument, create: outsideWrite },
     inventoryMovement: { create: outsideWrite },
     $transaction: jest.fn(
       async (fn: (client: typeof tx) => Promise<unknown>) => {
@@ -327,6 +360,7 @@ function fixture() {
     prisma,
     service,
     sequence,
+    organization,
     complete: (requestKey = 'complete-key', user = actor()) =>
       service.completePosSale('loan', { requestKey }, 'org', user),
     collect: (
@@ -387,6 +421,7 @@ describe('POS financing through LoansService (unwired)', () => {
             resolvedUnitPrice: '80.00',
             discountAmount: '10.00',
             taxRate: 19,
+            taxCode: 'IVA',
             costPriceSnapshot: '40.00',
           },
         ],
@@ -1184,9 +1219,48 @@ describe('Explicit POS sale completion', () => {
         productId: 'coffee',
         quantity: 2,
         taxRate: 19,
+        taxCode: 'IVA',
+        taxAmount: 28.5,
         unitPrice: new Prisma.Decimal(80),
         costPriceSnapshot: new Prisma.Decimal(40),
         discountAmount: new Prisma.Decimal(10),
+      });
+      // Spec S8: the financed sale registers its fiscal document in the same
+      // transaction, from the frozen quote facts, exactly like a cash sale.
+      expect(f.tx.fiscalDocument.create).toHaveBeenCalledTimes(1);
+      const fiscal = f.tx.fiscalDocument.create.mock.calls[0][0].data;
+      expect(fiscal).toMatchObject({
+        organizationId: 'org',
+        saleId: 'sale',
+        status: 'PENDING',
+      });
+      expect(fiscal.snapshot).toMatchObject({
+        version: 1,
+        saleId: 'sale',
+        organizationId: 'org',
+        currency: 'COP',
+        issuerTaxId: '900123456',
+        buyerTaxId: '900.111.222-3',
+        lineExtensionAmount: '150.00',
+        taxAmount: '28.50',
+        discountAmount: '10.00',
+        payableAmount: '168.50',
+        amountPaid: '168.50',
+        change: null,
+        lines: [
+          expect.objectContaining({
+            lineNumber: 1,
+            productId: 'coffee',
+            quantity: 2,
+            unitPrice: '80.00',
+            discountAmount: '10.00',
+            subtotal: '150.00',
+            taxRate: '19.00',
+            taxCode: 'IVA',
+            taxAmount: '28.50',
+            total: '178.50',
+          }),
+        ],
       });
       expect(f.state().intents[0].finalSaleId).toBe('sale');
       expect(f.state().loan.status).toBe('CLOSED');
@@ -1263,6 +1337,530 @@ describe('Explicit POS sale completion', () => {
       );
     },
   );
+
+  // Spec S9 — «solo para quienes la tienen activa»: the financed sale honours
+  // the same activation decision as a cash sale. No activation, no fiscal row;
+  // the financed sale itself is untouched.
+  it('registers no fiscal document when the organization has not activated electronic invoicing', async () => {
+    const f = fixture();
+    f.organization.settings = {};
+    await f.initiate();
+    await f.collect();
+
+    await expect(f.complete()).resolves.toMatchObject({
+      saleId: 'sale',
+      status: 'CLOSED',
+    });
+
+    expect(f.tx.sale.create).toHaveBeenCalledTimes(1);
+    expect(f.tx.saleItem.create).toHaveBeenCalledTimes(1);
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  // A quote written before this feature carries the rate but not the tribute
+  // code. Simulates a stored pre-tax-code quote by removing the code from the
+  // frozen snapshot the initiation result points at.
+  const stripQuoteTaxCodes = (f: ReturnType<typeof fixture>) => {
+    const snapshot = f.state().intents[0].quoteSnapshot as {
+      items: Row[];
+    };
+    const legacy = {
+      ...snapshot,
+      items: snapshot.items.map((item) => {
+        const row = { ...item };
+        delete row.taxCode;
+        return row;
+      }),
+    };
+    f.state().intents[0].quoteSnapshot = legacy;
+    (f.state().intents[0].initiationResult as Row).quoteSnapshot = legacy;
+  };
+
+  // Two 0.03 lines at 19%: each line's exact tax is 0.0057 and its own rounding
+  // is 0.01, while the agreed tax of the whole quote is one rounding of 0.0114,
+  // i.e. 0.01. The agreed payable (0.07) is fixed, so the lines share that cent
+  // instead of moving the agreement.
+  const fractionalCentItems = () => [
+    { productId: 'coffee', quantity: 1, unitPrice: 0.03, discountAmount: 0 },
+    { productId: 'coffee', quantity: 1, unitPrice: 0.03, discountAmount: 0 },
+  ];
+  const saleRows = (f: ReturnType<typeof fixture>) =>
+    f.tx.saleItem.create.mock.calls.map((call) => call[0].data);
+  const snapshotLines = (f: ReturnType<typeof fixture>) => {
+    const fiscal = f.tx.fiscalDocument.create.mock.calls[0][0].data as {
+      snapshot: {
+        lines: Array<{ taxCode: string | null; taxAmount: string | null }>;
+      };
+    };
+    return fiscal.snapshot.lines;
+  };
+
+  // Spec S9: an organization without electronic invoicing keeps the exact
+  // previous completion behavior, including quotes stored before tax codes.
+  it('completes a pre-tax-code quote unchanged when electronic invoicing is not active', async () => {
+    const f = fixture();
+    f.organization.settings = {};
+    await f.initiate();
+    await f.collect();
+    stripQuoteTaxCodes(f);
+
+    await expect(f.complete()).resolves.toMatchObject({
+      saleId: 'sale',
+      status: 'CLOSED',
+    });
+
+    expect(f.tx.sale.create.mock.calls[0][0].data).toMatchObject({
+      subtotal: new Prisma.Decimal(150),
+      taxAmount: new Prisma.Decimal('28.50'),
+      discountAmount: new Prisma.Decimal(0),
+      total: new Prisma.Decimal('178.50'),
+    });
+    const item = saleRows(f)[0];
+    // Exact pre-feature row: no per-line fiscal facts are invented.
+    expect(item).not.toHaveProperty('taxCode');
+    expect(item).not.toHaveProperty('taxAmount');
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  // Spec S9/S8: a sale-wide discount does not change what the disabled path
+  // writes. The legacy row shape and every money value stay pre-feature.
+  it('completes a discounted pre-tax-code quote unchanged when invoicing is not active', async () => {
+    const f = fixture();
+    f.organization.settings = {};
+    await f.initiate({ ...request(), discountAmount: 10 });
+    await f.collect();
+    stripQuoteTaxCodes(f);
+
+    await expect(f.complete()).resolves.toMatchObject({ status: 'CLOSED' });
+
+    expect(f.tx.sale.create.mock.calls[0][0].data).toMatchObject({
+      subtotal: new Prisma.Decimal(150),
+      taxAmount: new Prisma.Decimal('28.50'),
+      discountAmount: new Prisma.Decimal(10),
+      total: new Prisma.Decimal('168.50'),
+    });
+    expect(saleRows(f)[0]).not.toHaveProperty('taxCode');
+    expect(saleRows(f)[0]).not.toHaveProperty('taxAmount');
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  // The same frozen quote registers the same sale money under either activation
+  // decision: only the fiscal facts (line codes/amounts and the document) differ.
+  it('registers the same sale money whether or not electronic invoicing is active', async () => {
+    const money = async (settings: Record<string, unknown>) => {
+      const f = fixture();
+      f.organization.settings = settings;
+      await f.initiate();
+      await f.collect();
+      await f.complete();
+      const data = f.tx.sale.create.mock.calls[0][0].data;
+      return {
+        subtotal: String(data.subtotal),
+        taxAmount: String(data.taxAmount),
+        discountAmount: String(data.discountAmount),
+        total: String(data.total),
+        amountPaid: String(data.amountPaid),
+        change: data.change as string | null,
+      };
+    };
+    expect(await money({ electronicInvoicing: { enabled: true } })).toEqual(
+      await money({}),
+    );
+  });
+
+  // Spec S9 again, with money that does not round per line: the sale must keep
+  // the old `Sale.taxAmount` (one rounding of the unrounded total) and must not
+  // persist line facts, because no document will ever describe them.
+  it('keeps the previous money and no line tax facts for a fractional-cent quote when invoicing is not active', async () => {
+    const f = fixture();
+    f.organization.settings = {};
+    await f.initiate(request({ items: fractionalCentItems() }));
+    await f.collect();
+
+    await expect(f.complete()).resolves.toMatchObject({
+      saleId: 'sale',
+      status: 'CLOSED',
+    });
+
+    expect(f.state().loan.amount.toFixed(2)).toBe('0.07');
+    expect(f.tx.sale.create.mock.calls[0][0].data).toMatchObject({
+      subtotal: new Prisma.Decimal('0.06'),
+      taxAmount: new Prisma.Decimal('0.01'),
+      total: new Prisma.Decimal('0.07'),
+    });
+    for (const row of saleRows(f)) {
+      expect(row).not.toHaveProperty('taxCode');
+      expect(row).not.toHaveProperty('taxAmount');
+    }
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  // Enabled organizations fail closed: a quote without tax codes cannot be
+  // classified without inventing a tribute, so the sale is not registered.
+  it('refuses a pre-tax-code quote when electronic invoicing is active', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    await f.initiate();
+    await f.collect();
+    stripQuoteTaxCodes(f);
+
+    await expect(f.complete()).rejects.toThrow(ConflictException);
+
+    noSaleEffects(f.tx);
+    expect(f.tx.saleItem.create).not.toHaveBeenCalled();
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+    expect(f.tx.posLoanSaleIntent.updateMany).not.toHaveBeenCalled();
+  });
+
+  // A legacy quote has no tax to classify when every row's rate is zero, so
+  // refusing it would fail closed where nothing is missing. It completes with an
+  // honest zero-tax document instead of an invented tribute.
+  it('completes an activated quote whose legacy rows carry no tax to classify', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    f.state().products[0].taxable = false;
+    f.state().products[0].category = {
+      taxable: false,
+      defaultTaxRate: new Prisma.Decimal(0),
+    };
+    await f.initiate(
+      request({
+        items: [{ productId: 'coffee', quantity: 1, discountAmount: 0 }],
+      }),
+    );
+    await f.collect();
+    stripQuoteTaxCodes(f);
+
+    await expect(f.complete()).resolves.toMatchObject({ status: 'CLOSED' });
+
+    expect(f.tx.sale.create.mock.calls[0][0].data).toMatchObject({
+      subtotal: new Prisma.Decimal('80.00'),
+      taxAmount: new Prisma.Decimal(0),
+      total: new Prisma.Decimal('80.00'),
+    });
+    // Activated: the row carries fiscal facts, and for a quote with no tax those
+    // facts are honestly null instead of an invented tribute.
+    expect(saleRows(f)[0]).toEqual(
+      expect.objectContaining({ taxCode: null, taxAmount: null }),
+    );
+    expect(snapshotLines(f)).toEqual([
+      expect.objectContaining({ taxCode: null, taxAmount: null }),
+    ]);
+    expect(f.tx.fiscalDocument.create.mock.calls[0][0].data).toMatchObject({
+      snapshot: {
+        lineExtensionAmount: '80.00',
+        taxAmount: '0.00',
+        payableAmount: '80.00',
+      },
+    });
+  });
+
+  // The regression this closes: a valid quote whose per-line roundings lose one
+  // cent used to answer 409 even though its agreement reconstructed exactly.
+  // The agreed tax is distributed across the lines instead of moving the total.
+  // Two lines of 0.03 at 19%: each line owes tax (0.0057), the agreed tax is one
+  // cent, and only one line can carry it. Relabelling the other as untaxed while
+  // its rate stays 19% is a fiscal claim whose DIAN meaning is unproven (S6,
+  // L72), so an activated organization fails closed instead of inventing it.
+  it('fails closed instead of dropping the tax code of a taxed fractional-cent line', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    await f.initiate(request({ items: fractionalCentItems() }));
+    await f.collect();
+    const before = f.state();
+    f.tx.moneyLoan.updateMany.mockClear();
+
+    await expect(f.complete()).rejects.toThrow(ConflictException);
+
+    noSaleEffects(f.tx);
+    expect(f.tx.saleItem.create).not.toHaveBeenCalled();
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+    expect(f.tx.moneyLoan.updateMany).not.toHaveBeenCalled();
+    expect(f.state()).toEqual(before);
+  });
+
+  // The same quote is still completed for an organization that does not invoice:
+  // no line facts, no document, and the pre-feature money. Failing closed there
+  // would change inactive behaviour for no fiscal gain.
+  it('keeps completing the same taxed fractional-cent quote when invoicing is not active', async () => {
+    const f = fixture();
+    f.organization.settings = {};
+    await f.initiate(request({ items: fractionalCentItems() }));
+    await f.collect();
+
+    await expect(f.complete()).resolves.toMatchObject({ status: 'CLOSED' });
+
+    expect(f.tx.sale.create.mock.calls[0][0].data).toMatchObject({
+      subtotal: new Prisma.Decimal('0.06'),
+      taxAmount: new Prisma.Decimal('0.01'),
+      total: new Prisma.Decimal('0.07'),
+    });
+    for (const row of saleRows(f)) {
+      expect(row).not.toHaveProperty('taxCode');
+      expect(row).not.toHaveProperty('taxAmount');
+    }
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  // DISCLOSED LIMITATION (L75): a valid financed quote whose payable was rounded
+  // once from JS floats at initiation cannot always be rebuilt from its own
+  // decimals. 2826.30 of goods at 5% minus a 1569.23 discount is 1398.3849999999998
+  // at the POS, i.e. 1398.38, while the same money rebuilt exactly is 1398.39.
+  // The payable is never moved and no tax is derived from it, so this quote fails
+  // closed until fiscal policy for such cent differences is supported.
+  it('fails closed on a valid quote whose floats landed one cent below its decimals', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    f.state().products[0].salePrice = new Prisma.Decimal('284.34');
+    // A zero percentage is the fixture's no-op promotion: the list price holds.
+    f.state().products[0].promotionValue = new Prisma.Decimal(0);
+    f.state().products[0].taxRate = new Prisma.Decimal(5);
+    f.state().products[0].stock = 100;
+    await f.initiate({
+      ...request({
+        items: [{ productId: 'coffee', quantity: 10, discountAmount: 17.1 }],
+      }),
+      discountAmount: 1569.23,
+    });
+    await f.collect();
+
+    expect(f.state().loan.amount.toFixed(2)).toBe('1398.38');
+
+    await expect(f.complete()).rejects.toThrow(ConflictException);
+
+    noSaleEffects(f.tx);
+    expect(f.tx.saleItem.create).not.toHaveBeenCalled();
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  // The same one-cent gap is refused even when the quote is otherwise ordinary:
+  // no payable movement, no derived tax, no document. This is the case the
+  // invented tolerance used to absorb.
+  it('fails closed on a one-cent disagreement between payable and reconstruction', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    await f.initiate();
+    await f.collect();
+    // The agreement keeps its own number; the lines still rebuild 178.50.
+    f.state().loan.amount = new Prisma.Decimal('178.51');
+    f.state().intents[0].agreedCustomerTotal = new Prisma.Decimal('178.51');
+
+    await expect(f.complete()).rejects.toThrow(ConflictException);
+
+    noSaleEffects(f.tx);
+    expect(f.tx.saleItem.create).not.toHaveBeenCalled();
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  // The same quote stays refused for an inactive organization. Rebuilding its
+  // payable from the exact decimals gives 1398.39 while the POS quoted 1398.38,
+  // and that is exactly what HEAD did: inactive behaviour is not part of this
+  // correction (L72).
+  it('keeps the pre-feature refusal of that quote when invoicing is not active', async () => {
+    const f = fixture();
+    f.organization.settings = {};
+    f.state().products[0].salePrice = new Prisma.Decimal('284.34');
+    // A zero percentage is the fixture's no-op promotion: the list price holds.
+    f.state().products[0].promotionValue = new Prisma.Decimal(0);
+    f.state().products[0].taxRate = new Prisma.Decimal(5);
+    f.state().products[0].stock = 100;
+    await f.initiate({
+      ...request({
+        items: [{ productId: 'coffee', quantity: 10, discountAmount: 17.1 }],
+      }),
+      discountAmount: 1569.23,
+    });
+    await f.collect();
+
+    await expect(f.complete()).rejects.toThrow(ConflictException);
+    noSaleEffects(f.tx);
+    expect(f.tx.saleItem.create).not.toHaveBeenCalled();
+    expect(f.tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  // A sale-wide discount of half a cent is normalized to one cent before the
+  // agreed total is computed, so initiation and completion agree on it; the
+  // payable the POS quoted (1.04) is what the document records.
+  it('keeps a fractional-cent sale-wide discount reconciled with its agreement', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    f.state().products[0].salePrice = new Prisma.Decimal('1.00');
+    // A zero percentage is the fixture's no-op promotion: the list price holds.
+    f.state().products[0].promotionValue = new Prisma.Decimal(0);
+    f.state().products[0].taxRate = new Prisma.Decimal(5);
+    await f.initiate({
+      ...request({
+        items: [{ productId: 'coffee', quantity: 1, discountAmount: 0 }],
+      }),
+      discountAmount: 0.005,
+    });
+    await f.collect();
+
+    expect(f.state().loan.amount.toFixed(2)).toBe('1.04');
+    expect(f.state().intents[0].quoteSnapshot).toMatchObject({
+      discountAmount: '0.01',
+    });
+
+    await expect(f.complete()).resolves.toMatchObject({ status: 'CLOSED' });
+
+    expect(f.tx.sale.create.mock.calls[0][0].data).toMatchObject({
+      subtotal: new Prisma.Decimal('1.00'),
+      taxAmount: new Prisma.Decimal('0.05'),
+      discountAmount: new Prisma.Decimal('0.01'),
+      total: new Prisma.Decimal('1.04'),
+    });
+    expect(f.tx.fiscalDocument.create.mock.calls[0][0].data).toMatchObject({
+      snapshot: {
+        lineExtensionAmount: '1.00',
+        taxAmount: '0.05',
+        discountAmount: '0.01',
+        payableAmount: '1.04',
+      },
+    });
+  });
+
+  // The payable is never absorbed into the tax: a quote whose stored agreement
+  // its own lines do not reconstruct is refused, whatever the size of the gap.
+  it('refuses an agreement that its own lines do not reconstruct', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    await f.initiate();
+    await f.collect();
+    f.state().loan.amount = new Prisma.Decimal('178.45');
+    f.state().intents[0].agreedCustomerTotal = new Prisma.Decimal('178.45');
+
+    await expect(f.complete()).rejects.toThrow(ConflictException);
+
+    noSaleEffects(f.tx);
+    expect(f.tx.saleItem.create).not.toHaveBeenCalled();
+  });
+
+  // Three lines of 33.33 at 19%: exact tax 18.9981, agreed tax 19.00, per-line
+  // rounding 6.33 each. The payable stays 118.99 and the lines share 19.00.
+  it('preserves the agreed payable when per-line tax rounding loses a cent', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    await f.initiate(
+      request({
+        items: [0, 1, 2].map(() => ({
+          productId: 'coffee',
+          quantity: 1,
+          unitPrice: 33.33,
+          discountAmount: 0,
+        })),
+      }),
+    );
+    await f.collect();
+
+    await expect(f.complete()).resolves.toMatchObject({ status: 'CLOSED' });
+
+    expect(f.state().loan.amount.toFixed(2)).toBe('118.99');
+    expect(f.tx.sale.create.mock.calls[0][0].data).toMatchObject({
+      subtotal: new Prisma.Decimal('99.99'),
+      taxAmount: new Prisma.Decimal('19.00'),
+      total: new Prisma.Decimal('118.99'),
+    });
+    const rows = saleRows(f);
+    expect(rows.map((row) => row.taxCode)).toEqual(['IVA', 'IVA', 'IVA']);
+    expect(rows.map((row) => row.taxAmount)).toEqual([6.34, 6.33, 6.33]);
+    expect(rows.reduce((total, row) => total + Number(row.taxAmount), 0)).toBe(
+      19,
+    );
+    const lines = snapshotLines(f);
+    expect(lines.map((line) => line.taxAmount)).toEqual([
+      '6.34',
+      '6.33',
+      '6.33',
+    ]);
+    expect(
+      lines
+        .reduce((total, line) => total + Number(line.taxAmount), 0)
+        .toFixed(2),
+    ).toBe('19.00');
+  });
+
+  // Positive control: a fractional-cent line that still reconciles completes,
+  // and the snapshot's own money identity holds to the cent.
+  it('issues a consistent snapshot for an activated fractional-cent quote that reconciles', async () => {
+    const f = fixture();
+    f.organization.settings = { electronicInvoicing: { enabled: true } };
+    await f.initiate(
+      request({
+        items: [
+          {
+            productId: 'coffee',
+            quantity: 1,
+            unitPrice: 33.34,
+            discountAmount: 0,
+          },
+        ],
+      }),
+    );
+    await f.collect();
+
+    await expect(f.complete()).resolves.toMatchObject({ status: 'CLOSED' });
+
+    expect(f.tx.sale.create.mock.calls[0][0].data).toMatchObject({
+      subtotal: new Prisma.Decimal('33.34'),
+      taxAmount: new Prisma.Decimal('6.33'),
+      total: new Prisma.Decimal('39.67'),
+    });
+    const fiscal = f.tx.fiscalDocument.create.mock.calls[0][0].data;
+    expect(fiscal.snapshot).toMatchObject({
+      lineExtensionAmount: '33.34',
+      taxAmount: '6.33',
+      discountAmount: '0.00',
+      payableAmount: '39.67',
+      lines: [
+        expect.objectContaining({
+          taxCode: 'IVA',
+          taxAmount: '6.33',
+          total: '39.67',
+        }),
+      ],
+    });
+    const cents = (value: string) => Math.round(Number(value) * 100);
+    const snapshot = fiscal.snapshot as {
+      lineExtensionAmount: string;
+      taxAmount: string;
+      discountAmount: string;
+      payableAmount: string;
+    };
+    expect(
+      cents(snapshot.lineExtensionAmount) +
+        cents(snapshot.taxAmount) -
+        cents(snapshot.discountAmount),
+    ).toBe(cents(snapshot.payableAmount));
+  });
+
+  // The document describes the quote that was agreed, not the catalog as it
+  // looks at completion time.
+  it('snapshots the frozen quote facts after the catalog changed', async () => {
+    const f = fixture();
+    await f.initiate();
+    await f.collect();
+    Object.assign(f.state().products[0], {
+      salePrice: new Prisma.Decimal(999),
+      taxRate: new Prisma.Decimal(99),
+      taxCode: 'INC',
+    });
+
+    await f.complete();
+
+    const fiscal = f.tx.fiscalDocument.create.mock.calls[0][0].data;
+    expect(fiscal.snapshot).toMatchObject({
+      taxAmount: '28.50',
+      payableAmount: '178.50',
+      lines: [
+        expect.objectContaining({
+          unitPrice: '80.00',
+          taxRate: '19.00',
+          taxCode: 'IVA',
+          taxAmount: '28.50',
+        }),
+      ],
+    });
+  });
 
   it.each([
     'unpaid',

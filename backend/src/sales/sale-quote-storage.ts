@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { DianTaxCode } from '../common/utils/tax.util';
 import type { buildSaleQuote } from './sale-pricing';
 
 export type PreparedSaleQuote = Readonly<{
@@ -10,6 +11,7 @@ export type PreparedSaleQuote = Readonly<{
       readonly resolvedUnitPrice: string;
       readonly discountAmount: string;
       readonly taxRate: number;
+      readonly taxCode: DianTaxCode | null;
       readonly costPriceSnapshot: string;
     }>;
     readonly agreedCustomerTotal: string;
@@ -22,6 +24,13 @@ type QuoteItem = ReturnType<typeof buildSaleQuote>['items'][number];
 
 const MAX_STORED_MONEY = 99999999.99;
 const MAX_STORED_QUANTITY = 2147483647;
+
+/** The catalog tribute codes a quote row may carry, mirroring the enum. */
+const TAX_CODES: readonly string[] = [
+  DianTaxCode.IVA,
+  DianTaxCode.INC,
+  DianTaxCode.ICA,
+];
 
 /** Normalize server numbers only at this Decimal(10,2) persistence boundary. */
 function normalizeMoney(value: number): Prisma.Decimal {
@@ -74,12 +83,29 @@ export function prepareSaleQuoteForStorage(
     ) {
       throw new BadRequestException('Quote tax rate must fit Decimal(5,2)');
     }
+    // A quote row freezes the tribute code the rate was resolved under, and the
+    // two have to agree: a code is only meaningful beside a positive rate, and a
+    // taxed row with no code could never be completed as a fiscal document.
+    // Refusing a disagreeing pair here keeps the completion validator a defence
+    // in depth instead of the first place a bad quote is noticed.
+    if (item.taxCode === null || item.taxCode === undefined) {
+      if (item.taxRate !== 0) {
+        throw new BadRequestException(
+          'Quote tax rate requires a catalog DIAN tribute code',
+        );
+      }
+    } else if (!TAX_CODES.includes(item.taxCode) || item.taxRate <= 0) {
+      throw new BadRequestException(
+        'Quote tax code must be a catalog DIAN tribute code with a positive rate',
+      );
+    }
     return Object.freeze({
       productId: item.productId,
       quantity: item.quantity,
       resolvedUnitPrice: normalizeMoney(item.resolvedUnitPrice).toFixed(2),
       discountAmount: normalizeMoney(item.discountAmount).toFixed(2),
       taxRate: item.taxRate,
+      taxCode: item.taxCode,
       costPriceSnapshot: normalizeMoney(Number(item.costPriceSnapshot)).toFixed(
         2,
       ),

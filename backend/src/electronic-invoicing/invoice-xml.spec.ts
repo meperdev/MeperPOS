@@ -4,7 +4,11 @@ import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DianExtensionsInput } from './dian-extensions';
-import { DianInvoiceInput, buildInvoiceXml } from './invoice-xml';
+import {
+  DianInvoiceInput,
+  DianInvoiceLine,
+  buildInvoiceXml,
+} from './invoice-xml';
 
 /** The CUFE published in Annex 1.9 section 11.2.1, reused as a valid fixture. */
 const CUFE =
@@ -345,6 +349,72 @@ describe('buildInvoiceXml totals', () => {
     expect(xml).not.toMatch(/>(03|04)</);
   });
 
+  it('splits the invoice TaxTotal into one subtotal per persisted code', () => {
+    const base = baseInput();
+    const xml = buildInvoiceXml(
+      baseInput({
+        lines: [
+          { ...base.lines[0], taxCode: 'IVA' },
+          { ...base.lines[1], taxCode: 'INC', taxAmount: '95000.00' },
+        ],
+      }),
+    );
+
+    const taxTotal = block(xml, 'cac:TaxTotal', 1);
+    expect(valueAtDepth(taxTotal, 'cbc:TaxAmount', 2)).toEqual(['285000.00']);
+
+    const read = (subtotal: string) => {
+      const category = block(subtotal, 'cac:TaxCategory', 3);
+      return {
+        code: valueAtDepth(category, 'cbc:ID', 4)[0],
+        name: valueAtDepth(category, 'cbc:Name', 4)[0],
+        taxable: valueAtDepth(subtotal, 'cbc:TaxableAmount', 3)[0],
+        tax: valueAtDepth(subtotal, 'cbc:TaxAmount', 3)[0],
+      };
+    };
+
+    expect(blocks(taxTotal, 'cac:TaxSubtotal', 2).map(read)).toEqual([
+      { code: '01', name: 'IVA', taxable: '1000000.00', tax: '190000.00' },
+      { code: '04', name: 'INC', taxable: '500000.00', tax: '95000.00' },
+    ]);
+  });
+
+  it('groups lines that share a code into a single subtotal', () => {
+    const base = baseInput();
+    const xml = buildInvoiceXml(
+      baseInput({
+        lines: base.lines.map((line) => ({ ...line, taxCode: 'INC' })),
+      }),
+    );
+
+    const taxTotal = block(xml, 'cac:TaxTotal', 1);
+    const subtotals = blocks(taxTotal, 'cac:TaxSubtotal', 2);
+
+    expect(subtotals).toHaveLength(1);
+    expect(valueAtDepth(subtotals[0], 'cbc:TaxableAmount', 3)).toEqual([
+      '1500000.00',
+    ]);
+    expect(valueAtDepth(subtotals[0], 'cbc:TaxAmount', 3)).toEqual([
+      '285000.00',
+    ]);
+    const category = block(subtotals[0], 'cac:TaxCategory', 3);
+    expect(valueAtDepth(category, 'cbc:ID', 4)).toEqual(['04']);
+    expect(valueAtDepth(category, 'cbc:Name', 4)).toEqual(['INC']);
+  });
+
+  it('refuses a sale-level tax that disagrees with its own subtotals', () => {
+    const base = baseInput();
+
+    expect(() =>
+      buildInvoiceXml(
+        baseInput({
+          taxAmount: '284000.00',
+          lines: base.lines.map((line) => ({ ...line, taxCode: 'IVA' })),
+        }),
+      ),
+    ).toThrow(/tax total/i);
+  });
+
   it('writes the LegalMonetaryTotal amounts verbatim and in sequence', () => {
     const xml = buildInvoiceXml(baseInput());
     const total = block(xml, 'cac:LegalMonetaryTotal', 1);
@@ -429,6 +499,12 @@ describe('buildInvoiceXml lines', () => {
           description: 'Sticker',
         },
       ],
+      // The extra line adds 3800.00 of tax, so the sale-level amounts have to
+      // follow it: the document is refused when its header contradicts the
+      // lines it renders.
+      lineExtensionAmount: '1520000.00',
+      taxAmount: '288800.00',
+      payableAmount: '1808800.00',
     });
     const xml = buildInvoiceXml(threeLines);
 
@@ -916,5 +992,83 @@ describeXsd('buildInvoiceXml against UBL-Invoice-2.1.xsd', () => {
     validateWithXmllint(
       buildInvoiceXml(baseInput({ dianExtensions: EXTENSIONS })),
     );
+  });
+});
+
+/**
+ * T4b rule 6: a line that carries a persisted tax code emits that code's DIAN
+ * tax scheme; a line without one keeps scheme 01, which is today's behaviour.
+ */
+describe('buildInvoiceXml per-line tax scheme', () => {
+  const withLineCodes = (codes: Array<DianInvoiceLine['taxCode']>) =>
+    baseInput({
+      lines: baseInput().lines.map((line, index) => ({
+        ...line,
+        taxCode: codes[index],
+      })),
+    });
+
+  const lineScheme = (xml: string, index: number) => {
+    const line = blocks(xml, 'cac:InvoiceLine', 1)[index];
+    const subtotal = block(
+      block(line, 'cac:TaxTotal', 2),
+      'cac:TaxSubtotal',
+      3,
+    );
+    const category = block(subtotal, 'cac:TaxCategory', 4);
+    const scheme = block(category, 'cac:TaxScheme', 5);
+    return {
+      code: valueAtDepth(category, 'cbc:ID', 5)[0],
+      name: valueAtDepth(category, 'cbc:Name', 5)[0],
+      schemeCode: valueAtDepth(scheme, 'cbc:ID', 6)[0],
+      schemeName: valueAtDepth(scheme, 'cbc:Name', 6)[0],
+    };
+  };
+
+  it('keeps IVA scheme 01 for a line with no persisted code', () => {
+    expect(lineScheme(buildInvoiceXml(baseInput()), 0)).toEqual({
+      code: '01',
+      name: 'IVA',
+      schemeCode: '01',
+      schemeName: 'IVA',
+    });
+  });
+
+  it('emits the persisted code tax scheme per line', () => {
+    const xml = buildInvoiceXml(withLineCodes(['INC', 'ICA']));
+    expect(lineScheme(xml, 0)).toEqual({
+      code: '04',
+      name: 'INC',
+      schemeCode: '04',
+      schemeName: 'INC',
+    });
+    expect(lineScheme(xml, 1)).toEqual({
+      code: '03',
+      name: 'ICA',
+      schemeCode: '03',
+      schemeName: 'ICA',
+    });
+  });
+
+  it('keeps scheme 01 for an explicit null code (pre-feature sale)', () => {
+    const xml = buildInvoiceXml(withLineCodes([null, null]));
+    expect(lineScheme(xml, 0)).toEqual({
+      code: '01',
+      name: 'IVA',
+      schemeCode: '01',
+      schemeName: 'IVA',
+    });
+    expect(lineScheme(xml, 1)).toEqual({
+      code: '01',
+      name: 'IVA',
+      schemeCode: '01',
+      schemeName: 'IVA',
+    });
+  });
+
+  it('rejects an unknown persisted code instead of emitting IVA', () => {
+    expect(() =>
+      buildInvoiceXml(withLineCodes(['RENTA' as never, null])),
+    ).toThrow(/taxCode/);
   });
 });
