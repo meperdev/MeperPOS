@@ -258,4 +258,94 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
     expect(after.cancelReason).toBeNull();
     expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
   });
+
+  // T4b: the per-line fiscal facts must survive the transaction and the database,
+  // because the CUFE and the XML read the persisted rows, never the catalog.
+  it('persists the resolved tax code and tax amount per line', async () => {
+    const category = await prisma.category.create({
+      data: {
+        name: 'Sales INT INC Cat',
+        organizationId: fixture.orgAId,
+        active: true,
+      },
+    });
+    const incProduct = await prisma.product.create({
+      data: {
+        name: 'Sales INT INC Product',
+        sku: 'SALES-SKU-INC-' + Date.now(),
+        salePrice: new Prisma.Decimal(1000),
+        costPrice: new Prisma.Decimal(500),
+        taxRate: new Prisma.Decimal(5),
+        taxCode: 'INC',
+        taxable: true,
+        stock: 10,
+        minStock: 1,
+        active: true,
+        categoryId: category.id,
+        organizationId: fixture.orgAId,
+      },
+    });
+
+    const sale = await salesService.create(
+      {
+        customerId,
+        items: [
+          { productId: incProduct.id, quantity: 1 },
+          // Untaxed line: `taxable` defaults to false, so it resolves no tax.
+          { productId, quantity: 1 },
+        ],
+        payments: [{ method: 'CASH' as const, amount: 2100 }],
+      },
+      fixture.userAId,
+      fixture.orgAId,
+    );
+
+    const rows = await prisma.saleItem.findMany({
+      where: { saleId: sale.id },
+      select: {
+        productId: true,
+        taxCode: true,
+        taxAmount: true,
+        taxRate: true,
+      },
+    });
+    expect(rows).toHaveLength(2);
+
+    const taxed = rows.find((row) => row.productId === incProduct.id);
+    expect(taxed?.taxCode).toBe('INC');
+    expect(Number(taxed?.taxAmount)).toBe(50);
+
+    const untaxed = rows.find((row) => row.productId === productId);
+    // No code and no amount: a code may never accompany a zero amount.
+    expect(untaxed?.taxCode).toBeNull();
+    expect(untaxed?.taxAmount).toBeNull();
+  });
+
+  it('leaves a pre-feature sale row NULL instead of backfilling it', async () => {
+    // Spec S7: rows written before the feature are never reclassified, so the
+    // columns must be nullable and must stay NULL when nothing sets them.
+    const sale = await salesService.create(
+      buildSaleDto(productId, customerId),
+      fixture.userAId,
+      fixture.orgAId,
+    );
+    const legacy = await prisma.saleItem.create({
+      data: {
+        saleId: sale.id,
+        productId,
+        quantity: 1,
+        unitPrice: new Prisma.Decimal(1000),
+        costPriceSnapshot: new Prisma.Decimal(500),
+        taxRate: new Prisma.Decimal(19),
+        discountAmount: new Prisma.Decimal(0),
+        subtotal: new Prisma.Decimal(1000),
+        total: new Prisma.Decimal(1190),
+        organizationId: fixture.orgAId,
+      },
+      select: { taxCode: true, taxAmount: true },
+    });
+
+    expect(legacy.taxCode).toBeNull();
+    expect(legacy.taxAmount).toBeNull();
+  });
 });

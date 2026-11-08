@@ -611,6 +611,12 @@ model SaleItem {
   unitPrice      Decimal      @db.Decimal(10, 2)
   costPriceSnapshot Decimal?  @db.Decimal(10, 2)
   taxRate        Decimal      @db.Decimal(5, 2)
+  /// DIAN tribute code resolved with `taxRate` at sale time. NULL on a
+  /// pre-feature sale (never reclassified, spec S7) and on an untaxed line.
+  taxCode        DianTaxCode?
+  /// Tax charged on this line, persisted beside the code it belongs to so the
+  /// CUFE and the XML never have to re-derive it. NULL iff `taxCode` is NULL.
+  taxAmount      Decimal?     @db.Decimal(10, 2)
   discountAmount Decimal      @default(0) @db.Decimal(10, 2)
   subtotal       Decimal      @db.Decimal(10, 2)
   total          Decimal      @db.Decimal(10, 2)
