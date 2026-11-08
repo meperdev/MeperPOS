@@ -4,6 +4,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Prisma 6.19.2 requires the datasource URL here (removing it fails with
+  // P1012 "Argument url is missing in data source block"); `prisma.config.ts`
+  // resolves the same value for the CLI.
+  // pi-lens-ignore: Prisma:unknown
   url      = env("DATABASE_URL")
 }
 
@@ -31,6 +35,7 @@ model Organization {
   customers          Customer[]
   expenseGroups      ExpenseGroup[]
   expenseLabels      ExpenseLabel[]
+  fiscalDocuments    FiscalDocument[]
   payrollExpenseCategory PayrollExpenseCategory?
   payrollObligationExpenses PayrollObligationExpense[]
   expensePayments    ExpensePayment[]
@@ -582,8 +587,12 @@ model Sale {
   user               User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   items              SaleItem[]
   posLoanSaleIntent  PosLoanSaleIntent?
+  fiscalDocument     FiscalDocument?
 
   @@unique([id, organizationId, customerId])
+  /// Needed by `FiscalDocument`'s composite foreign key, which is what makes a
+  /// fiscal document's organization and its sale's organization the same one.
+  @@unique([id, organizationId])
   @@unique([organizationId, saleNumber])
   @@index([organizationId, createdAt, status])
   @@index([organizationId, userId])
@@ -627,6 +636,51 @@ model SaleItem {
 
   @@index([organizationId, saleId])
   @@index([organizationId, productId])
+}
+
+/// The fiscal document a sale emits, and the only persisted record of its DIAN
+/// lifecycle. One row per sale (`saleId` is unique): a sale either has a fiscal
+/// document from the moment it is registered or it predates this feature.
+///
+/// `snapshot` is the immutable capture of the fiscal facts taken inside the
+/// sale transaction. That immutability is a service rule, not yet a database
+/// constraint: a transition only moves `status` and its timestamps, and no code
+/// path updates `snapshot`, but a direct SQL UPDATE could still rewrite it.
+/// It deliberately holds no CUFE, because the
+/// technical key is not available yet (spec S6); `cufe` stays NULL until a
+/// transport obtains one.
+model FiscalDocument {
+  id              String                @id @default(uuid())
+  organizationId  String
+  saleId          String                @unique
+  status          FiscalDocumentStatus  @default(PENDING)
+  cufe            String?
+  invoiceNumber   String?
+  issuedAt        DateTime
+  sentAt          DateTime?
+  resolvedAt      DateTime?
+  rejectionReason String?
+  /// Fiscal facts of the sale as it was registered; write-once.
+  snapshot        Json
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  /// RESTRICT, never Cascade: the fiscal document is the evidence of what the
+  /// organization declared. The database refuses to delete an organization that
+  /// still holds one, so no cascade and no application bug can take the fiscal
+  /// history with it.
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// Composite foreign key on purpose: a document can only reference a sale of
+  /// its own organization, so a cross-tenant pair cannot be persisted even by a
+  /// direct write. `saleId` is separately unique: one document per sale.
+  /// RESTRICT here as well: the fiscal document outlives its own sale. Deleting
+  /// the sale is refused by the database, exactly like deleting the
+  /// organization, so no code path can erase the evidence underneath it.
+  sale         Sale         @relation(fields: [saleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([saleId, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, issuedAt])
 }
 
 model Task {
@@ -1220,6 +1274,18 @@ enum SaleStatus {
   COMPLETED
   CANCELLED
   RETURNED_PARTIAL
+}
+
+/// DIAN lifecycle of a sale's fiscal document. The legal edges live in
+/// `electronic-invoicing/fiscal-document.service.ts`; this enum only stores the
+/// states. PENDING is the state a sale is registered in, ACCEPTED, REJECTED and
+/// VOIDED are terminal.
+enum FiscalDocumentStatus {
+  PENDING
+  SENT
+  ACCEPTED
+  REJECTED
+  VOIDED
 }
 
 enum TaskStatus {
