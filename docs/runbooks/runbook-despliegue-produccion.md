@@ -205,6 +205,41 @@ curl -X POST "$BACKEND_URL/api/admin/organizations" \
    de provision. El catalogo opcional de una organizacion de sandbox sigue
    disponible con `npm run seed:org:prod` (requiere `SEED_ALLOW_NON_DEV=true`).
 
+   Para una demo completa de una organizacion sandbox (catalogo, clientes,
+   proveedores, ordenes de compra, ventas, salidas, prestamos, empleados, turnos,
+   nomina y tareas) existe `npm run sandbox:seed:prod`. Es dry-run por defecto:
+   sin `--apply` no escribe nada. Requiere `SEED_ALLOW_NON_DEV=true`, un
+   `SEED_SANDBOX_SLUG` explicito (fuera de desarrollo nunca usa un slug por
+   defecto) y, para aplicar, `SEED_DEMO_PASSWORD` o `SEED_DEMO_PASSWORD_FILE`
+   con al menos 12 caracteres. Solo crea o completa esa organizacion sandbox; no
+   modifica otras organizaciones ni sobrescribe filas existentes.
+
+```bash
+cd backend
+export SEED_ALLOW_NON_DEV=true
+export SEED_SANDBOX_SLUG='sandbox-demo'
+export SEED_OWNER_EMAIL='owner@sandbox-demo.demo'
+PWFILE="$(mktemp)"
+read -rsp 'SEED_DEMO_PASSWORD: ' P; echo
+printf '%s\n' "$P" > "$PWFILE"; unset P
+chmod 600 "$PWFILE"
+export SEED_DEMO_PASSWORD_FILE="$PWFILE"
+railway run -- npm run sandbox:seed:railway
+railway run -- npm run sandbox:seed:railway -- --apply
+unset SEED_DEMO_PASSWORD_FILE
+rm -f "$PWFILE"
+```
+
+   `railway run` ejecuta el comando **en tu maquina** con las variables del
+   servicio linkeado, no dentro del contenedor: necesita el branch local con
+   `node_modules` instalados y conectividad desde tu equipo a `DATABASE_URL`
+   (el pooler de Supabase del runbook sirve; una URL `*.railway.internal` no
+   resuelve desde fuera de Railway). `sandbox:seed:railway` no usa
+   `.env.production`: toma `DATABASE_URL` del entorno inyectado por Railway.
+
+   El login del owner usa `SEED_OWNER_EMAIL` y la password elegida; los usuarios
+   demo usan el dominio `SEED_SANDBOX_EMAIL_DOMAIN` (por defecto `<slug>.demo`).
+
 ### 4.2 Railway
 
 1. Root directory: `backend`.
