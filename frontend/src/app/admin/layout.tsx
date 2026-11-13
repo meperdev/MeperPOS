@@ -12,6 +12,7 @@ import { Building2, LayoutDashboard, LogOut, Loader2 } from "lucide-react";
 const navItems = [
   { href: "/admin", label: "Panel" },
   { href: "/admin/organizations", label: "Organizaciones" },
+  { href: "/admin/whatsapp", label: "WhatsApp central" },
 ] as const;
 
 export default function AdminLayout({

@@ -34,7 +34,7 @@ export class WhatsAppIntelligenceController {
 
   @Get()
   status() {
-    return this.sessions.status({ channel: 'INTELLIGENCE' });
+    return this.sessions.describe({ channel: 'INTELLIGENCE' });
   }
 
   @Get('qr')
@@ -59,5 +59,15 @@ export class WhatsAppIntelligenceController {
   @HttpCode(204)
   logout() {
     return this.sessions.logout();
+  }
+
+  /**
+   * Unlink and start again in one request. The screen asks for a new QR, and
+   * never has to own the two-step ceremony that could leave the number unlinked.
+   */
+  @Post('relink')
+  @HttpCode(200)
+  relink() {
+    return this.sessions.relink();
   }
 }

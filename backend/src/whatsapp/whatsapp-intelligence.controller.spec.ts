@@ -19,6 +19,7 @@ import { WhatsAppSessionService } from './whatsapp-session.service';
 import { deriveWebhookKey } from './waha-signature';
 
 const MASTER = 'master-webhook-secret';
+const OBSERVED_AT = new Date('2026-01-02T03:04:05.000Z');
 
 /**
  * Stands in for JwtStrategy. A super-admin carries no organization, which is
@@ -59,6 +60,13 @@ function fakeConnections() {
     getOrCreateCommercial: jest.fn(),
     getOrCreateIntelligence: jest.fn().mockResolvedValue({ id: 'central-row' }),
     recordStatus: jest.fn().mockResolvedValue({ id: 'central-row' }),
+    findById: jest.fn().mockResolvedValue({
+      id: 'central-row',
+      sessionName: INTELLIGENCE_SESSION,
+      status: 'WORKING',
+      accountId: '57311@c.us',
+      statusUpdatedAt: OBSERVED_AT,
+    }),
   };
 }
 
@@ -106,6 +114,7 @@ const ROUTES = [
   { method: 'post' as const, path: '/whatsapp/intelligence/session/stop' },
   { method: 'post' as const, path: '/whatsapp/intelligence/session/restart' },
   { method: 'post' as const, path: '/whatsapp/intelligence/session/logout' },
+  { method: 'post' as const, path: '/whatsapp/intelligence/session/relink' },
 ];
 
 describe('intelligence WhatsApp session boundary', () => {
@@ -134,7 +143,12 @@ describe('intelligence WhatsApp session boundary', () => {
         .get('/whatsapp/intelligence/session')
         .set(auth('SUPER_ADMIN'));
       expect(status.status).toBe(200);
-      expect(status.body).toEqual({ status: 'WORKING' });
+      expect(status.body).toEqual({
+        status: 'WORKING',
+        accountId: '57311@c.us',
+        sessionName: INTELLIGENCE_SESSION,
+        lastObservedAt: OBSERVED_AT.toISOString(),
+      });
       expect(provider.status).toHaveBeenCalledWith(INTELLIGENCE_SESSION);
 
       const qr = await request(server)
@@ -162,6 +176,48 @@ describe('intelligence WhatsApp session boundary', () => {
         .set(auth('SUPER_ADMIN'));
       expect(loggedOut.status).toBe(204);
       expect(provider.logout).toHaveBeenCalledWith(INTELLIGENCE_SESSION);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('re-links in one ordered operation instead of leaving the session unlinked', async () => {
+    const { app, provider } = await build(MASTER);
+    const server = app.getHttpServer();
+    try {
+      const response = await request(server)
+        .post('/whatsapp/intelligence/session/relink')
+        .set(auth('SUPER_ADMIN'));
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ status: 'WORKING' });
+      const unlinkOrder = (provider.logout as jest.Mock).mock
+        .invocationCallOrder[0];
+      const startOrder = (provider.ensureStarted as jest.Mock).mock
+        .invocationCallOrder[0];
+      expect(unlinkOrder).toBeLessThan(startOrder);
+      expect(provider.ensureStarted).toHaveBeenCalledWith(
+        INTELLIGENCE_SESSION,
+        deriveWebhookKey(MASTER, INTELLIGENCE_SESSION),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not start the session again when the unlink is refused', async () => {
+    const provider = fakeProvider();
+    (provider.logout as jest.Mock).mockRejectedValue(
+      new Error('provider refused'),
+    );
+    const { app } = await build(MASTER, provider);
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/whatsapp/intelligence/session/relink')
+        .set(auth('SUPER_ADMIN'));
+
+      expect(response.status).toBe(500);
+      expect(provider.ensureStarted).not.toHaveBeenCalled();
     } finally {
       await app.close();
     }
