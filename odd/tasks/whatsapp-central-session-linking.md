@@ -25,7 +25,7 @@ Runtime fact: the backend is Express; the central session is one row (`INTELLIGE
 |---|---|---|---|
 | 1 | CLI pairing path and its module | 558 | `5cc58df` |
 | 2 | Platform read model and one re-link operation | ~120 | `699532f` |
-| 3 | Platform console, hook, page test and docs | ~430 | pending |
+| 3 | Platform console, hook, page test and docs | ~430 | `a6f0f92` |
 
 Slice 1 crossed the ~400 authored-line guideline because the pairing loop, its eight tests, the command and the feature document landed together; slice 2 was kept as its own commit so the backend authority change can be reviewed alone, and slice 3 keeps the console and its documentation together.
 
@@ -37,4 +37,6 @@ Slice 1 crossed the ~400 authored-line guideline because the pairing loop, its e
 - L4: Decision: the human selected «Ambas: CLI para el pairing, consola para salud y re-vinculación» over the single-surface alternatives.
 - L5: Exploration findings: the platform surface already existed (`@Controller('whatsapp/intelligence/session')` at `backend/src/whatsapp/whatsapp-intelligence.controller.ts:23` with `GET /qr`, `POST /logout`, `POST /restart`), `isSuperAdmin` is persisted and mapped by the JWT strategy, and the frontend had no central surface at all. Conclusion: the missing piece was a surface, not an authority model.
 - L6: Pre-existing finding, deliberately not folded into this change: `backend/src/auth/jwt.strategy.ts:47,55` grants the platform role when the signed claim says `SUPER_ADMIN` or the row says `isSuperAdmin`, so the claim alone is trusted. Server-minted tokens make it unreachable today, but the row should be the only source. Report it to the human as its own unit.
-- L7: Evidence for the three units: `backend/src/whatsapp/` 454 tests across 25 suites green with PostgreSQL up; `frontend/src/app/admin/whatsapp` 4 tests green; `tsc --noEmit` clean in both packages; eslint silent on every touched file.
+- L7: Evidence for the three units: backend full suite `4211 passed, 15 skipped, 195 suites` with PostgreSQL up; frontend full suite `872 passed, 97 files`; `tsc --noEmit` clean in both packages; eslint silent on every touched file; command smoke covers `--help` (exit `0`), an unknown argument (exit `1`) and an empty provider environment (exit `1`, naming the four missing variables).
+- L8: The repository's own authorization-coverage gate rejected `POST /relink` on the first full backend run because it had no row in `docs/authorization-matrix.md`; the row and its rationale were added and the re-run is green. Recorded because the gate is the reason no route can reach production undocumented.
+- L9: Not verified here: the real pairing against a deployed WAHA instance and the physical central phone. This workspace has no provider reachable, so the QR scan itself remains an operator step, not a claimed result.
