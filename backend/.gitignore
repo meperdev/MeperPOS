@@ -6,3 +6,6 @@ node_modules
 
 /generated/prisma
 dist/
+
+# Operator artifacts written by the WhatsApp pairing command
+.tmp/
