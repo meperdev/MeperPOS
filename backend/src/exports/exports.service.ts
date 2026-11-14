@@ -5,12 +5,14 @@ import { ExportQueryDto, InventoryMovementsQueryDto } from './dto/export.dto';
 import * as ExcelJS from 'exceljs';
 import { jsPDF } from 'jspdf';
 import * as csv from '@fast-csv/format';
+import { BusinessModulesService } from '../business-modules/business-modules.service';
 
 @Injectable()
 export class ExportsService {
   constructor(
     private prisma: PrismaService,
-    private reportsService?: ReportsService,
+    private reportsService: ReportsService,
+    private modules: BusinessModulesService,
   ) {}
 
   async getInventoryMovements(
@@ -93,7 +95,16 @@ export class ExportsService {
     response: any,
   ) {
     const customers = await this.getCustomersData(organizationId, query);
-    return this.exportData(customers, 'customers', query.format, response);
+    const includeVehicle = organizationId
+      ? await this.modules.isEnabled(organizationId, 'vehicles')
+      : true;
+    return this.exportData(
+      customers,
+      'customers',
+      query.format,
+      response,
+      includeVehicle,
+    );
   }
 
   async exportInventory(
@@ -253,25 +264,33 @@ export class ExportsService {
     type: string,
     format: string,
     response: any,
+    includeVehicle = true,
   ) {
     switch (format) {
       case 'excel':
-        await this.exportToExcel(data, type, response);
+        await this.exportToExcel(data, type, response, includeVehicle);
         break;
       case 'csv':
-        await this.exportToCSV(data, type, response);
+        await this.exportToCSV(data, type, response, includeVehicle);
         break;
       case 'pdf':
-        await this.exportToPDF(data, type, response);
+        await this.exportToPDF(data, type, response, includeVehicle);
         break;
     }
   }
 
-  private async exportToExcel(data: any[], type: string, response: any) {
+  private async exportToExcel(
+    data: any[],
+    type: string,
+    response: any,
+    includeVehicle: boolean,
+  ) {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(type);
-    worksheet.addRow(this.getHeaders(type));
-    data.forEach((item) => worksheet.addRow(this.getRowData(type, item)));
+    worksheet.addRow(this.getHeaders(type, includeVehicle));
+    data.forEach((item) =>
+      worksheet.addRow(this.getRowData(type, item, includeVehicle)),
+    );
 
     response.setHeader(
       'Content-Type',
@@ -285,10 +304,15 @@ export class ExportsService {
     response.end();
   }
 
-  private async exportToCSV(data: any[], type: string, response: any) {
+  private async exportToCSV(
+    data: any[],
+    type: string,
+    response: any,
+    includeVehicle: boolean,
+  ) {
     const csvData = [
-      this.getHeaders(type),
-      ...data.map((item) => this.getRowData(type, item)),
+      this.getHeaders(type, includeVehicle),
+      ...data.map((item) => this.getRowData(type, item, includeVehicle)),
     ];
 
     response.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -302,7 +326,12 @@ export class ExportsService {
     csv.write(csvData, { headers: false }).pipe(response);
   }
 
-  private async exportToPDF(data: any[], type: string, response: any) {
+  private async exportToPDF(
+    data: any[],
+    type: string,
+    response: any,
+    includeVehicle: boolean,
+  ) {
     const doc = new jsPDF();
 
     doc.setFontSize(16);
@@ -315,8 +344,8 @@ export class ExportsService {
     let y = 50;
     const margin = 14;
 
-    const headers = this.getHeaders(type);
-    const colWidths = this.getColumnWidths(type);
+    const headers = this.getHeaders(type, includeVehicle);
+    const colWidths = this.getColumnWidths(type, includeVehicle);
 
     let x = margin;
     headers.forEach((header: string, index: number) => {
@@ -327,7 +356,7 @@ export class ExportsService {
     y += 10;
 
     data.forEach((item) => {
-      const rowData = this.getRowData(type, item);
+      const rowData = this.getRowData(type, item, includeVehicle);
       x = margin;
 
       if (y > 270) {
@@ -352,7 +381,7 @@ export class ExportsService {
     response.send(Buffer.from(doc.output('arraybuffer')));
   }
 
-  private getHeaders(type: string): string[] {
+  private getHeaders(type: string, includeVehicle = true): string[] {
     const headers: Record<string, string[]> = {
       sales: [
         'Sale #',
@@ -394,7 +423,10 @@ export class ExportsService {
       expenses: ['Date', 'Group', 'Label', 'Description', 'Total', 'Status'],
       economic: ['Section', 'Metric', 'Value'],
     };
-    return headers[type] || [];
+    const result = headers[type] || [];
+    return type === 'customers' && !includeVehicle
+      ? result.slice(0, -1)
+      : result;
   }
 
   /**
@@ -417,7 +449,7 @@ export class ExportsService {
     return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   }
 
-  private getRowData(type: string, item: any): any[] {
+  private getRowData(type: string, item: any, includeVehicle = true): any[] {
     const getters: Record<string, (item: any) => any[]> = {
       sales: (item) => [
         this.neutralizeFormulaText(item.saleNumber),
@@ -474,10 +506,13 @@ export class ExportsService {
       economic: (item) =>
         item.map((cell: unknown) => this.neutralizeFormulaText(cell)),
     };
-    return getters[type](item);
+    const result = getters[type](item);
+    return type === 'customers' && !includeVehicle
+      ? result.slice(0, -1)
+      : result;
   }
 
-  private getColumnWidths(type: string): number[] {
+  private getColumnWidths(type: string, includeVehicle = true): number[] {
     const widths: Record<string, number[]> = {
       sales: [20, 30, 40, 25, 25, 30],
       products: [50, 25, 25, 20, 20, 15, 15],
@@ -486,6 +521,9 @@ export class ExportsService {
       expenses: [25, 30, 30, 40, 20, 20],
       economic: [30, 40, 30],
     };
-    return widths[type] || [];
+    const result = widths[type] || [];
+    return type === 'customers' && !includeVehicle
+      ? result.slice(0, -1)
+      : result;
   }
 }

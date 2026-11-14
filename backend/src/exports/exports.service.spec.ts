@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { ExportsService } from './exports.service';
 import { ExportQueryDto } from './dto/export.dto';
+import { ReportsService } from '../reports/reports.service';
 import * as csv from '@fast-csv/format';
 
 jest.mock('@fast-csv/format', () => ({
@@ -42,6 +43,7 @@ describe('ExportsService', () => {
     },
   };
   const reportsMock = { getEconomicExport: jest.fn() };
+  const modulesMock = { isEnabled: jest.fn() };
 
   const ORG_ID = 'org-1';
 
@@ -58,7 +60,18 @@ describe('ExportsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ExportsService(prismaMock as never, reportsMock as never);
+    modulesMock.isEnabled.mockResolvedValue(true);
+    service = new ExportsService(
+      prismaMock as never,
+      reportsMock as never,
+      modulesMock as never,
+    );
+  });
+
+  it('exposes the reports service injection token to Nest', () => {
+    expect(Reflect.getMetadata('design:paramtypes', ExportsService)[1]).toBe(
+      ReportsService,
+    );
   });
 
   it('getInventoryMovements filters by organizationId', async () => {
@@ -245,6 +258,39 @@ describe('ExportsService', () => {
           active: true,
         }),
       }),
+    );
+  });
+
+  it('omits the plate header and value from customer exports when vehicles are disabled', async () => {
+    modulesMock.isEnabled.mockResolvedValue(false);
+    prismaMock.customer.findMany.mockResolvedValue([
+      {
+        name: 'Ana',
+        documentType: 'CC',
+        documentNumber: '1',
+        segment: 'VIP',
+        placaMoto: 'ABC123',
+      },
+    ]);
+    await service.exportCustomers(
+      ORG_ID,
+      { format: 'csv', type: 'customers' } as ExportQueryDto,
+      buildResMock(),
+    );
+    expect(csv.write).toHaveBeenCalledWith(
+      [
+        [
+          'Name',
+          'Document Type',
+          'Document #',
+          'Email',
+          'Phone',
+          'Segment',
+          'Referencia',
+        ],
+        ['Ana', 'CC', '1', 'N/A', 'N/A', 'VIP', 'N/A'],
+      ],
+      { headers: false },
     );
   });
 
