@@ -110,6 +110,28 @@ export function useUpdateOrganizationPlan() {
   });
 }
 
+export function useOrganizationVehiclesModule(id: string) {
+  return useQuery({
+    queryKey: ['admin', 'organization', id, 'modules', 'vehicles'],
+    queryFn: () => api.get<{ enabled: boolean }>(`/admin/organizations/${id}/modules/vehicles`).then((res) => res.data),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateOrganizationVehiclesModule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api.patch(`/admin/organizations/${id}/modules/vehicles`, { enabled }).then((res) => res.data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'organization', id, 'modules', 'vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['business-modules'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+}
+
 export function useAdminMetrics() {
   return useQuery({
     queryKey: ['admin', 'metrics'],

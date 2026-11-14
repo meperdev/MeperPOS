@@ -39,6 +39,8 @@ vi.mock("@/hooks/useAdmin", () => ({
   useUpdateMemberRole: () => mockUseUpdateMemberRole(),
   useRemoveOrganizationMember: () => mockUseRemoveOrganizationMember(),
   useDeleteOrganization: () => mockUseDeleteOrganization(),
+  useOrganizationVehiclesModule: () => ({ data: { enabled: true }, isLoading: false, isError: false }),
+  useUpdateOrganizationVehiclesModule: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
 function wrapper({ children }: { children: React.ReactNode }) {
