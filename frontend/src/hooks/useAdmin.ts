@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import type { BusinessModule } from '@/hooks/useBusinessModules';
 
 export interface OrganizationUser {
   id: string;
@@ -110,21 +111,21 @@ export function useUpdateOrganizationPlan() {
   });
 }
 
-export function useOrganizationVehiclesModule(id: string) {
+export function useOrganizationModules(id: string) {
   return useQuery({
-    queryKey: ['admin', 'organization', id, 'modules', 'vehicles'],
-    queryFn: () => api.get<{ enabled: boolean }>(`/admin/organizations/${id}/modules/vehicles`).then((res) => res.data),
+    queryKey: ['admin', 'organization', id, 'modules'],
+    queryFn: () => api.get<BusinessModule[]>(`/admin/organizations/${id}/modules`).then((res) => res.data),
     enabled: !!id,
   });
 }
 
-export function useUpdateOrganizationVehiclesModule() {
+export function useUpdateOrganizationModule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      api.patch(`/admin/organizations/${id}/modules/vehicles`, { enabled }).then((res) => res.data),
+    mutationFn: ({ id, moduleId, enabled }: { id: string; moduleId: string; enabled: boolean }) =>
+      api.patch(`/admin/organizations/${id}/modules/${moduleId}`, { enabled }).then((res) => res.data),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'organization', id, 'modules', 'vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'organization', id, 'modules'] });
       queryClient.invalidateQueries({ queryKey: ['business-modules'] });
       queryClient.invalidateQueries({ queryKey: ['customer-vehicles'] });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
