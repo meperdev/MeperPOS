@@ -10,22 +10,23 @@ export class UpdateModuleDto {
   enabled: boolean;
 }
 
-@Controller('admin/organizations/:organizationId/modules/vehicles')
+@Controller('admin/organizations/:organizationId/modules')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPER_ADMIN')
 export class AdminBusinessModulesController {
   constructor(private readonly modules: BusinessModulesService) {}
 
   @Get()
-  find(@Param('organizationId') organizationId: string) {
-    return this.modules.getForOrganization(organizationId, 'vehicles');
+  findAll(@Param('organizationId') organizationId: string) {
+    return this.modules.listForOrganization(organizationId);
   }
 
-  @Patch()
+  @Patch(':moduleId')
   update(
     @Param('organizationId') organizationId: string,
+    @Param('moduleId') moduleId: string,
     @Body() dto: UpdateModuleDto,
   ) {
-    return this.modules.setEnabled(organizationId, 'vehicles', dto.enabled);
+    return this.modules.setEnabled(organizationId, moduleId, dto.enabled);
   }
 }
