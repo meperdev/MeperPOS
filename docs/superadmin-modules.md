@@ -45,6 +45,8 @@ All routes are under `/api`, use the existing cookie session, and keep the exist
 
 The module detail searches the organization list already loaded for the admin section; it does not add a per-keystroke server query. The state filter uses each organization's `enabledModules`: when the server did not answer for that tenant, the organization is neither **Activado** nor **Desactivado**, so only **Todos** can show it.
 
+The `PATCH` body accepts only one JSON boolean, `{ "enabled": true }` or `{ "enabled": false }`; a string such as `"false"`, a number, `null`, an object, an array or a missing `enabled` answers the standard 400 validation error and changes nothing.
+
 ## State and data preservation
 
 - Disabling a module writes `enabled: false` for that organization and module. It does not delete the module row, the organization, or the capability's domain data.
