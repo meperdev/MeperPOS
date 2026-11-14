@@ -11,6 +11,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model OrganizationModule {
+  organizationId String
+  module         String
+  enabled        Boolean
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, module])
+}
+
 model Organization {
   id                 String                 @id @default(uuid())
   name               String
@@ -29,6 +38,7 @@ model Organization {
   pastDueAt          DateTime?
   billingStatus      BillingStatus          @default(PENDING)
   plan               PlanType               @default(BASIC)
+  modules            OrganizationModule[]
   auditLogs          AuditLog[]
   cashRegisters      CashRegister[]
   categories         Category[]
