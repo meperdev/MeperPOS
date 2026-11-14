@@ -26,6 +26,7 @@ import { JwtAuthGuard } from './jwt.strategy';
 import { AuditAction } from '../common/decorators/audit.decorator';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { Throttle } from '@nestjs/throttler';
+import { throttle } from '../common/throttle-limits';
 import {
   CSRF_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
@@ -39,6 +40,12 @@ interface AuthRequest {
   cookies?: Record<string, string | undefined>;
   user?: { userId: string };
 }
+
+/**
+ * Public auth response body: the service result with `refreshToken` removed,
+ * because that token travels cookie-only.
+ */
+type AuthResponseBody = Record<string, unknown>;
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -70,29 +77,30 @@ export class AuthController {
   }
 
   /** Removes the refresh token from a response body (cookie-only transport). */
-  private toResponseBody(result: unknown): unknown {
+  private toResponseBody(result: unknown): AuthResponseBody {
     if (
       typeof result === 'object' &&
       result !== null &&
       'refreshToken' in result
     ) {
-      const { refreshToken: _omitted, ...body } =
-        result as Record<string, unknown>;
+      const body = { ...(result as Record<string, unknown>) };
+      delete body.refreshToken;
       return body;
     }
-    return result;
+    // Defensive branch: non-object bodies pass through unchanged.
+    return result as AuthResponseBody;
   }
 
   private existingCsrfToken(req: AuthRequest): string | null {
     return typeof req.cookies?.[CSRF_TOKEN_COOKIE] === 'string'
-      ? (req.cookies[CSRF_TOKEN_COOKIE] as string)
+      ? req.cookies[CSRF_TOKEN_COOKIE]
       : null;
   }
 
   @Post('login')
   @UseInterceptors(AuditInterceptor)
   @AuditAction('LOGIN_SUCCESS')
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle(throttle('login'))
   @ApiOperation({ summary: 'Login with email and password' })
   async login(
     @Body() loginDto: LoginDto,
@@ -114,6 +122,7 @@ export class AuthController {
   @Post('select-organization')
   @UseInterceptors(AuditInterceptor)
   @AuditAction('AUTH_ORG_SELECTED')
+  @Throttle(throttle('selectOrganization'))
   @ApiOperation({ summary: 'Select organization and complete login' })
   async selectOrganization(
     @Body() dto: SelectOrganizationDto,
@@ -161,6 +170,7 @@ export class AuthController {
   @Post('change-password')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Change user password' })
+  @Throttle(throttle('changePassword'))
   async changePassword(
     @Body() changePasswordDto: ChangePasswordDto,
     @Request()
@@ -206,6 +216,7 @@ export class AuthController {
    */
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  @Throttle(throttle('refresh'))
   async refresh(
     @Body() refreshTokenDto: RefreshTokenDto,
     @Request() req: AuthRequest,
@@ -257,9 +268,14 @@ export class AuthController {
   @Post('select-org')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Select active organization and re-issue JWT' })
+  @Throttle(throttle('selectOrg'))
   async selectOrg(
     @Body() selectOrgDto: SelectOrgDto,
-    @Request() req: { user: { userId: string }; cookies?: Record<string, string | undefined> },
+    @Request()
+    req: {
+      user: { userId: string };
+      cookies?: Record<string, string | undefined>;
+    },
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.selectOrg(

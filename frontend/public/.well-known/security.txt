@@ -1,0 +1,9 @@
+# MeperPOS security policy
+# Report suspected vulnerabilities privately; see Policy for details.
+
+Contact: https://github.com/meperdev/MeperPOS/security/advisories/new
+Contact: mailto:contact@mepersoft.app
+Expires: 2027-10-31T00:00:00.000Z
+Preferred-Languages: es, en
+Canonical: https://pos.mepersoft.app/.well-known/security.txt
+Policy: https://github.com/meperdev/MeperPOS/security/policy

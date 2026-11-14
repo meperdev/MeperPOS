@@ -3,7 +3,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, ProductType } from '@prisma/client';
+import { DianTaxCode, Prisma, ProductType } from '@prisma/client';
 import { computeEffectiveSalePrice, ProductsService } from './products.service';
 
 describe('ProductsService — Opt-in tax resolution', () => {
@@ -12,6 +12,7 @@ describe('ProductsService — Opt-in tax resolution', () => {
   // Sentinel standing in for the Prisma field reference (prisma.product
   // .fields.minStock) used by the low-stock where clause; compared by identity.
   const MIN_STOCK_FIELD_REF = { prismaFieldRef: 'Product.minStock' };
+  const RESERVED_STOCK_FIELD_REF = { prismaFieldRef: 'Product.reservedStock' };
 
   // ── Mocks ──────────────────────────────────────────────────────────
   const prismaMock = {
@@ -27,7 +28,10 @@ describe('ProductsService — Opt-in tax resolution', () => {
       updateMany: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
-      fields: { minStock: MIN_STOCK_FIELD_REF },
+      fields: {
+        minStock: MIN_STOCK_FIELD_REF,
+        reservedStock: RESERVED_STOCK_FIELD_REF,
+      },
     },
     inventoryMovement: {
       create: jest.fn(),
@@ -48,11 +52,13 @@ describe('ProductsService — Opt-in tax resolution', () => {
   const categoryWithDefault = (
     defaultTaxRate: number | null,
     taxable = false,
+    defaultTaxCode: DianTaxCode | null = null,
   ) => ({
     id: 'cat-1',
     name: 'Electrónica',
     description: null,
     defaultTaxRate,
+    defaultTaxCode,
     taxable,
     active: true,
     createdAt: new Date(),
@@ -69,7 +75,9 @@ describe('ProductsService — Opt-in tax resolution', () => {
     salePrice: 150,
     taxable: overrides.taxable ?? false,
     taxRate: overrides.taxRate ?? 0,
+    type: ProductType.PRODUCT,
     stock: 10,
+    reservedStock: 0,
     minStock: 5,
     tracksStock: true,
     imageUrl: null,
@@ -204,7 +212,11 @@ describe('ProductsService — Opt-in tax resolution', () => {
       prismaMock.product.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.create({ ...baseDto, taxable: true, taxRate: 0 }, USER_ID, ORG_ID),
+        service.create(
+          { ...baseDto, taxable: true, taxRate: 0 },
+          USER_ID,
+          ORG_ID,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -237,7 +249,12 @@ describe('ProductsService — Opt-in tax resolution', () => {
       prismaMock.category.findFirst.mockResolvedValueOnce(null);
 
       await expect(
-        service.update('prod-1', { categoryId: 'foreign-cat' }, USER_ID, ORG_ID),
+        service.update(
+          'prod-1',
+          { categoryId: 'foreign-cat' },
+          USER_ID,
+          ORG_ID,
+        ),
       ).rejects.toThrow(NotFoundException);
 
       expect(prismaMock.category.findFirst).toHaveBeenCalledWith({
@@ -339,7 +356,12 @@ describe('ProductsService — Opt-in tax resolution', () => {
       );
       prismaMock.inventoryMovement.create.mockResolvedValue({});
 
-      await service.update('prod-1', { name: 'Renamed Product' }, USER_ID, ORG_ID);
+      await service.update(
+        'prod-1',
+        { name: 'Renamed Product' },
+        USER_ID,
+        ORG_ID,
+      );
 
       const updateCall = prismaMock.product.updateMany.mock.calls[0][0];
       expect(updateCall.data.name).toBe('Renamed Product');
@@ -463,9 +485,12 @@ describe('ProductsService — Opt-in tax resolution', () => {
       'barcode',
       'salePrice',
       'stock',
+      'availableStock',
       'taxable',
       'taxRate',
+      'taxCode',
       'effectiveTaxRate',
+      'effectiveTaxCode',
       'minStock',
       'type',
       'tracksStock',
@@ -718,13 +743,15 @@ describe('ProductsService — Opt-in tax resolution', () => {
     });
 
     it('filters low-stock products by organization', async () => {
-      prismaMock.$queryRaw.mockResolvedValue([
-        { id: 'prod-1', name: 'Panela' },
-      ]);
+      const row = {
+        ...buildProduct({ name: 'Panela', stock: 2 }),
+        categoryName: 'Electrónica',
+      };
+      prismaMock.$queryRaw.mockResolvedValue([row]);
 
       const result = await service.getLowStockProducts(ORG_ID);
 
-      expect(result).toEqual([{ id: 'prod-1', name: 'Panela' }]);
+      expect(result).toEqual([{ ...row, availableStock: 2 }]);
     });
   });
 
@@ -912,7 +939,11 @@ describe('ProductsService — Opt-in tax resolution', () => {
 
       await expect(
         service.create(
-          { ...createBase, promotionType: 'FIXED_PRICE', promotionValue: 10000 },
+          {
+            ...createBase,
+            promotionType: 'FIXED_PRICE',
+            promotionValue: 10000,
+          },
           USER_ID,
           ORG_ID,
         ),
@@ -950,7 +981,11 @@ describe('ProductsService — Opt-in tax resolution', () => {
       await expect(
         service.update(
           'prod-1',
-          { salePrice: 5000, promotionType: 'FIXED_PRICE', promotionValue: 6000 },
+          {
+            salePrice: 5000,
+            promotionType: 'FIXED_PRICE',
+            promotionValue: 6000,
+          },
           USER_ID,
           ORG_ID,
         ),
@@ -1006,7 +1041,11 @@ describe('ProductsService — Opt-in tax resolution', () => {
       prismaMock.product.findFirst
         .mockResolvedValueOnce(existing)
         .mockResolvedValueOnce(
-          buildProduct({ promotionType: 'PERCENTAGE', promotionValue: 20, version: 4 }),
+          buildProduct({
+            promotionType: 'PERCENTAGE',
+            promotionValue: 20,
+            version: 4,
+          }),
         );
       prismaMock.product.updateMany.mockResolvedValue({ count: 1 });
 
@@ -1039,82 +1078,302 @@ describe('ProductsService — Opt-in tax resolution', () => {
       setupFindAll();
       const id = '00000000-0000-4000-8000-000000000001';
       prismaMock.product.count.mockResolvedValue(7);
-      const result = await Reflect.apply(service.findAll, service, [ORG_ID, 2, 3, 'repair', 'cat-2', 'active', false, 'name', ProductType.SERVICE, [id, id], true]);
-      const rows = prismaMock.product.findMany.mock.calls[0][0];
-      expect(rows).toMatchObject({ skip: 3, take: 3, where: {
-        organizationId: ORG_ID, active: true, categoryId: 'cat-2', type: ProductType.SERVICE,
-        id: { in: [id] }, OR: expect.any(Array),
-        AND: [{ OR: [{ type: ProductType.SERVICE }, { tracksStock: false }, { stock: { gt: 0 } }] }],
-      } });
-      expect(prismaMock.product.count).toHaveBeenCalledWith({ where: rows.where });
+      const result = await service.findAll(
+        ORG_ID,
+        2,
+        3,
+        'repair',
+        'cat-2',
+        'active',
+        false,
+        'name',
+        ProductType.SERVICE,
+        [id, id],
+        true,
+      );
+      const rows = (
+        prismaMock.product.findMany.mock.calls as [
+          { where: Record<string, unknown> },
+        ][]
+      )[0][0];
+      expect(rows).toMatchObject({
+        skip: 3,
+        take: 3,
+        where: {
+          organizationId: ORG_ID,
+          active: true,
+          categoryId: 'cat-2',
+          type: ProductType.SERVICE,
+          id: { in: [id] },
+          OR: expect.any(Array) as unknown,
+          AND: [
+            {
+              OR: [
+                { type: ProductType.SERVICE },
+                { tracksStock: false },
+                { stock: { gt: RESERVED_STOCK_FIELD_REF } },
+              ],
+            },
+          ],
+        },
+      });
+      expect(prismaMock.product.count).toHaveBeenCalledWith({
+        where: rows.where,
+      });
       expect(result.meta).toMatchObject({ total: 7, totalPages: 3 });
     });
 
     it('keeps empty IDs restrictive and rejects malformed IDs rather than dropping the filter', async () => {
       setupFindAll();
-      await Reflect.apply(service.findAll, service, [ORG_ID, 1, 3, undefined, undefined, 'active', false, 'name', undefined, []]);
-      expect(prismaMock.product.findMany.mock.calls[0][0].where.id).toEqual({ in: [] });
-      await expect(Reflect.apply(service.findAll, service, [ORG_ID, 1, 3, undefined, undefined, 'active', false, 'name', undefined, ['bad']])).rejects.toThrow(BadRequestException);
+      await service.findAll(
+        ORG_ID,
+        1,
+        3,
+        undefined,
+        undefined,
+        'active',
+        false,
+        'name',
+        undefined,
+        [],
+      );
+      const rows = (
+        prismaMock.product.findMany.mock.calls as [
+          { where: Record<string, unknown> },
+        ][]
+      )[0][0];
+      expect(rows.where.id).toEqual({ in: [] });
+      await expect(
+        service.findAll(
+          ORG_ID,
+          1,
+          3,
+          undefined,
+          undefined,
+          'active',
+          false,
+          'name',
+          undefined,
+          ['bad'],
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('counts eligibility across zero-stock services, untracked and stocked merchandise before slicing', async () => {
       const fixture = [
-        buildProduct({ type: ProductType.SERVICE, stock: 0 }),
-        buildProduct({ id: 'untracked', type: ProductType.PRODUCT, tracksStock: false, stock: 0 }),
-        buildProduct({ id: 'stocked', type: ProductType.PRODUCT, tracksStock: true, stock: 2 }),
-        buildProduct({ id: 'empty', type: ProductType.PRODUCT, tracksStock: true, stock: 0 }),
+        buildProduct({
+          type: ProductType.SERVICE,
+          tracksStock: false,
+          stock: 0,
+        }),
+        buildProduct({
+          id: 'untracked',
+          type: ProductType.PRODUCT,
+          tracksStock: false,
+          stock: 0,
+        }),
+        buildProduct({
+          id: 'stocked',
+          type: ProductType.PRODUCT,
+          tracksStock: true,
+          stock: 2,
+          reservedStock: 1,
+        }),
+        buildProduct({
+          id: 'reserved',
+          type: ProductType.PRODUCT,
+          tracksStock: true,
+          stock: 2,
+          reservedStock: 2,
+        }),
+        buildProduct({
+          id: 'empty',
+          type: ProductType.PRODUCT,
+          tracksStock: true,
+          stock: 0,
+        }),
       ];
-      const select = (where: { AND?: { OR: Record<string, unknown>[] }[] }) => fixture.filter((p) => !where.AND || where.AND.every((clause) => clause.OR.some((branch) =>
-        branch.type === p.type || branch.tracksStock === p.tracksStock || (branch.stock !== undefined && p.stock > 0),
-      )));
-      prismaMock.product.findMany.mockImplementation(async ({ where, skip, take }) => select(where).slice(skip, skip + take));
-      prismaMock.product.count.mockImplementation(async ({ where }) => select(where).length);
-      const result = await Reflect.apply(service.findAll, service, [ORG_ID, 2, 2, undefined, undefined, 'active', false, 'name', undefined, undefined, true]);
+      type EligibilityWhere = {
+        AND?: {
+          OR: {
+            type?: ProductType;
+            tracksStock?: boolean;
+            stock?: { gt: unknown };
+          }[];
+        }[];
+      };
+      const select = (where: EligibilityWhere) =>
+        fixture.filter(
+          (p) =>
+            !where.AND ||
+            where.AND.every((clause) =>
+              clause.OR.some(
+                (branch) =>
+                  branch.type === p.type ||
+                  branch.tracksStock === p.tracksStock ||
+                  (branch.stock !== undefined &&
+                    p.stock >
+                      (branch.stock.gt === RESERVED_STOCK_FIELD_REF
+                        ? p.reservedStock
+                        : Number(branch.stock.gt))),
+              ),
+            ),
+        );
+      prismaMock.product.findMany.mockImplementation(
+        ({
+          where,
+          skip,
+          take,
+        }: {
+          where: EligibilityWhere;
+          skip: number;
+          take: number;
+        }) => Promise.resolve(select(where).slice(skip, skip + take)),
+      );
+      prismaMock.product.count.mockImplementation(
+        ({ where }: { where: EligibilityWhere }) =>
+          Promise.resolve(select(where).length),
+      );
+      const result = await service.findAll(
+        ORG_ID,
+        2,
+        2,
+        undefined,
+        undefined,
+        'active',
+        false,
+        'name',
+        undefined,
+        undefined,
+        true,
+      );
       expect(result.meta).toMatchObject({ total: 3, totalPages: 2 });
       expect(result.data.map((p: { id: string }) => p.id)).toEqual(['stocked']);
       const defaultResult = await service.findAll(ORG_ID, 1, 10);
-      expect(defaultResult.meta.total).toBe(4);
+      expect(defaultResult.meta.total).toBe(5);
     });
 
     it('retains every valid ID rather than capping favorites and composes low-stock availability', async () => {
       setupFindAll();
-      const ids = Array.from({ length: 250 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
-      await service.findAll(ORG_ID, 1, 3, 'repair', undefined, 'active', true, 'name', ProductType.SERVICE, ids, true);
-      const where = prismaMock.product.findMany.mock.calls[0][0].where;
-      expect(where.id.in).toEqual(ids);
-      expect(where.AND).toEqual([{ type: ProductType.PRODUCT }, { OR: [{ type: ProductType.SERVICE }, { tracksStock: false }, { stock: { gt: 0 } }] }]);
-      expect(where).toMatchObject({ active: true, organizationId: ORG_ID, type: ProductType.SERVICE, tracksStock: true, stock: { lte: MIN_STOCK_FIELD_REF } });
+      const ids = Array.from(
+        { length: 250 },
+        (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      );
+      await service.findAll(
+        ORG_ID,
+        1,
+        3,
+        'repair',
+        undefined,
+        'active',
+        true,
+        'name',
+        ProductType.SERVICE,
+        ids,
+        true,
+      );
+      const { where } = (
+        prismaMock.product.findMany.mock.calls as [
+          { where: Record<string, unknown> },
+        ][]
+      )[0][0];
+      expect(where.id).toEqual({ in: ids });
+      expect(where.AND).toEqual([
+        { type: ProductType.PRODUCT },
+        {
+          OR: [
+            { type: ProductType.SERVICE },
+            { tracksStock: false },
+            { stock: { gt: RESERVED_STOCK_FIELD_REF } },
+          ],
+        },
+      ]);
+      expect(where).toMatchObject({
+        active: true,
+        organizationId: ORG_ID,
+        type: ProductType.SERVICE,
+        tracksStock: true,
+        stock: { lte: MIN_STOCK_FIELD_REF },
+      });
       expect(prismaMock.product.count).toHaveBeenCalledWith({ where });
     });
 
     it('applies service type before paging and uses the same scoped where for count', async () => {
       setupFindAll();
       prismaMock.product.count.mockResolvedValue(25);
-      const result = await Reflect.apply(service.findAll, service, [ORG_ID, 2, 6, 'repair', 'cat-2', 'active', false, 'name', ProductType.SERVICE]);
+      const result = await Reflect.apply(service.findAll, service, [
+        ORG_ID,
+        2,
+        6,
+        'repair',
+        'cat-2',
+        'active',
+        false,
+        'name',
+        ProductType.SERVICE,
+      ]);
       const rows = prismaMock.product.findMany.mock.calls[0][0];
-      expect(rows).toEqual(expect.objectContaining({
-        skip: 6, take: 6,
-        where: expect.objectContaining({ organizationId: ORG_ID, active: true, categoryId: 'cat-2', type: ProductType.SERVICE, OR: expect.any(Array) }),
-      }));
-      expect(prismaMock.product.count).toHaveBeenCalledWith({ where: rows.where });
-      expect(result.meta).toEqual({ total: 25, page: 2, limit: 6, totalPages: 5 });
+      expect(rows).toEqual(
+        expect.objectContaining({
+          skip: 6,
+          take: 6,
+          where: expect.objectContaining({
+            organizationId: ORG_ID,
+            active: true,
+            categoryId: 'cat-2',
+            type: ProductType.SERVICE,
+            OR: expect.any(Array),
+          }),
+        }),
+      );
+      expect(prismaMock.product.count).toHaveBeenCalledWith({
+        where: rows.where,
+      });
+      expect(result.meta).toEqual({
+        total: 25,
+        page: 2,
+        limit: 6,
+        totalPages: 5,
+      });
     });
 
     it('intersects service and low-stock filters rather than returning merchandise', async () => {
       setupFindAll();
-      await Reflect.apply(service.findAll, service, [ORG_ID, 1, 6, undefined, undefined, 'active', true, 'name', ProductType.SERVICE]);
+      await Reflect.apply(service.findAll, service, [
+        ORG_ID,
+        1,
+        6,
+        undefined,
+        undefined,
+        'active',
+        true,
+        'name',
+        ProductType.SERVICE,
+      ]);
       const where = prismaMock.product.findMany.mock.calls[0][0].where;
-      expect(where).toEqual(expect.objectContaining({
-        type: ProductType.SERVICE, tracksStock: true,
-        stock: { lte: MIN_STOCK_FIELD_REF }, AND: [{ type: ProductType.PRODUCT }],
-      }));
+      expect(where).toEqual(
+        expect.objectContaining({
+          type: ProductType.SERVICE,
+          tracksStock: true,
+          stock: { lte: MIN_STOCK_FIELD_REF },
+          AND: [{ type: ProductType.PRODUCT }],
+        }),
+      );
       expect(prismaMock.product.count).toHaveBeenCalledWith({ where });
     });
 
     it('filters stock <= minStock via a field reference when lowStock is true', async () => {
       setupFindAll();
 
-      await service.findAll(ORG_ID, 1, 10, undefined, undefined, 'active', true);
+      await service.findAll(
+        ORG_ID,
+        1,
+        10,
+        undefined,
+        undefined,
+        'active',
+        true,
+      );
 
       expect(prismaMock.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1183,6 +1442,151 @@ describe('ProductsService — Opt-in tax resolution', () => {
   // gated on `isService` instead of `tracksStock`, so an untracked product with stale
   // numbers was badged "low on stock" while the server's own rule said false. The fix is
   // to ship the server's answer on every read so no consumer has to re-derive it.
+  describe('server-owned availableStock', () => {
+    it.each([
+      'create',
+      'update',
+      'list',
+      'detail',
+      'search',
+      'quick',
+      'lowStock',
+    ] as const)(
+      '%s returns availability without changing physical stock or response keys',
+      async (path) => {
+        const row = buildProduct({ stock: 10, reservedStock: 10, minStock: 5 });
+        prismaMock.category.findFirst.mockResolvedValue(
+          categoryWithDefault(null),
+        );
+        prismaMock.product.create.mockResolvedValue(row);
+        prismaMock.product.findFirst.mockResolvedValue(row);
+        prismaMock.product.findMany.mockResolvedValue([row]);
+        prismaMock.product.count.mockResolvedValue(1);
+        prismaMock.product.updateMany.mockResolvedValue({ count: 1 });
+        prismaMock.$queryRaw.mockResolvedValue([
+          { ...row, categoryName: 'Electrónica' },
+        ]);
+        const dto = {
+          name: row.name,
+          costPrice: 100,
+          salePrice: 150,
+          stock: 10,
+          minStock: 5,
+          categoryId: 'cat-1',
+        };
+        const readers = {
+          create: () => service.create(dto, USER_ID, ORG_ID),
+          update: () =>
+            service.update(row.id, { name: row.name }, USER_ID, ORG_ID),
+          list: async () => (await service.findAll(ORG_ID)).data[0],
+          detail: () => service.findOne(row.id, ORG_ID),
+          search: async () =>
+            (await service.searchProducts('test', 20, ORG_ID))[0],
+          quick: () => service.quickSearch(row.sku, ORG_ID),
+          lowStock: async () => (await service.getLowStockProducts(ORG_ID))[0],
+        };
+        const result = await readers[path]();
+        expect(result).toMatchObject({ stock: 10, availableStock: 0 });
+        if (path !== 'lowStock') {
+          expect(result).toMatchObject({
+            isLowStock: false,
+            effectiveTaxRate: 0,
+            effectiveSalePrice: null,
+          });
+        } else {
+          expect(result).toMatchObject({
+            categoryName: 'Electrónica',
+            reservedStock: 10,
+          });
+          const [sql, tenant] = prismaMock.$queryRaw.mock.calls[0] as [
+            TemplateStringsArray,
+            string,
+          ];
+          expect(sql.join('?')).toContain('p.stock <= p."minStock"');
+          expect(tenant).toBe(ORG_ID);
+        }
+        if (path === 'search' || path === 'quick') {
+          expect(Object.keys(result!)).toEqual([
+            'id',
+            'name',
+            'sku',
+            'barcode',
+            'salePrice',
+            'stock',
+            'availableStock',
+            'taxable',
+            'taxRate',
+            'taxCode',
+            'effectiveTaxRate',
+            'effectiveTaxCode',
+            'minStock',
+            'type',
+            'tracksStock',
+            'isLowStock',
+            'category',
+            'imageUrl',
+            'promotionType',
+            'promotionValue',
+            'effectiveSalePrice',
+          ]);
+        }
+      },
+    );
+
+    it.each([
+      {
+        type: ProductType.PRODUCT,
+        tracksStock: true,
+        reservedStock: 3,
+        expected: 7,
+      },
+      {
+        type: ProductType.PRODUCT,
+        tracksStock: true,
+        reservedStock: 0,
+        expected: 10,
+      },
+      {
+        type: ProductType.SERVICE,
+        tracksStock: false,
+        reservedStock: 0,
+        expected: null,
+      },
+      {
+        type: ProductType.PRODUCT,
+        tracksStock: false,
+        reservedStock: 0,
+        expected: null,
+      },
+    ])(
+      'uses actual stock controls on list/detail/search/quick: %j',
+      async ({ expected, ...controls }) => {
+        const row = buildProduct(controls);
+        prismaMock.product.findMany.mockResolvedValue([row]);
+        prismaMock.product.count.mockResolvedValue(1);
+        prismaMock.product.findFirst.mockResolvedValue(row);
+        const results = [
+          (await service.findAll(ORG_ID)).data[0],
+          await service.findOne(row.id, ORG_ID),
+          (await service.searchProducts('test', 20, ORG_ID))[0],
+          await service.quickSearch(row.sku, ORG_ID),
+        ];
+        for (const result of results)
+          expect(result).toMatchObject({ availableStock: expected, stock: 10 });
+      },
+    );
+
+    it.each(['reservedStock', 'type', 'tracksStock'])(
+      'rejects a stale queried row missing %s instead of supplying a default',
+      async (field) => {
+        const row: Record<string, unknown> = buildProduct();
+        delete row[field];
+        prismaMock.product.findFirst.mockResolvedValue(row);
+        await expect(service.findOne('prod-1', ORG_ID)).rejects.toThrow();
+      },
+    );
+  });
+
   describe('isLowStock is present on every product response', () => {
     const setupFindAll = (rows: ReturnType<typeof buildProduct>[]) => {
       prismaMock.product.findMany.mockResolvedValue(rows);
@@ -1335,6 +1739,199 @@ describe('ProductsService — Opt-in tax resolution', () => {
         effectiveSalePrice: null,
         effectiveTaxRate: 0,
       });
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // Fiscal tax code — the taxable/taxCode invariant
+  // ════════════════════════════════════════════════════════════════════
+  describe('Fiscal tax code', () => {
+    const baseDto = {
+      name: 'Test Product',
+      sku: 'SKU-001',
+      costPrice: 100,
+      salePrice: 150,
+      stock: 10,
+      minStock: 5,
+      categoryId: 'cat-1',
+    };
+
+    it('rejects a tax code on create when the product is not taxable', async () => {
+      prismaMock.category.findFirst.mockResolvedValue(
+        categoryWithDefault(null, false),
+      );
+      prismaMock.product.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.create(
+          { ...baseDto, taxable: false, taxCode: DianTaxCode.ICA },
+          USER_ID,
+          ORG_ID,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaMock.product.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a tax code on create when taxable is omitted (defaults to not taxable)', async () => {
+      prismaMock.category.findFirst.mockResolvedValue(
+        categoryWithDefault(null, false),
+      );
+      prismaMock.product.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.create(
+          { ...baseDto, taxCode: DianTaxCode.INC },
+          USER_ID,
+          ORG_ID,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('stores the explicit tax code of a taxable product', async () => {
+      prismaMock.category.findFirst.mockResolvedValue(
+        categoryWithDefault(null, false),
+      );
+      prismaMock.product.findUnique.mockResolvedValue(null);
+      prismaMock.product.create.mockResolvedValue(
+        buildProduct({
+          taxable: true,
+          taxRate: 8,
+          taxCode: DianTaxCode.INC,
+        }),
+      );
+      prismaMock.inventoryMovement.create.mockResolvedValue({});
+
+      const result = await service.create(
+        { ...baseDto, taxable: true, taxRate: 8, taxCode: DianTaxCode.INC },
+        USER_ID,
+        ORG_ID,
+      );
+
+      expect(prismaMock.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            taxable: true,
+            taxCode: DianTaxCode.INC,
+          }),
+        }),
+      );
+      expect(result.effectiveTaxCode).toBe(DianTaxCode.INC);
+    });
+
+    it('exposes the IVA default on create for a taxable product with no stored code', async () => {
+      prismaMock.category.findFirst.mockResolvedValue(
+        categoryWithDefault(null, false),
+      );
+      prismaMock.product.findUnique.mockResolvedValue(null);
+      prismaMock.product.create.mockResolvedValue(
+        buildProduct({ taxable: true, taxRate: 19, taxCode: null }),
+      );
+      prismaMock.inventoryMovement.create.mockResolvedValue({});
+
+      const result = await service.create(
+        { ...baseDto, taxable: true, taxRate: 19 },
+        USER_ID,
+        ORG_ID,
+      );
+
+      expect(result.taxCode).toBeNull();
+      expect(result.effectiveTaxCode).toBe(DianTaxCode.IVA);
+    });
+
+    it('exposes the resolved code on findOne, including the category default', async () => {
+      prismaMock.product.findFirst.mockResolvedValue(
+        buildProduct({
+          taxable: false,
+          taxRate: 0,
+          taxCode: null,
+          category: categoryWithDefault(16, true, DianTaxCode.ICA),
+        }),
+      );
+
+      const result = await service.findOne('prod-1', ORG_ID);
+
+      expect(result.taxCode).toBeNull();
+      expect(result.effectiveTaxCode).toBe(DianTaxCode.ICA);
+    });
+
+    it('exposes a null code for an untaxed product', async () => {
+      prismaMock.product.findFirst.mockResolvedValue(
+        buildProduct({ taxable: false, taxRate: 0, taxCode: null }),
+      );
+
+      const result = await service.findOne('prod-1', ORG_ID);
+
+      expect(result.effectiveTaxCode).toBeNull();
+    });
+
+    it('rejects a tax code on update when the resulting product is not taxable', async () => {
+      prismaMock.product.findFirst.mockResolvedValue(
+        buildProduct({ taxable: false, taxRate: 0 }),
+      );
+
+      await expect(
+        service.update('prod-1', { taxCode: DianTaxCode.INC }, USER_ID, ORG_ID),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('clears the stored code when taxable is set to false', async () => {
+      prismaMock.product.findFirst
+        .mockResolvedValueOnce(
+          buildProduct({
+            taxable: true,
+            taxRate: 19,
+            taxCode: DianTaxCode.ICA,
+          }),
+        )
+        .mockResolvedValueOnce(
+          buildProduct({ taxable: false, taxRate: 0, taxCode: null }),
+        );
+      prismaMock.product.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.inventoryMovement.create.mockResolvedValue({});
+
+      await service.update('prod-1', { taxable: false }, USER_ID, ORG_ID);
+
+      expect(prismaMock.product.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ taxable: false, taxCode: null }),
+        }),
+      );
+    });
+
+    it('keeps the stored code when the update does not touch it', async () => {
+      prismaMock.product.findFirst
+        .mockResolvedValueOnce(
+          buildProduct({
+            taxable: true,
+            taxRate: 19,
+            taxCode: DianTaxCode.ICA,
+          }),
+        )
+        .mockResolvedValueOnce(
+          buildProduct({
+            taxable: true,
+            taxRate: 19,
+            taxCode: DianTaxCode.ICA,
+          }),
+        );
+      prismaMock.product.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.inventoryMovement.create.mockResolvedValue({});
+
+      const result = await service.update(
+        'prod-1',
+        { name: 'Renamed' },
+        USER_ID,
+        ORG_ID,
+      );
+
+      const call = prismaMock.product.updateMany.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      };
+      expect(call.data).not.toHaveProperty('taxCode');
+      expect(result.effectiveTaxCode).toBe(DianTaxCode.ICA);
     });
   });
 });

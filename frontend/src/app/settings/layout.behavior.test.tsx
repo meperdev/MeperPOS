@@ -48,12 +48,16 @@ describe("settings sub-sidebar layout", () => {
     expect(
       screen.getByRole("link", { name: "Equipo y acceso" })
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "WhatsApp" })).toHaveAttribute(
+      "href",
+      "/settings/whatsapp"
+    );
     expect(screen.getByRole("link", { name: "Importar y exportar datos" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Suscripción" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Avanzado" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Facturación" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Localización" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Moneda y Región" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Suscripción" })).not.toBeInTheDocument();
   });
 
   it("marks the active section and navigates without scrolling the page", () => {

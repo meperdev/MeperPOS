@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { OrgRole, Prisma, PrismaClient, ProductType } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto, UpdateSaleDto } from './dto/sales.dto';
 import type { Response } from 'express';
@@ -16,20 +16,45 @@ import {
 } from '../common/utils/bogota-date';
 import { CacheService } from '../common/services/cache.service';
 import { SettingsService } from '../settings/settings.service';
-import { resolveEffectiveTaxRate } from '../common/utils/tax.util';
 import { computeSkipTake } from '../common/utils/pagination';
-import { computeEffectiveSalePrice } from '../products/products.service';
+import {
+  canOverrideSalePrice,
+  resolveSaleItemPricing,
+  saleLinesReconcile,
+  toPersistedLineTax,
+} from './sale-pricing';
+import type { DianTaxCode } from '../common/utils/tax.util';
 import { tracksStock } from '../products/product-type.logic';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { SequenceService } from '../common/sequences/sequence.service';
 import { PLAN_LIMITS } from '../plan-limits/plan-limits.constants';
 import { ReceiptsService } from '../receipts/receipts.service';
+import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emission';
+import { voidSaleFiscalDocument } from '../electronic-invoicing/fiscal-document.service';
+import { isElectronicInvoicingActive } from '../settings/schema';
+
+/**
+ * A POS-financed sale carries no cash/card rows, so the derived flag travels
+ * with the payload instead of the relation: the UI renders it as its own
+ * payment state ("Financiado") next to cash, card and mixed.
+ */
+function withFinancedFlag<
+  T extends { posLoanSaleIntent?: { id: string } | null },
+>(sale: T): Omit<T, 'posLoanSaleIntent'> & { financed: boolean } {
+  const { posLoanSaleIntent, ...rest } = sale;
+  return { ...rest, financed: Boolean(posLoanSaleIntent) };
+}
 
 @Injectable()
 export class SalesService {
   /** Prisma select for seller attribution on every sale query */
   private readonly sellerInclude = {
     user: { select: { id: true, name: true, email: true } },
+  } as const;
+
+  /** Presence of the POS loan intent is what marks a sale as financed. */
+  private readonly financingInclude = {
+    posLoanSaleIntent: { select: { id: true } },
   } as const;
 
   constructor(
@@ -59,13 +84,7 @@ export class SalesService {
    * Missing principals are denied; this permission does not change role inheritance.
    */
   private canOverridePrice(user: RequestUser | undefined): boolean {
-    if (!user) return false;
-    if (user.isSuperAdmin || user.role === 'SUPER_ADMIN') return true;
-    return (
-      user.role === OrgRole.ADMIN ||
-      user.role === OrgRole.OWNER ||
-      user.role === OrgRole.CASHIER
-    );
+    return canOverrideSalePrice(user);
   }
 
   /**
@@ -125,7 +144,9 @@ export class SalesService {
     user?: RequestUser,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const { customerId, items, discountAmount = 0, payments } = createSaleDto;
 
@@ -149,6 +170,8 @@ export class SalesService {
       unitPrice: number;
       costPriceSnapshot: Prisma.Decimal;
       taxRate: number;
+      taxCode: DianTaxCode | null;
+      taxAmount: number | null;
       discountAmount: number;
       subtotal: number;
       total: number;
@@ -181,80 +204,22 @@ export class SalesService {
         throw new BadRequestException(`Product ${product.name} is not active`);
       }
 
-      // The server owns the price. `computeEffectiveSalePrice` is the single
-      // source of truth (promotion-aware); a client-supplied `unitPrice` is
-      // never a default to fall back to, it is a request to override it — and
-      // overriding is a manager-only, audited act.
-      const serverUnitPrice = Number(
-        computeEffectiveSalePrice(product) ?? product.salePrice,
+      // Overrides authorize an audited POS price, not a catalog price edit.
+      const { pricedItem, taxAmount, override } = resolveSaleItemPricing(
+        product,
+        item,
+        this.canOverridePrice(user),
       );
-      const requestedUnitPrice =
-        item.unitPrice === undefined || item.unitPrice === null
-          ? null
-          : Number(item.unitPrice);
-
-      // Defensive: the DTO's @Min(0) already rejects negatives, but the service
-      // is also reachable from paths that skip the ValidationPipe, and a
-      // negative price would flip the sale into money owed rather than paid.
-      if (requestedUnitPrice !== null && requestedUnitPrice < 0) {
-        throw new BadRequestException(
-          `Unit price for product ${product.name} cannot be negative`,
-        );
-      }
-
-      // 0.01 tolerance absorbs float noise between a client that round-trips
-      // the server price and the DECIMAL(10,2) value it was derived from.
-      const isOverride =
-        requestedUnitPrice !== null &&
-        Math.abs(requestedUnitPrice - serverUnitPrice) > 0.01;
-
-      if (isOverride && !this.canOverridePrice(user)) {
-        throw new ForbiddenException(
-          `Only an ADMIN, OWNER, SUPER_ADMIN or CASHIER may override the unit price of ${product.name}`,
-        );
-      }
-
-      const unitPrice = isOverride ? requestedUnitPrice : serverUnitPrice;
-
-      if (isOverride) {
-        priceOverrides.push({
-          productId: product.id,
-          productName: product.name,
-          quantity: item.quantity,
-          serverUnitPrice,
-          overriddenUnitPrice: unitPrice,
-        });
-      }
-
-      const grossSubtotal = unitPrice * item.quantity;
-      const itemDiscount = Math.max(0, item.discountAmount || 0);
-
-      if (itemDiscount > grossSubtotal) {
-        throw new BadRequestException(
-          `Item discount for product ${product.name} cannot exceed item subtotal`,
-        );
-      }
-
-      const itemSubtotal = grossSubtotal - itemDiscount;
-      const effectiveTaxRate = resolveEffectiveTaxRate(product, product.category);
-      const itemTax = itemSubtotal * (effectiveTaxRate / 100);
-      const itemTotal = itemSubtotal + itemTax;
-
-      subtotal += itemSubtotal;
-      totalTax += itemTax;
-
-      saleItems.push({
-        productId: product.id,
-        productType: product.type,
-        productTracksStock: product.tracksStock,
-        quantity: item.quantity,
-        unitPrice,
-        costPriceSnapshot: product.costPrice,
-        taxRate: effectiveTaxRate,
-        discountAmount: itemDiscount,
-        subtotal: itemSubtotal,
-        total: itemTotal,
-      });
+      if (override) priceOverrides.push(override);
+      // The fiscal facts are derived once, from the priced line, and enforced by
+      // `toPersistedLineTax`: a code iff the amount is greater than zero. The
+      // rounded value is what gets persisted, so the rounded value is also what
+      // accumulates: the CUFE and the invoice sum the persisted rows, and
+      // `Sale.taxAmount` has to agree with them to the cent.
+      const persistedTax = toPersistedLineTax(pricedItem.taxCode, taxAmount);
+      subtotal += pricedItem.subtotal;
+      totalTax += persistedTax.taxAmount ?? 0;
+      saleItems.push({ ...pricedItem, ...persistedTax });
     }
 
     const total = subtotal + totalTax - discountAmount;
@@ -279,6 +244,10 @@ export class SalesService {
       .reduce((sum, p) => sum + p.amount, 0);
     const change = cashPaid > total ? cashPaid - total : null;
 
+    // The buyer identification is a fiscal fact of the sale, captured now
+    // because the customer row may be edited afterwards.
+    let customerDocumentNumber: string | null = null;
+
     if (customerId) {
       const customer = await this.prisma.customer.findFirst({
         where: { id: customerId, organizationId },
@@ -286,6 +255,7 @@ export class SalesService {
       if (!customer) {
         throw new NotFoundException('Customer not found');
       }
+      customerDocumentNumber = customer.documentNumber;
     }
 
     const year = new Date().getFullYear();
@@ -325,6 +295,11 @@ export class SalesService {
                 unitPrice: saleItem.unitPrice,
                 costPriceSnapshot: saleItem.costPriceSnapshot,
                 taxRate: saleItem.taxRate,
+                // Persisted inside the sale transaction, beside the line they
+                // belong to: the CUFE and the XML read these rows, never the
+                // catalog, so a later product edit cannot rewrite history.
+                taxCode: saleItem.taxCode,
+                taxAmount: saleItem.taxAmount,
                 discountAmount: saleItem.discountAmount,
                 subtotal: saleItem.subtotal,
                 total: saleItem.total,
@@ -341,14 +316,37 @@ export class SalesService {
                 tracksStock: saleItem.productTracksStock,
               })
             ) {
+              // Read inside the transaction, including repeated lines for the
+              // same product: each decrement advances its version.
+              const observed = await tx.product.findFirst({
+                where: { id: saleItem.productId, organizationId },
+                select: { stock: true, reservedStock: true, version: true },
+              });
+              if (
+                !observed ||
+                !Number.isInteger(observed.version) ||
+                !Number.isInteger(observed.reservedStock) ||
+                observed.reservedStock < 0 ||
+                observed.stock - observed.reservedStock < saleItem.quantity
+              ) {
+                throw new ConflictException(
+                  `Insufficient stock for product ${saleItem.productId}`,
+                );
+              }
               const updatedProduct = await tx.product.updateMany({
                 where: {
                   id: saleItem.productId,
+                  organizationId,
                   active: true,
-                  stock: { gte: saleItem.quantity },
+                  type: ProductType.PRODUCT,
+                  tracksStock: true,
+                  version: observed.version,
+                  reservedStock: observed.reservedStock,
+                  stock: { gte: observed.reservedStock + saleItem.quantity },
                 },
                 data: {
                   stock: { decrement: saleItem.quantity },
+                  version: { increment: 1 },
                 },
               });
 
@@ -412,6 +410,66 @@ export class SalesService {
               },
             });
           }
+
+          // Spec S8: an activated organization's sale is snapshotted with its
+          // four money facts recorded separately, so they have to add up to the
+          // cent. A sale-wide discount with a fraction of a cent can break that
+          // (a 0.005 discount on a 10.00 sale is stored as 0.01 while the
+          // payable keeps its own rounding), and recording a document that
+          // contradicts itself is worse than refusing the sale. Spec S9: an
+          // organization that has not activated electronic invoicing writes no
+          // document and keeps its previous behaviour exactly, including such a
+          // discount.
+          const activation = await tx.organization.findFirst({
+            where: { id: organizationId },
+            select: { settings: true },
+          });
+          if (
+            isElectronicInvoicingActive(activation?.settings) &&
+            !saleLinesReconcile(saleItems, {
+              lineExtensionAmount: subtotal,
+              taxAmount: totalTax,
+              discountAmount,
+              payableAmount: total,
+            })
+          ) {
+            throw new ConflictException(
+              'La venta no concilia sus importes al centavo para facturar electrónicamente',
+            );
+          }
+          // Spec S8: every activated organization's sale emits its fiscal
+          // document at sale registration, inside this transaction, so a sale
+          // can never exist without it and a document can never describe a sale
+          // that rolled back. Spec S9: an organization that has not activated
+          // electronic invoicing emits nothing and its sale proceeds unchanged.
+          // No CUFE is computed here: the technical key is not available
+          // (spec S6).
+          await emitFiscalDocumentForSale(tx, {
+            saleId: createdSale.id,
+            saleNumber,
+            organizationId,
+            issuedAt: createdSale.createdAt,
+            buyerTaxId: customerDocumentNumber,
+            // The values this transaction persisted, not a re-derivation: the
+            // snapshot has to describe the sale it belongs to.
+            lineExtensionAmount: subtotal,
+            taxAmount: totalTax,
+            discountAmount,
+            payableAmount: total,
+            amountPaid: totalPaid,
+            change,
+            lines: saleItems.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              discountAmount: item.discountAmount,
+              subtotal: item.subtotal,
+              taxRate: item.taxRate,
+              taxCode: item.taxCode,
+              taxAmount: item.taxAmount,
+              total: item.total,
+            })),
+          });
 
           return createdSale;
         },
@@ -512,6 +570,7 @@ export class SalesService {
             include: { product: true },
           },
           payments: true,
+          ...this.financingInclude,
           ...this.sellerInclude,
         },
         orderBy: { createdAt: 'desc' },
@@ -520,7 +579,7 @@ export class SalesService {
     ]);
 
     return {
-      data: sales,
+      data: sales.map(withFinancedFlag),
       meta: {
         total,
         page,
@@ -530,7 +589,11 @@ export class SalesService {
     };
   }
 
-  async findOne(id: string, organizationId: string | undefined, user?: RequestUser) {
+  async findOne(
+    id: string,
+    organizationId: string | undefined,
+    user?: RequestUser,
+  ) {
     const sale = await this.prisma.sale.findFirst({
       where: { id, ...(organizationId ? { organizationId } : {}) },
       include: {
@@ -539,6 +602,7 @@ export class SalesService {
           include: { product: true },
         },
         payments: true,
+        ...this.financingInclude,
         ...this.sellerInclude,
       },
     });
@@ -552,7 +616,7 @@ export class SalesService {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
-    return sale;
+    return withFinancedFlag(sale);
   }
 
   async findBySaleNumber(saleNumber: number, user?: RequestUser) {
@@ -572,6 +636,7 @@ export class SalesService {
           include: { product: true },
         },
         payments: true,
+        ...this.financingInclude,
         ...this.sellerInclude,
       },
     });
@@ -585,7 +650,7 @@ export class SalesService {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
-    return sale;
+    return withFinancedFlag(sale);
   }
 
   async update(
@@ -596,7 +661,9 @@ export class SalesService {
     user?: RequestUser,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const existingSale = await this.prisma.sale.findFirst({
       where: { id, organizationId },
@@ -616,8 +683,44 @@ export class SalesService {
       throw new BadRequestException('Only completed sales can be updated');
     }
 
+    if (
+      updateSaleDto.status === 'CANCELLED' ||
+      updateSaleDto.status === 'RETURNED_PARTIAL'
+    ) {
+      const intent = await this.prisma.posLoanSaleIntent.findFirst({
+        where: { finalSaleId: existingSale.id, organizationId },
+        select: { id: true },
+      });
+      if (intent) {
+        throw new ConflictException(
+          'No se puede cancelar ni devolver una venta vinculada a financiación',
+        );
+      }
+    }
+
     if (updateSaleDto.status === 'CANCELLED') {
       await this.prisma.$transaction(async (tx) => {
+        // Sale has no version column. Claim its expected state before effects;
+        // a concurrent loser cannot restore inventory a second time.
+        const claimed = await tx.sale.updateMany({
+          where: { id, organizationId, status: 'COMPLETED' },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt: new Date(),
+            cancelledById: userId,
+            cancelReason: updateSaleDto.cancelReason ?? null,
+          },
+        });
+        if (claimed.count === 0) {
+          throw new BadRequestException('Only completed sales can be updated');
+        }
+        // Spec S8: cancelling the sale voids its pending document in the same
+        // transaction. A document already resolved cannot be voided, and the
+        // cancellation is refused instead of leaving the two records disagreeing.
+        await voidSaleFiscalDocument(tx, {
+          saleId: existingSale.id,
+          organizationId: existingSale.organizationId,
+        });
         for (const item of existingSale.items) {
           const product = await tx.product.findFirst({
             where: {
@@ -627,13 +730,36 @@ export class SalesService {
           });
 
           if (product && tracksStock(product)) {
+            if (
+              !Number.isInteger(product.version) ||
+              !Number.isInteger(product.reservedStock) ||
+              product.reservedStock < 0 ||
+              product.reservedStock > product.stock
+            ) {
+              throw new ConflictException(
+                `Stock changed for product ${item.productId}`,
+              );
+            }
             const previousStock = product.stock;
             const newStock = previousStock + item.quantity;
 
-            await tx.product.update({
-              where: { id: item.productId },
-              data: { stock: newStock },
+            const restored = await tx.product.updateMany({
+              where: {
+                id: item.productId,
+                organizationId,
+                version: product.version,
+                reservedStock: product.reservedStock,
+              },
+              data: {
+                stock: { increment: item.quantity },
+                version: { increment: 1 },
+              },
             });
+            if (restored.count === 0) {
+              throw new ConflictException(
+                `Stock changed for product ${item.productId}`,
+              );
+            }
 
             await tx.inventoryMovement.create({
               data: {
@@ -650,16 +776,6 @@ export class SalesService {
             });
           }
         }
-
-        await tx.sale.update({
-          where: { id },
-          data: {
-            status: 'CANCELLED',
-            cancelledAt: new Date(),
-            cancelledById: userId,
-            cancelReason: updateSaleDto.cancelReason ?? null,
-          },
-        });
       });
 
       return this.findOne(id, organizationId);
@@ -681,9 +797,15 @@ export class SalesService {
    * as COMPLETED). This method is preserved for future use when open-sale
    * workflows are implemented.
    */
-  async forceClose(id: string, organizationId: string | undefined, reason?: string) {
+  async forceClose(
+    id: string,
+    organizationId: string | undefined,
+    reason?: string,
+  ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const organization = await this.prisma.organization.findUnique({
       where: { id: organizationId },

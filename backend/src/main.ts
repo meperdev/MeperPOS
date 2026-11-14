@@ -8,7 +8,7 @@ async function bootstrap() {
   // Fail fast on insecure runtime configuration before wiring anything up.
   validateJwtSecretOrExit(process.env);
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   configureApp(app);
   // Request-ID correlation + canonical { code, message, requestId } envelope
@@ -33,6 +33,7 @@ async function bootstrap() {
   app.enableCors({
     origin: corsOrigins.length > 0 ? corsOrigins : defaultOrigins,
     credentials: true,
+    exposedHeaders: ['Content-Disposition'],
   });
 
   // Swagger is a development tool only; never expose the schema in production.

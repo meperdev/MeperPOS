@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { BentoSelect } from "@/components/ui/BentoSelect";
+import { SearchField } from "@/components/ui/SearchField";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { useProducts } from "@/hooks/useProducts";
 import { useUpdatePurchaseOrder } from "@/hooks/usePurchaseOrders";
@@ -144,14 +145,14 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
             }))}
           />
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
               Notas
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:border-primary/50 resize-none"
+              className="w-full rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors resize-none"
             />
           </div>
         </div>
@@ -169,12 +170,12 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
           </div>
           {showPicker && (
             <div className="px-4 py-3 border-b border-border/60 bg-muted/20 space-y-2">
-              <input
+              <SearchField
                 autoFocus
-                placeholder="Buscar producto..."
                 value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
+                onChange={setProductSearch}
+                placeholder="Buscar producto..."
+                inputClassName="border border-border/70 bg-card text-sm"
               />
               <div className="max-h-44 overflow-y-auto rounded-lg border border-border/60 bg-card divide-y divide-border/60">
                 {products.length === 0 ? (
@@ -195,7 +196,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                           {p.sku}
                         </p>
                       </div>
-                      <Plus className="w-4 h-4 text-primary" />
+                      <Plus className="w-4 h-4 text-primary-text" />
                     </button>
                   ))
                 )}
@@ -205,20 +206,20 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px]">
               <thead>
-                <tr className="bg-muted/20 border-b border-border/60">
-                  <th className="text-left py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr className="bg-muted/35 border-b border-border/60">
+                  <th scope="col" className="text-left py-2.5 px-3 text-xs font-medium text-muted-foreground">
                     Producto
                   </th>
-                  <th className="text-right py-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-20">
+                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
                     Cant.
                   </th>
-                  <th className="text-right py-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-28">
+                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-28">
                     Costo
                   </th>
-                  <th className="text-right py-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground w-20">
+                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
                     IVA %
                   </th>
-                  <th className="w-8" />
+                  <th scope="col" className="w-8" />
                 </tr>
               </thead>
               <tbody>
@@ -256,7 +257,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                               ),
                             )
                           }
-                          className="w-full rounded-md border border-border bg-card px-2 py-1 text-right text-sm focus:outline-none focus:border-primary/50"
+                          className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -290,7 +291,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                               ),
                             )
                           }
-                          className="w-full rounded-md border border-border bg-card px-2 py-1 text-right text-sm focus:outline-none focus:border-primary/50"
+                          className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
                         />
                       </td>
                       <td className="py-2 pr-2">
@@ -315,7 +316,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
         <div className="flex items-center justify-between pt-3 border-t border-border/60">
           <div className="text-xs text-muted-foreground">
             Total estimado:{" "}
-            <span className="text-sm font-bold text-primary stat-number">
+            <span className="text-sm font-mono font-semibold text-foreground tabular-nums">
               {formatCurrency(totals.total)}
             </span>
           </div>

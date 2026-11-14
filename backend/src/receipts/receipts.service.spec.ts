@@ -9,7 +9,7 @@ import { buildReceiptData } from './receipt-data';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (
   b: Uint8Array,
-) => Promise<{ text: string }>;
+) => Promise<{ text: string; numpages: number }>;
 
 const FIXTURES_DIR = path.join(
   __dirname,
@@ -122,6 +122,7 @@ describe('ReceiptData contract (buildReceiptData)', () => {
       name: 'Café de Origen',
       quantity: 2,
       unitPrice: 1500,
+      discount: 0,
       total: 3000,
     });
 
@@ -133,6 +134,42 @@ describe('ReceiptData contract (buildReceiptData)', () => {
       baseSettings as never,
     );
     expect(deleted.items[0].name).toBe('Producto eliminado');
+  });
+
+  it('maps customer document, seller, status and distinct tax rates', () => {
+    const data = buildReceiptData(
+      {
+        ...baseSale,
+        status: 'CANCELLED',
+        cancelReason: 'Error de cobro',
+        user: { name: 'Vendedor Uno' },
+        customer: {
+          name: 'Ana María Torres',
+          documentType: 'CC',
+          documentNumber: '13.870.131-6',
+        },
+        items: [
+          { ...baseSale.items[0], taxRate: '19', discountAmount: '100' },
+          { ...baseSale.items[0], taxRate: '5', discountAmount: '0' },
+        ],
+      } as never,
+      baseSettings as never,
+    );
+
+    expect(data.customerDocument).toBe('CC 13.870.131-6');
+    expect(data.sellerName).toBe('Vendedor Uno');
+    expect(data.status).toBe('CANCELLED');
+    expect(data.cancelReason).toBe('Error de cobro');
+    expect(data.taxRates).toEqual([5, 19]);
+    expect(data.items[0].discount).toBe(100);
+  });
+
+  it('defaults the status to COMPLETED and the document to null', () => {
+    const data = buildReceiptData(baseSale as never, baseSettings as never);
+
+    expect(data.status).toBe('COMPLETED');
+    expect(data.sellerName).toBeNull();
+    expect(data.customerDocument).toBeNull();
   });
 
   it('maps payments to method and numeric amount', () => {
@@ -169,18 +206,25 @@ describe('ReceiptData contract (buildReceiptData)', () => {
     expect(data.change).toBeNull();
   });
 
-  it('derives the tax rate from the first item and defaults to 0 without items', () => {
+  it('collects distinct item tax rates and defaults to an empty list', () => {
     const withItems = buildReceiptData(
-      baseSale as never,
+      {
+        ...baseSale,
+        items: [
+          { ...baseSale.items[0], taxRate: '19' },
+          { ...baseSale.items[0], taxRate: '5' },
+          { ...baseSale.items[0], taxRate: '19' },
+        ],
+      } as never,
       baseSettings as never,
     );
-    expect(withItems.taxRate).toBe(19);
+    expect(withItems.taxRates).toEqual([5, 19]);
 
     const noItems = buildReceiptData(
       { ...baseSale, items: [] } as never,
       baseSettings as never,
     );
-    expect(noItems.taxRate).toBe(0);
+    expect(noItems.taxRates).toEqual([]);
   });
 });
 
@@ -385,5 +429,191 @@ describe('ReceiptsService.generateSaleReceiptPdf (golden PDF equality)', () => {
         baselines.expected[fixtureKey],
       );
     });
+  });
+});
+
+describe('receipt formatting and layout', () => {
+  const service = new ReceiptsService();
+
+  async function extract(pdf: Buffer) {
+    const parsed = await pdfParse(new Uint8Array(pdf));
+    return {
+      text: normalizeExtracted(parsed.text),
+      pages: parsed.numpages,
+    };
+  }
+
+  function pageHeight(pdf: Buffer): number {
+    const match = pdf
+      .toString('latin1')
+      .match(/\/MediaBox \[0 0 [\d.]+ ([\d.]+)\]/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  it('prints the organization legal identity and hides a duplicate header', async () => {
+    const { sale, settings } = inputs['fixture-1-normal-cash-change'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(
+        sale as never,
+        {
+          ...(settings as Record<string, unknown>),
+          organization: {
+            name: 'Cafetería Demo',
+            logoUrl: null,
+            taxId: '3353745410',
+            phone: '364.857.3930',
+            address: '94144 Dejah Bridge',
+          },
+          invoicing: {
+            printHeader: 'CAFETERÍA DEMO\nSucursal centro',
+            printFooter: '',
+          },
+        } as never,
+      ),
+    );
+
+    expect(text).toContain('NIT 3353745410');
+    expect(text).toContain('94144 Dejah Bridge');
+    expect(text).toContain('Tel. 364.857.3930');
+    expect(text).toContain('COMPROBANTE DE VENTA');
+    expect(text).toContain('Sucursal centro');
+    expect(text.split('CAFETERÍA DEMO')).toHaveLength(2);
+  });
+
+  it('names an anonymous sale as consumidor final', async () => {
+    const { sale, settings } = inputs['fixture-5-no-customer'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(sale as never, settings as never),
+    );
+
+    expect(text).toContain('Cliente: Consumidor final');
+  });
+
+  it('shows the zero-rate IVA line on tax-free sales', async () => {
+    const { sale, settings } = inputs['fixture-4-zero-tax-discount'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(sale as never, settings as never),
+    );
+
+    expect(text).toContain('Subtotal$2.500');
+    expect(text).toContain('Descuento-$500');
+    expect(text).toContain('IVA (0%)$0');
+  });
+
+  it('prints exact COP amounts instead of K/M abbreviations', async () => {
+    const { sale, settings } = inputs['fixture-5-no-customer'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(sale as never, settings as never),
+    );
+
+    expect(text).toContain('$5.900');
+    expect(text).toContain('$1.121');
+    expect(text).toContain('$7.021');
+    expect(text).not.toContain('$6K');
+    expect(text).not.toContain('M ');
+  });
+
+  it('prints full product names, the customer document and the seller', async () => {
+    const { sale, settings } = inputs['fixture-6-long-header-footer-logo'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(sale as never, settings as never),
+    );
+
+    expect(text).toContain('Mochila Artesanal Tejida a Mano');
+    expect(text).toContain('CC S3-2001');
+    expect(text).toContain('Atendido por: S3 Fixture Admin');
+    expect(text).not.toContain('Mochila Artesa..');
+  });
+
+  it('sizes the page to the content instead of a fixed 300mm sheet', async () => {
+    const { sale, settings } = inputs['fixture-1-normal-cash-change'];
+    const pdf = await service.generateSaleReceiptPdf(
+      sale as never,
+      settings as never,
+    );
+    const maxPoints = (300 / 25.4) * 72;
+
+    expect(pageHeight(pdf)).toBeGreaterThan(0);
+    expect(pageHeight(pdf)).toBeLessThan(maxPoints);
+  });
+
+  it('paginates long sales without dropping items or totals', async () => {
+    const { sale, settings } = inputs['fixture-2-multipayment-cash-card'];
+    const items = Array.from({ length: 60 }, (_, index) => ({
+      product: { name: `Artículo número ${index + 1}` },
+      quantity: 1,
+      unitPrice: '1000',
+      taxRate: '0',
+      discountAmount: '0',
+      total: '1000',
+    }));
+    const longSale = {
+      ...(sale as Record<string, unknown>),
+      items,
+      subtotal: '60000',
+      taxAmount: '0',
+      discountAmount: '0',
+      total: '60000',
+    };
+
+    const { text, pages } = await extract(
+      await service.generateSaleReceiptPdf(
+        longSale as never,
+        settings as never,
+      ),
+    );
+
+    expect(pages).toBeGreaterThan(1);
+    expect(text).toContain('Artículo número 60');
+    expect(text).toContain('TOTAL A PAGAR');
+    expect(text).toContain('continuación');
+    expect(text).toContain('Página 2 de');
+  });
+
+  it('labels financed sales that carry no payment rows', async () => {
+    const { sale, settings } = inputs['fixture-2-multipayment-cash-card'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(
+        {
+          ...(sale as Record<string, unknown>),
+          payments: [],
+          financed: true,
+        } as never,
+        settings as never,
+      ),
+    );
+
+    expect(text).toContain('Venta financiada (crédito)');
+    expect(text).not.toContain('Sin pagos registrados');
+  });
+
+  it('stamps cancelled sales with their reason', async () => {
+    const { sale, settings } = inputs['fixture-1-normal-cash-change'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(
+        {
+          ...(sale as Record<string, unknown>),
+          status: 'CANCELLED',
+          cancelReason: 'Error de cobro',
+          cancelledAt: '2026-06-16T14:30:00.000Z',
+        } as never,
+        settings as never,
+      ),
+    );
+
+    expect(text).toContain('ANULADA');
+    expect(text).toContain('Motivo: Error de cobro');
+    expect(text).toContain('16/6/2026');
+  });
+
+  it('lists every payment method with its exact amount', async () => {
+    const { sale, settings } = inputs['fixture-2-multipayment-cash-card'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(sale as never, settings as never),
+    );
+
+    expect(text).toContain('Efectivo$20.000');
+    expect(text).toContain('Tarjeta$18.280');
+    expect(text).not.toContain('Mixto (2 métodos)');
   });
 });

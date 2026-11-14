@@ -124,7 +124,7 @@ describe("Billing settings page", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Básico")).toBeNull();
     expect(screen.queryByText("Activo")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Registrar Pago" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Registrar pago" })).toBeNull();
     expect(screen.queryByText("No hay pagos registrados.")).toBeNull();
 
     const user = userEvent.setup();
@@ -140,7 +140,7 @@ describe("Billing settings page", () => {
     expect(screen.getByText("Profesional")).toBeInTheDocument();
     expect(screen.getByText("Activo")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Registrar Pago" }),
+      screen.getByRole("button", { name: "Registrar pago" }),
     ).toBeInTheDocument();
   });
 

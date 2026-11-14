@@ -94,12 +94,12 @@ function product(overrides: Record<string, unknown> = {}) {
 }
 
 const openCreate = () => {
-  fireEvent.click(screen.getByRole("button", { name: "Nuevo Producto" }));
-  return screen.getByRole("dialog", { name: "Nuevo Producto" });
+  fireEvent.click(screen.getByRole("button", { name: "Nuevo producto" }));
+  return screen.getByRole("dialog", { name: "Nuevo producto" });
 };
 const openEdit = () => {
   fireEvent.click(screen.getByRole("button", { name: "Panela" }));
-  return screen.getByRole("dialog", { name: "Editar Producto" });
+  return screen.getByRole("dialog", { name: "Editar producto" });
 };
 const selectImage = (dialog: HTMLElement) => {
   const fileInput = within(dialog).getByTestId("product-image").querySelector<HTMLInputElement>('input[type="file"]');
@@ -141,7 +141,17 @@ describe("inventory product modal", () => {
   });
 
   it("preloads edit values and updates the existing product without read-only metadata", async () => {
-    products = [product()];
+    products = [
+      product({
+        // Fields the API returns but the update DTO does not accept. Sending
+        // any of them fails the whitelisted validation and blocks editing.
+        reservedStock: 2,
+        availableStock: 6,
+        organizationId: "org-1",
+        effectiveSalePrice: 1800,
+        preferredSupplierId: "sup-1",
+      }),
+    ];
     render(<InventoryPage />);
     const dialog = openEdit();
     expect(within(dialog).getByLabelText("Nombre")).toHaveValue("Panela");
@@ -153,7 +163,22 @@ describe("inventory product modal", () => {
       id: "p-1",
       data: expect.objectContaining({ name: "Panela orgánica", type: "PRODUCT", tracksStock: true, stock: 8, minStock: 2 }),
     }));
-    expect(update.mock.calls[0][0].data).not.toHaveProperty("version");
+    const payload = update.mock.calls[0][0].data as Record<string, unknown>;
+    for (const field of [
+      "id",
+      "version",
+      "organizationId",
+      "reservedStock",
+      "availableStock",
+      "effectiveSalePrice",
+      "effectiveTaxRate",
+      "isLowStock",
+      "preferredSupplierId",
+      "createdAt",
+      "updatedAt",
+    ]) {
+      expect(payload, field).not.toHaveProperty(field);
+    }
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -201,10 +226,10 @@ describe("inventory product modal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar" }));
     fireEvent.keyDown(window, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Leche" }));
-    fireEvent.click(screen.getByRole("button", { name: "Nuevo Producto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo producto" }));
     fireEvent.submit(within(dialog).getByRole("button", { name: "Actualizar" }).closest("form")!);
     expect(uploadImage).toHaveBeenCalledOnce();
-    expect(screen.getByRole("dialog", { name: "Editar Producto" })).toBe(dialog);
+    expect(screen.getByRole("dialog", { name: "Editar producto" })).toBe(dialog);
     expect(within(dialog).getByLabelText("Nombre")).toHaveValue("Panela orgánica");
     const name = within(dialog).getByLabelText("Nombre");
     expect(name).toBeDisabled();
@@ -222,11 +247,11 @@ describe("inventory product modal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leche" }));
     fireEvent.submit(within(dialog).getByRole("button", { name: "Actualizar" }).closest("form")!);
     expect(update).toHaveBeenCalledOnce();
-    expect(screen.getByRole("dialog", { name: "Editar Producto" })).toBe(dialog);
+    expect(screen.getByRole("dialog", { name: "Editar producto" })).toBe(dialog);
     expect(uploadImageById).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Leche" })).toHaveAttribute("data-image-url", "/images/leche.jpg");
     await act(async () => { resolveUpdate({}); });
-    expect(screen.queryByRole("dialog", { name: "Editar Producto" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Editar producto" })).not.toBeInTheDocument();
   });
 
   it("discards a selected edit image on Cancel and restores the existing preview on reopen", () => {
@@ -310,7 +335,7 @@ describe("inventory product modal", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     fireEvent.submit(within(dialog).getByRole("button", { name: "Actualizar" }).closest("form")!);
     expect(update).toHaveBeenCalledOnce();
-    expect(screen.getByRole("dialog", { name: "Editar Producto" })).toBe(dialog);
+    expect(screen.getByRole("dialog", { name: "Editar producto" })).toBe(dialog);
     await act(async () => { rejectUpdate(new Error("Save failed")); });
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancelar" })).toBeEnabled());
     expect(within(dialog).getByRole("img", { name: "Preview" })).toHaveAttribute("src", expect.stringContaining("panela-new.jpg"));
@@ -318,7 +343,7 @@ describe("inventory product modal", () => {
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     expect(uploadImage).toHaveBeenCalledTimes(1);
     expect(update.mock.calls[1][0].data.imageUrl).toBe("/images/panela-new.jpg");
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Editar Producto" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Editar producto" })).not.toBeInTheDocument());
   });
 
   it("defaults new products to tracked inventory with stock inputs", () => {
@@ -460,7 +485,7 @@ describe("inventory product modal", () => {
     cleanup();
     role = "CASHIER";
     render(<InventoryPage />);
-    expect(screen.queryByRole("button", { name: "Nuevo Producto" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nuevo producto" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Panela" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -487,12 +512,12 @@ describe("inventory product modal", () => {
     expect(within(dialog).getByRole("group", { name: /precios/i })).toBeInTheDocument();
   });
 
-  it("gives the image an 18rem column and a full-width container without the old cap", () => {
+  it("gives the image a wider column and a full-width container without the old cap", () => {
     render(<InventoryPage />);
     const dialog = openCreate();
     const identity = within(dialog).getByRole("group", { name: /identidad/i });
     const grid = identity.querySelector(".grid")!;
-    expect(grid.className).toContain("md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]");
+    expect(grid.className).toContain("md:grid-cols-[minmax(0,19.5rem)_minmax(0,1fr)]");
     expect(grid.className).not.toContain("12rem");
     const imageColumn = within(identity).getByTestId("product-image").parentElement!;
     expect(imageColumn.className).not.toContain("max-w-56");
@@ -507,14 +532,14 @@ describe("inventory product modal", () => {
     const dialog = openEdit();
     const media = within(dialog).getByTestId("product-image");
     const preview = within(media).getByRole("img", { name: "Preview" }).parentElement!;
-    expect(preview).toHaveClass("aspect-[4/3]", "md:aspect-[4/5]");
+    expect(preview).toHaveClass("aspect-[4/3]", "md:aspect-square");
     expect(within(media).getByRole("button", { name: "Cambiar" }).textContent?.trim()).toBe("");
     expect(within(media).getByRole("button", { name: "Eliminar" }).textContent?.trim()).toBe("");
     cleanup();
     products = [];
     render(<InventoryPage />);
     const createDialog = openCreate();
-    expect(within(createDialog).getByRole("button", { name: /Seleccionar imagen/ })).toHaveClass("aspect-[4/3]", "md:aspect-[4/5]");
+    expect(within(createDialog).getByRole("button", { name: /Seleccionar imagen/ })).toHaveClass("aspect-[4/3]", "md:aspect-square");
   });
 
   it("keeps Descripción inside the identity group, spanning both right-column sub-columns, and still edits and saves it", async () => {

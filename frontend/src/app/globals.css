@@ -9,18 +9,21 @@
     color-scheme: light;
     --background: #FAF8FF;
     --foreground: #131B2E;
-    --primary: #C25E36;
-    --primary-dark: #A84D28;
+    --primary: #B0522E;
+    --primary-dark: #96421F;
     --primary-light: #FAECE5;
+    /* Text-on-surface variant: the fill colour fails 4.5:1 as a link/label. */
+    --primary-text: #A84D28;
     --accent: #C25E36;
     --accent-light: #FAECE5;
+    --terracotta: #C25E36;
     /* --accent: #7BA08B; es una segunda opción de reemplazo al terracota */
     --card: #FFFFFF;
     --card-foreground: #131B2E;
     --border: #C7C4D7;
     --border-subtle: #E2E8F0;
     --muted: #F2F3FF;
-    --muted-foreground: #767586;
+    --muted-foreground: #6B6A76;
     --success: #16A34A;
     --warning: #D97706;
     --danger: #D0453F;
@@ -43,8 +46,10 @@
     --primary: #C25E36;
     --primary-dark: #A84D28;
     --primary-light: #2C1D18;
+    --primary-text: #E58A63;
     --accent: #C25E36;
     --accent-light: #2C1D18;
+    --terracotta: #E0764C;
     /* --accent: #8BB59D; es una segunda opción de reemplazo al terracota */
     --card: #18181C;
     --card-foreground: #F2F2F5;
@@ -73,9 +78,11 @@
     --color-foreground: var(--foreground);
     --color-primary: var(--primary);
     --color-primary-dark: var(--primary-dark);
+    --color-primary-text: var(--primary-text);
     --color-primary-light: var(--primary-light);
     --color-accent: var(--accent);
     --color-accent-light: var(--accent-light);
+    --color-terracotta: var(--terracotta);
     --color-card: var(--card);
     --color-card-foreground: var(--card-foreground);
     --color-border: var(--border);
@@ -91,6 +98,11 @@
 }
 
 /* ─── Base ─────────────────────────────────────────────── */
+/* Keyboard focus must stay visible even where a component forgets its ring. */
+:where(a, button, input, select, textarea, [role="button"]):focus-visible {
+    outline: 2px solid var(--primary-text);
+    outline-offset: 2px;
+}
 * {
     box-sizing: border-box;
 }
@@ -139,41 +151,6 @@ h4 {
 
 .card-top-rail--accent {
     background-color: var(--accent);
-}
-
-/* ─── Thermal Receipt Print Styles ─────────────────────── */
-.thermal-receipt {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.4;
-}
-
-@media print {
-    .thermal-receipt {
-        width: 80mm;
-        height: auto;
-        margin: 0 auto;
-        padding: 4mm;
-        box-sizing: border-box;
-        color: #000;
-        background: #fff;
-    }
-
-    .thermal-receipt .receipt-title {
-        font-size: 14px;
-        font-weight: bold;
-    }
-
-    .thermal-receipt .receipt-divider {
-        border: none;
-        border-top: 1px dashed #000;
-        margin: 8px 0;
-    }
-
-    .thermal-receipt .receipt-grand-total {
-        font-weight: bold;
-        font-size: 13px;
-    }
 }
 
 /* ─── Animations ───────────────────────────────────────── */
@@ -268,47 +245,91 @@ h4 {
     animation-delay: 400ms;
 }
 
+/* Notifications: drop from the top edge, leave the same way. */
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(-14px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes toast-out {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+}
+
+@keyframes toast-progress {
+    from {
+        transform: scaleX(1);
+    }
+    to {
+        transform: scaleX(0);
+    }
+}
+
+.animate-toast-in {
+    animation: toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-toast-out {
+    animation: toast-out 160ms ease-in both;
+}
+
+.animate-toast-progress {
+    animation: toast-progress linear both;
+}
+
+/* Motion is decoration: without it, content must still be fully visible. */
+@media (prefers-reduced-motion: reduce) {
+    .animate-fade-in-up,
+    .animate-fade-in,
+    .animate-slide-in-left,
+    .animate-slide-in-bottom,
+    .stagger-children > * {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .animate-toast-in,
+    .animate-toast-out {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .animate-toast-progress {
+        display: none;
+    }
+
+    /* Transitions are decoration too: state changes land immediately. */
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 /* ─── Sidebar Styles ───────────────────────────────────── */
 .sidebar-item {
     position: relative;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.625rem 0.875rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--sidebar-fg);
-    text-decoration: none;
-    transition: all 0.18s ease;
     cursor: pointer;
+    text-decoration: none;
     border: none;
     background: transparent;
-    width: 100%;
     text-align: left;
     font-family: var(--font-geist), system-ui, sans-serif;
-}
-
-.sidebar-item:hover {
-    color: var(--sidebar-hover-fg);
-    background: var(--sidebar-hover-bg);
-}
-
-.sidebar-item.active {
-    color: var(--sidebar-active-fg);
-    background: var(--sidebar-active-bg);
-}
-
-.sidebar-item.active::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 55%;
-    background: var(--sidebar-active-fg);
-    border-radius: 0 3px 3px 0;
 }
 
 /* ─── Scrollbars ───────────────────────────────────────── */

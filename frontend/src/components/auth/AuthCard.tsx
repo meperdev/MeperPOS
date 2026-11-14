@@ -19,18 +19,18 @@ export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
           {/* Logo & Header */}
           <div className="text-center space-y-2">
             <Image
-              src="/brand/meperpos-lockup-on-light-384.png"
+              src="/brand/lockup-horizontal-light.png"
               alt={`${APP_NAME} logo`}
-              width={384}
-              height={247}
-              className="mx-auto mb-4 block h-auto w-48 dark:hidden"
+              width={1200}
+              height={300}
+              className="mx-auto mb-4 block h-10 w-auto dark:hidden"
             />
             <Image
-              src="/brand/meperpos-lockup-on-dark-384.png"
+              src="/brand/lockup-horizontal-dark.png"
               alt={`${APP_NAME} logo`}
-              width={384}
-              height={247}
-              className="mx-auto mb-4 hidden h-auto w-48 dark:block"
+              width={1200}
+              height={300}
+              className="mx-auto mb-4 hidden h-10 w-auto dark:block"
             />
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               {title}
@@ -49,7 +49,7 @@ export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
               {footer.text}{" "}
               <Link
                 href={footer.href}
-                className="font-bold text-primary hover:text-primary-dark transition-colors ml-1"
+                className="font-bold text-primary-text hover:text-primary-dark transition-colors ml-1"
               >
                 {footer.linkText}
               </Link>

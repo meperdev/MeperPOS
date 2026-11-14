@@ -7,8 +7,43 @@ import {
   Min,
   IsUUID,
   IsEnum,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
 } from 'class-validator';
 import { ProductType, PromotionType } from '@prisma/client';
+import { DianTaxCode } from '../../common/utils/tax.util';
+
+/**
+ * Cross-field rule mirroring the taxable/taxRate invariant: a product that is
+ * not taxable cannot carry a tribute code. A taxable product may omit the code,
+ * in which case `resolveEffectiveTaxCode` resolves it to IVA.
+ *
+ * `@IsOptional()` runs first, so an explicit `null` (clearing the code) never
+ * reaches this constraint.
+ */
+@ValidatorConstraint({ name: 'taxCodeRequiresTaxable', async: false })
+class TaxCodeRequiresTaxableConstraint implements ValidatorConstraintInterface {
+  validate(taxCode: unknown, args: ValidationArguments): boolean {
+    if (taxCode === null || taxCode === undefined) return true;
+    const { taxable } = args.object as { taxable?: boolean | null };
+    return taxable !== false;
+  }
+
+  defaultMessage(): string {
+    return 'taxCode cannot be set when taxable is false';
+  }
+}
+
+const TAX_CODE_API_PROPERTY = {
+  enum: DianTaxCode,
+  enumName: 'DianTaxCode',
+  required: false,
+  nullable: true,
+  description:
+    'DIAN tribute code of the item. Omitted on a taxable product resolves to IVA.',
+} as const;
 
 export class CreateProductDto {
   @ApiProperty({ example: 'Product Name' })
@@ -44,6 +79,12 @@ export class CreateProductDto {
   @Min(0)
   @IsOptional()
   taxRate?: number;
+
+  @ApiProperty(TAX_CODE_API_PROPERTY)
+  @Validate(TaxCodeRequiresTaxableConstraint)
+  @IsEnum(DianTaxCode)
+  @IsOptional()
+  taxCode?: DianTaxCode | null;
 
   @ApiProperty({ example: false, required: false })
   @IsBoolean()
@@ -139,6 +180,12 @@ export class UpdateProductDto {
   @Min(0)
   @IsOptional()
   taxRate?: number;
+
+  @ApiProperty(TAX_CODE_API_PROPERTY)
+  @Validate(TaxCodeRequiresTaxableConstraint)
+  @IsEnum(DianTaxCode)
+  @IsOptional()
+  taxCode?: DianTaxCode | null;
 
   @ApiProperty({ example: false, required: false })
   @IsBoolean()

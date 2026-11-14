@@ -87,6 +87,8 @@ export interface Sale {
   user?: SaleUser;
   items: SaleItem[];
   payments?: Payment[];
+  /** A POS-financed sale: settled through the linked money loan, no cash rows. */
+  financed?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -116,13 +118,22 @@ export interface InventoryMovement {
   id: string;
   productId: string;
   product?: Product;
-  type: "PURCHASE" | "SALE" | "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "DAMAGE" | "RETURN";
+  type:
+    | "PURCHASE"
+    | "SALE"
+    | "ADJUSTMENT_IN"
+    | "ADJUSTMENT_OUT"
+    | "DAMAGE"
+    | "RETURN"
+    | "LOAN_DELIVERY"
+    | "LOAN_RETURN";
   quantity: number;
   previousStock: number;
   newStock: number;
   reason: string;
   userId: string;
   saleId: string | null;
+  inventoryLoanEventId: string | null;
   createdAt: string;
 }
 
@@ -130,6 +141,9 @@ export interface Settings {
   organization: {
     name: string;
     logoUrl: string | null;
+    taxId?: string | null;
+    phone?: string | null;
+    address?: string | null;
   };
   invoicing: {
     printHeader: string;
@@ -705,3 +719,227 @@ export type ExpenseQueryParams = {
   status?: ExpenseStatus;
   search?: string;
 };
+
+export type MonetaryLoanType = "MONEY" | "SERVICE";
+
+export type MoneyLoanStatus = "OPEN" | "CLOSED" | "CANCELLED";
+
+export type LoanPaymentStatus = "UNPAID" | "PARTIAL" | "PAID";
+
+/** Minimal party projection returned by the loans selects. */
+export interface LoanParty {
+  id: string;
+  name: string;
+}
+
+/**
+ * The POS financing behind a loan, or `null` for an ordinary loan. Mirrors the
+ * additive `posFinancing` field the backend `present()` projects; `finalSaleId`
+ * is `null` until the financed checkout is finalized into a sale.
+ */
+export interface PosLoanFinancing {
+  intentId: string;
+  finalSaleId: string | null;
+  /** Human-facing sale number once the financed checkout is finalized. */
+  finalSaleNumber?: number | null;
+}
+
+/**
+ * Money loan as returned by GET /loans and GET /loans/:id. The backend omits
+ * `version`/`events` and adds the server-owned `collected`/`balance` strings and
+ * `paymentStatus`; the UI reads those and never recomputes them.
+ */
+export interface Loan {
+  type: MonetaryLoanType;
+  id: string;
+  amount: string;
+  status: MoneyLoanStatus;
+  issuedAt: string;
+  dueAt: string | null;
+  reason: string;
+  customerId: string | null;
+  supplierId: string | null;
+  employeeId: string | null;
+  createdById: string;
+  createdAt: string;
+  customer: LoanParty | null;
+  supplier: LoanParty | null;
+  employee: LoanParty | null;
+  createdBy: LoanParty;
+  collected: string;
+  balance: string;
+  paymentStatus: LoanPaymentStatus;
+  /**
+   * Present on every backend projection, `null` for an ordinary loan with no
+   * POS financing intent; `finalSaleId` stays `null` until the financed
+   * checkout is finalized into a sale.
+   */
+  posFinancing: PosLoanFinancing | null;
+}
+
+export interface PosLoanItemInput {
+  productId: string;
+  quantity: number;
+  /** Send only for a deliberate manager override; the server prices the line otherwise. */
+  unitPrice?: number;
+  discountAmount?: number;
+}
+
+export interface CreatePosLoanInput {
+  customerId: string;
+  reason: string;
+  items: PosLoanItemInput[];
+  /** Defaults to the current date (YYYY-MM-DD) when the caller omits it. */
+  issuedAt?: string;
+  dueAt?: string;
+  /** Sale-wide discount. */
+  discountAmount?: number;
+  /** Pin a stable idempotency key so a retried attempt reuses it. */
+  requestKey?: string;
+}
+
+/** POST /loans/pos-initiation response. `agreedCustomerTotal` is the server total to display. */
+export interface PosLoanInitiation {
+  intentId: string;
+  loanId: string;
+  organizationId: string;
+  customerId: string;
+  agreedCustomerTotal: string;
+  quoteSnapshot: unknown;
+}
+
+/** The five append-only money loan event kinds (`MoneyLoanEventType`). */
+export type MoneyLoanEventType =
+  | "CREATED"
+  | "COLLECTED"
+  | "REVERSED"
+  | "CLOSED"
+  | "CANCELLED";
+
+/** One event from GET /loans/:id/history (the backend `eventSelect`). */
+export interface LoanHistoryEvent {
+  id: string;
+  loanId: string;
+  type: MoneyLoanEventType;
+  amount: string | null;
+  method: "CASH" | "CARD" | "TRANSFER" | null;
+  reversesId: string | null;
+  reason: string;
+  createdById: string;
+  createdAt: string;
+  createdBy: LoanParty;
+}
+
+/** Filters accepted by GET /loans, mirroring `QueryLoansDto`. */
+export type LoanQueryParams = {
+  type?: MonetaryLoanType;
+  page?: number;
+  limit?: number;
+};
+
+/** POST /loans/:id/collections, and /pos-completion with `intentId`/`saleId`. */
+export interface LoanOperationResult {
+  type: MonetaryLoanType;
+  loanId: string;
+  status: MoneyLoanStatus;
+  collected: string;
+  balance: string;
+  paymentStatus: LoanPaymentStatus;
+  eventId: string;
+  intentId?: string;
+  saleId?: string;
+}
+
+/** Body the client sends on POST /loans/:id/collections. */
+export interface CollectLoanInput {
+  amount: number;
+  method: "CASH" | "CARD" | "TRANSFER";
+  /** Pin a stable key so a retried collection stays idempotent. */
+  requestKey?: string;
+}
+
+/** Flat pagination envelope returned by GET /loans and GET /loans/:id/history. */
+export type LoanPage<T> = { data: T[]; total: number; page: number; limit: number; totalPages: number };
+
+/** Provider lifecycle state of a WAHA session (`WhatsAppSessionStatus`). */
+export type WhatsAppSessionStatus =
+  | "STOPPED"
+  | "STARTING"
+  | "SCAN_QR_CODE"
+  | "PASSKEY_REQUIRED"
+  | "PASSKEY_CONFIRMATION_REQUIRED"
+  | "WORKING"
+  | "FAILED";
+
+/**
+ * GET /whatsapp/commercial/session — the channel status. `accountId` is the
+ * number the session is linked to; it is present only once the provider reports
+ * a working session, so the screen shows it when it is known.
+ */
+export interface WhatsAppSessionState {
+  status: WhatsAppSessionStatus;
+  accountId?: string | null;
+}
+
+/** GET /whatsapp/commercial/session/qr — base64 PNG, never cached. */
+export interface WhatsAppQrImage {
+  data: string;
+}
+
+/** One linked number (`WhatsAppIdentityStatus`). */
+export type WhatsAppIdentityStatus = "PENDING" | "VERIFIED" | "REVOKED";
+
+/** GET /whatsapp/identity — one administrative link of the calling user. */
+export interface WhatsAppIdentity {
+  id: string;
+  phone: string;
+  status: WhatsAppIdentityStatus;
+  verifiedAt: string | null;
+  organizationId: string | null;
+}
+
+/** POST /whatsapp/identity/challenge — the code is shown once, then worthless. */
+export interface WhatsAppLinkChallenge {
+  code: string;
+  expiresAt: string;
+}
+
+/** One report attempt as the history shows it (`WhatsAppDeliveryKind`). */
+export type WhatsAppDeliveryKind = "SCHEDULED" | "ON_DEMAND";
+
+/** The attempt state a delivery row carries (`WhatsAppDeliveryStatus`). */
+export type WhatsAppDeliveryStatus = "PENDING" | "SENT" | "FAILED";
+
+/**
+ * The closed set of failure codes the backend may record. A row never carries
+ * provider text, so the screen can translate every reason it receives.
+ */
+export type WhatsAppDeliveryFailure =
+  | "no_recipient"
+  | "organization_ambiguous"
+  | "report_failed"
+  | "render_failed"
+  | "provider_rejected"
+  | "send_failed";
+
+/** GET /whatsapp/deliveries — one attempt of the calling organization. */
+export interface WhatsAppDelivery {
+  id: string;
+  kind: WhatsAppDeliveryKind;
+  reportDate: string;
+  status: WhatsAppDeliveryStatus;
+  failureReason: WhatsAppDeliveryFailure | null;
+  sentAt: string | null;
+  attempts: number;
+}
+
+/**
+ * POST /whatsapp/deliveries/report — the send outcome, exactly as the server
+ * reported it. `no_identity` arrives as a 409 body: nobody is linked, so nothing
+ * was sent and nothing failed.
+ */
+export type WhatsAppReportOutcome =
+  | { status: "sent"; providerMessageId: string | null }
+  | { status: "failed"; reason: WhatsAppDeliveryFailure }
+  | { status: "already_attempted" }
+  | { status: "no_identity"; reason: "no_recipient" };

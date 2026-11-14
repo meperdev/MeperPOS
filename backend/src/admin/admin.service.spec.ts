@@ -5,8 +5,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { OrgRole, OrgStatus, PlanType } from '@prisma/client';
+import {
+  BillingStatus,
+  OrgRole,
+  OrgStatus,
+  PlanType,
+  Prisma,
+} from '@prisma/client';
 import { DEFAULT_EXPENSE_TAXONOMY } from '../expenses/default-expense-categories';
+import { isElectronicInvoicingActive } from '../settings/schema';
+import { mergeSettingsJson } from '../settings/settings.service';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -58,6 +66,13 @@ describe('AdminService', () => {
     refreshToken: {
       updateMany: jest.fn(),
     },
+    // Activation flips a setting only; it must never mint a fiscal record.
+    // `count` is what the organization delete reads before it removes anything.
+    fiscalDocument: {
+      create: jest.fn(),
+      updateMany: jest.fn(),
+      count: jest.fn(),
+    },
   };
 
   const authServiceMock = {
@@ -70,6 +85,12 @@ describe('AdminService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // `clearAllMocks` keeps queued `mockResolvedValueOnce` implementations, so a
+    // test that stops mid-sequence would leak values into the next one. These
+    // three are the mocks the settings CAS sequences with `...Once`.
+    prismaMock.organization.findUnique.mockReset();
+    prismaMock.organization.update.mockReset();
+    prismaMock.organization.updateMany.mockReset();
     service = new AdminService(
       prismaMock as never,
       authServiceMock as never,
@@ -118,6 +139,8 @@ describe('AdminService', () => {
           data: expect.objectContaining({
             name: 'Test Org',
             slug: 'test-org',
+            status: OrgStatus.TRIAL,
+            trialEndsAt: expect.any(Date),
           }),
         }),
       );
@@ -346,19 +369,64 @@ describe('AdminService', () => {
   });
 
   describe('updatePlan', () => {
+    /** The single guarded `update` this method is expected to issue. */
+    function guardedWrite(): {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    } {
+      const calls = prismaMock.organization.update.mock.calls as [
+        { where: Record<string, unknown>; data: Record<string, unknown> },
+      ][];
+      return calls[0][0];
+    }
+
+    /** The settings blob the downgrade wrote through the version guard. */
+    function writtenSettings(): Record<string, unknown> {
+      return guardedWrite().data.settings as Record<string, unknown>;
+    }
+
+    /** A lost version race: Prisma reports "record to update not found". */
+    function versionConflict(): Prisma.PrismaClientKnownRequestError {
+      return new Prisma.PrismaClientKnownRequestError(
+        'An operation failed because it depends on one or more records that were required but not found.',
+        { code: 'P2025', clientVersion: 'test' },
+      );
+    }
+
+    function withinBasicLimits(): void {
+      planLimitServiceMock.count.mockResolvedValue(1);
+      prismaMock.cashRegister.findMany.mockResolvedValue([]);
+    }
+
     it('updates organization plan', async () => {
       prismaMock.organization.findUnique.mockResolvedValue({
         id: 'org-1',
         plan: PlanType.BASIC,
+        settingsVersion: 3,
+        settings: {},
       });
       prismaMock.organization.update.mockResolvedValue({
         id: 'org-1',
         plan: PlanType.PRO,
+        settingsVersion: 4,
       });
 
       const result = await service.updatePlan('org-1', { plan: PlanType.PRO });
 
-      expect(result.plan).toBe(PlanType.PRO);
+      // F1: the plan-only write takes part too -- it consumes the exact
+      // settingsVersion it read and does not rewrite the settings blob.
+      expect(prismaMock.organization.update).toHaveBeenCalledWith({
+        where: { id: 'org-1', settingsVersion: 3 },
+        data: { plan: PlanType.PRO, settingsVersion: { increment: 1 } },
+      });
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
+      // F2: the response is the row the guarded write returned, no read-back.
+      expect(result).toEqual({
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 4,
+      });
+      expect(prismaMock.organization.findUnique).toHaveBeenCalledTimes(1);
     });
 
     it('throws NotFoundException if organization does not exist', async () => {
@@ -367,17 +435,49 @@ describe('AdminService', () => {
       await expect(
         service.updatePlan('non-existent', { plan: PlanType.PRO }),
       ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(prismaMock.organization.update).not.toHaveBeenCalled();
+    });
+
+    it('answers with the exact row the guarded write returned, without a read-back', async () => {
+      // F2: an `updateMany` + `findUnique` pair can answer with a row another
+      // writer changed between the two statements. One RETURNING update cannot.
+      const written = {
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 5,
+        settings: { printHeader: 'H' },
+      };
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.BASIC,
+        settingsVersion: 4,
+        settings: {},
+      });
+      prismaMock.organization.update.mockResolvedValue(written);
+
+      const result = await service.updatePlan('org-1', { plan: PlanType.PRO });
+
+      expect(result).toBe(written);
+      expect(prismaMock.organization.findUnique).toHaveBeenCalledTimes(1);
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
     });
 
     it('sets downgradeFlags when downgrading PRO to BASIC', async () => {
       prismaMock.organization.findUnique.mockResolvedValue({
         id: 'org-1',
         plan: PlanType.PRO,
+        settingsVersion: 3,
         settings: { someExisting: true },
       });
       prismaMock.organization.update.mockResolvedValue({
         id: 'org-1',
         plan: PlanType.BASIC,
+        settingsVersion: 4,
+        settings: {
+          someExisting: true,
+          downgradeFlags: { usersOverLimit: true },
+        },
       });
       planLimitServiceMock.count.mockImplementation((type: string) => {
         const counts: Record<string, number> = {
@@ -393,29 +493,37 @@ describe('AdminService', () => {
         { id: 'cr-3' },
       ]);
 
-      await service.updatePlan('org-1', { plan: PlanType.BASIC });
+      const result = await service.updatePlan('org-1', {
+        plan: PlanType.BASIC,
+      });
 
-      expect(prismaMock.organization.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            settings: expect.objectContaining({
-              someExisting: true,
-              downgradeFlags: expect.objectContaining({
-                usersOverLimit: true,
-                productsOverLimit: true,
-                customersOverLimit: true,
-                cashRegistersDisabled: ['cr-2', 'cr-3'],
-              }),
+      expect(prismaMock.organization.update).toHaveBeenCalledWith({
+        where: { id: 'org-1', settingsVersion: 3 },
+        data: {
+          plan: PlanType.BASIC,
+          settings: expect.objectContaining({
+            someExisting: true,
+            downgradeFlags: expect.objectContaining({
+              usersOverLimit: true,
+              productsOverLimit: true,
+              customersOverLimit: true,
+              cashRegistersDisabled: ['cr-2', 'cr-3'],
             }),
           }),
-        }),
-      );
+          settingsVersion: { increment: 1 },
+        },
+      });
+      // No unguarded or two-statement write is left on this path.
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
+      expect(prismaMock.organization.findUnique).toHaveBeenCalledTimes(1);
+      expect(result.plan).toBe(PlanType.BASIC);
     });
 
     it('does not set downgradeFlags when upgrading BASIC to PRO', async () => {
       prismaMock.organization.findUnique.mockResolvedValue({
         id: 'org-1',
         plan: PlanType.BASIC,
+        settingsVersion: 0,
         settings: {},
       });
       prismaMock.organization.update.mockResolvedValue({
@@ -425,24 +533,53 @@ describe('AdminService', () => {
 
       await service.updatePlan('org-1', { plan: PlanType.PRO });
 
-      expect(prismaMock.organization.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.not.objectContaining({
-            settings: expect.anything(),
-          }),
-        }),
-      );
+      // Historical policy preserved: an upgrade never rewrites settings, so any
+      // previously retained downgradeFlags stay untouched.
+      expect(prismaMock.organization.update).toHaveBeenCalledWith({
+        where: { id: 'org-1', settingsVersion: 0 },
+        data: { plan: PlanType.PRO, settingsVersion: { increment: 1 } },
+      });
+      expect(planLimitServiceMock.count).not.toHaveBeenCalled();
+    });
+
+    it('does not recompute flags when the plan already matches the request', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 9,
+        settings: { downgradeFlags: { usersOverLimit: true } },
+      });
+      prismaMock.organization.update.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 10,
+      });
+
+      const result = await service.updatePlan('org-1', { plan: PlanType.PRO });
+
+      expect(prismaMock.organization.update).toHaveBeenCalledWith({
+        where: { id: 'org-1', settingsVersion: 9 },
+        data: { plan: PlanType.PRO, settingsVersion: { increment: 1 } },
+      });
+      expect(planLimitServiceMock.count).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 10,
+      });
     });
 
     it('sets no downgradeFlags when within BASIC limits', async () => {
       prismaMock.organization.findUnique.mockResolvedValue({
         id: 'org-1',
         plan: PlanType.PRO,
+        settingsVersion: 1,
         settings: {},
       });
       prismaMock.organization.update.mockResolvedValue({
         id: 'org-1',
         plan: PlanType.BASIC,
+        settingsVersion: 2,
       });
       planLimitServiceMock.count.mockImplementation((type: string) => {
         const counts: Record<string, number> = {
@@ -459,18 +596,250 @@ describe('AdminService', () => {
 
       expect(prismaMock.organization.update).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: { id: 'org-1', settingsVersion: 1 },
           data: expect.objectContaining({
             settings: expect.objectContaining({
-              downgradeFlags: expect.objectContaining({
+              downgradeFlags: {
                 usersOverLimit: false,
                 productsOverLimit: false,
                 customersOverLimit: false,
                 cashRegistersDisabled: [],
-              }),
+              },
             }),
+            settingsVersion: { increment: 1 },
           }),
         }),
       );
+    });
+
+    it('keeps the activation flag and every other key when downgrading', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 6,
+        settings: {
+          printHeader: 'Mi Negocio',
+          custom: { loyalty: 'true' },
+          legacyKey: 'preserved',
+          electronicInvoicing: { enabled: true },
+        },
+      });
+      prismaMock.organization.update.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.BASIC,
+        settingsVersion: 7,
+      });
+      withinBasicLimits();
+
+      await service.updatePlan('org-1', { plan: PlanType.BASIC });
+
+      expect(writtenSettings()).toEqual({
+        printHeader: 'Mi Negocio',
+        custom: { loyalty: 'true' },
+        legacyKey: 'preserved',
+        electronicInvoicing: { enabled: true },
+        downgradeFlags: {
+          usersOverLimit: false,
+          productsOverLimit: false,
+          customersOverLimit: false,
+          cashRegistersDisabled: [],
+        },
+      });
+      // Differential check with the reader the sale path uses (spec S9): a
+      // downgrade must not switch invoicing off behind the SUPER_ADMIN's back.
+      expect(isElectronicInvoicingActive(writtenSettings())).toBe(true);
+    });
+
+    it('writes a blob the user settings merge keeps intact', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 2,
+        settings: { electronicInvoicing: { enabled: true } },
+      });
+      prismaMock.organization.update.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.BASIC,
+        settingsVersion: 3,
+      });
+      withinBasicLimits();
+
+      await service.updatePlan('org-1', { plan: PlanType.BASIC });
+
+      // Differential check with the shared settings engine: this is the very
+      // merge the user settings PUT applies to the blob the downgrade wrote.
+      const merged = mergeSettingsJson(writtenSettings(), {
+        printFooter: 'Gracias',
+      } as never);
+
+      expect(merged.printFooter).toBe('Gracias');
+      expect(merged.downgradeFlags).toEqual(
+        expect.objectContaining({ usersOverLimit: false }),
+      );
+      expect(isElectronicInvoicingActive(merged)).toBe(true);
+    });
+
+    it('answers 409 instead of writing stale downgrade flags when the settings changed', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 5,
+        settings: {},
+      });
+      prismaMock.organization.update.mockRejectedValue(versionConflict());
+      withinBasicLimits();
+
+      await expect(
+        service.updatePlan('org-1', { plan: PlanType.BASIC }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      // The guarded statement used the version it read, and nothing else wrote.
+      expect(guardedWrite().where).toEqual({
+        id: 'org-1',
+        settingsVersion: 5,
+      });
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
+      expect(prismaMock.organization.findUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers 409 instead of overwriting a downgrade that landed first', async () => {
+      // F1: a plan-only write derived from a pre-downgrade read must not
+      // overwrite the downgrade's plan. Every updatePlan write is version
+      // guarded, so the loser of the race answers 409.
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.BASIC,
+        settingsVersion: 6,
+        settings: { downgradeFlags: { usersOverLimit: true } },
+      });
+      prismaMock.organization.update.mockRejectedValue(versionConflict());
+
+      await expect(
+        service.updatePlan('org-1', { plan: PlanType.PRO }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(guardedWrite().where).toEqual({
+        id: 'org-1',
+        settingsVersion: 6,
+      });
+      expect(planLimitServiceMock.count).not.toHaveBeenCalled();
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rethrows a database error that is not a lost version race', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.BASIC,
+        settingsVersion: 0,
+        settings: {},
+      });
+      prismaMock.organization.update.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        service.updatePlan('org-1', { plan: PlanType.PRO }),
+      ).rejects.toThrow('boom');
+    });
+
+    it('serializes a downgrade and a plan-only write on the same settings version', async () => {
+      const stale = {
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 4,
+        settings: {},
+      };
+      // Both writers read the same version before either one writes.
+      prismaMock.organization.findUnique
+        .mockResolvedValueOnce(stale)
+        .mockResolvedValueOnce(stale);
+      prismaMock.organization.update
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          plan: PlanType.BASIC,
+          settingsVersion: 5,
+        }) // the downgrade wins version 4
+        .mockRejectedValueOnce(versionConflict()); // the plan-only write loses
+      withinBasicLimits();
+
+      await service.updatePlan('org-1', { plan: PlanType.BASIC });
+
+      await expect(
+        service.updatePlan('org-1', { plan: PlanType.PRO }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      const downgradeCall = prismaMock.organization.update.mock.calls[0][0];
+      const planOnlyCall = prismaMock.organization.update.mock.calls[1][0];
+      expect(downgradeCall.where).toEqual({
+        id: 'org-1',
+        settingsVersion: 4,
+      });
+      expect(planOnlyCall.where).toEqual({
+        id: 'org-1',
+        settingsVersion: 4,
+      });
+    });
+
+    it('cannot apply a stale downgrade after activation consumed the version', async () => {
+      const stale = {
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 4,
+        settings: { printHeader: 'Mi Negocio' },
+      };
+      prismaMock.organization.findUnique
+        .mockResolvedValueOnce(stale)
+        .mockResolvedValueOnce(stale);
+      prismaMock.organization.updateMany.mockResolvedValueOnce({ count: 1 });
+      prismaMock.organization.update.mockRejectedValueOnce(versionConflict());
+      withinBasicLimits();
+
+      await service.updateElectronicInvoicing('org-1', { enabled: true });
+
+      await expect(
+        service.updatePlan('org-1', { plan: PlanType.BASIC }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      const activationCall =
+        prismaMock.organization.updateMany.mock.calls[0][0];
+      const downgradeCall = prismaMock.organization.update.mock.calls[0][0];
+      // Both writers guard on the same key, so exactly one of them applies.
+      expect(activationCall.where).toEqual({
+        id: 'org-1',
+        settingsVersion: 4,
+      });
+      expect(downgradeCall.where).toEqual({
+        id: 'org-1',
+        settingsVersion: 4,
+      });
+      expect(
+        isElectronicInvoicingActive(
+          (activationCall.data as { settings: unknown }).settings,
+        ),
+      ).toBe(true);
+    });
+
+    it('cannot activate over downgrade flags the downgrade already wrote', async () => {
+      const beforeDowngrade = {
+        id: 'org-1',
+        plan: PlanType.PRO,
+        settingsVersion: 8,
+        settings: { printHeader: 'H' },
+      };
+      prismaMock.organization.findUnique
+        .mockResolvedValueOnce(beforeDowngrade) // downgrade read
+        .mockResolvedValueOnce(beforeDowngrade); // activation read, now stale
+      prismaMock.organization.update.mockResolvedValueOnce({
+        ...beforeDowngrade,
+        plan: PlanType.BASIC,
+        settingsVersion: 9,
+      });
+      prismaMock.organization.updateMany.mockResolvedValueOnce({ count: 0 });
+      withinBasicLimits();
+
+      await service.updatePlan('org-1', { plan: PlanType.BASIC });
+
+      await expect(
+        service.updateElectronicInvoicing('org-1', { enabled: true }),
+      ).rejects.toBeInstanceOf(ConflictException);
     });
   });
 
@@ -538,12 +907,32 @@ describe('AdminService', () => {
   });
 
   describe('getMetrics', () => {
-    it('returns correct metrics', async () => {
-      prismaMock.organization.count.mockResolvedValueOnce(10);
-      prismaMock.organization.count.mockResolvedValueOnce(7);
-      prismaMock.organization.count.mockResolvedValueOnce(2);
-      prismaMock.organization.count.mockResolvedValueOnce(1);
-      prismaMock.user.count.mockResolvedValue(25);
+    it('returns the status counts, the risk counts and the user counts', async () => {
+      prismaMock.organization.count.mockImplementation(
+        (args: { where?: Record<string, unknown> } = {}) => {
+          const where = args.where ?? {};
+
+          if (where.status === OrgStatus.ACTIVE) return Promise.resolve(7);
+          if (where.status === OrgStatus.TRIAL) {
+            if (where.trialEndsAt) {
+              return Promise.resolve(
+                'lt' in (where.trialEndsAt as Record<string, unknown>) ? 1 : 2,
+              );
+            }
+            return Promise.resolve(2);
+          }
+          if (where.status === OrgStatus.PAST_DUE) return Promise.resolve(1);
+          if (where.status === OrgStatus.SUSPENDED) return Promise.resolve(1);
+          if (where.billingStatus === BillingStatus.OVERDUE)
+            return Promise.resolve(3);
+          if (where.createdAt) return Promise.resolve(4);
+          return Promise.resolve(10);
+        },
+      );
+      prismaMock.user.count.mockImplementation(
+        (args?: { where?: Record<string, unknown> }) =>
+          Promise.resolve(args?.where ? 18 : 25),
+      );
       prismaMock.organization.groupBy.mockResolvedValue([
         { plan: PlanType.BASIC, _count: { id: 8 } },
         { plan: PlanType.PRO, _count: { id: 2 } },
@@ -555,12 +944,48 @@ describe('AdminService', () => {
         totalOrganizations: 10,
         activeOrganizations: 7,
         trialOrganizations: 2,
+        pastDueOrganizations: 1,
         suspendedOrganizations: 1,
+        trialExpiringSoon: 2,
+        trialExpired: 1,
+        billingOverdue: 3,
+        newOrganizationsThisMonth: 4,
         totalUsers: 25,
+        activeUsers: 18,
         organizationsByPlan: {
           [PlanType.BASIC]: 8,
           [PlanType.PRO]: 2,
         },
+      });
+    });
+
+    it('filters the risk counts by the expected where clauses', async () => {
+      prismaMock.organization.count.mockResolvedValue(0);
+      prismaMock.user.count.mockResolvedValue(0);
+      prismaMock.organization.groupBy.mockResolvedValue([]);
+
+      await service.getMetrics();
+
+      expect(prismaMock.organization.count).toHaveBeenCalledWith({
+        where: { status: OrgStatus.PAST_DUE },
+      });
+      expect(prismaMock.organization.count).toHaveBeenCalledWith({
+        where: {
+          status: OrgStatus.TRIAL,
+          trialEndsAt: { gte: expect.any(Date), lte: expect.any(Date) },
+        },
+      });
+      expect(prismaMock.organization.count).toHaveBeenCalledWith({
+        where: {
+          status: OrgStatus.TRIAL,
+          trialEndsAt: { lt: expect.any(Date) },
+        },
+      });
+      expect(prismaMock.organization.count).toHaveBeenCalledWith({
+        where: { billingStatus: BillingStatus.OVERDUE },
+      });
+      expect(prismaMock.user.count).toHaveBeenCalledWith({
+        where: { active: true, isSuperAdmin: false },
       });
     });
   });
@@ -811,10 +1236,7 @@ describe('AdminService', () => {
         id: 'ou-2',
       });
 
-      const result = await service.removeOrganizationMember(
-        'org-1',
-        'user-2',
-      );
+      const result = await service.removeOrganizationMember('org-1', 'user-2');
 
       expect(prismaMock.organizationUser.delete).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'ou-2' } }),
@@ -846,11 +1268,24 @@ describe('AdminService', () => {
   });
 
   describe('deleteOrganization', () => {
+    /** Prisma 6's shape for a foreign key that refused a delete. */
+    function foreignKeyRefusal(constraint: string) {
+      return new Prisma.PrismaClientKnownRequestError(
+        'Foreign key constraint violated on the constraint: ' + constraint,
+        {
+          code: 'P2003',
+          clientVersion: '6.19.2',
+          meta: { modelName: 'Organization', constraint },
+        },
+      );
+    }
+
     it('deletes organization when confirmation name matches', async () => {
       prismaMock.organization.findUnique.mockResolvedValue({
         id: 'org-1',
         name: 'Tienda Principal',
       });
+      prismaMock.fiscalDocument.count.mockResolvedValue(0);
       prismaMock.organization.delete.mockResolvedValue({
         id: 'org-1',
         name: 'Tienda Principal',
@@ -864,6 +1299,100 @@ describe('AdminService', () => {
         expect.objectContaining({ where: { id: 'org-1' } }),
       );
       expect(result.success).toBe(true);
+    });
+
+    it('refuses to delete an organization that still holds fiscal documents', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: 'Tienda Principal',
+      });
+      prismaMock.fiscalDocument.count.mockResolvedValue(2);
+
+      await expect(
+        service.deleteOrganization('org-1', {
+          confirmOrganizationName: 'Tienda Principal',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      // The whole point of the check: the rows are still there afterwards.
+      expect(prismaMock.organization.delete).not.toHaveBeenCalled();
+      expect(prismaMock.fiscalDocument.count).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1' },
+      });
+    });
+
+    it('says how many fiscal documents are keeping the organization alive', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: 'Tienda Principal',
+      });
+      prismaMock.fiscalDocument.count.mockResolvedValue(2);
+
+      await expect(
+        service.deleteOrganization('org-1', {
+          confirmOrganizationName: 'Tienda Principal',
+        }),
+      ).rejects.toThrow('2 fiscal documents');
+    });
+
+    it('answers 409 when the database refuses the delete because a fiscal document appeared', async () => {
+      // The count can be stale: a sale may register its document between the
+      // read and the delete. The database constraint is what actually holds the
+      // invariant, and its refusal must reach the caller as a conflict.
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: 'Tienda Principal',
+      });
+      prismaMock.fiscalDocument.count.mockResolvedValue(0);
+      prismaMock.organization.delete.mockRejectedValue(
+        foreignKeyRefusal('FiscalDocument_organizationId_fkey'),
+      );
+
+      await expect(
+        service.deleteOrganization('org-1', {
+          confirmOrganizationName: 'Tienda Principal',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('answers 409 when the refusal names the sale-side fiscal constraint', async () => {
+      // An organization delete cascades into its sales, so the database may
+      // refuse on the composite sale constraint instead of the organization
+      // one. Both are the same preservation rule and must answer the same 409.
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: 'Tienda Principal',
+      });
+      prismaMock.fiscalDocument.count.mockResolvedValue(0);
+      prismaMock.organization.delete.mockRejectedValue(
+        foreignKeyRefusal('FiscalDocument_saleId_organizationId_fkey'),
+      );
+
+      await expect(
+        service.deleteOrganization('org-1', {
+          confirmOrganizationName: 'Tienda Principal',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('does not disguise another restricted relation as a fiscal conflict', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: 'Tienda Principal',
+      });
+      prismaMock.fiscalDocument.count.mockResolvedValue(0);
+      const payrollRefusal = foreignKeyRefusal(
+        'PayrollObligation_organizationId_fkey',
+      );
+      prismaMock.organization.delete.mockRejectedValue(payrollRefusal);
+
+      // Only the fiscal constraint is translated here; any other failure is a
+      // real failure and must keep its own diagnosis.
+      await expect(
+        service.deleteOrganization('org-1', {
+          confirmOrganizationName: 'Tienda Principal',
+        }),
+      ).rejects.toBe(payrollRefusal);
     });
 
     it('throws BadRequestException when confirmation name does not match', async () => {
@@ -887,6 +1416,147 @@ describe('AdminService', () => {
           confirmOrganizationName: 'Anything',
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('updateElectronicInvoicing', () => {
+    /** The exact `data` payload this method sent to `updateMany`. */
+    function updatePayload(): Record<string, unknown> {
+      const calls = prismaMock.organization.updateMany.mock.calls as [
+        { data: Record<string, unknown> },
+      ][];
+      return calls[0][0].data;
+    }
+
+    /** The settings blob this method wrote. */
+    function writtenSettings(): Record<string, unknown> {
+      return updatePayload().settings as Record<string, unknown>;
+    }
+
+    it('records activation without disturbing any other settings key', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        settingsVersion: 4,
+        settings: {
+          printHeader: 'Mi Negocio',
+          downgradeFlags: { usersOverLimit: false },
+          custom: { loyalty: 'true' },
+        },
+      });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.updateElectronicInvoicing('org-1', {
+        enabled: true,
+      });
+
+      expect(prismaMock.organization.updateMany).toHaveBeenCalledTimes(1);
+      expect(prismaMock.organization.updateMany).toHaveBeenCalledWith({
+        where: { id: 'org-1', settingsVersion: 4 },
+        data: {
+          settings: {
+            printHeader: 'Mi Negocio',
+            downgradeFlags: { usersOverLimit: false },
+            custom: { loyalty: 'true' },
+            electronicInvoicing: { enabled: true },
+          },
+          settingsVersion: { increment: 1 },
+        },
+      });
+      expect(result).toEqual({
+        organizationId: 'org-1',
+        electronicInvoicing: { enabled: true },
+      });
+      // Differential check against the reader the sale path uses (spec S9):
+      // the admin write and `emitFiscalDocumentForSale` must agree on the shape.
+      expect(isElectronicInvoicingActive(writtenSettings())).toBe(true);
+    });
+
+    it('never creates or updates a fiscal document and records no issuance facts', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        settingsVersion: 0,
+        settings: {},
+      });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.updateElectronicInvoicing('org-1', { enabled: true });
+
+      expect(prismaMock.fiscalDocument.create).not.toHaveBeenCalled();
+      expect(prismaMock.fiscalDocument.updateMany).not.toHaveBeenCalled();
+      expect(Object.keys(updatePayload()).sort()).toEqual([
+        'settings',
+        'settingsVersion',
+      ]);
+      // No CUFE, no invoice number, no fabricated DIAN status may ride along.
+      expect(JSON.stringify(updatePayload())).not.toMatch(
+        /cufe|invoiceNumber/i,
+      );
+    });
+
+    it('deactivates the flag and keeps the reader in sync', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        settingsVersion: 2,
+        settings: { electronicInvoicing: { enabled: true } },
+      });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.updateElectronicInvoicing('org-1', {
+        enabled: false,
+      });
+
+      expect(result.electronicInvoicing.enabled).toBe(false);
+      expect(writtenSettings().electronicInvoicing).toEqual({ enabled: false });
+      expect(isElectronicInvoicingActive(writtenSettings())).toBe(false);
+    });
+
+    it('answers 404 for an unknown organization and writes nothing', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateElectronicInvoicing('missing', { enabled: true }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('answers 409 when the settings changed concurrently', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        settingsVersion: 7,
+        settings: {},
+      });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updateElectronicInvoicing('org-1', { enabled: true }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('starts from an empty blob when the persisted settings are unusable', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        settingsVersion: 0,
+        settings: 'not-an-object',
+      });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.updateElectronicInvoicing('org-1', { enabled: true });
+
+      expect(writtenSettings()).toEqual({
+        electronicInvoicing: { enabled: true },
+      });
+    });
+
+    it('refuses a non-boolean flag before touching the database', async () => {
+      await expect(
+        service.updateElectronicInvoicing('org-1', {
+          // A caller that bypasses the DTO must not activate with a string.
+          enabled: 'true' as unknown as boolean,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaMock.organization.findUnique).not.toHaveBeenCalled();
+      expect(prismaMock.organization.updateMany).not.toHaveBeenCalled();
     });
   });
 });

@@ -67,11 +67,11 @@ export function AddPaymentModal({ expense, isOpen, onClose }: Props) {
       size="sm"
     >
       <div className="space-y-4">
-        <div className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3 flex items-center justify-between">
-          <span className="text-xs font-semibold text-muted-foreground">
+        <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground">
             Saldo pendiente
           </span>
-          <span className="text-sm font-bold text-foreground stat-number">
+          <span className="text-base font-semibold font-mono text-foreground tabular-nums">
             {formatCurrency(remaining)}
           </span>
         </div>
@@ -95,22 +95,22 @@ export function AddPaymentModal({ expense, isOpen, onClose }: Props) {
         />
 
         <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
             Fecha
           </label>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
+            className="w-full h-[38px] rounded-lg border border-border/70 bg-muted/30 px-3 text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
           />
         </div>
 
         {error && (
-          <p className="text-xs font-medium text-red-500">{error}</p>
+          <p className="text-xs font-medium text-rose-600 dark:text-rose-400">{error}</p>
         )}
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-2 pt-3 border-t border-border/60">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancelar
           </Button>

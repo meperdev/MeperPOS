@@ -27,7 +27,14 @@ import {
 } from './reports-golden-workload';
 import { seedGoldenFixtures } from '../../test/fixtures/reports-golden/seed-golden-fixtures';
 
-const GOLDEN_DIR = path.join(__dirname, '..', '..', 'test', 'fixtures', 'reports-golden');
+const GOLDEN_DIR = path.join(
+  __dirname,
+  '..',
+  '..',
+  'test',
+  'fixtures',
+  'reports-golden',
+);
 
 interface OrgsManifest {
   orgs: Array<{ slug: string }>;
@@ -57,12 +64,19 @@ const manifest = JSON.parse(
 // (also embedded in economicExport.cash) — are sorted by paymentMethod on BOTH
 // sides before deep-equal; every OTHER assertion stays byte-strict (sorting
 // cannot mask a value difference) — a recorded relaxation, not a weakening.
-function isMethodGroupArray(value: unknown): value is Array<{ paymentMethod: string }> {
-  return Array.isArray(value) && value.every((row) => typeof row?.paymentMethod === 'string');
+function isMethodGroupArray(
+  value: unknown,
+): value is Array<{ paymentMethod: string }> {
+  return (
+    Array.isArray(value) &&
+    value.every((row) => typeof row?.paymentMethod === 'string')
+  );
 }
 
 function sortMethodGroups(rows: Array<{ paymentMethod: string }>) {
-  return [...rows].sort((a, b) => a.paymentMethod.localeCompare(b.paymentMethod));
+  return [...rows].sort((a, b) =>
+    a.paymentMethod.localeCompare(b.paymentMethod),
+  );
 }
 
 function withSortedMethodGroups(key: string, output: unknown): unknown {
@@ -77,7 +91,8 @@ function withSortedMethodGroups(key: string, output: unknown): unknown {
     key === 'economicCash'
       ? (output as { collections?: { byPaymentMethod?: unknown } })
       : key === 'economicExport'
-        ? (output as { cash?: { collections?: { byPaymentMethod?: unknown } } }).cash
+        ? (output as { cash?: { collections?: { byPaymentMethod?: unknown } } })
+            .cash
         : undefined;
   const byPaymentMethod = cashflow?.collections?.byPaymentMethod;
   if (!isMethodGroupArray(byPaymentMethod)) return output;
@@ -88,7 +103,24 @@ function withSortedMethodGroups(key: string, output: unknown): unknown {
       byPaymentMethod: sortMethodGroups(byPaymentMethod),
     },
   };
-  return key === 'economicExport' ? { ...output, cash: sorted } : sorted;
+  // `expensePayments` merges expense payments with payroll cash and returns, and
+  // the service reads them without an ORDER BY, so its group order is unspecified
+  // by contract. The golden compares the numbers, never the row order.
+  const expenseGroups = (
+    sorted as { expensePayments?: { byPaymentMethod?: unknown } }
+  ).expensePayments?.byPaymentMethod;
+  const normalized = isMethodGroupArray(expenseGroups)
+    ? {
+        ...sorted,
+        expensePayments: {
+          ...(sorted as { expensePayments: object }).expensePayments,
+          byPaymentMethod: sortMethodGroups(expenseGroups),
+        },
+      }
+    : sorted;
+  return key === 'economicExport'
+    ? { ...output, cash: normalized }
+    : normalized;
 }
 
 describe('Reports golden equality (S5 perf-refactor #98)', () => {

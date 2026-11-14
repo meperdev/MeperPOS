@@ -1,0 +1,9 @@
+# Override SOLO para desarrollo local. El archivo base no publica puertos ni
+# permite que el contenedor llame al backend del host, que es justo lo que hace
+# falta para vincular un número desde la máquina.
+services:
+  waha:
+    ports:
+      - "127.0.0.1:3002:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

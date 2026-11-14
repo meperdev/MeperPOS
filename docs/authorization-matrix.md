@@ -20,9 +20,11 @@ Living inventory of every backend route: path × method × role(s) × org-scope 
 | `superadmin-global` | Only SUPER_ADMIN; operates across organizations via `X-Organization-Id`. |
 | `authenticated-global` | Requires a valid JWT but no organization context (own profile, token flows). |
 | `pre-auth-public` | No JWT required (login, refresh, health). |
+| `provider-hmac` | No JWT; requires WAHA HMAC over the exact request body and does not process events. |
 
 Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUPER_ADMIN` (platform).
 "any org role" = any authenticated membership role (no `@Roles` restriction).
+Where a row shows an inherited role in parentheses — `ADMIN (OWNER inherits)`, `CASHIER (OWNER, ADMIN, MEMBER inherit)` — the leading value is the single role declared in `@Roles(...)` and the parenthetical is what `RolesGuard.getInheritedRoles` additionally admits.
 
 ---
 
@@ -32,6 +34,42 @@ Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUP
 |---|---|---|---|---|
 | /api | GET | public | pre-auth-public | backend/src/app.controller.spec.ts |
 | /api/health | GET | public | pre-auth-public | backend/src/app.controller.spec.ts |
+
+## whatsapp
+
+The module runs two independent WAHA sessions inside one instance. The commercial session belongs to
+exactly one organization: its name is derived from the authenticated token's organization, so it is
+created, started, stopped and restarted only for the caller's own tenant. The intelligence session is
+a single central channel owned by the platform, has no organization scope, and is reachable only by a
+platform `SUPER_ADMIN`; it is deliberately guarded without `OrganizationRequiredGuard`. Neither
+controller accepts a session name from the request.
+
+The delivery routes supervise the daily report. Reads return the calling organization's recent
+attempts, bounded to 30 rows; a delivery row carries no organization of its own, so the tenant comes
+from the connection it ran on, and the central INTELLIGENCE connection's rows are shown only when that
+connection speaks for exactly one organization. The send route delivers to the caller's own verified
+identity and returns the delivery service's outcome; a caller with no verified identity is answered
+with a 409 instead of an error.
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/whatsapp/commercial/session | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/commercial/session | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/commercial/session/qr | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/commercial/session/stop | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/commercial/session/restart | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-commercial.controller.spec.ts |
+| /api/whatsapp/intelligence/session | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session | GET | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/qr | GET | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/stop | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/restart | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/logout | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/identity | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
+| /api/whatsapp/identity/challenge | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
+| /api/whatsapp/identity/:id | DELETE | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
+| /api/whatsapp/deliveries | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-delivery.controller.spec.ts |
+| /api/whatsapp/deliveries/report | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-delivery.controller.spec.ts |
+| /api/whatsapp/webhook | POST | WAHA HMAC | provider-hmac | backend/src/whatsapp/whatsapp-webhook.spec.ts |
 
 ## auth
 
@@ -56,6 +94,7 @@ Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUP
 | /api/admin/organizations/:id | GET | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/status | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/plan | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
+| /api/admin/organizations/:id/electronic-invoicing | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/transfer-owner | POST | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/metrics | GET | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
@@ -87,7 +126,7 @@ Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUP
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/categories | POST | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
-| /api/categories | GET | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
+| /api/categories | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
 | /api/categories/:id | GET | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
 | /api/categories/:id | PUT | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
 | /api/categories/:id | DELETE | ADMIN, MEMBER | org-scoped | backend/src/categories/categories.service.int.spec.ts |
@@ -102,6 +141,19 @@ Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUP
 | /api/customers/:id | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/customers/customers.service.int.spec.ts |
 | /api/customers/:id | PUT | ADMIN | org-scoped | backend/src/customers/customers.service.int.spec.ts |
 | /api/customers/:id | DELETE | ADMIN | org-scoped | backend/src/customers/customers.service.int.spec.ts |
+
+## employees
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/employees | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+| /api/employees | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+| /api/employees/shifts | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/employee-shifts.service.spec.ts |
+| /api/employees/shifts/:shiftId | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/employee-shifts.service.spec.ts |
+| /api/employees/:id/shifts | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/employee-shifts.service.spec.ts |
+| /api/employees/:id | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+| /api/employees/:id | PATCH | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
+| /api/employees/:id/active | PATCH | OWNER, ADMIN | org-scoped | backend/src/payroll/employees.controller.spec.ts |
 
 ## expenses
 
@@ -154,6 +206,44 @@ Roles: `OWNER`, `ADMIN`, `MEMBER`, `CASHIER`, `INVENTORY_USER` (org roles), `SUP
 | /api/imports/:jobId/status | GET | ADMIN, CASHIER | org-scoped | backend/src/imports/imports.service.int.spec.ts |
 | /api/imports/:jobId/retry-row | POST | ADMIN, CASHIER | org-scoped | backend/src/imports/imports.service.int.spec.ts |
 
+## loans
+
+All rows below are served by `backend/src/loans/loans.controller.ts`; the controller mounts
+`JwtAuthGuard`, `RolesGuard` and `OrganizationRequiredGuard`, and every read/mutation is filtered by
+`organizationId` in `LoansService`.
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/loans/pos-initiation | POST | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.pos-initiation.spec.ts |
+| /api/loans/:id/pos-completion | POST | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.boundary.spec.ts |
+| /api/loans | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/loans/loans.boundary.spec.ts |
+| /api/loans/:id/collections | POST | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.lifecycle.spec.ts |
+| /api/loans/:id/collections/:paymentId/reverse | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/loans/loans.lifecycle.spec.ts |
+| /api/loans/:id/close | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/loans/loans.lifecycle.spec.ts |
+| /api/loans/:id/cancel | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/loans/loans.lifecycle.spec.ts |
+| /api/loans | GET | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.service.spec.ts |
+| /api/loans/:id | GET | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.service.spec.ts |
+| /api/loans/:id/history | GET | CASHIER (OWNER, ADMIN, MEMBER inherit) | org-scoped | backend/src/loans/loans.service.spec.ts |
+
+Note: `InventoryLoansController` (`backend/src/loans/inventory-loans.controller.ts`, all routes
+`@Roles(OrgRole.OWNER, OrgRole.ADMIN)`) is a prepared artifact that is deliberately **unregistered**
+in every module, so it is absent from the OpenAPI document and has no rows here. Wire it into a
+module and add its rows in the same change that exposes it.
+
+## payroll
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/payroll/periods | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/groups | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/period-installments | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/group-installments | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/group-installments/correct | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll.controller.spec.ts |
+| /api/payroll/period-installments/correct | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+| /api/payroll/cash-returns | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll.controller.spec.ts |
+| /api/payroll/replacement-payments | POST | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll.controller.spec.ts |
+| /api/payroll/obligations | GET | OWNER, ADMIN | org-scoped | backend/src/payroll/payroll-http.spec.ts |
+
 ## plan-limits
 
 | Route | Method | Role(s) | Org-scope | Test reference |
@@ -197,6 +287,8 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
+| /api/reports/daily-report | GET | ADMIN | org-scoped | backend/src/reports/daily-report.http.spec.ts |
+| /api/reports/daily-report/pdf | GET | ADMIN | org-scoped | backend/src/reports/daily-report.http.spec.ts |
 | /api/reports/dashboard | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
 | /api/reports/economic | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
 | /api/reports/economic/cash | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |

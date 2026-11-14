@@ -286,6 +286,36 @@ export class ApiClient {
     this.downloadBlobResponse(response.data, response.headers);
   }
 
+  /** Fetches a binary response without downloading it (preview flows). */
+  async fetchBlob(
+    url: string,
+    data?: unknown
+  ): Promise<{ blob: Blob; filename: string }> {
+    const response = await this.client.post(url, data, {
+      responseType: "blob",
+    });
+
+    return {
+      blob: response.data as Blob,
+      filename: this.filenameFromHeaders(
+        response.headers,
+        `export_${Date.now()}`
+      ),
+    };
+  }
+
+  /** Saves an already-fetched blob with the given filename. */
+  saveBlob(blob: Blob, filename: string) {
+    const urlBlob = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = urlBlob;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(urlBlob);
+  }
+
   private downloadBlobResponse(
     blobData: BlobPart,
     headers: Record<string, unknown>
@@ -294,27 +324,29 @@ export class ApiClient {
       typeof headers["content-type"] === "string"
         ? headers["content-type"]
         : undefined;
-    let filename = `export_${Date.now()}`;
+    this.saveBlob(
+      new Blob([blobData], { type: contentType }),
+      this.filenameFromHeaders(headers, `export_${Date.now()}`)
+    );
+  }
 
+  private filenameFromHeaders(
+    headers: Record<string, unknown>,
+    fallback: string
+  ): string {
     const contentDisposition =
       typeof headers["content-disposition"] === "string"
         ? headers["content-disposition"]
         : undefined;
     if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      const filenameMatch = contentDisposition.match(
+        /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+      );
       if (filenameMatch && filenameMatch[1]) {
-        filename = filenameMatch[1];
+        return filenameMatch[1].replace(/^['"]|['"]$/g, "");
       }
     }
-
-    const url_blob = window.URL.createObjectURL(new Blob([blobData], { type: contentType }));
-    const link = document.createElement("a");
-    link.href = url_blob;
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url_blob);
+    return fallback;
   }
 }
 

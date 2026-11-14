@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  waha:
+    image: ${WAHA_IMAGE:?Set WAHA_IMAGE to a verified immutable image reference}
+    environment:
+      WAHA_API_KEY: ${WAHA_API_KEY:?Set WAHA_API_KEY}
+      WAHA_DASHBOARD_ENABLED: "false"
+      WHATSAPP_SWAGGER_ENABLED: "false"
+    volumes:
+      - waha_sessions:/app/.sessions
+    networks:
+      - waha_private
+networks:
+  waha_private:
+    driver: bridge
+volumes:
+  waha_sessions:

@@ -696,11 +696,12 @@ interface JwtPayload {
 
 ### 0.7 Middleware de Tenant
 
-`TenantGuard`:
-1. Extrae `orgId` del JWT.
-2. Valida `OrganizationUser` existe.
-3. Valida `org.status` no es `PAST_DUE` para mutaciones.
-4. Inyecta `organizationId` en `req.user`.
+`JwtStrategy` resuelve la organización y su estado en cada request
+(`req.user.organizationId`, `req.user.orgStatus`).
+`OrganizationStatusGuard` valida que `org.status` no sea `PAST_DUE` ni `SUSPENDED`
+para mutaciones (GET/HEAD quedan permitidos). Se aplica con el interceptor global
+`OrganizationStatusInterceptor`, que corre **después** de la autenticación de ruta:
+un guard global vería `req.user` vacío porque la app no tiene `JwtAuthGuard` global.
 
 ### Archivos Fase 0
 
@@ -923,6 +924,11 @@ Al CREAR: si se supera el límite, devuelve `warning: 'PLAN_LIMIT_REACHED'` con 
 
 - **Trial:** 15 días. Si expira → `PAST_DUE` (solo lectura).
 - **PAST_DUE:** Si pasa 15 días → `SUSPENDED`.
+
+> **Estado actual:** las transiciones automáticas están deshabilitadas por diseño
+> (`BillingScheduler` es un no-op). Una organización nueva nace con `trialEndsAt`
+> a 15 días y el SuperAdmin aplica `PAST_DUE`/`SUSPENDED` manualmente; la
+> automatización queda como unidad pendiente.
 - **SUSPENDED:** Readonly por 5 años (Estatuto Tributario colombiano). Después de 5 años, se puede purgar.
 - **Revocación JWT:** Al suspender, `revokeAllUserTokens()` para todos los usuarios de la org.
 

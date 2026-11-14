@@ -2,9 +2,9 @@
  * Regeneration script for the receipt golden fixtures (S3 — perf-refactor #98).
  *
  * Creates 6 deterministic, org-scoped fixture sales in the local database and
- * generates the baseline receipt PDFs with the CURRENT SalesService receipt
- * builder (pre-refactor code path). The committed artifacts produced here are
- * the equality gate for the receipt-module extraction:
+ * generates the baseline receipt PDFs with the CURRENT receipt renderer. The
+ * committed artifacts produced here are the equality gate for receipt layout
+ * changes:
  *
  *   - pdf/fixture-<n>-<slug>.pdf   baseline PDF per fixture (human-readable)
  *   - baselines.json               normalized pdf-parse extraction per fixture
@@ -521,7 +521,7 @@ async function main(): Promise<void> {
 
   const baselines = {
     _comment:
-      'Golden baselines for the receipt PDF extraction gate (S3). Regenerate with: npm run fixtures:receipts. Generated from the pre-refactor sales.service receipt builder.',
+      'Golden baselines for the receipt PDF extraction gate. Regenerate with: npm run fixtures:receipts after intentional layout changes.',
     normalization: "pdf-parse text; replace /\\s+/g with ' '; trim",
     expected,
   };

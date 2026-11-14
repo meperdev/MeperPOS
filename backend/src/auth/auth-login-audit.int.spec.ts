@@ -51,6 +51,20 @@ describe('Auth login-cycle audit rows (R-LOGIN-1..5)', () => {
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
+  /**
+   * This spec drives a six-login cycle from what would otherwise be one client,
+   * and `login` allows 5 attempts per client per minute (common/throttle-limits.ts).
+   * Each request therefore presents its own client address, which is also what a
+   * real deployment sees: the trusted edge proxy (TRUST_PROXY_HOPS, default 1)
+   * appends the actual client IP. Rate limiting itself is covered by
+   * common/proxy-trust.int.spec.ts and the multi-instance 429 proof.
+   */
+  let clientCounter = 0;
+  const asDistinctClient = (): Record<string, string> => {
+    clientCounter += 1;
+    return { 'X-Forwarded-For': `10.0.0.${clientCounter}` };
+  };
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -145,6 +159,7 @@ describe('Auth login-cycle audit rows (R-LOGIN-1..5)', () => {
   it('R-LOGIN-1: single-org login persists a LOGIN_SUCCESS row with the auto-resolved org', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/auth/login')
+      .set(asDistinctClient())
       .send({ email: singleOrgEmail, password });
 
     expect(res.status).toBe(201);
@@ -173,6 +188,7 @@ describe('Auth login-cycle audit rows (R-LOGIN-1..5)', () => {
   it('R-LOGIN-2: multi-org login with a validated organizationId persists a LOGIN_SUCCESS row', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/auth/login')
+      .set(asDistinctClient())
       .send({ email: multiOrgEmail, password, organizationId: orgAId });
 
     expect(res.status).toBe(201);
@@ -201,6 +217,7 @@ describe('Auth login-cycle audit rows (R-LOGIN-1..5)', () => {
 
     const res = await request(app.getHttpServer())
       .post('/api/auth/login')
+      .set(asDistinctClient())
       .send({ email: multiOrgEmail, password, organizationId: foreignOrgId });
 
     expect(res.status).toBe(401);
@@ -225,6 +242,7 @@ describe('Auth login-cycle audit rows (R-LOGIN-1..5)', () => {
 
     const res = await request(app.getHttpServer())
       .post('/api/auth/login')
+      .set(asDistinctClient())
       .send({ email: multiOrgEmail, password });
 
     expect(res.status).toBe(201);
@@ -241,6 +259,7 @@ describe('Auth login-cycle audit rows (R-LOGIN-1..5)', () => {
   it('R-LOGIN-4: selectOrganization completes login and persists an AUTH_ORG_SELECTED row for the selected org', async () => {
     const pre = await request(app.getHttpServer())
       .post('/api/auth/login')
+      .set(asDistinctClient())
       .send({ email: multiOrgEmail, password });
 
     expect(pre.status).toBe(201);
@@ -277,6 +296,7 @@ describe('Auth login-cycle audit rows (R-LOGIN-1..5)', () => {
   it('R-LOGIN-5: superadmin login (organizationId null) writes NO audit row', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/auth/login')
+      .set(asDistinctClient())
       .send({ email: superAdminEmail, password });
 
     expect(res.status).toBe(201);

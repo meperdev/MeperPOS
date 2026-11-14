@@ -261,4 +261,51 @@ describe('CategoriesService', () => {
       );
     });
   });
+
+  // Regression guards, not behavioural RED: the DTO shape and the invariant live
+  // elsewhere; these pin that the fiscal default survives the write and the
+  // serializer, so a future refactor cannot silently drop the column.
+  describe('fiscal default tax code', () => {
+    it('forwards the default tax code on create', async () => {
+      prismaMock.category.findFirst.mockResolvedValue(null);
+      prismaMock.category.create.mockResolvedValue({
+        id: 'cat-1',
+        name: 'Bebidas',
+        description: null,
+        defaultTaxRate: null,
+        defaultTaxCode: 'IVA',
+        active: true,
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-01T00:00:00.000Z'),
+      });
+
+      const result = await service.create(
+        { name: 'Bebidas', defaultTaxCode: 'IVA' },
+        orgId,
+      );
+
+      expect(prismaMock.category.create).toHaveBeenCalledWith({
+        data: { name: 'Bebidas', defaultTaxCode: 'IVA', organizationId: orgId },
+      });
+      expect(result.defaultTaxCode).toBe('IVA');
+    });
+
+    it('keeps a null default tax code on read', async () => {
+      prismaMock.category.findFirst.mockResolvedValue({
+        id: 'cat-1',
+        name: 'Bebidas',
+        description: null,
+        defaultTaxRate: null,
+        defaultTaxCode: null,
+        active: true,
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-01T00:00:00.000Z'),
+        products: [],
+      });
+
+      const result = await service.findOne('cat-1', orgId);
+
+      expect(result.defaultTaxCode).toBeNull();
+    });
+  });
 });

@@ -8,11 +8,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateSettingsDto } from './dto/settings.dto';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import {
-  CORE_KEY_SET,
-  SYSTEM_KEY_SET,
-  type SettingsView,
-} from './schema';
+import { CORE_KEY_SET, SYSTEM_KEY_SET, type SettingsView } from './schema';
 import { DEFAULT_INVOICING, DEFAULT_LOCALE } from './defaults';
 import { validateInvoicing } from './validator';
 
@@ -69,8 +65,10 @@ export function mergeSettingsJson(
     }
   }
 
-  if (incoming.printHeader !== undefined) next.printHeader = incoming.printHeader;
-  if (incoming.printFooter !== undefined) next.printFooter = incoming.printFooter;
+  if (incoming.printHeader !== undefined)
+    next.printHeader = incoming.printHeader;
+  if (incoming.printFooter !== undefined)
+    next.printFooter = incoming.printFooter;
   if (incoming.custom !== undefined && isRecord(incoming.custom)) {
     Object.assign(custom, incoming.custom);
   }
@@ -111,7 +109,15 @@ export class SettingsService {
 
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { name: true, logoUrl: true, settings: true, settingsVersion: true },
+      select: {
+        name: true,
+        logoUrl: true,
+        taxId: true,
+        phone: true,
+        address: true,
+        settings: true,
+        settingsVersion: true,
+      },
     });
 
     if (!org) {
@@ -121,8 +127,7 @@ export class SettingsService {
     const prefix = await this.readSalePrefix(organizationId);
 
     return this.buildView(
-      org.name,
-      org.logoUrl,
+      org,
       isRecord(org.settings) ? org.settings : {},
       prefix,
     );
@@ -140,14 +145,24 @@ export class SettingsService {
     dto: UpdateSettingsDto,
   ): Promise<SettingsView> {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
 
     this.assertNoSystemKeyWrites(dto);
 
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { name: true, logoUrl: true, settings: true, settingsVersion: true },
+      select: {
+        name: true,
+        logoUrl: true,
+        taxId: true,
+        phone: true,
+        address: true,
+        settings: true,
+        settingsVersion: true,
+      },
     });
 
     if (!org) {
@@ -173,7 +188,7 @@ export class SettingsService {
 
     const prefix = await this.readSalePrefix(organizationId);
 
-    return this.buildView(org.name, org.logoUrl, merged, prefix);
+    return this.buildView(org, merged, prefix);
   }
 
   async updateOrganizationName(
@@ -181,7 +196,9 @@ export class SettingsService {
     name: string,
   ): Promise<SettingsView> {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
 
     const trimmed = typeof name === 'string' ? name.trim() : '';
@@ -210,7 +227,9 @@ export class SettingsService {
     prefix: string | undefined,
   ): Promise<SettingsView> {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
 
     const trimmed = typeof prefix === 'string' ? prefix.trim() : '';
@@ -258,7 +277,9 @@ export class SettingsService {
     file: Express.Multer.File,
   ): Promise<{ logoUrl: string }> {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     if (!file) {
       throw new BadRequestException('No file provided');
@@ -295,13 +316,24 @@ export class SettingsService {
   }
 
   private buildView(
-    name: string,
-    logoUrl: string | null,
+    organization: {
+      name: string;
+      logoUrl: string | null;
+      taxId: string | null;
+      phone: string | null;
+      address: string | null;
+    },
     settings: Record<string, unknown>,
     prefix: string | null,
   ): SettingsView {
     return {
-      organization: { name, logoUrl },
+      organization: {
+        name: organization.name,
+        logoUrl: organization.logoUrl,
+        taxId: organization.taxId ?? null,
+        phone: organization.phone ?? null,
+        address: organization.address ?? null,
+      },
       invoicing: validateInvoicing(settings),
       receipt: { prefix },
       locale: { ...DEFAULT_LOCALE },
@@ -311,7 +343,13 @@ export class SettingsService {
 
   private buildDefaultView(): SettingsView {
     return {
-      organization: { name: '', logoUrl: null },
+      organization: {
+        name: '',
+        logoUrl: null,
+        taxId: null,
+        phone: null,
+        address: null,
+      },
       invoicing: { ...DEFAULT_INVOICING },
       receipt: { prefix: null },
       locale: { ...DEFAULT_LOCALE },

@@ -5,7 +5,11 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { OrganizationSwitcher } from "@/components/auth/OrganizationSwitcher";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { AlertCenter } from "@/components/layout/AlertCenter";
+import { useQueryClient } from "@tanstack/react-query";
+import { applyOrganizationScope } from "@/lib/organizationScope";
+
+export { applyOrganizationScope };
 import { SELECTED_ORGANIZATION_KEY } from "@/lib/session";
 import {
   LayoutDashboard,
@@ -26,13 +30,16 @@ import {
   ClipboardList,
   Truck,
   Wallet,
+  Banknote,
   Building2,
   PanelLeftClose,
   PanelLeftOpen,
+  HandCoins,
 } from "lucide-react";
+import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
-import { cn, safeGetItem, safeSetItem, safeRemoveItem } from "@/lib/utils";
+import { cn, safeGetItem } from "@/lib/utils";
 import { APP_NAME } from "@/lib/constants";
 import { hasAnyRole, type AppRole } from "@/lib/auth";
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -42,6 +49,8 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   roles?: AppRole[];
+  /** Section header shown above the item when the rail is expanded. */
+  group: string;
 }
 
 const navItems: NavItem[] = [
@@ -50,85 +59,124 @@ const navItems: NavItem[] = [
     href: "/dashboard",
     icon: <LayoutDashboard className="w-4 h-4" />,
     roles: ["ADMIN", "INVENTORY_USER"],
+    group: "Operación",
   },
   {
     label: "POS",
     href: "/pos",
     icon: <ShoppingBasket className="w-4 h-4" />,
     roles: ["ADMIN", "CASHIER"],
+    group: "Operación",
   },
   {
     label: "Ventas",
     href: "/sales",
     icon: <Receipt className="w-4 h-4" />,
     roles: ["ADMIN", "CASHIER"],
+    group: "Operación",
   },
   {
     label: "Clientes",
     href: "/customers",
     icon: <Users className="w-4 h-4" />,
     roles: ["ADMIN", "CASHIER"],
+    group: "Operación",
   },
   {
     label: "Inventario",
     href: "/inventory",
     icon: <Package className="w-4 h-4" />,
     roles: ["ADMIN", "CASHIER", "INVENTORY_USER"],
+    group: "Inventario",
   },
   {
     label: "Categorías",
     href: "/categories",
     icon: <FolderTree className="w-4 h-4" />,
     roles: ["ADMIN", "INVENTORY_USER"],
+    group: "Inventario",
   },
   {
     label: "Proveedores",
     href: "/suppliers",
     icon: <Truck className="w-4 h-4" />,
     roles: ["ADMIN", "INVENTORY_USER"],
+    group: "Inventario",
   },
   {
     label: "Compras",
     href: "/purchase-orders",
     icon: <ClipboardList className="w-4 h-4" />,
     roles: ["ADMIN", "INVENTORY_USER"],
+    group: "Inventario",
   },
   {
     label: "Salidas",
     href: "/expenses",
     icon: <Wallet className="w-4 h-4" />,
     roles: ["ADMIN"],
+    group: "Finanzas",
   },
   {
     label: "Reportes",
     href: "/reports",
     icon: <TrendingUp className="w-4 h-4" />,
     roles: ["ADMIN"],
+    group: "Finanzas",
+  },
+  {
+    label: "Préstamos",
+    href: "/loans",
+    icon: <HandCoins className="w-4 h-4" />,
+    roles: ["ADMIN", "CASHIER"],
+    group: "Finanzas",
+  },
+  {
+    label: "Empleados",
+    href: "/employees",
+    icon: <Users className="w-4 h-4" />,
+    roles: ["ADMIN"],
+    group: "Equipo",
+  },
+  {
+    label: "Nómina",
+    href: "/payroll",
+    icon: <Banknote className="w-4 h-4" />,
+    roles: ["ADMIN"],
+    group: "Equipo",
   },
   {
     label: "Tareas",
     href: "/tasks",
     icon: <ClipboardList className="w-4 h-4" />,
     roles: ["ADMIN", "CASHIER", "INVENTORY_USER"],
+    group: "Equipo",
   },
   {
     label: "Mi perfil",
     href: "/profile",
     icon: <UserIcon className="w-4 h-4" />,
+    group: "Cuenta",
   },
   {
     label: "Configuración",
     href: "/settings",
     icon: <Settings className="w-4 h-4" />,
     roles: ["ADMIN"],
+    group: "Cuenta",
   },
   {
     label: "SuperAdmin",
     href: "/admin",
     icon: <Shield className="w-4 h-4" />,
     roles: ["SUPER_ADMIN"],
+    group: "Cuenta",
   },
 ];
+
+// Owners and administrators only. These routes are checked by identity instead of
+// the inherited role list, so a SUPER_ADMIN scope never reaches tenant payroll.
+const OWNER_ADMIN_ONLY_ROUTES = ["/employees", "/payroll"];
 
 const roleLabels: Record<string, string> = {
   OWNER: "Propietario",
@@ -136,33 +184,6 @@ const roleLabels: Record<string, string> = {
   CASHIER: "Cajero",
   INVENTORY_USER: "Inventario",
 };
-
-/**
- * Applies a SuperAdmin organization scope change.
- *
- * A scope change must RESET the queries: not clear them, and not merely
- * invalidate them.
- *
- * - Invalidating leaves the previous organization's rows readable while the
- *   refetch resolves.
- * - Clearing empties the cache but leaves a MOUNTED observer holding its last
- *   result, and unlike invalidating it requests no refetch at all, so those rows
- *   can stay on screen indefinitely.
- *
- * `resetQueries` drops the displayed state AND refetches the active queries,
- * which is also how the switcher's own organization list comes back.
- */
-export function applyOrganizationScope(
-  queryClient: QueryClient,
-  organizationId: string | null
-): void {
-  if (organizationId) {
-    safeSetItem(SELECTED_ORGANIZATION_KEY, organizationId);
-  } else {
-    safeRemoveItem(SELECTED_ORGANIZATION_KEY);
-  }
-  void queryClient.resetQueries();
-}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -182,8 +203,24 @@ export function Sidebar() {
   const navRef = useRef<HTMLElement>(null);
 
   const filteredItems = navItems.filter(
-    (item) => !item.roles || (user && hasAnyRole(user.role, item.roles))
+    (item) => OWNER_ADMIN_ONLY_ROUTES.includes(item.href)
+      ? user?.role === "OWNER" || user?.role === "ADMIN"
+      : !item.roles || (user && hasAnyRole(user.role, item.roles))
   );
+
+  // Consecutive items sharing a group collapse into one labelled block, so the
+  // approved operational order survives while the rail gains a scannable spine.
+  const navGroups = filteredItems.reduce<
+    Array<{ label: string; items: NavItem[] }>
+  >((groups, item) => {
+    const last = groups[groups.length - 1];
+    if (last && last.label === item.group) {
+      last.items.push(item);
+    } else {
+      groups.push({ label: item.group, items: [item] });
+    }
+    return groups;
+  }, []);
 
   const toggleMobileMenu = useCallback(() => setIsMobileMenuOpen((p) => !p), []);
   const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
@@ -204,14 +241,20 @@ export function Sidebar() {
     return () => window.clearInterval(intervalId);
   }, []);
 
-  // Scroll the active nav item into view on mount / pathname change
+  // Scroll the active nav item into view only if it is actually hidden outside the viewport
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
 
     const activeLink = nav.querySelector<HTMLElement>(".sidebar-item.active");
-    if (activeLink?.scrollIntoView) {
-      activeLink.scrollIntoView({ block: "center", behavior: "instant" });
+    if (!activeLink) return;
+
+    const navRect = nav.getBoundingClientRect();
+    const linkRect = activeLink.getBoundingClientRect();
+    const isOutOfView = linkRect.top < navRect.top || linkRect.bottom > navRect.bottom;
+
+    if (isOutOfView && activeLink.scrollIntoView) {
+      activeLink.scrollIntoView({ block: "nearest", behavior: "instant" });
     }
   }, [pathname]);
 
@@ -224,6 +267,27 @@ export function Sidebar() {
         .toUpperCase()
     : "?";
 
+  // The account actions live in one menu so the footer stays quiet.
+  const accountItems: RowActionItem[] = [
+    {
+      label:
+        theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro",
+      icon:
+        theme === "dark" ? (
+          <Sun className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Moon className="h-3.5 w-3.5" aria-hidden="true" />
+        ),
+      onSelect: toggleTheme,
+    },
+    {
+      label: "Cerrar sesión",
+      icon: <LogOut className="h-3.5 w-3.5" aria-hidden="true" />,
+      onSelect: logout,
+      destructive: true,
+    },
+  ];
+
   const formattedDate = new Intl.DateTimeFormat("es-CO", {
     day: "numeric",
     month: "long",
@@ -235,33 +299,45 @@ export function Sidebar() {
     minute: "2-digit",
   }).format(now);
 
+  const timeMatch = formattedTime.match(/^(\d{1,2}:\d{2})\s*(.*)$/);
+  const timeDigits = timeMatch ? timeMatch[1] : formattedTime;
+  const timePeriod = timeMatch && timeMatch[2]
+    ? timeMatch[2].replace(/[\.\s]/g, "").toUpperCase()
+    : "";
+
   const sidebarContent = (
     <>
       {/* Block 1: Brand - logo and wordmark sized to read as one lockup */}
       <div
         data-testid="sidebar-brand"
         className={cn(
-          "border-b border-border/70 shrink-0 transition-all duration-300",
+          "border-b border-border/70 shrink-0",
           isCollapsed
             ? "px-2 py-4 flex flex-col items-center gap-3"
             : "px-5 py-5 flex items-center justify-between gap-3"
         )}
       >
-        <div className={cn("flex items-center gap-3 min-w-0", isCollapsed && "justify-center")}>
+        <div className={cn("flex items-center gap-3.5 min-w-0", isCollapsed && "justify-center")}>
           <Image
-            src="/brand/meperpos-mark-160.png"
+            src="/brand/icon-192.png"
             alt={`${APP_NAME} logo`}
-            width={160}
-            height={89}
-            className={cn("w-auto shrink-0 transition-all", isCollapsed ? "h-8" : "h-9")}
+            width={192}
+            height={192}
+            className={cn(
+              "shrink-0 object-contain drop-shadow-xs",
+              isCollapsed ? "w-11 h-11" : "w-14 h-14"
+            )}
           />
           <p
             className={cn(
-              "text-2xl font-extrabold text-foreground truncate leading-none tracking-tight transition-all",
+              "text-[30px] font-black text-foreground truncate leading-none tracking-tight",
               isCollapsed ? "sr-only" : "min-w-0"
             )}
           >
-            {APP_NAME}
+            Meper
+            <span className="text-[#B45309] underline decoration-[#B45309] decoration-[3.5px] underline-offset-[6px] dark:text-[#FF9933] dark:decoration-[#FF9933]">
+              POS
+            </span>
           </p>
         </div>
         <button
@@ -280,28 +356,54 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Block 2: Date + time - es-CO formatting with the 60s live tick */}
+      {/* Block 2: Date + time and the persistent alert bell */}
       <div
         data-testid="sidebar-clock"
-        className={cn("shrink-0 transition-all", isCollapsed ? "px-2 pt-3" : "px-4 pt-4")}
+        className={cn("shrink-0", isCollapsed ? "px-2 pt-3" : "px-3 pt-3")}
       >
         <div
           className={cn(
-            "font-mono text-muted-foreground text-center bg-muted/60 rounded-lg border border-border/40 transition-all",
-            isCollapsed
-              ? "text-[10px] py-1.5 px-0.5 leading-tight"
-              : "text-[11px] py-1.5 px-2"
+            "flex items-center gap-2",
+            isCollapsed ? "flex-col" : "justify-between",
           )}
-          title={`${formattedDate}, ${formattedTime}`}
         >
-          {isCollapsed ? (
-            <>
-              <span className="font-semibold block">{formattedTime}</span>
-              <span className="sr-only">, {formattedDate}</span>
-            </>
-          ) : (
-            `${formattedDate}, ${formattedTime}`
-          )}
+          <div
+            className={cn(
+              "flex items-center rounded-md border border-border/60 bg-muted/30 px-2 py-1.5",
+              isCollapsed
+                ? "w-full justify-center"
+                : "min-w-0 flex-1 justify-between gap-2",
+            )}
+            title={`${formattedDate}, ${formattedTime}`}
+          >
+            {isCollapsed ? (
+              <div className="flex flex-col items-center leading-none">
+                <span className="font-mono text-[11px] font-semibold text-foreground tabular-nums">
+                  {timeDigits}
+                </span>
+                {timePeriod && (
+                  <span className="mt-0.5 font-mono text-[9px] text-muted-foreground leading-none">
+                    {timePeriod}
+                  </span>
+                )}
+                <span className="sr-only">, {formattedDate}</span>
+              </div>
+            ) : (
+              <>
+                <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground tabular-nums">
+                  {formattedDate}
+                </span>
+                <span className="shrink-0 font-mono text-[11px] font-semibold text-foreground tabular-nums">
+                  {timeDigits} {timePeriod}
+                </span>
+              </>
+            )}
+          </div>
+
+          <AlertCenter
+            collapsed={isCollapsed}
+            className="hidden lg:inline-flex shrink-0"
+          />
         </div>
       </div>
 
@@ -310,60 +412,80 @@ export function Sidebar() {
         data-testid="sidebar-nav"
         ref={navRef}
         className={cn(
-          "flex-1 overflow-y-auto overscroll-contain transition-all pb-20 lg:pb-3 scrollbar-app",
-          isCollapsed ? "px-2 py-3 space-y-2" : "px-3 py-3 space-y-1"
+          "flex-1 overflow-y-auto overscroll-contain pb-20 lg:pb-3 scrollbar-app",
+          isCollapsed ? "px-2 py-3" : "px-3 py-3"
         )}
       >
-        {filteredItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={closeMobileMenu}
-              onMouseEnter={(e) => {
-                if (isCollapsed) {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setHoveredTooltip({
-                    label: item.label,
-                    top: rect.top + rect.height / 2,
-                  });
-                }
-              }}
-              onMouseLeave={() => setHoveredTooltip(null)}
+        {navGroups.map((group, groupIndex) => (
+          <div
+            key={group.label}
+            className={groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined}
+          >
+            {!isCollapsed && (
+              <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground/70">
+                {group.label}
+              </p>
+            )}
+            <div
               className={cn(
-                "sidebar-item flex items-center rounded-xl text-xs font-semibold transition-all duration-150",
-                isCollapsed
-                  ? "justify-center p-0 w-11 h-11 mx-auto"
-                  : "gap-3 px-3.5 py-2.5",
-                isActive
-                  ? cn(
-                      "active bg-primary-light text-primary relative shadow-xs",
-                      !isCollapsed &&
-                        "after:absolute after:left-0 after:w-1 after:h-2/3 after:bg-primary after:rounded-r-full",
-                      isCollapsed && "ring-1.5 ring-primary/40 font-bold"
-                    )
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                "flex flex-col",
+                isCollapsed ? "items-center gap-1" : "gap-0.5"
               )}
-              title={isCollapsed ? item.label : undefined}
             >
-              <span
-                className={cn(
-                  "shrink-0 transition-colors duration-150 flex items-center justify-center",
-                  isActive ? "text-primary" : "text-muted-foreground"
-                )}
-              >
-                {item.icon}
-              </span>
-              <span className={cn("truncate", isCollapsed ? "sr-only" : "inline")}>
-                {item.label}
-              </span>
-            </Link>
-          );
-        })}
+              {group.items.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== "/dashboard" &&
+                    pathname.startsWith(`${item.href}/`));
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => {
+                      closeMobileMenu();
+                      setHoveredTooltip(null);
+                    }}
+                    onMouseEnter={(e) => {
+                      if (isCollapsed) {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setHoveredTooltip({
+                          label: item.label,
+                          top: rect.top + rect.height / 2,
+                        });
+                      }
+                    }}
+                    onMouseLeave={() => setHoveredTooltip(null)}
+                    className={cn(
+                      "sidebar-item flex items-center rounded-md text-[13px] font-medium select-none transition-colors duration-150",
+                      isCollapsed
+                        ? "mx-auto h-9 w-9 justify-center"
+                        : "h-11 w-full gap-2.5 px-2 lg:h-9",
+                      isActive
+                        ? "active bg-muted/70 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                    )}
+                    title={isCollapsed ? item.label : undefined}
+                  >
+                    <span
+                      className={cn(
+                        "shrink-0 flex items-center justify-center",
+                        isActive ? "text-foreground" : "text-muted-foreground"
+                      )}
+                    >
+                      {item.icon}
+                    </span>
+                    <span
+                      className={cn("truncate", isCollapsed ? "sr-only" : "inline")}
+                    >
+                      {item.label}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Floating tooltip for collapsed rail items */}
@@ -371,10 +493,9 @@ export function Sidebar() {
         <div
           data-testid="sidebar-rail-tooltip"
           style={{ top: hoveredTooltip.top }}
-          className="fixed left-[78px] -translate-y-1/2 z-[70] px-3 py-1.5 rounded-lg bg-foreground text-background dark:bg-card dark:text-foreground text-xs font-semibold shadow-xl border border-border/80 pointer-events-none whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150 flex items-center gap-2"
+          className="fixed left-[78px] -translate-y-1/2 z-[70] rounded-md border border-border/70 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-lg pointer-events-none whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150"
         >
-          <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-          <span>{hoveredTooltip.label}</span>
+          {hoveredTooltip.label}
         </div>
       )}
 
@@ -383,14 +504,14 @@ export function Sidebar() {
         <div
           data-testid="sidebar-user"
           className={cn(
-            "border-t border-border/70 shrink-0 transition-all",
-            isCollapsed ? "p-2" : "p-4"
+            "border-t border-border/70 shrink-0",
+            isCollapsed ? "px-2 py-3" : "px-3 py-3"
           )}
         >
           {isCollapsed ? (
-            <div className="rounded-2xl border border-border/80 bg-muted/30 p-2 flex flex-col items-center gap-2.5 shadow-xs">
+            <div className="flex flex-col items-center gap-1.5">
               <div
-                className="w-10 h-10 rounded-xl bg-primary-light border border-primary/30 text-primary flex items-center justify-center font-bold text-sm shrink-0"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/60 font-mono text-[11px] font-semibold text-foreground"
                 title={`${user.name} (${roleLabels[user.role] ?? user.role})`}
               >
                 {initials}
@@ -399,47 +520,22 @@ export function Sidebar() {
                 </span>
               </div>
 
-              <button
-                type="button"
-                onClick={toggleTheme}
-                aria-label={
-                  theme === "dark"
-                    ? "Cambiar a modo claro"
-                    : "Cambiar a modo oscuro"
-                }
-                title={
-                  theme === "dark"
-                    ? "Cambiar a modo claro"
-                    : "Cambiar a modo oscuro"
-                }
-                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-              >
-                {theme === "dark" ? (
-                  <Sun className="w-4 h-4 text-primary" />
-                ) : (
-                  <Moon className="w-4 h-4 text-primary" />
-                )}
-              </button>
+              <RowActions
+                label="Opciones de cuenta"
+                triggerClassName="h-11 w-11 lg:h-8 lg:w-8"
+                menuOffset={24}
+                items={accountItems}
+              />
 
-              <button
-                type="button"
-                onClick={logout}
-                className="p-2 rounded-lg text-danger hover:bg-danger/10 transition-colors"
-                aria-label="Cerrar sesion"
-                title="Cerrar sesion"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-
-              <div className="border-t border-border/60 pt-2 w-full flex justify-center">
+              <div className="w-full border-t border-border/60 pt-1.5 flex justify-center">
                 <button
                   type="button"
                   onClick={toggleCollapse}
-                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                  className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8"
                   aria-label="Cambiar organizacion (expandir)"
                   title="Cambiar organizacion (expandir barra)"
                 >
-                  <Building2 className="w-4 h-4" />
+                  <Building2 className="h-4 w-4" />
                 </button>
               </div>
 
@@ -466,60 +562,27 @@ export function Sidebar() {
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-border/80 bg-muted/30 p-3.5 flex flex-col gap-3 shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary-light border border-primary/30 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/60 font-mono text-[11px] font-semibold text-foreground">
                   {initials}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-foreground truncate leading-tight">
+                  <p className="truncate text-xs font-semibold leading-tight text-foreground">
                     {user.name}
                   </p>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted text-muted-foreground font-mono text-[10px] font-semibold mt-0.5">
+                  <p className="truncate text-[11px] text-muted-foreground">
                     {roleLabels[user.role] ?? user.role}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between border-t border-border/60 pt-2.5">
-                <div className="flex items-center bg-muted/80 rounded-lg p-0.5 border border-border/40">
-                  <button
-                    type="button"
-                    onClick={toggleTheme}
-                    aria-label="Cambiar a modo claro"
-                    className={cn(
-                      "p-1 rounded-md transition-colors",
-                      theme === "light"
-                        ? "bg-card text-primary shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <Sun className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={toggleTheme}
-                    aria-label="Cambiar a modo oscuro"
-                    className={cn(
-                      "p-1 rounded-md transition-colors",
-                      theme === "dark"
-                        ? "bg-card text-primary shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <Moon className="w-3.5 h-3.5" />
-                  </button>
+                  </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="p-1.5 rounded-lg text-danger hover:bg-danger/10 transition-colors"
-                  aria-label="Cerrar sesion"
-                  title="Cerrar sesion"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
+                <RowActions
+                  label="Opciones de cuenta"
+                  className="shrink-0"
+                  triggerClassName="h-7 w-7"
+                  menuOffset={24}
+                  items={accountItems}
+                />
               </div>
 
               {user.isSuperAdmin ? (
@@ -552,25 +615,32 @@ export function Sidebar() {
     <>
       {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-50 flex items-center justify-between px-4 bg-card border-b border-border">
-        <div className="flex items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <button
+            onClick={toggleMobileMenu}
+            className="-ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={isMobileMenuOpen ? "Cerrar menu" : "Abrir menu"}
+            aria-expanded={isMobileMenuOpen}
+          >
+            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
           <Image
-            src="/brand/meperpos-mark-160.png"
+            src="/brand/icon-192.png"
             alt={`${APP_NAME} logo`}
-            width={160}
-            height={89}
-            className="h-8 w-auto shrink-0"
+            width={192}
+            height={192}
+            className="w-9 h-9 shrink-0 object-contain drop-shadow-xs"
           />
-          <span className="text-sm font-bold text-foreground">
-            {APP_NAME}
+          <span className="truncate text-lg font-black tracking-tight text-foreground">
+            Meper
+            <span className="text-[#B45309] underline decoration-[#B45309] decoration-2 underline-offset-4 dark:text-[#FF9933] dark:decoration-[#FF9933]">
+              POS
+            </span>
           </span>
         </div>
-        <button
-          onClick={toggleMobileMenu}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          aria-label={isMobileMenuOpen ? "Cerrar menu" : "Abrir menu"}
-        >
-          {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-1">
+          <AlertCenter className="lg:hidden" />
+        </div>
       </header>
 
       {/* Mobile Overlay */}
@@ -583,10 +653,11 @@ export function Sidebar() {
 
       {/* Sidebar (Fixed Desktop / Responsive Drawer Mobile) */}
       <aside
+        data-sidebar-root
         className={cn(
           "fixed top-14 bottom-0 left-0 lg:top-0 lg:bottom-auto lg:h-screen flex flex-col z-50",
           "bg-card border-r border-border/80 shadow-2xl lg:shadow-none",
-          "transition-all duration-300 ease-in-out",
+          "transition-[width,transform] duration-300 ease-in-out",
           "lg:translate-x-0",
           isCollapsed ? "lg:w-[72px]" : "lg:w-[320px]",
           "w-[280px] sm:w-[320px]",

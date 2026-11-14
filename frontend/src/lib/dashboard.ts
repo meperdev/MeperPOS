@@ -1,5 +1,5 @@
 import { shiftDateInputValue } from "@/lib/utils";
-import type { DailySale, Expense, SaleByCategoryDaily, Task, TaskStatus } from "@/types";
+import type { DailySale, SaleByCategoryDaily, Task, TaskStatus } from "@/types";
 
 export interface TodaySaleRecord {
   total: number;
@@ -114,6 +114,16 @@ export function countDaysInclusive(startDate: string, endDate: string): number {
   return diff > 0 ? diff : 1;
 }
 
+/** Money ticks without the full weight of a COP amount. */
+export function formatCategoryAmountTick(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  if (value >= 1_000_000_000) return `$${Math.round(value / 1_000_000_000)}MM`;
+  if (value >= 1_000_000) return `$${Math.round(value / 1_000_000)}M`;
+  if (value >= 1_000) return `$${Math.round(value / 1_000)}k`;
+  return `$${Math.round(value)}`;
+}
+
+
 /**
  * Compact `d/m` axis tick for a `YYYY-MM-DD` day. Range-driven: it prints the
  * actual date instead of a month-bound `day % 5 === 0` rule.
@@ -191,18 +201,28 @@ export function computeDelta(
  * pending amount falls back to the full `total`.
  */
 export function computePendingAmount(expense: {
-  total: number;
-  payments?: Array<{ amount: number }>;
+  total: number | string;
+  payments?: Array<{ amount: number | string }>;
 }): number {
-  const total = expense?.total ?? 0;
+  const total = toAmount(expense?.total);
   const payments = expense?.payments;
 
   if (!payments || payments.length === 0) {
     return total;
   }
 
-  const paid = payments.reduce((sum, payment) => sum + (payment?.amount ?? 0), 0);
+  const paid = payments.reduce((sum, payment) => sum + toAmount(payment?.amount), 0);
   return total - paid;
+}
+
+/**
+ * The API serializes Prisma `Decimal` money fields as strings ("5000.00").
+ * Summing them raw concatenates digits, so every amount crosses this boundary
+ * as a number. Non-finite input counts as zero.
+ */
+function toAmount(value: unknown): number {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
 }
 
 const OPEN_TASK_STATUSES: TaskStatus[] = ["PENDING", "IN_PROGRESS"];
@@ -314,7 +334,7 @@ export function buildStackedDailySeries(
   });
 }
 
-export type ExpenseDateLike = Pick<Expense, "date" | "total">;
+export type ExpenseDateLike = { date: string; total: number | string | null };
 
 /**
  * Sums the `total` of the expenses whose Bogotá date matches `date`. Accepts
@@ -329,6 +349,6 @@ export function sumExpensesOnDate(
     if (!expense) return sum;
     const expenseDate = expense.date;
     const matches = expenseDate === date || expenseDate.slice(0, 10) === date;
-    return matches ? sum + (expense.total ?? 0) : sum;
+    return matches ? sum + toAmount(expense.total) : sum;
   }, 0);
 }

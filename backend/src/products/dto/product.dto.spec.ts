@@ -74,3 +74,93 @@ describe('Product promotion DTO shape', () => {
     expect(dto.promotionValue).toBeNull();
   });
 });
+
+describe('Product tax code DTO shape', () => {
+  const baseCreate = {
+    name: 'Test Product',
+    sku: 'SKU-001',
+    costPrice: 100,
+    salePrice: 19900,
+    stock: 10,
+    minStock: 5,
+    categoryId: '123e4567-e89b-12d3-a456-426614174000',
+  };
+
+  it('rejects a tax code when taxable is false', async () => {
+    const dto = plainToInstance(CreateProductDto, {
+      ...baseCreate,
+      taxable: false,
+      taxCode: 'IVA',
+    });
+
+    const errors = await validate(dto);
+
+    const codeErrors = errors.find((e) => e.property === 'taxCode');
+    expect(codeErrors).toBeDefined();
+    expect(codeErrors!.constraints).toHaveProperty('taxCodeRequiresTaxable');
+  });
+
+  it('rejects a tax code on an update that declares taxable false', async () => {
+    const dto = plainToInstance(UpdateProductDto, {
+      taxable: false,
+      taxCode: 'ICA',
+    });
+
+    const errors = await validate(dto);
+
+    const codeErrors = errors.find((e) => e.property === 'taxCode');
+    expect(codeErrors).toBeDefined();
+    expect(codeErrors!.constraints).toHaveProperty('taxCodeRequiresTaxable');
+  });
+
+  it('accepts a taxable product that omits the code (resolves to IVA)', async () => {
+    const dto = plainToInstance(CreateProductDto, {
+      ...baseCreate,
+      taxable: true,
+      taxRate: 19,
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts an explicit code on a taxable product', async () => {
+    const dto = plainToInstance(CreateProductDto, {
+      ...baseCreate,
+      taxable: true,
+      taxRate: 8,
+      taxCode: 'INC',
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.taxCode).toBe('INC');
+  });
+
+  it('rejects an unknown tax code', async () => {
+    const dto = plainToInstance(UpdateProductDto, {
+      taxable: true,
+      taxCode: 'IVA19',
+    });
+
+    const errors = await validate(dto);
+
+    const codeErrors = errors.find((e) => e.property === 'taxCode');
+    expect(codeErrors).toBeDefined();
+    expect(codeErrors!.constraints).toHaveProperty('isEnum');
+  });
+
+  it('lets an explicit null pass for clearing the code', async () => {
+    const dto = plainToInstance(UpdateProductDto, {
+      taxable: true,
+      taxCode: null,
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.taxCode).toBeNull();
+  });
+});

@@ -20,6 +20,7 @@
     "test:debug": "dotenv -e .env.development -- node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "dotenv -e .env.development -- jest --config ./test/jest-e2e.json",
     "seed": "dotenv -e .env.development -- ts-node prisma/seed.ts",
+    "seed:activity": "dotenv -e .env.development -- ts-node prisma/seed-demo-activity.ts",
     "fixtures:receipts": "dotenv -e .env.development -- ts-node test/fixtures/receipts/regenerate-fixtures.ts",
     "fixtures:reports-golden": "dotenv -e .env.development -- ts-node test/fixtures/reports-golden/capture-goldens.ts",
     "fixtures:reports-timing": "dotenv -e .env.development -- ts-node test/fixtures/reports-golden/run-reports-timing.ts",
@@ -30,7 +31,12 @@
     "migrate:dev": "dotenv -e .env.development -- npx prisma migrate dev",
     "migrate:prod": "dotenv -e .env.production -- npx prisma migrate deploy",
     "provision:prod": "dotenv -e .env.production -- ts-node prisma/provision.ts",
-    "studio": "dotenv -e .env.development -- npx prisma studio"
+    "db:up": "bash scripts/db.sh up",
+    "db:status": "bash scripts/db.sh status",
+    "db:down": "bash scripts/db.sh down",
+    "db:logs": "bash scripts/db.sh logs",
+    "studio": "dotenv -e .env.development -- npx prisma studio",
+    "backfill:trial-ends": "dotenv -e .env.development -- ts-node prisma/backfill-trial-ends.ts"
   },
   "dependencies": {
     "@fast-csv/format": "^5.0.5",
@@ -52,7 +58,8 @@
     "cookie-parser": "^1.4.7",
     "exceljs": "^4.4.0",
     "helmet": "^8.3.0",
-    "jspdf": "^4.0.0",
+    "ioredis": "^6.0.0",
+    "jspdf": "^4.2.1",
     "multer": "^2.0.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -97,6 +104,10 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.20.0"
+  },
+  "overrides": {
+    "handlebars": "^4.7.10",
+    "proxy-addr": "^2.0.8"
   },
   "jest": {
     "moduleFileExtensions": [

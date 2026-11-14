@@ -20,6 +20,7 @@ import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { AddOrganizationMemberDto } from './dto/add-organization-member.dto';
 import { DeleteOrganizationDto } from './dto/delete-organization.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { UpdateElectronicInvoicingDto } from './dto/update-electronic-invoicing.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -78,6 +79,14 @@ export class AdminController {
     @Body() dto: UpdateOrganizationDto,
   ) {
     return this.adminService.updateOrganization(id, dto);
+  }
+
+  @Patch('organizations/:id/electronic-invoicing')
+  updateElectronicInvoicing(
+    @Param('id') id: string,
+    @Body() dto: UpdateElectronicInvoicingDto,
+  ) {
+    return this.adminService.updateElectronicInvoicing(id, dto);
   }
 
   @Post('organizations/:id/members')

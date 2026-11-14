@@ -82,7 +82,7 @@ export function Stepper({
         aria-label="Disminuir cantidad"
         className={cn(
           "bg-card border border-border/60 text-foreground flex items-center justify-center font-bold",
-          "hover:bg-primary-light hover:text-primary active:scale-90 transition-all duration-150 shadow-xs",
+          "hover:bg-primary-light hover:text-primary-text active:scale-90 transition-all duration-150 shadow-xs",
           "disabled:opacity-40 disabled:pointer-events-none",
           currentSize.btn
         )}
@@ -109,7 +109,7 @@ export function Stepper({
         aria-label="Aumentar cantidad"
         className={cn(
           "bg-card border border-border/60 text-foreground flex items-center justify-center font-bold",
-          "hover:bg-primary-light hover:text-primary active:scale-90 transition-all duration-150 shadow-xs",
+          "hover:bg-primary-light hover:text-primary-text active:scale-90 transition-all duration-150 shadow-xs",
           "disabled:opacity-40 disabled:pointer-events-none",
           currentSize.btn
         )}

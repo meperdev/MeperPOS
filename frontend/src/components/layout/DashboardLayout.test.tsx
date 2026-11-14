@@ -35,6 +35,51 @@ function setUser(role: string) {
   });
 }
 
+describe("employee route access", () => {
+  beforeEach(() => { vi.clearAllMocks(); currentPathname = "/employees"; });
+  afterEach(cleanup);
+
+  it.each(["OWNER", "ADMIN"])("allows %s", (role) => {
+    setUser(role);
+    render(<DashboardLayout>Empleados</DashboardLayout>);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it.each([["CASHIER", "/pos"], ["MEMBER", "/dashboard"], ["INVENTORY_USER", "/dashboard"], ["SUPER_ADMIN", "/dashboard"]])("redirects %s", (role, destination) => {
+    setUser(role);
+    render(<DashboardLayout>Empleados</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith(destination);
+  });
+});
+
+describe("payroll route access", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentPathname = "/payroll";
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it.each(["OWNER", "ADMIN"])("allows %s", (role) => {
+    setUser(role);
+    render(<DashboardLayout>Nómina</DashboardLayout>);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["CASHIER", "/pos"],
+    ["MEMBER", "/dashboard"],
+    ["INVENTORY_USER", "/dashboard"],
+    ["SUPER_ADMIN", "/dashboard"],
+  ])("redirects %s", (role, destination) => {
+    setUser(role);
+    render(<DashboardLayout>Nómina</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith(destination);
+  });
+});
+
 describe("DashboardLayout route gating for /expenses", () => {
   beforeEach(() => {
     vi.clearAllMocks();

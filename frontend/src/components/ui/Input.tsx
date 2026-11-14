@@ -1,5 +1,23 @@
-import { InputHTMLAttributes, forwardRef, useId } from "react";
+import { InputHTMLAttributes, forwardRef, useEffect, useId, useRef, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Numeric fields keep the text the user sees. Native number inputs re-render
+ * "0" the moment the value parses to 0, so deleting the last digit and typing
+ * again felt impossible; here an empty field stays empty while focused and
+ * leading zeros never survive a keystroke.
+ */
+function normalizeNumericText(raw: string) {
+  if (raw === "") return "";
+  if (!/^-?\d*\.?\d*$/.test(raw)) return raw;
+  const negative = raw.startsWith("-");
+  const unsigned = negative ? raw.slice(1) : raw;
+  const [integer, ...rest] = unsigned.split(".");
+  const cleanInteger = integer.replace(/^0+(?=\d)/, "");
+  const decimals = rest.length ? `.${rest.join("")}` : "";
+  return `${negative ? "-" : ""}${cleanInteger}${decimals}`;
+}
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> {
   label?: string;
@@ -12,22 +30,59 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement | HTMLTextArea
 }
 
 export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputProps>(
-  ({ label, error, textarea = false, rows = 3, className = "", icon, prefixText, suffixIcon, required, id, ...props }, ref) => {
+  ({ label, error, textarea = false, rows = 3, className = "", icon, prefixText, suffixIcon, required, id, type, disabled, readOnly, ...props }, ref) => {
     const reactId = useId();
     const inputId = id || reactId;
+    const innerInputRef = useRef<HTMLInputElement | null>(null);
+    const isNumber = !textarea && type === "number";
+    const focusedRef = useRef(false);
+    const [numericText, setNumericText] = useState<string | null>(null);
+
+    useEffect(() => {
+      // Leaving the field hands control back to the prop.
+      if (!focusedRef.current) setNumericText(null);
+    }, [props.value]);
+
+    const propText =
+      isNumber && props.value !== undefined && props.value !== null
+        ? String(props.value)
+        : "";
+    const shownValue = isNumber
+      ? numericText ?? propText
+      : props.value;
+
+    const stepNumber = (direction: 1 | -1) => {
+      const el = innerInputRef.current;
+      if (!el || el.disabled || el.readOnly) return;
+      try {
+        if (direction === 1) el.stepUp();
+        else el.stepDown();
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        nativeSetter?.call(el, el.value);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch {
+        // Fallback if stepUp/stepDown is unsupported for current state
+      }
+    };
 
     const commonClasses = cn(
-      "w-full rounded-xl border bg-card px-3.5 py-2.5 text-base sm:text-xs text-foreground",
+      "w-full rounded-lg border bg-card px-3.5 py-2 text-base sm:text-xs text-foreground",
       "placeholder:text-muted-foreground/60",
-      "transition-all duration-200 shadow-xs",
-      "focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20",
+      "transition-colors duration-150 shadow-2xs",
+      "focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15",
       "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-muted/40",
-      icon && "pl-10",
-      prefixText && "pl-8 font-mono",
-      suffixIcon && "pr-10",
+      icon && "pl-9",
+      prefixText && "pl-8 font-mono tabular-nums",
+      (suffixIcon || isNumber) && "pr-9",
+      isNumber &&
+        "font-mono tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
       error
         ? "border-danger focus:border-danger focus:ring-danger/20"
-        : "border-border hover:border-primary/40",
+        : "border-border/70 hover:border-border",
       className,
     );
 
@@ -36,10 +91,10 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
         {label && (
           <label
             htmlFor={inputId}
-            className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            className="mb-1.5 block text-xs font-medium text-muted-foreground"
           >
             {label}
-            {required && <span className="text-danger ml-0.5">*</span>}
+            {required && <span className="ml-0.5 text-rose-700 dark:text-rose-400">*</span>}
           </label>
         )}
         <div className="relative">
@@ -49,7 +104,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
             </span>
           )}
           {prefixText && (
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono font-bold text-primary pointer-events-none">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-xs font-medium text-muted-foreground pointer-events-none">
               {prefixText}
             </span>
           )}
@@ -60,23 +115,75 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
               rows={rows}
               required={required}
               aria-required={required}
+              disabled={disabled}
+              readOnly={readOnly}
               className={cn(commonClasses, "resize-none")}
               {...(props as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
             />
           ) : (
             <input
-              ref={ref as React.RefObject<HTMLInputElement>}
+              ref={(node) => {
+                innerInputRef.current = node;
+                if (typeof ref === "function") ref(node);
+                else if (ref) (ref as React.MutableRefObject<HTMLInputElement | null>).current = node;
+              }}
               id={inputId}
+              type={type}
               required={required}
               aria-required={required}
+              disabled={disabled}
+              readOnly={readOnly}
               className={commonClasses}
               {...props}
+              value={shownValue}
+              onFocus={(event) => {
+                focusedRef.current = true;
+                props.onFocus?.(event as React.FocusEvent<HTMLInputElement>);
+              }}
+              onBlur={(event) => {
+                focusedRef.current = false;
+                setNumericText(null);
+                props.onBlur?.(event as React.FocusEvent<HTMLInputElement>);
+              }}
+              onChange={(event) => {
+                if (isNumber) {
+                  const raw = event.target.value;
+                  const normalized = normalizeNumericText(raw);
+                  if (normalized !== raw) event.target.value = normalized;
+                  setNumericText(normalized);
+                }
+                (props.onChange as React.ChangeEventHandler<HTMLInputElement> | undefined)?.(
+                  event as React.ChangeEvent<HTMLInputElement>,
+                );
+              }}
             />
           )}
           {suffixIcon && (
             <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground">
               {suffixIcon}
             </span>
+          )}
+          {isNumber && !suffixIcon && (
+            <div
+              aria-hidden="true"
+              className={cn(
+                "absolute right-1 inset-y-1 flex flex-col w-6 rounded-md border border-border/60 bg-muted/35 overflow-hidden divide-y divide-border/60",
+                (disabled || readOnly) && "opacity-40 pointer-events-none",
+              )}
+            >
+              <span
+                onClick={() => stepNumber(1)}
+                className="flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors select-none"
+              >
+                <ChevronUp className="w-3 h-3" />
+              </span>
+              <span
+                onClick={() => stepNumber(-1)}
+                className="flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors select-none"
+              >
+                <ChevronDown className="w-3 h-3" />
+              </span>
+            </div>
           )}
         </div>
         {error && (
@@ -86,7 +193,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
         )}
       </div>
     );
-  }
+  },
 );
 
 Input.displayName = "Input";

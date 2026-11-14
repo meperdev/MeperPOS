@@ -22,17 +22,20 @@ export class OrganizationStatusGuard implements CanActivate {
       return true;
     }
 
-    if (orgStatus === 'SUSPENDED') {
+    if (orgStatus === 'SUSPENDED' || orgStatus === 'PAST_DUE') {
       const method = request.method;
 
-      // Allow GET and HEAD for read-only access
+      // Reading stays available so the tenant can see its own billing state.
       if (method === 'GET' || method === 'HEAD') {
         return true;
       }
 
       throw new ForbiddenException({
-        message: 'Organization is suspended. Write operations are disabled.',
-        status: 'SUSPENDED',
+        message:
+          orgStatus === 'PAST_DUE'
+            ? 'Organization is past due. Write operations are disabled until the payment is settled.'
+            : 'Organization is suspended. Write operations are disabled.',
+        status: orgStatus,
       });
     }
 

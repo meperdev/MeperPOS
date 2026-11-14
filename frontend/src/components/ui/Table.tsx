@@ -16,18 +16,18 @@ const TableContext = createContext<TableContextValue>({
 });
 
 const headerRowClasses: Record<TableVariant, string> = {
-  primary: "border-b border-primary/20 bg-primary/5",
-  accent: "border-b border-accent/20 bg-accent/10",
-  default: "border-b border-border/60 bg-muted/40",
+  primary: "border-b border-border/60 bg-muted/35",
+  accent: "border-b border-border/60 bg-muted/35",
+  default: "border-b border-border/60 bg-muted/35",
 };
 
 const bodyRowClasses: Record<TableVariant, string> = {
   primary:
-    "border-b border-primary/10 transition-colors hover:bg-primary/[0.06] last:border-b-0",
+    "border-b border-border/50 transition-colors hover:bg-muted/30 last:border-b-0",
   accent:
-    "border-b border-accent/10 transition-colors hover:bg-accent/[0.06] last:border-b-0",
+    "border-b border-border/50 transition-colors hover:bg-muted/30 last:border-b-0",
   default:
-    "border-b border-border/40 transition-colors hover:bg-muted/30 last:border-b-0",
+    "border-b border-border/50 transition-colors hover:bg-muted/30 last:border-b-0",
 };
 
 interface TableProps {
@@ -92,6 +92,14 @@ export function TableCell({
 }: TableCellProps) {
   const Comp = as;
   return (
-    <Comp className={cn("py-3 px-5 text-xs", className)}>{children}</Comp>
+    <Comp
+      className={cn(
+        "py-3 px-5 text-xs",
+        as === "th" && "text-left font-medium text-muted-foreground",
+        className,
+      )}
+    >
+      {children}
+    </Comp>
   );
 }

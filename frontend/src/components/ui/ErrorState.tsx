@@ -24,11 +24,11 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        "flex flex-col items-center justify-center text-center min-h-[200px] rounded-xl bg-red-500/10 border border-red-500/20 px-6",
+        "flex flex-col items-center justify-center text-center min-h-[200px] rounded-xl bg-card border border-border/70 px-6 shadow-2xs",
         className,
       )}
     >
-      <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500">
+      <div className="w-10 h-10 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-600 dark:text-rose-400">
         {icon}
       </div>
       {title && <p className="text-sm font-semibold text-foreground mt-3">{title}</p>}
@@ -36,10 +36,10 @@ export function ErrorState({
       {onRetry && retryLabel && (
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={onRetry}
-          className="mt-4"
+          className="mt-3.5"
         >
           {retryLabel}
         </Button>

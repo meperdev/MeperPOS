@@ -2,8 +2,22 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 vi.mock("@/components/ui/Modal", () => ({
-  Modal: ({ children, title, size }: { children: React.ReactNode; title: string; size?: string }) => (
-    <section data-testid="taxonomy-modal" data-size={size}><h2>{title}</h2>{children}</section>
+  Modal: ({
+    children,
+    title,
+    size,
+    footer,
+  }: {
+    children: React.ReactNode;
+    title: string;
+    size?: string;
+    footer?: React.ReactNode;
+  }) => (
+    <section data-testid="taxonomy-modal" data-size={size}>
+      <h2>{title}</h2>
+      {children}
+      {footer}
+    </section>
   ),
 }));
 vi.mock("@/hooks/useExpenses", () => ({

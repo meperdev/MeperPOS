@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -9,8 +9,10 @@ import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
 import { CustomersModule } from './customers/customers.module';
 import { SalesModule } from './sales/sales.module';
+import { ElectronicInvoicingModule } from './electronic-invoicing/electronic-invoicing.module';
 import { ReportsModule } from './reports/reports.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { throttlerModuleOptions } from './common/throttling/throttler-storage.factory';
 import { SettingsModule } from './settings/settings.module';
 import { ExportsModule } from './exports/exports.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
@@ -24,22 +26,25 @@ import { SequenceModule } from './common/sequences/sequence.module';
 import { AdminModule } from './admin/admin.module';
 import { PlanLimitsModule } from './plan-limits/plan-limits.module';
 import { OrganizationStatusGuard } from './common/guards/organization-status.guard';
+import { OrganizationStatusInterceptor } from './common/interceptors/organization-status.interceptor';
 import { CookieCsrfGuard } from './common/guards/cookie-csrf.guard';
 import { CashRegistersModule } from './cash-registers/cash-registers.module';
 import { BillingModule } from './billing/billing.module';
 import { ExpensesModule } from './expenses/expenses.module';
+import { LoansModule } from './loans/loans.module';
+import { PayrollModule } from './payroll/payroll.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 100,
-      },
-    ]),
+    // Global limit 100 req/60 s. The options are resolved here, inside the
+    // imports array and after ConfigModule, so a `.env` value of REDIS_URL is
+    // already visible and the shared storage is used when it is configured
+    // (spec S4.3, S4.5).
+    ThrottlerModule.forRoot(throttlerModuleOptions()),
     CacheModule,
     PrismaModule,
     AuthModule,
@@ -47,6 +52,9 @@ import { ExpensesModule } from './expenses/expenses.module';
     ProductsModule,
     CustomersModule,
     SalesModule,
+    // Internal only: registers the fiscal document state machine. It exposes no
+    // route, so nothing here claims a DIAN answer (spec S6).
+    ElectronicInvoicingModule,
     ReportsModule,
     SettingsModule,
     ExportsModule,
@@ -62,6 +70,9 @@ import { ExpensesModule } from './expenses/expenses.module';
     CashRegistersModule,
     BillingModule,
     ExpensesModule,
+    LoansModule,
+    PayrollModule,
+    WhatsAppModule,
   ],
   controllers: [AppController],
   providers: [
@@ -82,9 +93,13 @@ import { ExpensesModule } from './expenses/expenses.module';
       provide: APP_GUARD,
       useClass: CookieCsrfGuard,
     },
+    // The status check must run AFTER route authentication: there is no global
+    // JwtAuthGuard, so a global guard would read `request.user` as undefined
+    // and let every request through. The interceptor runs after the route
+    // guards resolve the user, which is the first point the status exists.
     {
-      provide: APP_GUARD,
-      useClass: OrganizationStatusGuard,
+      provide: APP_INTERCEPTOR,
+      useClass: OrganizationStatusInterceptor,
     },
   ],
 })

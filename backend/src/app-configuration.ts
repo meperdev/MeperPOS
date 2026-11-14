@@ -7,6 +7,8 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { requestIdMiddleware } from './common/middleware/request-id.middleware';
+import { noStoreMiddleware } from './common/middleware/no-store.middleware';
+import { applyProxyTrust } from './common/proxy-trust';
 import {
   normalizeValidationMessage,
   PUBLIC_ERROR_CODES,
@@ -20,11 +22,21 @@ import {
  * therefore CI (issue #48, spec 2.R1).
  */
 export function configureApp(app: INestApplication): void {
+  // Express must trust a NUMBER of proxy hops (default 1, TRUST_PROXY_HOPS)
+  // before anything reads req.ip: without it the rate limiter buckets every
+  // client behind the Railway edge together and the audit log records the
+  // proxy address (spec S4.2). See common/proxy-trust.spec coverage in
+  // common/proxy-trust.int.spec.ts.
+  applyProxyTrust(app);
+
   // CSP is disabled because Swagger UI assets conflict with strict policies and this API serves no HTML to end users.
   app.use(helmet({ contentSecurityPolicy: false }));
 
   // Required for auth cookies: parses Cookie headers into req.cookies.
   app.use(cookieParser());
+
+  // No API response may be stored by a browser or an intermediary (spec S3).
+  app.use(noStoreMiddleware);
 
   app.setGlobalPrefix('api');
 }

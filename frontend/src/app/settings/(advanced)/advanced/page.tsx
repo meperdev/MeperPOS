@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -21,17 +21,19 @@ export default function AdvancedSettingsPage() {
   const { data: settings, isLoading, isError, refetch } = useSettings();
   const updateSettings = useUpdateSettings();
   const [entries, setEntries] = useState<CustomEntry[]>([]);
+  const [syncedSettings, setSyncedSettings] = useState<typeof settings | null>(null);
 
-  useEffect(() => {
-    if (settings) {
-      setEntries(
-        Object.entries(settings.custom).map(([key, value]) => ({
-          key,
-          value: typeof value === "string" ? value : JSON.stringify(value),
-        }))
-      );
-    }
-  }, [settings]);
+  // Render-phase sync: the editable rows are seeded from the server snapshot,
+  // and re-seeded only when a new snapshot arrives (no effect cascade).
+  if (settings && settings !== syncedSettings) {
+    setSyncedSettings(settings);
+    setEntries(
+      Object.entries(settings.custom).map(([key, value]) => ({
+        key,
+        value: typeof value === "string" ? value : JSON.stringify(value),
+      })),
+    );
+  }
 
   if (isError && !settings) {
     return (
@@ -46,7 +48,7 @@ export default function AdvancedSettingsPage() {
   if (isLoading || !settings) {
     return (
       <LoadingState
-        icon={<SlidersHorizontal className="w-5 h-5 text-primary/50" />}
+        icon={<SlidersHorizontal className="w-4 h-4 text-muted-foreground" />}
         message="Cargando configuración..."
       />
     );
@@ -78,20 +80,24 @@ export default function AdvancedSettingsPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-1 h-6 rounded-full bg-primary shrink-0" />
-        <h2 className="text-xl font-bold text-foreground">Avanzado</h2>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
+          Avanzado
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Parámetros libres para integraciones y automatizaciones
+        </p>
       </div>
 
       <SettingsCard
         title="Claves personalizadas"
         description="Parámetros libres clave/valor preservados por el sistema"
-        icon={<SlidersHorizontal className="w-4 h-4 text-primary" />}
+        icon={<SlidersHorizontal className="w-4 h-4" />}
       >
         <form onSubmit={handleSubmit} className="space-y-3">
           {entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
+            <p className="text-xs text-muted-foreground text-center py-4">
               No hay claves personalizadas.
             </p>
           ) : (
@@ -123,11 +129,11 @@ export default function AdvancedSettingsPage() {
             ))
           )}
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
             <Button type="button" variant="secondary" size="sm" onClick={addEntry}>
               <Plus className="w-3.5 h-3.5" /> Agregar
             </Button>
-            <Button type="submit" loading={updateSettings.isPending}>
+            <Button type="submit" size="sm" loading={updateSettings.isPending}>
               Guardar
             </Button>
           </div>

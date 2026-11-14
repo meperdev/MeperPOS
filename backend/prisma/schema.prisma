@@ -4,6 +4,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Prisma 6.19.2 requires the datasource URL here (removing it fails with
+  // P1012 "Argument url is missing in data source block"); `prisma.config.ts`
+  // resolves the same value for the CLI.
+  // pi-lens-ignore: Prisma:unknown
   url      = env("DATABASE_URL")
 }
 
@@ -31,8 +35,15 @@ model Organization {
   customers          Customer[]
   expenseGroups      ExpenseGroup[]
   expenseLabels      ExpenseLabel[]
+  fiscalDocuments    FiscalDocument[]
+  payrollExpenseCategory PayrollExpenseCategory?
+  payrollObligationExpenses PayrollObligationExpense[]
   expensePayments    ExpensePayment[]
   expenses           Expense[]
+  employees          Employee[]
+  employeeShifts     EmployeeShift[]
+  payrollObligations PayrollObligation[]
+  payrollCashOutflows PayrollCashOutflow[]
   inventoryMovements InventoryMovement[]
   sequences          OrganizationSequence[]
   users              OrganizationUser[]
@@ -46,8 +57,300 @@ model Organization {
   suppliers          Supplier[]
   tasks              Task[]
   taskEvents         TaskEvent[]
+  moneyLoans         MoneyLoan[]
+  moneyLoanEvents    MoneyLoanEvent[]
+  inventoryLoans     InventoryLoan[]
+  posLoanSaleIntents PosLoanSaleIntent[]
+  posLoanSaleReservations PosLoanSaleReservation[]
+  whatsAppConnections WhatsAppConnection[]
+  whatsAppConversations WhatsAppConversation[]
+  whatsAppInternalContacts WhatsAppInternalContact[]
+  whatsAppIdentities WhatsAppIdentity[]
+  whatsAppLinkChallenges WhatsAppLinkChallenge[]
 
   @@index([status, trialEndsAt])
+}
+
+// Unexposed payroll foundation; employees do not require login accounts.
+enum EmployeeShiftKind {
+  FULL_DAY
+  PARTIAL_DAY
+}
+
+enum EmployeeRemunerationModality {
+  FIXED
+  BY_DAY
+  OTHER
+}
+
+model Employee {
+  id             String          @id @default(uuid())
+  organizationId String
+  name           String
+  identification String?
+  phone          String?
+  email          String?
+  address        String?
+  jobTitle       String?
+  startDate      DateTime?       @db.Date
+  remunerationModality EmployeeRemunerationModality?
+  referenceAmount Decimal?       @db.Decimal(12, 2)
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  shifts         EmployeeShift[]
+  payrollObligations PayrollObligation[]
+  payrollCashOutflows PayrollCashOutflow[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, active])
+}
+
+model EmployeeShift {
+  id             String            @id @default(uuid())
+  organizationId String
+  employeeId     String
+  date           DateTime          @db.Date
+  kind           EmployeeShiftKind
+  amount         Decimal           @db.Decimal(12, 2)
+  observation    String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employee       Employee          @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  payrollMemberships PayrollShiftMembership[]
+
+  @@unique([id, organizationId, employeeId])
+  @@unique([organizationId, employeeId, date])
+}
+
+// Unwired storage only. Installments, CAS transitions and corrections belong to
+// later transactional flows; group totals are not stored here.
+enum PayrollObligationKind {
+  SHIFT_GROUP
+  FIXED_PERIOD
+}
+
+enum PayrollObligationStatus {
+  PENDING
+  COMPLETED
+}
+
+model PayrollObligation {
+  id             String                  @id @default(uuid())
+  organizationId String
+  employeeId     String
+  kind           PayrollObligationKind
+  status         PayrollObligationStatus @default(PENDING)
+  version        Int                     @default(0)
+  periodStart    DateTime?               @db.Date
+  periodEnd      DateTime?               @db.Date
+  periodAmount   Decimal?                @db.Decimal
+  // Null choice means unspecified, including legacy obligations. Date is explicit only.
+  expenseEnabled Boolean?
+  selectedExpenseDate DateTime?           @db.Date
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employee       Employee                @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  shiftMemberships PayrollShiftMembership[]
+  installments PayrollInstallment[]
+  expenseLink PayrollObligationExpense?
+  installmentReferences PayrollInstallmentReference[]
+
+  @@unique([id, organizationId, employeeId])
+  @@unique([id, organizationId, employeeId, kind])
+  @@index([organizationId, employeeId])
+}
+
+// releasedAt is only a storage seam, not a complete correction workflow.
+// PostgreSQL enforces one unreleased membership per shift with a partial index.
+model PayrollShiftMembership {
+  id             String                @id @default(uuid())
+  organizationId String
+  employeeId     String
+  shiftId        String
+  obligationId   String
+  obligationKind PayrollObligationKind @default(SHIFT_GROUP)
+  createdAt      DateTime              @default(now())
+  releasedAt     DateTime?
+  shift          EmployeeShift         @relation(fields: [shiftId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollShiftMembership_shift_fkey")
+  obligation     PayrollObligation     @relation(fields: [obligationId, organizationId, employeeId, obligationKind], references: [id, organizationId, employeeId, kind], onDelete: Restrict, onUpdate: Restrict, map: "PayrollShiftMembership_obligation_fkey")
+  allocations    PayrollAllocation[]
+
+  @@unique([id, obligationId, organizationId, employeeId], map: "PayrollShiftMembership_allocation_target_key")
+  @@index([obligationId, organizationId, employeeId, obligationKind], map: "PayrollShiftMembership_obligation_idx")
+}
+
+// Unwired cash identity and obligation references. Revision evidence is storage
+// only; correction workflows are future work. Reports must count outflows.
+model PayrollCashOutflow {
+  id             String              @id @default(uuid())
+  organizationId String
+  employeeId     String
+  actorId        String
+  amount         Decimal             @db.Decimal
+  date           DateTime            @db.Date
+  method         PaymentMethod
+  createdAt      DateTime            @default(now())
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employee       Employee            @relation(fields: [employeeId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashOutflow_employee_fkey")
+  actor          OrganizationUser    @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashOutflow_actor_fkey")
+  installments   PayrollInstallment[]
+
+  @@unique([id, organizationId, employeeId], map: "PayrollCashOutflow_identity_key")
+  @@index([organizationId, date], map: "PayrollCashOutflow_date_idx")
+}
+
+model PayrollInstallment {
+  id             String             @id @default(uuid())
+  organizationId String
+  employeeId     String
+  obligationId   String
+  outflowId      String
+  // Registration order inside the obligation, assigned by the grouped writer
+  // while it holds the employee -> obligation lock. Nullable on purpose: rows
+  // created before this column existed keep NULL because their order was never
+  // persisted and must never be inferred; corrections must fail closed on it.
+  // Positive and unique per obligation/tenant/employee when set. Fixed-period
+  // installments leave it NULL (their revision history is sequenced separately).
+  sequence       Int?
+  createdAt      DateTime           @default(now())
+  obligation     PayrollObligation  @relation(fields: [obligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_obligation_fkey")
+  outflow        PayrollCashOutflow @relation(fields: [outflowId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallment_outflow_fkey")
+  allocations    PayrollAllocation[]
+  revisions      PayrollCashRevision[]
+  cashReturn     PayrollCashReturn?
+  references     PayrollInstallmentReference[]
+
+  @@unique([id, obligationId, outflowId, organizationId, employeeId], map: "PayrollInstallment_revision_target_key")
+  @@unique([id, obligationId, organizationId, employeeId], map: "PayrollInstallment_allocation_target_key")
+  @@unique([obligationId, outflowId], map: "PayrollInstallment_obligation_outflow_key")
+  @@unique([obligationId, organizationId, employeeId, sequence], map: "PayrollInstallment_obligation_sequence_key")
+  @@index([outflowId, organizationId, employeeId], map: "PayrollInstallment_outflow_idx")
+}
+
+// Row updates/deletes are rejected; TRUNCATE and privileged operations are not
+// guarded. Actor membership cannot be deleted or re-keyed while referenced.
+// Writers must validate snapshots, pending status and chain continuity
+// transactionally. Multiple revisions per outflow are allowed.
+model PayrollCashRevision {
+  id             String @id @default(uuid())
+  organizationId String
+  employeeId     String
+  installmentId  String
+  obligationId   String
+  outflowId      String
+  actorId        String
+  sequence       Int
+  oldAmount      Decimal @db.Decimal
+  newAmount      Decimal @db.Decimal
+  originalDate   DateTime @db.Date
+  originalMethod PaymentMethod
+  createdAt      DateTime @default(now())
+  installment    PayrollInstallment @relation(fields: [installmentId, obligationId, outflowId, organizationId, employeeId], references: [id, obligationId, outflowId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashRevision_installment_fkey")
+  actor          OrganizationUser @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashRevision_actor_fkey")
+
+  @@unique([installmentId, sequence], map: "PayrollCashRevision_installment_sequence_key")
+  @@index([installmentId, obligationId, outflowId, organizationId, employeeId], map: "PayrollCashRevision_installment_idx")
+}
+
+// Actual full reimbursement of cash the employee had already received. It is a
+// separate append-only fact, not an in-place revision: the original payment,
+// its outflow, its allocations and its linked expense stay unchanged, and
+// reports must count this return on its own date. Row updates/deletes are
+// rejected; TRUNCATE and privileged operations are not guarded. Actor
+// membership cannot be deleted or re-keyed while referenced. One return covers
+// exactly one complete installment of the completed payment (never an
+// obligation-level total), and a second return of the same installment is
+// refused because the composite key below fixes its identity, so repeated
+// returns cannot be stored. The amount itself is not CHECKed against the
+// outflow, so a full return stays a writer rule: nothing is recomputed here and
+// the writer must verify amount and the original* snapshot against the returned
+// cash outflow. returnMethod is the real method chosen by the actor for the
+// money coming back; it is required and independent from originalMethod.
+model PayrollCashReturn {
+  id             String        @id @default(uuid())
+  organizationId String
+  employeeId     String
+  installmentId  String
+  obligationId   String
+  outflowId      String
+  actorId        String
+  amount         Decimal       @db.Decimal
+  originalAmount Decimal       @db.Decimal
+  originalDate   DateTime      @db.Date
+  originalMethod PaymentMethod
+  returnMethod   PaymentMethod
+  returnDate     DateTime      @db.Date
+  createdAt      DateTime      @default(now())
+  installment    PayrollInstallment @relation(fields: [installmentId, obligationId, outflowId, organizationId, employeeId], references: [id, obligationId, outflowId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashReturn_installment_fkey")
+  actor          OrganizationUser   @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollCashReturn_actor_fkey")
+
+  @@unique([installmentId, obligationId, outflowId, organizationId, employeeId], map: "PayrollCashReturn_installment_key")
+  @@index([organizationId, returnDate], map: "PayrollCashReturn_date_idx")
+}
+
+// Reference-based replacement of a completed payroll payment (L327, L338): a new
+// pending payment counts the valid installments of the completed one as already
+// paid cash without creating any new cash outflow. This row is the evidence of
+// that shared cash: it snapshots the source installment's amount and pins both
+// the new payment and the source installment identity (with its owning payment,
+// tenant and employee) through composite RESTRICT foreign keys, so neither can be
+// re-keyed or deleted while the reference exists. Rows are append-only; ordinary
+// UPDATE and DELETE are rejected by trigger, while TRUNCATE and privileged bypass
+// are not guarded. Uniqueness per (target payment, source installment) keeps one
+// reference per counted installment, and the writer refuses a source installment
+// that any other payment already references, so the same cash cannot be counted
+// twice. The snapshot is not CHECKed against the source outflow, so comparing it
+// with the live cash amount stays a writer/reader rule.
+model PayrollInstallmentReference {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  employeeId          String
+  targetObligationId  String
+  sourceObligationId  String
+  sourceInstallmentId String
+  amount              Decimal  @db.Decimal
+  createdAt           DateTime @default(now())
+  targetObligation    PayrollObligation  @relation(fields: [targetObligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallmentReference_target_fkey")
+  sourceInstallment   PayrollInstallment @relation(fields: [sourceInstallmentId, sourceObligationId, organizationId, employeeId], references: [id, obligationId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollInstallmentReference_source_fkey")
+
+  @@unique([targetObligationId, sourceInstallmentId], map: "PayrollInstallmentReference_target_source_key")
+  @@index([sourceInstallmentId, organizationId, employeeId], map: "PayrollInstallmentReference_source_idx")
+}
+
+// Immutable application evidence; voids and replacements require a future transaction protocol.
+model PayrollAllocation {
+  id             String @id @default(uuid())
+  organizationId String
+  employeeId     String
+  obligationId   String
+  installmentId  String
+  membershipId   String
+  amount         Decimal @db.Decimal
+  createdAt      DateTime @default(now())
+  installment    PayrollInstallment @relation(fields: [installmentId, obligationId, organizationId, employeeId], references: [id, obligationId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollAllocation_installment_fkey")
+  membership     PayrollShiftMembership @relation(fields: [membershipId, obligationId, organizationId, employeeId], references: [id, obligationId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollAllocation_membership_fkey")
+  voids          PayrollAllocationVoid[]
+
+  @@unique([id, obligationId, organizationId, employeeId], map: "PayrollAllocation_void_target_key")
+  @@index([installmentId, membershipId], map: "PayrollAllocation_installment_membership_idx")
+  @@index([membershipId, obligationId, organizationId, employeeId], map: "PayrollAllocation_membership_idx")
+}
+
+// A void is immutable evidence, not an automated correction or actor audit.
+model PayrollAllocationVoid {
+  id             String @id @default(uuid())
+  allocationId   String
+  obligationId   String
+  organizationId String
+  employeeId     String
+  createdAt      DateTime @default(now())
+  allocation     PayrollAllocation @relation(fields: [allocationId, obligationId, organizationId, employeeId], references: [id, obligationId, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollAllocationVoid_allocation_fkey")
+
+  @@unique([allocationId], map: "PayrollAllocationVoid_allocation_key")
 }
 
 model User {
@@ -66,10 +369,20 @@ model User {
   organizationUsers  OrganizationUser[]
   purchaseOrders     PurchaseOrder[]
   refreshTokens      RefreshToken[]
+  whatsAppInternalContacts WhatsAppInternalContact[]
+  whatsAppIdentities WhatsAppIdentity[]
+  whatsAppLinkChallenges WhatsAppLinkChallenge[]
   sales              Sale[]
   tasksAssigned      Task[]              @relation("TaskAssignedTo")
   tasksCreated       Task[]              @relation("TaskCreatedBy")
   taskEvents         TaskEvent[]         @relation("TaskEventCreatedBy")
+  posLoanSaleIntentsInitiated PosLoanSaleIntent[] @relation("PosLoanSaleInitiatedBy")
+  posLoanSaleReservationsFinalized PosLoanSaleReservation[] @relation("PosLoanSaleReservationFinalizedBy")
+  moneyLoansCreated  MoneyLoan[]         @relation("MoneyLoanCreatedBy")
+  moneyLoansEmployee MoneyLoan[]         @relation("MoneyLoanEmployee")
+  moneyLoanEvents    MoneyLoanEvent[]    @relation("MoneyLoanEventCreatedBy")
+  inventoryLoansCreated InventoryLoan[] @relation("InventoryLoanCreatedBy")
+  inventoryLoanEvents InventoryLoanEvent[] @relation("InventoryLoanEventCreatedBy")
 }
 
 model OrganizationUser {
@@ -80,6 +393,11 @@ model OrganizationUser {
   joinedAt       DateTime     @default(now())
   invitedById    String?
   isPrimaryOwner Boolean      @default(false)
+  inventoryLoansEmployee InventoryLoan[] @relation("InventoryLoanEmployee")
+  inventoryLoanOperations InventoryLoanOperation[]
+  payrollCashOutflows PayrollCashOutflow[]
+  payrollCashRevisions PayrollCashRevision[]
+  payrollCashReturns PayrollCashReturn[]
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -140,6 +458,7 @@ model Category {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   defaultTaxRate Decimal?     @db.Decimal(5, 2)
+  defaultTaxCode DianTaxCode?
   taxable        Boolean      @default(false)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -158,8 +477,10 @@ model Product {
   costPrice           Decimal             @db.Decimal(10, 2)
   salePrice           Decimal             @db.Decimal(10, 2)
   taxRate             Decimal             @default(0) @db.Decimal(5, 2)
+  taxCode             DianTaxCode?
   taxable             Boolean             @default(false)
   stock               Int                 @default(0)
+  reservedStock       Int                 @default(0)
   minStock            Int                 @default(0)
   type                ProductType         @default(PRODUCT)
   tracksStock         Boolean             @default(true)
@@ -179,7 +500,10 @@ model Product {
   preferredSupplier   Supplier?           @relation("PreferredSupplier", fields: [preferredSupplierId], references: [id])
   purchaseItems       PurchaseOrderItem[]
   saleItems           SaleItem[]
+  inventoryLoanItems  InventoryLoanItem[]
+  posLoanSaleReservations PosLoanSaleReservation[]
 
+  @@unique([id, organizationId])
   @@unique([organizationId, sku])
   @@unique([organizationId, barcode])
   @@index([organizationId, active])
@@ -204,6 +528,8 @@ model InventoryMovement {
   product        Product      @relation(fields: [productId], references: [id])
   sale           Sale?        @relation(fields: [saleId], references: [id])
   user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  inventoryLoanEventId String? @unique
+  inventoryLoanEvent InventoryLoanEvent? @relation(fields: [inventoryLoanEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([organizationId, productId, createdAt])
 }
@@ -225,7 +551,12 @@ model Customer {
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sales          Sale[]
+  moneyLoans     MoneyLoan[]
+  inventoryLoans InventoryLoan[]
+  posLoanSaleIntents PosLoanSaleIntent[]
+  whatsAppConversations WhatsAppConversation[]
 
+  @@unique([id, organizationId])
   @@unique([organizationId, documentNumber])
   @@index([organizationId, active])
   @@index([organizationId, segment])
@@ -255,7 +586,13 @@ model Sale {
   organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user               User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   items              SaleItem[]
+  posLoanSaleIntent  PosLoanSaleIntent?
+  fiscalDocument     FiscalDocument?
 
+  @@unique([id, organizationId, customerId])
+  /// Needed by `FiscalDocument`'s composite foreign key, which is what makes a
+  /// fiscal document's organization and its sale's organization the same one.
+  @@unique([id, organizationId])
   @@unique([organizationId, saleNumber])
   @@index([organizationId, createdAt, status])
   @@index([organizationId, userId])
@@ -283,6 +620,12 @@ model SaleItem {
   unitPrice      Decimal      @db.Decimal(10, 2)
   costPriceSnapshot Decimal?  @db.Decimal(10, 2)
   taxRate        Decimal      @db.Decimal(5, 2)
+  /// DIAN tribute code resolved with `taxRate` at sale time. NULL on a
+  /// pre-feature sale (never reclassified, spec S7) and on an untaxed line.
+  taxCode        DianTaxCode?
+  /// Tax charged on this line, persisted beside the code it belongs to so the
+  /// CUFE and the XML never have to re-derive it. NULL iff `taxCode` is NULL.
+  taxAmount      Decimal?     @db.Decimal(10, 2)
   discountAmount Decimal      @default(0) @db.Decimal(10, 2)
   subtotal       Decimal      @db.Decimal(10, 2)
   total          Decimal      @db.Decimal(10, 2)
@@ -293,6 +636,51 @@ model SaleItem {
 
   @@index([organizationId, saleId])
   @@index([organizationId, productId])
+}
+
+/// The fiscal document a sale emits, and the only persisted record of its DIAN
+/// lifecycle. One row per sale (`saleId` is unique): a sale either has a fiscal
+/// document from the moment it is registered or it predates this feature.
+///
+/// `snapshot` is the immutable capture of the fiscal facts taken inside the
+/// sale transaction. That immutability is a service rule, not yet a database
+/// constraint: a transition only moves `status` and its timestamps, and no code
+/// path updates `snapshot`, but a direct SQL UPDATE could still rewrite it.
+/// It deliberately holds no CUFE, because the
+/// technical key is not available yet (spec S6); `cufe` stays NULL until a
+/// transport obtains one.
+model FiscalDocument {
+  id              String                @id @default(uuid())
+  organizationId  String
+  saleId          String                @unique
+  status          FiscalDocumentStatus  @default(PENDING)
+  cufe            String?
+  invoiceNumber   String?
+  issuedAt        DateTime
+  sentAt          DateTime?
+  resolvedAt      DateTime?
+  rejectionReason String?
+  /// Fiscal facts of the sale as it was registered; write-once.
+  snapshot        Json
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  /// RESTRICT, never Cascade: the fiscal document is the evidence of what the
+  /// organization declared. The database refuses to delete an organization that
+  /// still holds one, so no cascade and no application bug can take the fiscal
+  /// history with it.
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// Composite foreign key on purpose: a document can only reference a sale of
+  /// its own organization, so a cross-tenant pair cannot be persisted even by a
+  /// direct write. `saleId` is separately unique: one document per sale.
+  /// RESTRICT here as well: the fiscal document outlives its own sale. Deleting
+  /// the sale is refused by the database, exactly like deleting the
+  /// organization, so no code path can erase the evidence underneath it.
+  sale         Sale         @relation(fields: [saleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([saleId, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, issuedAt])
 }
 
 model Task {
@@ -352,6 +740,8 @@ model Supplier {
   updatedAt      DateTime        @updatedAt
   organizationId String
   expenses       Expense[]
+  moneyLoans     MoneyLoan[]
+  inventoryLoans InventoryLoan[]
   preferredBy    Product[]       @relation("PreferredSupplier")
   purchaseOrders PurchaseOrder[]
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -359,6 +749,7 @@ model Supplier {
   @@unique([organizationId, documentNumber])
   @@index([organizationId, active])
   @@index([organizationId, name])
+  @@unique([id, organizationId])
 }
 
 model PurchaseOrder {
@@ -409,6 +800,236 @@ model PurchaseOrderItem {
   @@index([organizationId, productId])
 }
 
+// Monetary MONEY/SERVICE tracking only; collections never create sale Payments.
+enum MonetaryLoanType {
+  MONEY
+  SERVICE
+}
+
+model MoneyLoan {
+  type           MonetaryLoanType @default(MONEY)
+  id             String       @id @default(uuid())
+  organizationId String
+  amount         Decimal      @db.Decimal(10, 2)
+  status         MoneyLoanStatus @default(OPEN)
+  version        Int          @default(0)
+  issuedAt       DateTime     @db.Date
+  dueAt          DateTime?    @db.Date
+  reason         String       @db.VarChar(500)
+  customerId     String?
+  supplierId     String?
+  employeeId     String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer       Customer?    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  employee       User?        @relation("MoneyLoanEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  createdBy      User         @relation("MoneyLoanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  events         MoneyLoanEvent[]
+  posLoanSaleIntent PosLoanSaleIntent?
+
+  @@unique([id, organizationId])
+  @@unique([id, organizationId, customerId])
+  @@index([organizationId, createdAt, id])
+}
+
+// Intent presence is reserved for the future dedicated POS initiation path.
+model PosLoanSaleIntent {
+  id             String       @id @default(uuid())
+  organizationId String
+  loanId         String       @unique
+  customerId     String
+  createdAt      DateTime     @default(now())
+  finalSaleId    String?      @unique
+  quoteSnapshot  Json?
+  agreedCustomerTotal Decimal? @db.Decimal(10, 2)
+  initiationRequestKey String? @db.VarChar(100)
+  initiationRequestHash String? @db.VarChar(64)
+  initiatedById  String?
+  initiationResult Json?
+  initiatedBy    User?        @relation("PosLoanSaleInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reservations   PosLoanSaleReservation[]
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  customer       Customer     @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  loan           MoneyLoan    @relation(fields: [loanId, organizationId, customerId], references: [id, organizationId, customerId], onDelete: Restrict, onUpdate: Restrict)
+  finalSale      Sale?        @relation(fields: [finalSaleId, organizationId, customerId], references: [id, organizationId, customerId], onDelete: Restrict, onUpdate: Restrict)
+
+  // Composite keys declare the one-to-one relation tuples to Prisma.
+  @@unique([loanId, organizationId, customerId])
+  @@unique([finalSaleId, organizationId, customerId])
+  @@unique([organizationId, initiationRequestKey])
+  @@unique([id, organizationId])
+}
+
+// SQL freezes ownership and validates insert eligibility and terminal claims.
+enum PosLoanSaleReservationState {
+  HELD
+  CONSUMED
+  RELEASED
+}
+
+model PosLoanSaleReservation {
+  id             String       @id @default(uuid())
+  intentId       String
+  organizationId String
+  productId      String
+  quantity       Int
+  state          PosLoanSaleReservationState @default(HELD)
+  createdAt      DateTime     @default(now())
+  finalizedAt    DateTime?
+  finalizedById  String?
+  intent         PosLoanSaleIntent @relation(fields: [intentId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  product        Product      @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  finalizedBy    User?        @relation("PosLoanSaleReservationFinalizedBy", fields: [finalizedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([intentId, productId])
+}
+
+enum MoneyLoanStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum MoneyLoanEventType {
+  CREATED
+  COLLECTED
+  REVERSED
+  CLOSED
+  CANCELLED
+}
+
+// Append-only enforcement and loan input checks are in the SQL migration.
+model MoneyLoanEvent {
+  id             String             @id @default(uuid())
+  loanId         String
+  organizationId String
+  type           MoneyLoanEventType
+  amount         Decimal?           @db.Decimal(10, 2)
+  method         PaymentMethod?
+  reversesId     String?            @unique
+  requestKey     String?            @db.VarChar(100)
+  requestPayload String?
+  result         Json?
+  reverses       MoneyLoanEvent?    @relation("MoneyLoanReversal", fields: [reversesId, loanId, organizationId], references: [id, loanId, organizationId], onDelete: Restrict)
+  reversals      MoneyLoanEvent[]   @relation("MoneyLoanReversal")
+  reason         String             @db.VarChar(500)
+  createdById    String
+  createdAt      DateTime           @default(now())
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  loan           MoneyLoan          @relation(fields: [loanId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdBy      User               @relation("MoneyLoanEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([id, loanId, organizationId])
+  @@unique([organizationId, loanId, requestKey])
+  @@index([organizationId, loanId, createdAt, id])
+}
+
+// Unexposed physical-loan foundation. SQL owns checks and immutable evidence.
+enum InventoryLoanStatus {
+  OPEN
+  CANCELLED
+  CLOSED
+}
+
+enum InventoryLoanEventType {
+  CREATED
+  DELIVERED
+  RETURNED
+  CANCELLED
+  CLOSED
+}
+
+model InventoryLoan {
+  id             String              @id @default(uuid())
+  organizationId String
+  status         InventoryLoanStatus @default(OPEN)
+  version        Int                 @default(0)
+  customerId     String?
+  supplierId     String?
+  employeeId     String?
+  createdById    String
+  createdAt      DateTime            @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  customer       Customer? @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  supplier       Supplier? @relation(fields: [supplierId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  employee       OrganizationUser? @relation("InventoryLoanEmployee", fields: [employeeId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User @relation("InventoryLoanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  items          InventoryLoanItem[]
+  events         InventoryLoanEvent[]
+  operations     InventoryLoanOperation[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, createdAt, id])
+}
+
+model InventoryLoanItem {
+  id                String   @id @default(uuid())
+  loanId            String
+  organizationId    String
+  productId         String
+  quantity          Int
+  deliveredQuantity Int      @default(0)
+  returnedQuantity  Int      @default(0)
+  cancelledQuantity Int      @default(0)
+  createdAt         DateTime @default(now())
+  loan              InventoryLoan @relation(fields: [loanId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  product           Product @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  events            InventoryLoanEvent[]
+
+  @@unique([id, loanId, organizationId])
+  @@index([organizationId, loanId])
+  @@index([organizationId, productId])
+}
+
+// Completed immutable replay evidence; no pending operation state.
+enum InventoryLoanOperationType {
+  CREATE
+  DELIVER
+  RETURN
+  CANCEL
+  CLOSE
+}
+
+model InventoryLoanOperation {
+  id             String                     @id @default(uuid())
+  organizationId String
+  loanId         String
+  actorId        String
+  type           InventoryLoanOperationType
+  requestKey     String
+  requestPayload Json
+  resultSnapshot Json
+  createdAt      DateTime                   @default(now())
+  loan           InventoryLoan @relation(fields: [loanId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  actor          OrganizationUser @relation(fields: [actorId, organizationId], references: [userId, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  events         InventoryLoanEvent[]
+
+  @@unique([organizationId, requestKey])
+  @@unique([id, loanId, organizationId, actorId], map: "InventoryLoanOperation_event_target_key")
+}
+
+model InventoryLoanEvent {
+  id             String                 @id @default(uuid())
+  loanId         String
+  organizationId String
+  itemId         String?
+  operationId    String?
+  type           InventoryLoanEventType
+  quantity       Int?
+  createdById    String
+  createdAt      DateTime               @default(now())
+  loan           InventoryLoan @relation(fields: [loanId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  item           InventoryLoanItem? @relation(fields: [itemId, loanId, organizationId], references: [id, loanId, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User @relation("InventoryLoanEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  operation      InventoryLoanOperation? @relation(fields: [operationId, loanId, organizationId, createdById], references: [id, loanId, organizationId, actorId], onDelete: Restrict, onUpdate: Restrict, map: "InventoryLoanEvent_operation_fkey")
+  movement       InventoryMovement?
+
+  @@index([organizationId, loanId, createdAt, id])
+}
+
 model AuditLog {
   id             String       @id @default(uuid())
   userId         String?
@@ -451,7 +1072,9 @@ model ExpenseGroup {
   updatedAt      DateTime       @updatedAt
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   labels         ExpenseLabel[]
+  payrollExpenseCategories PayrollExpenseCategory[]
 
+  @@unique([id, organizationId], map: "ExpenseGroup_payroll_target_key")
   @@unique([organizationId, name])
   @@index([organizationId, active])
 }
@@ -467,9 +1090,56 @@ model ExpenseLabel {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   group          ExpenseGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   expenses       Expense[]
+  payrollExpenseCategory PayrollExpenseCategory?
 
+  @@unique([id, groupId, organizationId], map: "ExpenseLabel_payroll_target_key")
   @@unique([groupId, name])
   @@index([organizationId, active])
+}
+
+// Unwired association: no automatic assignment or taxonomy creation occurs here.
+// Both label and group must belong to the organization, including legacy data.
+model PayrollExpenseCategory {
+  organizationId String @id
+  labelId        String
+  groupId        String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "PayrollExpenseCategory_organization_fkey")
+  label          ExpenseLabel @relation(fields: [labelId, groupId, organizationId], references: [id, groupId, organizationId], onDelete: Cascade, onUpdate: Restrict, map: "PayrollExpenseCategory_label_fkey")
+  group          ExpenseGroup @relation(fields: [groupId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict, map: "PayrollExpenseCategory_group_fkey")
+
+  @@unique([labelId, groupId, organizationId], map: "PayrollExpenseCategory_label_key")
+  @@index([groupId, organizationId], map: "PayrollExpenseCategory_group_idx")
+}
+
+// Unwired storage only: this foundation creates, annuls and reports no expense
+// and stores no cash or per-installment mirror. One obligation links to at most
+// one expense and an expense cannot be shared by obligations, all inside one
+// tenant. The parent foreign keys are RESTRICT, so a linked obligation or expense
+// cannot be removed or re-keyed, but they do not make the link row itself
+// immutable: the append-only trigger in the matching migration rejects ordinary
+// UPDATE and DELETE of a link row. That trigger does not guard TRUNCATE or
+// privileged bypass, and blocking those writes also blocks administrative cleanup
+// of a link row. The correction and annulment copy protocol is not established:
+// annulment keeps the annulled payment history, annuls the associated expense
+// when present and creates a pending copy with the valid shifts and installments.
+// The copy identity and its link to a replacement expense are not established.
+// Future expense creation still needs at least one ExpensePayment because the
+// expense service requires it (a service rule, not a database constraint), and
+// must handle the expense money column being Decimal(12,2) while a payroll
+// aggregate can exceed it.
+model PayrollObligationExpense {
+  obligationId   String
+  organizationId String
+  employeeId     String
+  expenseId      String
+  createdAt      DateTime @default(now())
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "PayrollObligationExpense_organization_fkey")
+  obligation     PayrollObligation @relation(fields: [obligationId, organizationId, employeeId], references: [id, organizationId, employeeId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollObligationExpense_obligation_fkey")
+  expense        Expense           @relation(fields: [expenseId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict, map: "PayrollObligationExpense_expense_fkey")
+
+  @@id([obligationId, organizationId, employeeId], map: "PayrollObligationExpense_pkey")
+  @@unique([expenseId, organizationId], map: "PayrollObligationExpense_expense_key")
+  @@index([organizationId], map: "PayrollObligationExpense_organization_idx")
 }
 
 model Expense {
@@ -493,7 +1163,9 @@ model Expense {
   purchaseOrder   PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   createdBy       User                @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
   payments        ExpensePayment[]
+  payrollObligationExpense PayrollObligationExpense?
 
+  @@unique([id, organizationId], map: "Expense_payroll_target_key")
   @@index([organizationId, date])
   @@index([organizationId, labelId])
 }
@@ -548,6 +1220,14 @@ enum PromotionType {
   FIXED_PRICE
 }
 
+/// Colombian tribute codes MeperPOS can attach to a catalog item. The DIAN
+/// numeric codes (01/04/03) live in `common/utils/tax.util.ts`, never here.
+enum DianTaxCode {
+  IVA
+  INC
+  ICA
+}
+
 enum MovementType {
   PURCHASE
   SALE
@@ -555,6 +1235,8 @@ enum MovementType {
   ADJUSTMENT_OUT
   DAMAGE
   RETURN
+  LOAN_DELIVERY
+  LOAN_RETURN
 }
 
 enum CustomerSegment {
@@ -594,6 +1276,18 @@ enum SaleStatus {
   RETURNED_PARTIAL
 }
 
+/// DIAN lifecycle of a sale's fiscal document. The legal edges live in
+/// `electronic-invoicing/fiscal-document.service.ts`; this enum only stores the
+/// states. PENDING is the state a sale is registered in, ACCEPTED, REJECTED and
+/// VOIDED are terminal.
+enum FiscalDocumentStatus {
+  PENDING
+  SENT
+  ACCEPTED
+  REJECTED
+  VOIDED
+}
+
 enum TaskStatus {
   PENDING
   IN_PROGRESS
@@ -614,4 +1308,227 @@ enum PurchaseOrderStatus {
   PARTIAL_RECEIVED
   RECEIVED
   CANCELLED
+}
+
+/// Provider session bound to one channel. COMMERCIAL belongs to one
+/// organization; INTELLIGENCE is a single central channel shared across
+/// organizations and owned by the platform (organizationId stays null).
+///
+/// `retentionDays` is the channel's message-retention policy. It is never null:
+/// the channel always has a policy, and the purge job reads it from here rather
+/// than from configuration, so changing it is one row update. The migration adds
+/// a CHECK (retentionDays >= 1) as NOT VALID, which keeps a row an operator may
+/// have corrupted from blocking the deploy.
+model WhatsAppConnection {
+  id              String                @id @default(uuid())
+  provider        String                @default("WAHA")
+  sessionName     String                @unique
+  channel         WhatsAppChannel
+  organizationId  String?
+  status          WhatsAppSessionStatus @default(STOPPED)
+  statusUpdatedAt DateTime?
+  accountId       String?
+  retentionDays   Int                   @default(30)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  organization    Organization?          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  processedEvents WhatsAppProcessedEvent[]
+  conversations   WhatsAppConversation[]
+  deliveries      WhatsAppDelivery[]
+
+  @@unique([channel, organizationId])
+  @@index([channel])
+}
+
+/// Durable record of a provider event already handled. The provider event id
+/// comes from the HMAC-signed payload, never from unsigned transport headers.
+model WhatsAppProcessedEvent {
+  id              String   @id @default(uuid())
+  connectionId    String
+  providerEventId String
+  eventType       String
+  receivedAt      DateTime @default(now())
+
+  connection WhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, providerEventId])
+  @@index([receivedAt])
+}
+
+enum WhatsAppChannel {
+  COMMERCIAL
+  INTELLIGENCE
+}
+
+enum WhatsAppSessionStatus {
+  STOPPED
+  STARTING
+  SCAN_QR_CODE
+  PASSKEY_REQUIRED
+  PASSKEY_CONFIRMATION_REQUIRED
+  WORKING
+  FAILED
+}
+
+/// One WhatsApp thread on one connection. There is no location: the commercial
+/// number is shared by every branch, so a conversation is never attributed to a
+/// site automatically. The location column arrives with the branches work.
+model WhatsAppConversation {
+  id              String                    @id @default(uuid())
+  connectionId    String
+  organizationId  String?
+  /// Raw provider chat id exactly as received (`573000000000@c.us`,
+  /// `145805600096353@lid`, `120363000000000000@g.us`). Nullable only because
+  /// conversations written before this column existed have no raw id yet.
+  contactJid      String?
+  /// Digits for a phone, but for a LID this is the opaque identifier, not a phone.
+  contactPhone    String
+  contactKind     WhatsAppContactKind       @default(CLIENT)
+  state           WhatsAppConversationState @default(AUTOMATED)
+  customerId      String?
+  firstInboundAt  DateTime?
+  firstResponseAt DateTime?
+  lastMessageAt   DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  connection   WhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  organization Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  messages     WhatsAppMessage[]
+
+  @@unique([connectionId, contactPhone])
+  @@index([organizationId, state])
+}
+
+/// Stored only for text we already received; media stays out of scope.
+model WhatsAppMessage {
+  id                String                   @id @default(uuid())
+  conversationId    String
+  providerMessageId String
+  direction         WhatsAppMessageDirection
+  source            String
+  body              String?
+  sentAt            DateTime
+  createdAt         DateTime                 @default(now())
+
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, providerMessageId])
+  @@index([conversationId, sentAt])
+}
+
+/// Numbers that must never receive an automated reply: employees and the
+/// administrator. Scoped per organization.
+model WhatsAppInternalContact {
+  id             String   @id @default(uuid())
+  organizationId String
+  phone          String
+  userId         String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, phone])
+  @@index([organizationId])
+}
+
+enum WhatsAppContactKind {
+  CLIENT
+  INTERNAL
+  UNKNOWN
+}
+
+enum WhatsAppConversationState {
+  AUTOMATED
+  HUMAN
+  SUSPENDED
+}
+
+enum WhatsAppMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+/// A phone proven to belong to a MeperPOS user. Access is granted by this row,
+/// never by the phone number appearing in a list or by the provider session.
+model WhatsAppIdentity {
+  id             String                @id @default(uuid())
+  phone          String                @unique
+  userId         String
+  organizationId String?
+  status         WhatsAppIdentityStatus @default(PENDING)
+  verifiedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+/// One single-use linking code, generated from an authenticated web session and
+/// sent by the administrator from her own phone. Only its hash is stored.
+model WhatsAppLinkChallenge {
+  id             String    @id @default(uuid())
+  codeHash       String    @unique
+  userId         String
+  organizationId String
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+enum WhatsAppIdentityStatus {
+  PENDING
+  VERIFIED
+  REVOKED
+}
+
+/// One attempt at delivering the daily report PDF over a WhatsApp session. The
+/// row is claimed before the provider is called, so a crash leaves PENDING and a
+/// successful send leaves SENT; nothing here is retried automatically.
+///
+/// Exactly one SCHEDULED delivery may exist per connection per calendar day.
+/// That is enforced by a partial unique index in the migration (WHERE kind =
+/// 'SCHEDULED'), never by a composite @@unique: on-demand reports are legitimately
+/// requested more than once a day and must not collide with each other.
+model WhatsAppDelivery {
+  id                String                  @id @default(uuid())
+  connectionId      String
+  kind              WhatsAppDeliveryKind
+  /// Calendar day the report covers, in America/Bogota. Stored as a date.
+  reportDate        DateTime                @db.Date
+  status            WhatsAppDeliveryStatus  @default(PENDING)
+  /// Fixed failure code from a closed set; never provider text.
+  failureReason     String?
+  providerMessageId String?
+  attempts          Int                     @default(0)
+  sentAt            DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  connection WhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId, reportDate])
+}
+
+enum WhatsAppDeliveryKind {
+  SCHEDULED
+  ON_DEMAND
+}
+
+enum WhatsAppDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
 }

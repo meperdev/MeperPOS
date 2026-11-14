@@ -48,7 +48,8 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/hooks/useReceipt", () => ({
-  printReceipt: vi.fn(),
+  downloadReceiptPdf: vi.fn(),
+  openReceiptPdf: vi.fn(),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({

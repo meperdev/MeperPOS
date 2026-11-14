@@ -33,10 +33,28 @@ export class SequenceService {
 
     const seq = rows[0];
 
-    // 2. Incrementar atómicamente
+    // 2. Nunca entregar un número ya usado. El contador puede quedarse atrás
+    // si las filas se crearon por fuera de esta secuencia (seed, importación,
+    // backfill): en ese caso el máximo real manda y el contador se recupera.
+    const maxExisting =
+      type === 'SALE'
+        ? ((
+            await tx.sale.aggregate({
+              where: { organizationId },
+              _max: { saleNumber: true },
+            })
+          )._max.saleNumber ?? 0)
+        : ((
+            await tx.purchaseOrder.aggregate({
+              where: { organizationId },
+              _max: { orderNumber: true },
+            })
+          )._max.orderNumber ?? 0);
+
+    // 3. Incrementar atómicamente desde el mayor de los dos
     const updated = await tx.organizationSequence.update({
       where: { id: seq.id },
-      data: { currentNumber: { increment: 1 } },
+      data: { currentNumber: Math.max(seq.currentNumber, maxExisting) + 1 },
     });
 
     const formatted = updated.prefix

@@ -23,9 +23,13 @@ npm run lint            # ESLint with auto-fix
 npm run seed            # Seed database with faker data
 npx prisma migrate dev  # Run migrations
 npx prisma studio       # Open Prisma Studio GUI
+npm run db:up           # Start the local PostgreSQL container (docker compose)
+npm run db:status       # Is the database container up?
+npm run db:down         # Stop it
+npm run db:logs         # Follow the server log
 ```
 
-> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npx eslint <file>`. The backend test suite also requires PostgreSQL on port 5432: roughly 94 integration tests fail without it.
+> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npx eslint <file>`. The backend test suite also requires PostgreSQL on port 5432 (`npm run db:up` starts it): roughly 94 integration tests fail without it. The container is the `postgres` service of `backend/docker-compose.yml`; if Docker asks for a password, add your user to the group once (`sudo usermod -aG docker "$USER"`) and start a new session.
 
 ### Frontend (`/frontend`)
 ```bash
@@ -98,7 +102,8 @@ Next.js App Router under `frontend/src/`:
 
 ## Key Conventions
 
-- **The server owns every number that becomes money.** Tax rate (`resolveEffectiveTaxRate`), effective sale price (`computeEffectiveSalePrice`), sale totals, change and low-stock classification are all derived in the backend and sent down as fields. The client *reads* them; it never re-derives them. A client-supplied `unitPrice` is a **request to override**, not a default — it requires ADMIN/OWNER/SUPER_ADMIN and is recorded in `AuditLog` as `SALE_PRICE_OVERRIDE` inside the sale transaction. See `SalesService.create` and `canOverridePrice`.
+- **The server owns every number that becomes money.** Tax rate (`resolveEffectiveTaxRate`), effective sale price (`computeEffectiveSalePrice`), sale totals, change and low-stock classification are all derived in the backend and sent down as fields. The client *reads* them; it never re-derives them. A client-supplied `unitPrice` is a **request to override**, not a default — it requires ADMIN/OWNER/CASHIER/SUPER_ADMIN and is recorded in `AuditLog` as `SALE_PRICE_OVERRIDE` inside the sale transaction. This permits raising or lowering the charged POS price, not editing catalog prices; MEMBER and INVENTORY_USER cannot override it. A financed sale's agreed total remains fixed after POS initiation. See `SalesService.create` and `canOverridePrice`.
+- **UI copy is sentence case, in Spanish**: actions, titles and labels capitalize only the first word and proper nouns (`Nuevo cliente`, `Registrar pago`, `Editar producto`), never Title Case (`Nuevo Cliente`). No exclamation marks or emoji in chrome; an action reads verb + object.
 - `cn()` from `lib/utils.ts` for conditional Tailwind class merging — always use this instead of string concatenation
 - `formatCurrency(amount)` for COP formatting; `formatDate/formatDateTime` for es-CO locale
 - `getApiErrorMessage(error, fallback)` for extracting user-facing error messages from Axios errors

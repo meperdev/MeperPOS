@@ -157,15 +157,19 @@ export default function UsersPage() {
 
   return (
     <div>
-      <div className="space-y-5 lg:space-y-7">
-        <div className="flex items-center justify-between gap-3">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="mb-1 flex items-center gap-3">
-              <div className="h-7 w-1 shrink-0 rounded-full bg-primary" />
-              <h1 className="text-2xl font-bold text-foreground lg:text-3xl">Usuarios</h1>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
+                Usuarios
+              </h1>
+              <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
+                {users.length} {users.length === 1 ? "miembro" : "miembros"}
+              </span>
             </div>
-            <p className="ml-4 text-sm text-muted-foreground">
-              Administración centralizada de usuarios y accesos.
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Administración centralizada de usuarios y accesos
             </p>
           </div>
           <Button onClick={() => setShowCreateModal(true)}>
@@ -173,78 +177,112 @@ export default function UsersPage() {
           </Button>
         </div>
 
-        <div className="overflow-hidden rounded-3xl border border-primary/30 bg-primary/10">
-          <div className="border-b border-primary/20 px-5 py-4">
-            <h3 className="text-sm font-semibold text-foreground">Listado de usuarios</h3>
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs">
+          <div className="border-b border-border/60 px-4 py-3 flex items-center gap-2">
+            <UsersIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+              Listado de usuarios
+            </h3>
           </div>
 
-          <div className="p-5">
+          <div className="p-4">
             {isLoading ? (
-              <LoadingState icon={<UsersIcon className="w-5 h-5 text-primary/50" />} message="Cargando usuarios..." />
+              <LoadingState
+                icon={<UsersIcon className="w-4 h-4 text-muted-foreground" />}
+                message="Cargando usuarios..."
+              />
             ) : users.length === 0 ? (
-              <EmptyState icon={<UsersIcon className="w-6 h-6 text-muted-foreground/30" />} title="No hay usuarios registrados." />
+              <EmptyState
+                icon={<UsersIcon className="w-5 h-5 text-muted-foreground" />}
+                title="No hay usuarios registrados."
+              />
             ) : (
-              <div className="space-y-2.5">
-                {users.map((user) => (
-                  <div key={user.id} className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-background/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{user.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+              <div className="space-y-2">
+                {users.map((user) => {
+                  const initials = user.name
+                    .split(" ")
+                    .filter(Boolean)
+                    .map((n) => n[0])
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase();
+                  return (
+                    <div
+                      key={user.id}
+                      className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 p-3.5 transition-colors hover:border-border sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-lg bg-muted/60 border border-border/70 flex items-center justify-center shrink-0">
+                          <span className="font-mono text-xs font-semibold text-foreground tracking-tight">
+                            {initials}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-xs sm:text-sm font-semibold text-foreground">
+                            {user.name}
+                          </p>
+                          <p className="truncate font-mono text-xs text-muted-foreground">
+                            {user.email}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="default">
+                          <Shield className="mr-1 h-3 w-3 text-muted-foreground" />
+                          {roleLabel[user.role] || user.role}
+                        </Badge>
+                        <Badge variant={user.active ? "success" : "danger"} dot>
+                          {user.active ? "Activo" : "Inactivo"}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleToggleActive(user.id)}
+                          disabled={
+                            user.id === currentUser?.id || toggleUserActive.isPending
+                          }
+                        >
+                          {user.active ? "Desactivar" : "Activar"}
+                        </Button>
+                        {user.id !== currentUser?.id && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Editar usuario ${user.name}`}
+                              onClick={() => openEditModal(user)}
+                            >
+                              <SquarePen className="h-3.5 w-3.5" /> Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Restablecer contraseña de ${user.name}`}
+                              onClick={() => {
+                                setUserToReset(user);
+                                setShowResetModal(true);
+                                setNewPassword("");
+                              }}
+                            >
+                              <KeyRound className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              aria-label={`Eliminar usuario ${user.name}`}
+                              onClick={() => {
+                                setUserToDelete(user.id);
+                                setShowDeleteModal(true);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="default" className="text-xs">
-                        <Shield className="mr-1 h-3 w-3" />
-                        {roleLabel[user.role] || user.role}
-                      </Badge>
-                      <Badge variant={user.active ? "success" : "danger"} className="text-xs">
-                        {user.active ? "Activo" : "Inactivo"}
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleToggleActive(user.id)}
-                        disabled={user.id === currentUser?.id || toggleUserActive.isPending}
-                      >
-                        {user.active ? "Desactivar" : "Activar"}
-                      </Button>
-                      {user.id !== currentUser?.id && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            aria-label={`Editar usuario ${user.name}`}
-                            onClick={() => openEditModal(user)}
-                          >
-                            <SquarePen className="h-3.5 w-3.5" /> Editar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            aria-label={`Restablecer contraseña de ${user.name}`}
-                            onClick={() => {
-                              setUserToReset(user);
-                              setShowResetModal(true);
-                              setNewPassword("");
-                            }}
-                          >
-                            <KeyRound className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            aria-label={`Eliminar usuario ${user.name}`}
-                            onClick={() => {
-                              setUserToDelete(user.id);
-                              setShowDeleteModal(true);
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useState } from "react";
 import { Input } from "@/components/ui/Input";
 import { toFiniteNumber } from "@/lib/utils";
 
@@ -38,7 +38,11 @@ function digitsFromValue(v: number | string | undefined): string {
   // "1500000" and displays 100x the real amount. A blank input stays blank
   // instead of collapsing to a displayed "0".
   if (typeof v === "string" && v.trim() === "") return "";
-  return toDigits(String(toFiniteNumber(v)));
+  const numeric = toFiniteNumber(v);
+  // A zero is "nothing typed yet" in a money field; leaving it on screen makes
+  // the caret fight the digit and reads like a value the user chose.
+  if (numeric === 0) return "";
+  return toDigits(String(numeric));
 }
 
 /**
@@ -67,28 +71,26 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
     ref,
   ) => {
     const [display, setDisplay] = useState(() => formatThousands(digitsFromValue(value)));
-    const lastValueRef = useRef<number | string | undefined>(value);
+    const [lastValue, setLastValue] = useState(value);
 
-    // Re-sync the visible display when `value` changes from OUTSIDE (form reset,
-    // programmatic set, parent updates after a submit). We skip re-syncing when
-    // the change is just echoing back the same number the user just typed.
-    useEffect(() => {
-      const before = lastValueRef.current;
-      lastValueRef.current = value;
+    // Adjust the visible display during render when the value changes from
+    // OUTSIDE (form reset, programmatic set). No effect pass, no cascading
+    // render, and typing is left alone because the digits already match.
+    if (String(lastValue) !== String(value)) {
+      setLastValue(value);
       const nextDigits = digitsFromValue(value);
-      const currentDigits = display.replace(/\D/g, "");
-      if (String(before) === String(value) || nextDigits === currentDigits) {
-        return;
+      if (nextDigits !== display.replace(/\D/g, "")) {
+        setDisplay(formatThousands(nextDigits));
       }
-      setDisplay(formatThousands(nextDigits));
-    }, [value, display]);
+    }
 
     const handleChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const digits = toDigits(e.target.value);
         const numeric = digits ? Number(digits) : 0;
         const clamped = max !== undefined ? Math.min(numeric, max) : numeric;
-        setDisplay(formatThousands(String(clamped)));
+        // An empty field stays empty: it is "nothing typed yet", not a zero.
+        setDisplay(digits ? formatThousands(String(clamped)) : "");
         if (onChange) onChange(clamped);
       },
       [max, onChange],

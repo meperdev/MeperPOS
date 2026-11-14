@@ -20,6 +20,7 @@ type UseProductsParams = {
   page?: number;
   limit?: number;
   search?: string;
+  categoryId?: string;
   type?: "PRODUCT" | "SERVICE";
   ids?: string[];
   available?: boolean;
@@ -28,6 +29,7 @@ type UseProductsParams = {
 const useProductsMock = vi.fn();
 const quickSearchMutateMock = vi.fn();
 const createSaleMutateMock = vi.fn();
+const createPosLoanMutateMock = vi.fn();
 const resumeSaleMock = vi.fn();
 const apiGetMock = vi.fn();
 const pausedSalesState = vi.hoisted(() => ({ list: [] as unknown[] }));
@@ -193,8 +195,46 @@ vi.mock("@/components/ui/Modal", () => ({
   }) => (isOpen ? <section aria-label={title}>{children}</section> : null),
 }));
 
+// ConfirmDialog is the shared warning dialog. The mock mirrors its documented
+// contract — isOpen gate, title, message, confirmText/cancelText, onClose wired
+// to both the cancel button and the backdrop, and the same close-after-confirm
+// semantics (await onConfirm, then onClose) — so POS tests can drive the
+// confirmation and observe exactly which words reach the cashier.
 vi.mock("@/components/ui/ConfirmDialog", () => ({
-  ConfirmDialog: () => null,
+  ConfirmDialog: ({
+    isOpen,
+    onClose,
+    onConfirm,
+    title,
+    message,
+    confirmText = "Confirmar",
+    cancelText = "Cancelar",
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void | Promise<void>;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+  }) =>
+    isOpen ? (
+      <div role="dialog" aria-label={title}>
+        <p data-testid="confirm-message">{message}</p>
+        <div data-testid="confirm-backdrop" onClick={onClose} />
+        <button type="button" onClick={onClose}>
+          {cancelText}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void Promise.resolve(onConfirm()).then(onClose);
+          }}
+        >
+          {confirmText}
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/hooks/useProducts", () => ({
@@ -202,6 +242,17 @@ vi.mock("@/hooks/useProducts", () => ({
   useQuickSearchProduct: () => ({
     mutateAsync: quickSearchMutateMock,
     isPending: false,
+  }),
+}));
+
+vi.mock("@/hooks/useCategories", () => ({
+  useCategories: () => ({
+    data: {
+      data: [
+        { id: "cat-1", name: "Mecánica", active: true },
+        { id: "cat-2", name: "Accesorios", active: true },
+      ],
+    },
   }),
 }));
 
@@ -234,6 +285,28 @@ vi.mock("@/hooks/useSales", () => ({
   }),
 }));
 
+// The real hook exposes the mutation's pending state through React state, so the
+// mock must do the same: a frozen `isPending: false` hides the in-flight guards.
+vi.mock("@/hooks/useLoans", async () => {
+  const { useState } = await import("react");
+  return {
+    useCreatePosLoan: () => {
+      const [pending, setPending] = useState(false);
+      return {
+        isPending: pending,
+        mutateAsync: async (payload: unknown) => {
+          setPending(true);
+          try {
+            return await createPosLoanMutateMock(payload);
+          } finally {
+            setPending(false);
+          }
+        },
+      };
+    },
+  };
+});
+
 vi.mock("@/hooks/usePausedSales", () => ({
   usePausedSales: () => ({
     pausedSales: pausedSalesState.list,
@@ -249,8 +322,8 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/hooks/useReceipt", () => ({
-  printReceipt: vi.fn(),
-  printThermalReceipt: vi.fn(),
+  downloadReceiptPdf: vi.fn(),
+  openReceiptPdf: vi.fn(),
 }));
 
 vi.mock("@/hooks/useSettings", () => ({
@@ -265,12 +338,14 @@ vi.mock("@/hooks/useSettings", () => ({
   }),
 }));
 
+const toastState = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+}));
+
 vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({
-    error: vi.fn(),
-    success: vi.fn(),
-    info: vi.fn(),
-  }),
+  useToast: () => toastState,
 }));
 
 // The POS reads the acting role to decide whether to offer the price-override
@@ -282,7 +357,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 import POSPage from "./page";
-import { printReceipt, printThermalReceipt } from "@/hooks/useReceipt";
+import { downloadReceiptPdf, openReceiptPdf } from "@/hooks/useReceipt";
 import * as nextDynamic from "next/dynamic";
 
 const resetDynamicChunks = () =>
@@ -359,20 +434,27 @@ describe("products query service filter", () => {
     apiGetMock.mockReset();
   });
 
-  it("forwards type in the request and isolates cache/placeholder data across types", async () => {
+  it("forwards type and categoryId in the request and isolates cache/placeholder data across them", async () => {
     const { useProducts } = await vi.importActual<typeof import("@/hooks/useProducts")>("@/hooks/useProducts");
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
     const previous = { data: [makeProduct("p1", "Mercancia")], meta: { total: 80, totalPages: 4 } };
-    apiGetMock.mockResolvedValueOnce({ data: previous }).mockImplementationOnce(() => new Promise(() => {}));
-    const { result, rerender, unmount } = renderHook(({ type }: { type?: "SERVICE" }) => useProducts({ page: 1, limit: 6, type }), { wrapper, initialProps: { type: undefined } as { type?: "SERVICE" } });
+    apiGetMock.mockResolvedValueOnce({ data: previous }).mockImplementation(() => new Promise(() => {}));
+    const { result, rerender, unmount } = renderHook(
+      ({ type, categoryId }: { type?: "SERVICE"; categoryId?: string }) => useProducts({ page: 1, limit: 6, type, categoryId }),
+      { wrapper, initialProps: { type: undefined, categoryId: undefined } as { type?: "SERVICE"; categoryId?: string } },
+    );
     await waitFor(() => expect(result.current.data).toEqual(previous));
-    rerender({ type: "SERVICE" });
+    rerender({ type: "SERVICE", categoryId: undefined });
     expect(result.current.data).toBeUndefined();
-    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith("/products", { page: 1, limit: 6, type: "SERVICE" }));
+    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith("/products", { page: 1, limit: 6, type: "SERVICE", categoryId: undefined }));
+    rerender({ type: undefined, categoryId: "cat-1" });
+    expect(result.current.data).toBeUndefined();
+    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith("/products", { page: 1, limit: 6, type: undefined, categoryId: "cat-1" }));
     expect(client.getQueryCache().findAll({ queryKey: ["products"] }).map((query) => query.queryKey)).toEqual([
-      ["products", { page: 1, limit: 6, type: undefined }],
-      ["products", { page: 1, limit: 6, type: "SERVICE" }],
+      ["products", { page: 1, limit: 6, type: undefined, categoryId: undefined }],
+      ["products", { page: 1, limit: 6, type: "SERVICE", categoryId: undefined }],
+      ["products", { page: 1, limit: 6, type: undefined, categoryId: "cat-1" }],
     ]);
     unmount();
     client.clear();
@@ -486,7 +568,7 @@ describe("POS behavior evidence (#19, #18)", () => {
       return { data: { data: filtered.slice((params.page! - 1) * limit, params.page! * limit), meta: { total: filtered.length, totalPages: Math.ceil(filtered.length / limit) } }, isLoading: false, isFetching: false };
     });
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Todos" }));
+    await userEvent.click(screen.getByRole("button", { name: "Favoritos" }));
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ ids, available: true }));
     expect(screen.getByText("Favorito 10")).toBeTruthy();
     expect(screen.getByRole("button", { name: /siguiente/i })).toBeTruthy();
@@ -506,8 +588,9 @@ describe("POS behavior evidence (#19, #18)", () => {
       return { data: { data: filtered.slice((params.page! - 1) * params.limit!, params.page! * params.limit!), meta: { total: filtered.length, totalPages: Math.ceil(filtered.length / params.limit!) } }, isLoading: false, isFetching: false };
     });
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Todos" }));
-    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByRole("button", { name: "Favoritos" }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
     await userEvent.type(screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código..."), "repair");
     await waitFor(() => expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ search: "repair", type: "SERVICE", ids, available: true })));
     await userEvent.click(screen.getByRole("button", { name: /siguiente/i }));
@@ -523,13 +606,13 @@ describe("POS behavior evidence (#19, #18)", () => {
     localStorage.setItem("pos_favorite_product_ids", JSON.stringify([null, {}, "bad"]));
     useProductsMock.mockImplementation((params: UseProductsParams) => ({ data: { data: params.ids === undefined ? [makeProduct("p1", "Catalogo")] : [], meta: { total: params.ids === undefined ? 1 : 0, totalPages: 1 } }, isLoading: false, isFetching: false }));
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Todos" }));
+    await userEvent.click(screen.getByRole("button", { name: "Favoritos" }));
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ ids: [], available: true }));
     expect(screen.queryByText("Catalogo")).toBeNull();
     localStorage.removeItem("pos_favorite_product_ids");
   });
 
-  it.each(["pending", "error", "empty"])("keeps repeated Services toggles available during %s while preserving search/favorites", async (state) => {
+  it.each(["pending", "error", "empty"])("keeps repeated Services dropdown selections available during %s while preserving search/favorites", async (state) => {
     const ids = ["00000000-0000-4000-8000-000000000001"];
     localStorage.setItem("pos_favorite_product_ids", JSON.stringify(ids));
     const refetch = vi.fn();
@@ -548,14 +631,15 @@ describe("POS behavior evidence (#19, #18)", () => {
       };
     });
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Todos" }));
+    await userEvent.click(screen.getByRole("button", { name: "Favoritos" }));
     const search = screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código...");
     await userEvent.type(search, "repair");
     await waitFor(() => expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ search: "repair" })));
     for (let cycle = 0; cycle < 2; cycle++) {
       await userEvent.click(screen.getByRole("button", { name: /siguiente/i }));
       expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
-      await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+      await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+      await userEvent.click(screen.getByText("Servicios"));
       expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, type: "SERVICE", search: "repair", ids }));
       expect(screen.getByRole("button", { name: "Servicios" })).not.toBeDisabled();
       if (state === "pending") expect(screen.getByText("Buscando productos...")).toBeTruthy();
@@ -567,6 +651,7 @@ describe("POS behavior evidence (#19, #18)", () => {
         expect(refetch).toHaveBeenCalledTimes(cycle + 1);
       }
       await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+      await userEvent.click(screen.getByText("Todas las categorías"));
       expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, type: undefined, search: "repair", ids }));
       expect(search).toHaveValue("repair");
       expect(screen.getByRole("button", { name: "Favoritos" })).toBeTruthy();
@@ -583,7 +668,8 @@ describe("POS behavior evidence (#19, #18)", () => {
       isLoading: false, isFetching: false, isError: failed, refetch,
     }));
     const { rerender } = render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
     await userEvent.click(screen.getByRole("button", { name: /siguiente/i }));
     failed = true;
     rerender(<POSPage />);
@@ -599,15 +685,18 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, type: "SERVICE" }));
   });
 
-  it("exposes the Services selection as a pressed toggle", async () => {
+  it("exposes Services and Categories in the unified filter dropdown", async () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
-    const toggle = screen.getByRole("button", { name: "Servicios" });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
+    expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: "SERVICE", categoryId: undefined, page: 1 }));
+    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByText("Mecánica"));
+    expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: undefined, categoryId: "cat-1", page: 1 }));
+    await userEvent.click(screen.getByRole("button", { name: "Mecánica" }));
+    await userEvent.click(screen.getByText("Todas las categorías"));
+    expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: undefined, categoryId: undefined, page: 1 }));
   });
 
   it("caps the rendered grid tracks using a responsive minimum rather than fixed five columns", () => {
@@ -627,7 +716,8 @@ describe("POS behavior evidence (#19, #18)", () => {
       return { data: { data: list.slice((page - 1) * limit, page * limit), meta: { total: list.length, totalPages: Math.ceil(list.length / limit) } }, isLoading: false, isFetching: false };
     });
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: "SERVICE", page: 1 }));
     expect(screen.getByText("Servicio 0")).toBeTruthy();
     expect(screen.getByText("7", { selector: "span" })).toBeTruthy();
@@ -635,6 +725,7 @@ describe("POS behavior evidence (#19, #18)", () => {
       await userEvent.click(screen.getByRole("button", { name: /siguiente/i }));
     }
     await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByText("Todas las categorías"));
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: undefined, page: 1 }));
   });
 
@@ -695,7 +786,8 @@ describe("POS behavior evidence (#19, #18)", () => {
       isPlaceholderData: params.type === "SERVICE", isFetching: params.type === "SERVICE", isLoading: false,
     }));
     render(<POSPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
     expect(screen.queryByText("80", { selector: "span" })).toBeNull();
     expect(screen.queryByText("Mercancia anterior")).toBeNull();
   });
@@ -909,7 +1001,7 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(confirmButton).toBeTruthy();
   });
 
-  it("shows a thermal print button after checkout and calls printThermalReceipt", async () => {
+  it("opens the receipt PDF preview after checkout", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, totalPages: 1 } },
       isLoading: false,
@@ -929,20 +1021,16 @@ describe("POS behavior evidence (#19, #18)", () => {
       expect(createSaleMutateMock).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole("button", { name: /imprimir recibo térmico/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ver \/ imprimir/i })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /imprimir recibo térmico/i }));
+    await userEvent.click(screen.getByRole("button", { name: /ver \/ imprimir/i }));
 
     await waitFor(() => {
-      expect(printThermalReceipt).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "sale-1", saleNumber: 101 }),
-        "Mi Tienda",
-        expect.objectContaining({ header: null, footer: null, logoUrl: "https://res.cloudinary.com/demo/image/upload/logos/store.png" }),
-      );
+      expect(openReceiptPdf).toHaveBeenCalledWith("sale-1");
     });
   });
 
-  it("keeps the PDF fallback button that calls printReceipt", async () => {
+  it("downloads the receipt PDF after checkout", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, totalPages: 1 } },
       isLoading: false,
@@ -967,7 +1055,7 @@ describe("POS behavior evidence (#19, #18)", () => {
     await userEvent.click(screen.getByRole("button", { name: /descargar pdf/i }));
 
     await waitFor(() => {
-      expect(printReceipt).toHaveBeenCalledWith("sale-1");
+      expect(downloadReceiptPdf).toHaveBeenCalledWith("sale-1");
     });
   });
 
@@ -1067,14 +1155,19 @@ describe("POS behavior evidence (#19, #18)", () => {
     ).toBeNull();
   });
 
-  it("filters the grid by item type", async () => {
+  it("filters the grid by item type and category via the dropdown", async () => {
     useProductsMock.mockImplementation((params: UseProductsParams) => ({
       data: {
         data: [
-          makeProduct("1", "Producto Base", { stock: 5 }),
-          makeProduct("9", "Mantenimiento", { type: "SERVICE", stock: 0 }),
-        ].filter((product) => !params.type || product.type === params.type),
-        meta: { total: params.type ? 1 : 2, page: 1, limit: 20, totalPages: 1 },
+          makeProduct("1", "Producto Base", { stock: 5, categoryId: "cat-1" }),
+          makeProduct("2", "Producto Accesorios", { stock: 5, categoryId: "cat-2" }),
+          makeProduct("9", "Mantenimiento", { type: "SERVICE", stock: 0, categoryId: "cat-1" }),
+        ].filter(
+          (product) =>
+            (!params.type || product.type === params.type) &&
+            (!params.categoryId || product.categoryId === params.categoryId),
+        ),
+        meta: { total: params.type || params.categoryId ? 1 : 3, page: 1, limit: 20, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -1083,13 +1176,23 @@ describe("POS behavior evidence (#19, #18)", () => {
     render(<POSPage />);
 
     expect(screen.getByRole("button", { name: "Producto Base" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Producto Accesorios" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Mantenimiento" })).toBeTruthy();
 
-    await userEvent.click(screen.getByRole("button", { name: /^Servicios$/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Todas las categorías" }));
+    await userEvent.click(screen.getByText("Servicios"));
 
     expect(screen.getByRole("button", { name: "Mantenimiento" })).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Producto Base" }),
+    ).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Servicios" }));
+    await userEvent.click(screen.getByText("Accesorios"));
+
+    expect(screen.getByRole("button", { name: "Producto Accesorios" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Mantenimiento" }),
     ).toBeNull();
   });
 });
@@ -1604,5 +1707,312 @@ describe("POS promotion pricing (#74)", () => {
     expect(screen.getByTestId("line-discount").textContent).toContain(
       formatCurrency(5000),
     );
+  });
+});
+
+describe("POS cart financing (pos-loan-initiation)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    pausedSalesState.list = [];
+  });
+
+  afterEach(() => {
+    cleanup();
+    pausedSalesState.list = [];
+  });
+
+  function renderWithProducts(list: Product[]) {
+    useProductsMock.mockReturnValue({
+      data: { data: list, meta: { total: list.length, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    return render(<POSPage />);
+  }
+
+  const financeAction = () => screen.getByRole("button", { name: /financiar/i });
+  const confirmFinance = async () => {
+    await userEvent.click(screen.getByRole("button", { name: "Financiar venta" }));
+  };
+  const cancelFinance = async () => {
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  };
+  const dismissFinance = async () => {
+    await userEvent.click(screen.getByTestId("confirm-backdrop"));
+  };
+  const confirmMessage = () => screen.getByTestId("confirm-message").textContent ?? "";
+
+  async function selectAnaPerez() {
+    await userEvent.click(screen.getByRole("button", { name: /sin cliente/i }));
+    await userEvent.click(screen.getByText("Ana Perez"));
+  }
+
+  /** Seed the sale-wide discount through the only existing POS path: resuming a paused cart. */
+  function seedPausedCart(product: Product, discountAmount: number) {
+    const paused = {
+      id: "paused-finance",
+      customerId: "",
+      discountAmount,
+      pausedAt: "2026-08-25T10:00:00.000Z",
+      cart: [
+        {
+          productId: product.id,
+          product,
+          quantity: 1,
+          unitPrice: product.salePrice,
+          originalUnitPrice: product.salePrice,
+          discountAmount: 0,
+          availableStock: 10,
+        },
+      ],
+    };
+    pausedSalesState.list = [paused];
+    resumeSaleMock.mockReturnValue(paused);
+    apiGetMock.mockResolvedValue({ data: product });
+  }
+
+  async function resumePausedCart() {
+    await userEvent.click(screen.getByRole("button", { name: "Reanudar (1)" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reanudar" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("line-unit-price")).toBeTruthy();
+      expect(screen.getByText("Descuento")).toBeTruthy();
+    });
+  }
+
+  function initiation() {
+    return {
+      intentId: "intent-1",
+      loanId: "loan-1",
+      organizationId: "org-1",
+      customerId: "customer-1",
+      agreedCustomerTotal: "12345.00",
+      quoteSnapshot: {},
+    };
+  }
+
+  it("renders a financing action next to checkout, disabled until a cart and customer exist", async () => {
+    renderWithProducts([makeProduct("p1", "Producto Financiado", { salePrice: 50000 })]);
+
+    expect(financeAction()).toBeDisabled();
+    expect(screen.getByRole("button", { name: /finalizar venta/i })).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Financiado" }));
+    expect(financeAction()).toBeDisabled();
+
+    await selectAnaPerez();
+    expect(financeAction()).not.toBeDisabled();
+  });
+
+  it("opens a confirmation naming the customer and the amount to finance instead of initiating immediately", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    seedPausedCart(product, 5000);
+    renderWithProducts([product]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+
+    // Nothing is initiated until the cashier confirms the debt.
+    expect(createPosLoanMutateMock).not.toHaveBeenCalled();
+    // The confirm button reads like an action, not like a dismissal.
+    expect(screen.getByRole("button", { name: "Financiar venta" })).toBeTruthy();
+    const message = confirmMessage();
+    expect(message).toContain("Ana Perez");
+    // Pre-server figure: the client-computed amount to finance, not the agreed total.
+    expect(message).toContain(formatCurrency(45000));
+    expect(message).toContain("Monto a financiar");
+  });
+
+  it("cancelling the confirmation leaves the cart, the customer and the discount untouched and never calls the mutation", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    seedPausedCart(product, 5000);
+    renderWithProducts([product]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await cancelFinance();
+
+    expect(createPosLoanMutateMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Financiar venta" })).toBeNull();
+    expect(screen.getByTestId("line-unit-price")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /ana perez/i })).toBeTruthy();
+    expect(screen.getByText("Descuento")).toBeTruthy();
+  });
+
+  it("dismissing the confirmation does not consume the request key, and a later confirm uses one generated key", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    createPosLoanMutateMock.mockResolvedValue(initiation());
+    seedPausedCart(product, 5000);
+    renderWithProducts([product]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await dismissFinance();
+    expect(createPosLoanMutateMock).not.toHaveBeenCalled();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    const key = (createPosLoanMutateMock.mock.calls[0]?.[0] as { requestKey: string })
+      .requestKey;
+    expect(typeof key).toBe("string");
+    expect(key.length).toBeGreaterThan(0);
+  });
+
+  it("initiates with the cart items, the selected customer, the global discount and a generated requestKey, surfacing the server total", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    createPosLoanMutateMock.mockResolvedValue(initiation());
+    seedPausedCart(product, 5000);
+    renderWithProducts([product]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    expect(createPosLoanMutateMock).not.toHaveBeenCalled();
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    const payload = createPosLoanMutateMock.mock.calls[0]?.[0] as {
+      customerId: string;
+      requestKey: string;
+      discountAmount: number;
+      items: Array<Record<string, unknown>>;
+    };
+    expect(payload.customerId).toBe("customer-1");
+    expect(typeof payload.requestKey).toBe("string");
+    expect(payload.requestKey.length).toBeGreaterThan(0);
+    expect(payload.discountAmount).toBe(5000);
+    expect(payload.items).toEqual([{ productId: "p1", quantity: 1, discountAmount: 0 }]);
+    expect(payload.items[0]).not.toHaveProperty("unitPrice");
+
+    // The surfaced money must be the server agreed total, never the client-computed 45000.
+    // It leaves as a toast: no panel stays pinned to the cart.
+    await waitFor(() =>
+      expect(toastState.success).toHaveBeenCalledWith(
+        expect.stringContaining(formatCurrency(12345)),
+      ),
+    );
+    expect(screen.queryByText("Venta financiada iniciada")).toBeNull();
+  });
+
+  it("reuses the request key on a failed retry and clears the cart, customer and discount only after success", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    createPosLoanMutateMock
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(initiation());
+    seedPausedCart(product, 5000);
+    renderWithProducts([product]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    // A failed attempt must not clear the cart, the customer or the discount.
+    expect(screen.getByTestId("line-unit-price")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /ana perez/i })).toBeTruthy();
+    expect(screen.getByText("Descuento")).toBeTruthy();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(2));
+
+    const keys = createPosLoanMutateMock.mock.calls.map(
+      (call) => (call[0] as { requestKey: string }).requestKey,
+    );
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0].length).toBeGreaterThan(0);
+
+    await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
+    expect(screen.queryByTestId("line-unit-price")).toBeNull();
+    expect(screen.getByRole("button", { name: /sin cliente/i })).toBeTruthy();
+    expect(screen.queryByText("Descuento")).toBeNull();
+  });
+
+  it("mints a new request key when the payload changes after a failed attempt", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    const extra = makeProduct("p2", "Producto Extra", { salePrice: 10000 });
+    createPosLoanMutateMock
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(initiation());
+    seedPausedCart(product, 5000);
+    renderWithProducts([product, extra]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    // The cashier edits the cart before retrying: the failed key no longer
+    // describes the request, so it must not be reused for the new payload.
+    await userEvent.click(screen.getByRole("button", { name: "Producto Extra" }));
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(2));
+
+    const keys = createPosLoanMutateMock.mock.calls.map(
+      (call) => (call[0] as { requestKey: string }).requestKey,
+    );
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it("keeps the confirmation open and the normal checkout closed while the initiation is pending", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    let resolveInitiation: (value: ReturnType<typeof initiation>) => void = () => {};
+    createPosLoanMutateMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveInitiation = resolve;
+      }),
+    );
+    seedPausedCart(product, 5000);
+    renderWithProducts([product]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    // The backdrop does not abandon a pending debt: the confirmation stays.
+    await dismissFinance();
+    expect(screen.getByRole("button", { name: "Financiar venta" })).toBeTruthy();
+    // The ordinary checkout cannot start a second sale for the same cart.
+    expect(screen.getByRole("button", { name: /finalizar venta/i })).toBeDisabled();
+
+    resolveInitiation(initiation());
+    await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
+  });
+
+  it("locks the cart while the initiation is pending so the financed payload cannot drift", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    const extra = makeProduct("p2", "Producto Extra", { salePrice: 10000 });
+    let resolveInitiation: (value: ReturnType<typeof initiation>) => void = () => {};
+    createPosLoanMutateMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveInitiation = resolve;
+      }),
+    );
+    seedPausedCart(product, 5000);
+    renderWithProducts([product, extra]);
+    await resumePausedCart();
+    await selectAnaPerez();
+
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    await waitFor(() => expect(createPosLoanMutateMock).toHaveBeenCalledTimes(1));
+
+    // The financed payload owns the cart until the server answers.
+    await userEvent.click(screen.getByRole("button", { name: "Producto Extra" }));
+    expect(screen.getAllByTestId("line-unit-price")).toHaveLength(1);
+
+    resolveInitiation(initiation());
+    await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
   });
 });

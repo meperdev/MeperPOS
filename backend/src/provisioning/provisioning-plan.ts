@@ -12,6 +12,11 @@ import { COMMON_PASSWORDS } from '../common/validators/password.policy';
  * The development demo seed (backend/prisma/seed.ts) must never be the
  * production bootstrap: it hardcodes a public password and creates demo data.
  * This module is the production-safe alternative.
+ *
+ * The secret is resolved here too, from either SUPERADMIN_PASSWORD or the file
+ * named by SUPERADMIN_PASSWORD_FILE, never from both. The file source exists so
+ * the plaintext does not have to live in the process environment, and it is only
+ * accepted when no account other than its owner can read it.
  */
 
 /**
@@ -52,7 +57,15 @@ export type ProvisioningRefusalCode =
   | 'PASSWORD_KNOWN_DEFAULT'
   | 'PASSWORD_BLANK'
   | 'PASSWORD_SURROUNDING_WHITESPACE'
-  | 'EXISTING_USER_NOT_SUPERADMIN';
+  | 'EXISTING_USER_NOT_SUPERADMIN'
+  | 'RESET_USER_NOT_FOUND'
+  | 'RESET_TARGET_NOT_SUPERADMIN'
+  | 'RESET_AND_PROMOTE_CONFLICT'
+  | 'PASSWORD_SOURCE_AMBIGUOUS'
+  | 'PASSWORD_FILE_MISSING'
+  | 'PASSWORD_FILE_NOT_REGULAR'
+  | 'PASSWORD_FILE_TOO_PERMISSIVE'
+  | 'PASSWORD_FILE_UNREADABLE';
 
 export interface ProvisioningRefusal {
   action: 'refuse';
@@ -79,11 +92,24 @@ export interface ProvisioningPromotePlan {
   userId: string;
 }
 
+/**
+ * Replaces the password of an existing SuperAdmin. Only reachable with the
+ * explicit SUPERADMIN_RESET_PASSWORD=true opt-in, and only for an account that
+ * is already a SuperAdmin: a lost password must never create or promote one.
+ */
+export interface ProvisioningResetPasswordPlan {
+  action: 'reset-password';
+  email: string;
+  password: string;
+  userId: string;
+}
+
 export type ProvisioningPlan =
   | ProvisioningRefusal
   | ProvisioningCreatePlan
   | ProvisioningNoopPlan
-  | ProvisioningPromotePlan;
+  | ProvisioningPromotePlan
+  | ProvisioningResetPasswordPlan;
 
 export interface ProvisioningExistingUser {
   id: string;
@@ -91,11 +117,37 @@ export interface ProvisioningExistingUser {
   isSuperAdmin: boolean;
 }
 
+/**
+ * Operator-provided description of SUPERADMIN_PASSWORD_FILE. The CLI probes the
+ * filesystem once and passes the result in, so every rule below stays pure and
+ * unit-testable without touching a real file.
+ */
+export interface ProvisioningPasswordFile {
+  path: string;
+  exists: boolean;
+  /** True only for a regular file: a directory, socket or device is no secret store. */
+  isFile: boolean;
+  /**
+   * Permission bits (`stat.mode & 0o777`), or null when the platform exposes no
+   * POSIX mode (Windows), in which case the permission rule is skipped.
+   */
+  mode: number | null;
+  /** File content, or null when it could not be read. */
+  content: string | null;
+}
+
 export interface ProvisioningInput {
   email?: string | null;
   password?: string | null;
+  /**
+   * Set from SUPERADMIN_PASSWORD_FILE. Preferred over the environment variable
+   * so the plaintext never lands in /proc/<pid>/environ, `ps eww` or a CI log.
+   */
+  passwordFile?: ProvisioningPasswordFile | null;
   /** Set from SUPERADMIN_PROMOTE === 'true'. Explicit consent is required. */
   promoteExistingUser?: boolean;
+  /** Set from SUPERADMIN_RESET_PASSWORD === 'true'. Explicit consent is required. */
+  resetPassword?: boolean;
   existingUser?: ProvisioningExistingUser | null;
 }
 
@@ -116,45 +168,23 @@ function refuse(
 }
 
 /**
- * Decides what the production bootstrap must do. Never throws, never returns
- * the password inside a refusal, and never adopts an existing non-SuperAdmin
- * account without explicit opt-in.
+ * Password rules shared by the create and the reset paths, so a reset cannot
+ * accept a value the bootstrap would have refused.
+ *
+ * Returns the validated secret or a refusal; the ordering below is the contract
+ * pinned by provisioning-plan.spec.ts.
  */
-export function planProvisioning(input: ProvisioningInput): ProvisioningPlan {
-  const email = normalizeSuperAdminEmail(input.email);
-
-  if (!email) {
-    return refuse(
-      'MISSING_SUPERADMIN_EMAIL',
-      'SUPERADMIN_EMAIL is required: set it to the address that will own the production SuperAdmin account and run the command again.',
-    );
-  }
-
-  const existingUser = input.existingUser ?? null;
-
-  // Idempotency: an existing SuperAdmin is left untouched, and no password is
-  // needed to re-run the command.
-  if (existingUser && existingUser.isSuperAdmin) {
-    return { action: 'noop', email, userId: existingUser.id };
-  }
-
-  if (existingUser) {
-    if (input.promoteExistingUser) {
-      return { action: 'promote', email, userId: existingUser.id };
-    }
-
-    return refuse(
-      'EXISTING_USER_NOT_SUPERADMIN',
-      `A user already exists for ${email} and is not a SuperAdmin. Set SUPERADMIN_PROMOTE=true to grant SuperAdmin on purpose, or choose a different SUPERADMIN_EMAIL.`,
-    );
-  }
-
-  const password = input.password ?? '';
+function validatePassword(
+  rawPassword: string | null | undefined,
+  intent: 'create' | 'reset',
+): { password: string } | ProvisioningRefusal {
+  const password = rawPassword ?? '';
+  const action = intent === 'create' ? 'create' : 'reset';
 
   if (password.length === 0) {
     return refuse(
       'MISSING_SUPERADMIN_PASSWORD',
-      `SUPERADMIN_PASSWORD is required to create the SuperAdmin: set a unique value of at least ${MIN_SUPERADMIN_PASSWORD_LENGTH} characters.`,
+      `SUPERADMIN_PASSWORD is required to ${action} the SuperAdmin: export a unique value of at least ${MIN_SUPERADMIN_PASSWORD_LENGTH} characters in the shell that runs this command.`,
     );
   }
 
@@ -195,5 +225,167 @@ export function planProvisioning(input: ProvisioningInput): ProvisioningPlan {
     );
   }
 
-  return { action: 'create', email, password };
+  return { password };
+}
+
+/** `0o600`-style rendering so the refusal can print the offending mode. */
+function formatMode(mode: number): string {
+  return `0${(mode & 0o777).toString(8).padStart(3, '0')}`;
+}
+
+/**
+ * Strips the one trailing newline that `echo`, `printf '...\n'` and most secret
+ * stores append. Exactly one: a second blank line still reaches the whitespace
+ * rule in validatePassword, so padding can never sneak in through the file.
+ */
+function stripSingleTrailingNewline(content: string): string {
+  return content.replace(/\r?\n$/, '');
+}
+
+/**
+ * Resolves the operator-provided secret before the shared password rules run.
+ *
+ * The file source exists so the bootstrap plaintext does not have to live in the
+ * process environment, where `/proc/<pid>/environ`, `ps eww` and CI logs can read
+ * it. The two sources are never mixed: an ambiguous setup has no safe precedence,
+ * so it is refused instead of guessed.
+ *
+ * Called only by the actions that need a password (create and reset), so a stale
+ * variable or an unreadable file never breaks the idempotent `noop` or a promote.
+ */
+function resolvePassword(
+  input: ProvisioningInput,
+  intent: 'create' | 'reset',
+): { password: string } | ProvisioningRefusal {
+  const envPassword = input.password ?? '';
+  const file = input.passwordFile ?? null;
+
+  if (envPassword.length > 0 && file) {
+    return refuse(
+      'PASSWORD_SOURCE_AMBIGUOUS',
+      'SUPERADMIN_PASSWORD and SUPERADMIN_PASSWORD_FILE are both set. Unset one: when the file is in place, remove SUPERADMIN_PASSWORD from the environment so the secret is never exported.',
+    );
+  }
+
+  if (!file) {
+    return validatePassword(envPassword, intent);
+  }
+
+  if (!file.exists) {
+    return refuse(
+      'PASSWORD_FILE_MISSING',
+      `SUPERADMIN_PASSWORD_FILE points to ${file.path}, which does not exist. Write the password there with owner-only permissions (chmod 600), or unset the variable and export SUPERADMIN_PASSWORD instead.`,
+    );
+  }
+
+  if (!file.isFile) {
+    return refuse(
+      'PASSWORD_FILE_NOT_REGULAR',
+      `SUPERADMIN_PASSWORD_FILE points to ${file.path}, which is not a regular file. Point it at a plain file whose only content is the password.`,
+    );
+  }
+
+  // Owner-only. Group and other bits would let any account on the host read the
+  // bootstrap secret, so the file is rejected instead of silently trusted.
+  if (file.mode !== null && (file.mode & 0o077) !== 0) {
+    return refuse(
+      'PASSWORD_FILE_TOO_PERMISSIVE',
+      `SUPERADMIN_PASSWORD_FILE points to ${file.path} with mode ${formatMode(file.mode)}; users other than the owner can read it. Run "chmod 600 ${file.path}" and retry.`,
+    );
+  }
+
+  if (file.content === null) {
+    return refuse(
+      'PASSWORD_FILE_UNREADABLE',
+      `SUPERADMIN_PASSWORD_FILE points to ${file.path}, which could not be read. Check that the current user owns it and that it is readable.`,
+    );
+  }
+
+  return validatePassword(stripSingleTrailingNewline(file.content), intent);
+}
+
+/**
+ * Decides what the production bootstrap must do. Never throws, never returns
+ * the password inside a refusal, and never adopts an existing non-SuperAdmin
+ * account without explicit opt-in.
+ */
+export function planProvisioning(input: ProvisioningInput): ProvisioningPlan {
+  const email = normalizeSuperAdminEmail(input.email);
+
+  if (!email) {
+    return refuse(
+      'MISSING_SUPERADMIN_EMAIL',
+      'SUPERADMIN_EMAIL is required: export the address that owns the production SuperAdmin account in the shell that runs this command (railway run does not inject it), then run it again.',
+    );
+  }
+
+  const existingUser = input.existingUser ?? null;
+
+  // A reset is destructive to live sessions, so it requires the explicit
+  // SUPERADMIN_RESET_PASSWORD opt-in. This branch runs before the idempotent
+  // one: an operator who lost the password must not get the `noop` that leaves
+  // the old hash in place. It never creates or promotes an account, so a lost
+  // password cannot widen who is a SuperAdmin.
+  if (input.resetPassword) {
+    if (!existingUser) {
+      return refuse(
+        'RESET_USER_NOT_FOUND',
+        `No user exists for ${email}, so there is no SuperAdmin password to reset. Run the provisioning command without SUPERADMIN_RESET_PASSWORD to create the account first.`,
+      );
+    }
+
+    if (!existingUser.isSuperAdmin) {
+      return refuse(
+        'RESET_TARGET_NOT_SUPERADMIN',
+        `The user for ${email} is not a SuperAdmin, so this command will not reset its password. Use the SuperAdmin address, or grant SuperAdmin on purpose with SUPERADMIN_PROMOTE=true.`,
+      );
+    }
+
+    // Two opposite security outcomes requested at once: replace a secret, or
+    // grant SuperAdmin. Only one could ever run, so the operator gets a refusal
+    // instead of a silent precedence they did not choose. Checked after the
+    // target rules so a non-SuperAdmin still reports the more specific refusal.
+    if (input.promoteExistingUser) {
+      return refuse(
+        'RESET_AND_PROMOTE_CONFLICT',
+        'SUPERADMIN_RESET_PASSWORD and SUPERADMIN_PROMOTE are both true. Pick one intent: reset the password of the existing SuperAdmin, or promote the existing account. Unset the other variable and retry.',
+      );
+    }
+
+    const validated = resolvePassword(input, 'reset');
+    if ('action' in validated) {
+      return validated;
+    }
+
+    return {
+      action: 'reset-password',
+      email,
+      password: validated.password,
+      userId: existingUser.id,
+    };
+  }
+
+  // Idempotency: an existing SuperAdmin is left untouched, and no password is
+  // needed to re-run the command.
+  if (existingUser && existingUser.isSuperAdmin) {
+    return { action: 'noop', email, userId: existingUser.id };
+  }
+
+  if (existingUser) {
+    if (input.promoteExistingUser) {
+      return { action: 'promote', email, userId: existingUser.id };
+    }
+
+    return refuse(
+      'EXISTING_USER_NOT_SUPERADMIN',
+      `A user already exists for ${email} and is not a SuperAdmin. Set SUPERADMIN_PROMOTE=true to grant SuperAdmin on purpose, or choose a different SUPERADMIN_EMAIL.`,
+    );
+  }
+
+  const validated = resolvePassword(input, 'create');
+  if ('action' in validated) {
+    return validated;
+  }
+
+  return { action: 'create', email, password: validated.password };
 }

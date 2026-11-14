@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Sidebar, applyOrganizationScope } from "./Sidebar";
 import { SidebarProvider, SIDEBAR_COLLAPSED_KEY } from "@/contexts/SidebarContext";
-import { safeGetItem } from "@/lib/utils";
+import { safeGetItem, safeSetItem } from "@/lib/utils";
 import { api } from "@/lib/api";
 
 const pushMock = vi.fn();
@@ -90,6 +90,7 @@ const organizations = [
 describe("Sidebar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    safeSetItem(SIDEBAR_COLLAPSED_KEY, "false");
     useAuthMock.mockReturnValue({
       user: {
         id: "user-1",
@@ -171,11 +172,47 @@ describe("Sidebar", () => {
       "Compras",
       "Salidas",
       "Reportes",
+      "Préstamos",
+      "Empleados",
+      "Nómina",
       "Tareas",
       "Mi perfil",
       "Configuración",
     ]);
     expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["OWNER", true], ["ADMIN", true], ["CASHIER", false],
+    ["MEMBER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
+  ])("shows the employee link for %s only when permitted", async (role, permitted) => {
+    useAuthMock.mockReturnValue({
+      user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
+      logout: vi.fn(), switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { organizations: [organizations[0]] } });
+    render(<Sidebar />, { wrapper });
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    const link = screen.queryByRole("link", { name: "Empleados" });
+    if (permitted) expect(link).toHaveAttribute("href", "/employees");
+    else expect(link).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mi perfil" })).toHaveAttribute("href", "/profile");
+  });
+
+  it.each([
+    ["OWNER", true], ["ADMIN", true], ["CASHIER", false],
+    ["MEMBER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
+  ])("shows the payroll link for %s only when permitted", async (role, permitted) => {
+    useAuthMock.mockReturnValue({
+      user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
+      logout: vi.fn(), switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { organizations: [organizations[0]] } });
+    render(<Sidebar />, { wrapper });
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    const link = screen.queryByRole("link", { name: "Nómina" });
+    if (permitted) expect(link).toHaveAttribute("href", "/payroll");
+    else expect(link).not.toBeInTheDocument();
   });
 
   it("hides the Importar nav item now that it lives under Configuración", async () => {
@@ -439,6 +476,39 @@ describe("Sidebar", () => {
     const tooltip = await screen.findByTestId("sidebar-rail-tooltip");
     expect(tooltip).toBeInTheDocument();
     expect(tooltip).toHaveTextContent("Dashboard");
+  });
+
+  it("renders the Lucky square icon and hides wordmark text when collapsed", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
+      >
+        <SidebarProvider>
+          <Sidebar />
+        </SidebarProvider>
+      </QueryClientProvider>
+    );
+
+    const brandBlock = await screen.findByTestId("sidebar-brand");
+    const imgsBefore = brandBlock.querySelectorAll("img");
+    expect(imgsBefore.length).toBe(1);
+    expect(imgsBefore[0].getAttribute("src")).toContain("icon-192.png");
+
+    const wordmark = brandBlock.querySelector("p");
+    expect(wordmark).not.toHaveClass("sr-only");
+
+    const toggleBtn = await screen.findByTestId("sidebar-collapse-toggle");
+    await userEvent.click(toggleBtn);
+
+    expect(wordmark).toHaveClass("sr-only");
   });
 });
 

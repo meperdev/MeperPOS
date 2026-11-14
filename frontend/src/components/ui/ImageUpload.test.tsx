@@ -70,11 +70,11 @@ describe("ImageUpload", () => {
   });
 
   describe("hero variant", () => {
-    it("renders a 4:3 / md:4:5 preview with icon-only overlay buttons and no gradients or blur", () => {
+    it("renders a 4:3 / md:aspect-square preview with icon-only overlay buttons and no gradients or blur", () => {
       const change = vi.fn();
       const { container } = render(<ImageUpload variant="hero" value="/images/old.jpg" onChange={change} />);
       const preview = screen.getByRole("img", { name: "Preview" }).parentElement!;
-      expect(preview).toHaveClass("aspect-[4/3]", "md:aspect-[4/5]", "rounded-2xl", "overflow-hidden", "border", "border-border");
+      expect(preview).toHaveClass("aspect-[4/3]", "md:aspect-square", "rounded-2xl", "overflow-hidden", "border", "border-border");
       expect(preview).not.toHaveClass("aspect-square");
       expect(container.firstElementChild).not.toHaveClass("space-y-2");
 
@@ -105,7 +105,7 @@ describe("ImageUpload", () => {
     it("renders the empty dropzone with the same aspect and copy", () => {
       const { container } = render(<ImageUpload variant="hero" onChange={vi.fn()} />);
       const dropzone = screen.getByRole("button", { name: /Seleccionar imagen/ });
-      expect(dropzone).toHaveClass("aspect-[4/3]", "md:aspect-[4/5]", "rounded-2xl", "border-dashed", "w-full");
+      expect(dropzone).toHaveClass("aspect-[4/3]", "md:aspect-square", "rounded-2xl", "border-dashed", "w-full");
       expect(dropzone).not.toHaveClass("aspect-square");
       expect(screen.getByText("Seleccionar imagen")).toBeInTheDocument();
       expect(screen.getByText("JPG, PNG, GIF o WEBP · Máx. 5 MB")).toBeInTheDocument();

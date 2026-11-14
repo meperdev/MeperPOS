@@ -135,7 +135,11 @@ export class ExportsService {
       ['cash', 'expensePayments', report.cash.expensePayments.total],
       ['inventory', 'stockValue', report.inventory.current.stockValue],
       ['inventory', 'retailValue', report.inventory.current.retailValue],
-      ['inventory', 'potentialProfit', report.inventory.current.potentialProfit],
+      [
+        'inventory',
+        'potentialProfit',
+        report.inventory.current.potentialProfit,
+      ],
     ];
     return this.exportData(rows, 'economic', query.format, response);
   }
@@ -238,7 +242,9 @@ export class ExportsService {
       where,
       take: query.limit || undefined,
       orderBy: { date: 'desc' },
-      include: { label: { select: { name: true, group: { select: { name: true } } } } },
+      include: {
+        label: { select: { name: true, group: { select: { name: true } } } },
+      },
     });
   }
 
@@ -391,56 +397,82 @@ export class ExportsService {
     return headers[type] || [];
   }
 
+  /**
+   * Neutralizes CSV/SpreadsheetML/XLSX formula injection (CWE-1236).
+   *
+   * Excel, Sheets and LibreOffice interpret a cell whose text begins with
+   * `=`, `+`, `-`, `@`, TAB or CR as a formula. Prepending a single quote
+   * makes the spreadsheet render the original text. The rule is idempotent
+   * (a value that already carries the prefix is untouched) and never coerces
+   * non-strings, so numbers, dates, booleans, null/undefined and the
+   * `toFixed(2)` money strings keep their current representation.
+   */
+  private neutralizeFormulaText<T>(value: T): T | string {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    if (value.startsWith("'")) {
+      return value;
+    }
+    return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  }
+
   private getRowData(type: string, item: any): any[] {
     const getters: Record<string, (item: any) => any[]> = {
       sales: (item) => [
-        item.saleNumber,
-        new Date(item.createdAt).toLocaleDateString(),
-        item.customer?.name || 'N/A',
+        this.neutralizeFormulaText(item.saleNumber),
+        this.neutralizeFormulaText(
+          new Date(item.createdAt).toLocaleDateString(),
+        ),
+        this.neutralizeFormulaText(item.customer?.name || 'N/A'),
         Number(item.total).toFixed(2),
-        item.status,
-        item.payments?.map((p: { method: string }) => p.method).join(', ') ||
-          'N/A',
+        this.neutralizeFormulaText(item.status),
+        this.neutralizeFormulaText(
+          item.payments?.map((p: { method: string }) => p.method).join(', ') ||
+            'N/A',
+        ),
       ],
       products: (item) => [
-        item.name,
-        item.sku,
-        item.label?.group?.name || 'N/A',
-        item.label?.name || 'N/A',
+        this.neutralizeFormulaText(item.name),
+        this.neutralizeFormulaText(item.sku),
+        this.neutralizeFormulaText(item.category?.name || 'N/A'),
         Number(item.salePrice).toFixed(2),
         Number(item.costPrice).toFixed(2),
         item.stock,
         item.minStock,
       ],
       customers: (item) => [
-        item.name,
-        item.documentType,
-        item.documentNumber,
-        item.email || 'N/A',
-        item.phone || 'N/A',
-        item.segment,
-        item.referencia || 'N/A',
-        item.placaMoto || 'N/A',
+        this.neutralizeFormulaText(item.name),
+        this.neutralizeFormulaText(item.documentType),
+        this.neutralizeFormulaText(item.documentNumber),
+        this.neutralizeFormulaText(item.email || 'N/A'),
+        this.neutralizeFormulaText(item.phone || 'N/A'),
+        this.neutralizeFormulaText(item.segment),
+        this.neutralizeFormulaText(item.referencia || 'N/A'),
+        this.neutralizeFormulaText(item.placaMoto || 'N/A'),
       ],
       inventory: (item) => [
-        new Date(item.createdAt).toLocaleDateString(),
-        item.product?.name || 'N/A',
-        item.product?.type || 'N/A',
-        item.type,
+        this.neutralizeFormulaText(
+          new Date(item.createdAt).toLocaleDateString(),
+        ),
+        this.neutralizeFormulaText(item.product?.name || 'N/A'),
+        this.neutralizeFormulaText(item.product?.type || 'N/A'),
+        this.neutralizeFormulaText(item.type),
         item.quantity,
         item.previousStock,
         item.newStock,
-        item.user?.name || 'N/A',
+        this.neutralizeFormulaText(item.user?.name || 'N/A'),
       ],
       expenses: (item) => [
-        new Date(item.date).toLocaleDateString(),
-        item.label?.group?.name || 'N/A',
-        item.label?.name || 'N/A',
-        item.description || 'N/A',
+        this.neutralizeFormulaText(new Date(item.date).toLocaleDateString()),
+        this.neutralizeFormulaText(item.label?.group?.name || 'N/A'),
+        this.neutralizeFormulaText(item.label?.name || 'N/A'),
+        this.neutralizeFormulaText(item.description || 'N/A'),
         Number(item.total).toFixed(2),
-        item.status,
+        this.neutralizeFormulaText(item.status),
       ],
-      economic: (item) => item,
+      economic: (item) =>
+        item.map((cell: unknown) => this.neutralizeFormulaText(cell)),
     };
     return getters[type](item);
   }

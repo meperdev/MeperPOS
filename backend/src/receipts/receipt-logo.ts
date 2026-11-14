@@ -9,22 +9,26 @@ const LOGO_TIMEOUT_MS = 3000;
 export interface ReceiptLogo {
   bytes: Uint8Array;
   format: 'PNG' | 'JPEG';
+  width: number;
+  height: number;
 }
 
-function hasJpegFrame(bytes: Buffer): boolean {
+function hasJpegFrame(
+  bytes: Buffer,
+): { width: number; height: number } | undefined {
   if (bytes[bytes.length - 2] !== 0xff || bytes[bytes.length - 1] !== 0xd9)
-    return false;
+    return;
   let offset = 2;
-  let frame = false;
+  let dimensions: { width: number; height: number } | undefined;
   while (offset + 4 <= bytes.length) {
-    if (bytes[offset++] !== 0xff) return false;
+    if (bytes[offset++] !== 0xff) return;
     while (bytes[offset] === 0xff) offset++;
     const marker = bytes[offset++];
-    if (offset + 2 > bytes.length) return false;
+    if (offset + 2 > bytes.length) return;
     const length = bytes.readUInt16BE(offset);
-    if (length < 2 || offset + length > bytes.length) return false;
+    if (length < 2 || offset + length > bytes.length) return;
     if ([0xc0, 0xc1, 0xc2].includes(marker)) {
-      if (length < 11) return false;
+      if (length < 11) return;
       const height = bytes.readUInt16BE(offset + 3);
       const width = bytes.readUInt16BE(offset + 5);
       const channels = bytes[offset + 7];
@@ -35,14 +39,16 @@ function hasJpegFrame(bytes: Buffer): boolean {
         ![1, 3, 4].includes(channels) ||
         length !== 8 + 3 * channels
       )
-        return false;
-      frame = true;
+        return;
+      dimensions = { width, height };
     }
     if (marker === 0xda)
-      return frame && length >= 8 && offset + length < bytes.length - 2;
+      return dimensions && length >= 8 && offset + length < bytes.length - 2
+        ? dimensions
+        : undefined;
     offset += length;
   }
-  return false;
+  return;
 }
 
 function detectLogo(bytes: Buffer): ReceiptLogo | undefined {
@@ -58,16 +64,21 @@ function detectLogo(bytes: Buffer): ReceiptLogo | undefined {
     const width = bytes.readUInt32BE(16);
     const height = bytes.readUInt32BE(20);
     if (!width || !height || width * height > 4_000_000) return;
-    return { bytes: new Uint8Array(bytes), format: 'PNG' };
+    return { bytes: new Uint8Array(bytes), format: 'PNG', width, height };
   }
   if (
     bytes.length >= 4 &&
     bytes[0] === 0xff &&
     bytes[1] === 0xd8 &&
-    bytes[2] === 0xff &&
-    hasJpegFrame(bytes)
+    bytes[2] === 0xff
   ) {
-    return { bytes: new Uint8Array(bytes), format: 'JPEG' };
+    const dimensions = hasJpegFrame(bytes);
+    if (dimensions)
+      return {
+        bytes: new Uint8Array(bytes),
+        format: 'JPEG',
+        ...dimensions,
+      };
   }
 }
 
