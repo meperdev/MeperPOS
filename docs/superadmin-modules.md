@@ -25,7 +25,7 @@ Expected result: the organization list and the organization detail agree on the 
 | --- | --- |
 | Module catalog | Served by the backend. Today it contains `vehicles` only. |
 | Vehicles capability | Implemented: customer vehicle records, legacy plate compatibility and existing module gating. |
-| Suggested modules (employees, payroll, expenses, reports, and similar) | **Not implemented.** Do not add placeholder entries to the catalog or the UI. |
+| Suggested modules (employees, payroll, expenses, reports, and similar) | **Not implemented as switchable modules.** Existing core features are unchanged; do not add placeholder catalog entries. |
 | Per-module screen | `/admin/modules/<moduleId>`; `/admin/modules/vehicles` is the real detail page. |
 | Organization detail | Read-only linked summary, no duplicated controls. |
 
