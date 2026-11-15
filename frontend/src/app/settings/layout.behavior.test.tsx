@@ -89,7 +89,10 @@ describe("settings sub-sidebar layout", () => {
       name: "Secciones de configuración",
     });
     const shell = nav.parentElement!;
-    expect(shell.className).toContain("@container");
+    // A container query never matches the element that is itself the container, so
+    // @container must sit on an ancestor of the element whose layout switches.
+    expect(shell.className).not.toContain("@container");
+    expect(shell.parentElement!.className).toContain("@container");
     expect(shell.className).toContain("flex-col");
     expect(shell.className).toContain("@4xl:flex-row");
     expect(shell.className).not.toContain("lg:flex-row");
