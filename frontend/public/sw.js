@@ -32,6 +32,12 @@
  *      below with stub caches while `src/lib/pwa.test.ts` fails if the two
  *      copies of these literals drift apart.
  *
+ * Updating: this worker never calls skipWaiting() on its own. A new version
+ * installs, precaches and then waits, because swapping the running code
+ * underneath an open cart is the operator's decision, not the deploy's. The page
+ * asks for the swap with a SKIP_WAITING message once someone chooses to reload,
+ * which is the only path from "installed" to "activated" for a replacement.
+ *
  * Emergency rollback, if this file ever misbehaves in production: replace its
  * contents with the self-unregistering worker below and deploy. A client that
  * then loads the app fetches the new script, unregisters and clears its caches;
@@ -48,7 +54,7 @@
  *   );
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 
 const STATIC_CACHE = `meperpos-static-${CACHE_VERSION}`;
 const PAGES_CACHE = `meperpos-pages-${CACHE_VERSION}`;
@@ -82,9 +88,20 @@ self.addEventListener("install", (event) => {
         await Promise.all(PRECACHE_URLS.map((url) => precache(cache, url)));
       }
 
-      await self.skipWaiting();
+      // Deliberately no skipWaiting() here: see the message handler below. The
+      // new worker stays in `waiting` until the page asks for the swap, so a
+      // deploy cannot change the code under a half-finished sale.
     })(),
   );
+});
+
+self.addEventListener("message", (event) => {
+  // The one and only way a replacement takes over. Anything else is ignored:
+  // this worker answers no other message, and guessing at unfamiliar payloads
+  // would be a way for the page to activate a worker by accident.
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", (event) => {

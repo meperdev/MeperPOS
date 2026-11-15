@@ -1,14 +1,35 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { PWA_SCOPE, SW_PATH } from "@/lib/pwa";
+import { getSwUpdateSnapshot, resetSwUpdateStore } from "@/lib/sw-update";
 
-/** jsdom ships no service worker container, so the test supplies one. */
-function stubServiceWorker() {
-  const register = vi.fn(async () => ({ scope: PWA_SCOPE }));
+/**
+ * jsdom ships no service worker container, so the test supplies one. `waiting`
+ * and `controller` are what the update path actually reads, so the stub has to
+ * model them rather than only the registration promise.
+ */
+function stubServiceWorker(
+  options: {
+    waiting?: unknown;
+    controlled?: boolean;
+    registration?: Record<string, unknown>;
+  } = {}
+) {
+  const register = vi.fn(async () => ({
+    scope: PWA_SCOPE,
+    waiting: options.waiting ?? null,
+    addEventListener: vi.fn(),
+    ...options.registration,
+  }));
   Object.defineProperty(navigator, "serviceWorker", {
-    value: { register },
+    value: {
+      register,
+      controller: options.controlled ? {} : null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    },
     configurable: true,
   });
   return register;
@@ -21,8 +42,58 @@ function forceLoadingState() {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+  resetSwUpdateStore();
   delete (navigator as { serviceWorker?: unknown }).serviceWorker;
 });
+
+/**
+ * A registration that can actually report an update. The real path is
+ * `updatefound` on the registration followed by `statechange` on the installing
+ * worker, so the stub has to be able to fire both, in that order.
+ */
+function stubUpdatingServiceWorker(options: { controlled: boolean }) {
+  const registrationListeners = new Map<string, Array<() => void>>();
+  const workerListeners = new Map<string, Array<() => void>>();
+  const installing = {
+    state: "installing",
+    postMessage: vi.fn(),
+    addEventListener: (type: string, handler: () => void) => {
+      workerListeners.set(type, [...(workerListeners.get(type) ?? []), handler]);
+    },
+  };
+  const registration = {
+    scope: PWA_SCOPE,
+    waiting: null,
+    installing,
+    addEventListener: (type: string, handler: () => void) => {
+      registrationListeners.set(type, [
+        ...(registrationListeners.get(type) ?? []),
+        handler,
+      ]);
+    },
+  };
+  const register = vi.fn(async () => registration);
+  Object.defineProperty(navigator, "serviceWorker", {
+    value: {
+      register,
+      controller: options.controlled ? {} : null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    },
+    configurable: true,
+  });
+
+  return {
+    register,
+    fire: (type: string) => {
+      for (const handler of registrationListeners.get(type) ?? []) handler();
+    },
+    install: () => {
+      installing.state = "installed";
+      for (const handler of workerListeners.get("statechange") ?? []) handler();
+    },
+  };
+}
 
 describe("ServiceWorkerRegistrar", () => {
   it("registers the worker at the shipped path with an explicit scope", async () => {
@@ -80,13 +151,72 @@ describe("ServiceWorkerRegistrar", () => {
     expect(register).not.toHaveBeenCalled();
   });
 
+  it("announces a waiting worker that is sitting behind a live page", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const waiting = { postMessage: vi.fn(), state: "installed" };
+    stubServiceWorker({ waiting, controlled: true });
+
+    render(<ServiceWorkerRegistrar />);
+
+    await waitFor(() => expect(getSwUpdateSnapshot()).toBe(true));
+  });
+
+  it("does not offer an update on a first install with no page controlled", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    // A worker that activates with nobody controlled is the first install, not
+    // a replacement: there is nothing to swap and no reason to show an offer.
+    stubServiceWorker({ waiting: { postMessage: vi.fn() }, controlled: false });
+
+    render(<ServiceWorkerRegistrar />);
+
+    await waitFor(() => expect(getSwUpdateSnapshot()).toBe(false));
+  });
+
+  it("announces a worker that finishes installing while the page is open", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const harness = stubUpdatingServiceWorker({ controlled: true });
+
+    render(<ServiceWorkerRegistrar />);
+    await waitFor(() => expect(harness.register).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      harness.fire("updatefound");
+      harness.install();
+    });
+
+    expect(getSwUpdateSnapshot()).toBe(true);
+  });
+
+  it("ignores an install that finishes with no page controlled", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const harness = stubUpdatingServiceWorker({ controlled: false });
+
+    render(<ServiceWorkerRegistrar />);
+    await waitFor(() => expect(harness.register).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      harness.fire("updatefound");
+      harness.install();
+    });
+
+    // First install: `clients.claim()` fires `controllerchange` too, and there
+    // is nothing to replace, so an offer here would be a button that reloads
+    // for no reason.
+    expect(getSwUpdateSnapshot()).toBe(false);
+  });
+
   it("survives a rejected registration", async () => {
     vi.stubEnv("NODE_ENV", "production");
     const register = vi.fn(async () => {
       throw new Error("scope denied");
     });
     Object.defineProperty(navigator, "serviceWorker", {
-      value: { register },
+      value: {
+        register,
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      },
       configurable: true,
     });
 

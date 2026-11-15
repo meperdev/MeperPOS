@@ -210,14 +210,16 @@ const asset = (url: string) =>
   ({ method: "GET", mode: "cors", url }) as Record<string, unknown>;
 
 describe("service worker install", () => {
-  it("precaches the offline shell and activates immediately", async () => {
+  it("precaches the offline shell and then waits for the operator", async () => {
     const scope = createScope();
     const lifecycle = scope.lifecycle();
 
     scope.dispatch("install", lifecycle.event);
     await lifecycle.settled();
 
-    expect(scope.self.skipWaiting).toHaveBeenCalledTimes(1);
+    // A POS can have an open cart. The deploy does not get to swap the code
+    // underneath it: the worker parks here until the page asks for the swap.
+    expect(scope.self.skipWaiting).not.toHaveBeenCalled();
     expect(scope.storeFor(SW_STATIC_CACHE).entries.has(PWA_OFFLINE_URL)).toBe(
       true,
     );
@@ -237,7 +239,30 @@ describe("service worker install", () => {
     // A rejected install fails the whole worker, which costs offline support
     // outright instead of only the entry that could not be fetched.
     await expect(lifecycle.settled()).resolves.toBeDefined();
+    expect(scope.self.skipWaiting).not.toHaveBeenCalled();
+  });
+
+  it("activates only when the page asks for the swap", async () => {
+    const scope = createScope();
+    const lifecycle = scope.lifecycle();
+
+    scope.dispatch("install", lifecycle.event);
+    await lifecycle.settled();
+    expect(scope.self.skipWaiting).not.toHaveBeenCalled();
+
+    scope.dispatch("message", { data: { type: "SKIP_WAITING" } });
+
     expect(scope.self.skipWaiting).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a message it does not own", () => {
+    const scope = createScope();
+
+    scope.dispatch("message", { data: { type: "SOMETHING_ELSE" } });
+    scope.dispatch("message", { data: null });
+    scope.dispatch("message", {});
+
+    expect(scope.self.skipWaiting).not.toHaveBeenCalled();
   });
 });
 
@@ -511,7 +536,9 @@ describe("service worker caching strategies", () => {
     const install = scope.lifecycle();
     scope.dispatch("install", install.event);
     await expect(install.settled()).resolves.toBeDefined();
-    expect(scope.self.skipWaiting).toHaveBeenCalledTimes(1);
+    // Waiting is unconditional: an install that cannot precache must still be
+    // able to replace a broken worker, just never on its own initiative.
+    expect(scope.self.skipWaiting).not.toHaveBeenCalled();
 
     const activate = scope.lifecycle();
     scope.dispatch("activate", activate.event);
