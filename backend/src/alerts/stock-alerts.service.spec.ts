@@ -31,7 +31,9 @@ interface ProductRow {
   minStock: number;
 }
 
-function build(options: { products?: ProductRow[] } = {}) {
+function build(
+  options: { products?: ProductRow[]; failHistoryFor?: string } = {},
+) {
   const products: ProductRow[] = options.products ?? [];
   const alerts: AlertRow[] = [];
   const events: Array<Record<string, unknown>> = [];
@@ -150,6 +152,9 @@ function build(options: { products?: ProductRow[] } = {}) {
     productStockAlertEvent: {
       createMany: jest.fn(
         async (args: { data: Array<Record<string, unknown>> }) => {
+          if (options.failHistoryFor && args.data[0]?.kind === options.failHistoryFor) {
+            throw new Error('history unavailable');
+          }
           events.push(...args.data);
           return { count: args.data.length };
         },
@@ -234,6 +239,20 @@ describe('StockAlertsService', () => {
       expect.objectContaining({ kind: 'OPENED', episode: 2, productId: 'p1' }),
       expect.objectContaining({ kind: 'NOTIFIED', episode: 2, productId: 'p1' }),
     ]);
+  });
+
+  it('keeps a delivered episode SENT when the history write fails', async () => {
+    const { service, prisma, alerts, sender } = build({
+      products: [product()],
+      failHistoryFor: 'NOTIFIED',
+    });
+    recipient(prisma);
+
+    await expect(service.scanOrganization('org-1')).rejects.toThrow(
+      'history unavailable',
+    );
+    expect(sender.sendText).toHaveBeenCalledTimes(1);
+    expect(alerts[0]).toMatchObject({ notificationStatus: 'SENT' });
   });
 
   it('reports every skipped episode of a batch', async () => {

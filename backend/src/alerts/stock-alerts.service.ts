@@ -329,14 +329,6 @@ export class StockAlertsService {
     try {
       const connection = await this.connections.getOrCreateIntelligence();
       await this.sender.sendText(connection.sessionName, { chatId, text });
-      await this.finish(ids, NotificationStatus.SENT, null, new Date());
-      await this.recordEvents(history(EventKind.NOTIFIED));
-      this.logger.log({
-        event: 'stock_alert',
-        outcome: 'sent',
-        episodes: claimed.length,
-      });
-      return { notified: claimed.length, failed: 0 };
     } catch (error) {
       const reason: StockAlertFailure =
         error instanceof ServiceUnavailableException
@@ -347,6 +339,19 @@ export class StockAlertsService {
       this.logger.warn({ event: 'stock_alert', outcome: 'failed', reason });
       return { notified: 0, failed: claimed.length };
     }
+
+    // The provider accepted the message. Bookkeeping runs outside the send's try
+    // on purpose: an auxiliary status or history write must never turn a
+    // delivered alert into a recorded failure, because the episode is never
+    // retried. A failure here leaves the rows SENT and only the history short.
+    await this.finish(ids, NotificationStatus.SENT, null, new Date());
+    await this.recordEvents(history(EventKind.NOTIFIED));
+    this.logger.log({
+      event: 'stock_alert',
+      outcome: 'sent',
+      episodes: claimed.length,
+    });
+    return { notified: claimed.length, failed: 0 };
   }
 
   /**

@@ -35,6 +35,9 @@ export function useAlertNotifications(params: {
 }) {
   return useQuery({
     queryKey: ["alerts", "notifications", params],
+    // `api.get(url, params)` serializes the second argument as the query string
+    // (see `ApiClient.get` in lib/api.ts), so page, limit and kind reach the
+    // endpoint as URL params rather than as an axios request config.
     queryFn: () =>
       api
         .get<StockAlertHistoryPage>("/alerts/notifications", params)
