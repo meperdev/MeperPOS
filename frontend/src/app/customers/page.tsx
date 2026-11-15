@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from "@/hooks/useCustomers";
 import type { CustomerPayload } from "@/hooks/useCustomers";
+import { useVehiclesModule } from "@/hooks/useBusinessModules";
+import { CustomerVehicles } from "./customer-vehicles";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -70,6 +72,8 @@ export default function CustomersPage() {
   const toast = useToast();
   const router = useRouter();
   const { user } = useAuth();
+  const { data: vehiclesModule } = useVehiclesModule();
+  const vehiclesEnabled = vehiclesModule?.enabled === true;
   const canCreate = hasAnyRole(user?.role, ["ADMIN", "CASHIER"]);
   const canEdit = hasAnyRole(user?.role, ["ADMIN"]);
   const [search, setSearch] = useState("");
@@ -100,7 +104,7 @@ export default function CustomersPage() {
       phone: customer.phone,
       address: customer.address,
       referencia: customer.referencia,
-      placaMoto: customer.placaMoto,
+      ...(vehiclesEnabled ? { placaMoto: customer.placaMoto } : {}),
       segment: customer.segment,
       active: customer.active,
     });
@@ -110,7 +114,7 @@ export default function CustomersPage() {
   const handleCreate = () => {
     if (!canCreate) return;
     setEditingCustomer(null);
-    setFormData({ name: "", documentType: "CC", documentNumber: "", email: "", phone: "", address: "", referencia: "", placaMoto: "", segment: "OCCASIONAL" });
+    setFormData({ name: "", documentType: "CC", documentNumber: "", email: "", phone: "", address: "", referencia: "", ...(vehiclesEnabled ? { placaMoto: "" } : {}), segment: "OCCASIONAL" });
     setShowModal(true);
   };
 
@@ -136,11 +140,13 @@ export default function CustomersPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = { ...formData };
+      if (!vehiclesEnabled) delete payload.placaMoto;
       if (editingCustomer) {
-        await updateCustomer.mutateAsync({ id: editingCustomer.id, data: formData });
+        await updateCustomer.mutateAsync({ id: editingCustomer.id, data: payload });
         toast.success("Cliente actualizado correctamente");
       } else {
-        await createCustomer.mutateAsync(formData);
+        await createCustomer.mutateAsync(payload);
         toast.success("Cliente creado correctamente");
       }
       setShowModal(false);
@@ -225,7 +231,7 @@ export default function CustomersPage() {
                       customer.phone ||
                       customer.address ||
                       customer.referencia ||
-                      customer.placaMoto,
+                      vehiclesEnabled && customer.placaMoto,
                   );
                   return (
                     <div
@@ -268,7 +274,7 @@ export default function CustomersPage() {
                             </p>
                           ) : (
                             <div className="space-y-1.5">
-                              {(customer.phone || customer.placaMoto) && (
+                              {(customer.phone || (vehiclesEnabled && customer.placaMoto)) && (
                                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                                   {customer.phone ? (
                                     <span className="inline-flex items-center gap-1.5 min-w-0">
@@ -280,7 +286,7 @@ export default function CustomersPage() {
                                   ) : (
                                     <span />
                                   )}
-                                  {customer.placaMoto && (
+                                  {vehiclesEnabled && customer.placaMoto && (
                                     <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground uppercase tracking-tight shrink-0">
                                       <Bike className="w-3 h-3 text-muted-foreground shrink-0" />
                                       {customer.placaMoto}
@@ -371,7 +377,7 @@ export default function CustomersPage() {
                           Contacto
                         </TableCell>
                         <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
-                          Placa / Ref
+                          {vehiclesEnabled ? "Placa / Ref" : "Referencia"}
                         </TableCell>
                         <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                           Segmento
@@ -432,7 +438,7 @@ export default function CustomersPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap items-center gap-1.5">
-                                {customer.placaMoto && (
+                                {vehiclesEnabled && customer.placaMoto && (
                                   <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground uppercase">
                                     <Bike className="w-3 h-3 text-muted-foreground" />
                                     {customer.placaMoto}
@@ -443,7 +449,7 @@ export default function CustomersPage() {
                                     Ref: {customer.referencia}
                                   </span>
                                 )}
-                                {!customer.placaMoto && !customer.referencia && (
+                                {!(vehiclesEnabled && customer.placaMoto) && !customer.referencia && (
                                   <span className="text-xs text-muted-foreground/60">—</span>
                                 )}
                               </div>
@@ -524,8 +530,9 @@ export default function CustomersPage() {
             <Input label="Dirección" value={formData.address || ""} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
             <BentoSelect label="Segmento" value={formData.segment || "OCCASIONAL"} onChange={(value) => setFormData({ ...formData, segment: value as Customer["segment"] })} options={[{ value: "OCCASIONAL", label: "Ocasional" }, { value: "FREQUENT", label: "Frecuente" }, { value: "VIP", label: "VIP" }, { value: "INACTIVE", label: "Inactivo" }]} />
             <Input label="Referencia" value={formData.referencia || ""} onChange={(e) => setFormData({ ...formData, referencia: e.target.value })} />
-            <Input label="Placa de la moto" value={formData.placaMoto || ""} onChange={(e) => setFormData({ ...formData, placaMoto: e.target.value })} />
+            {vehiclesEnabled && <div><Input label="Placa de la moto" value={formData.placaMoto || ""} onChange={(e) => setFormData({ ...formData, placaMoto: e.target.value })} /><p className="mt-1 text-xs text-muted-foreground">Placa anterior; se conserva por compatibilidad.</p></div>}
           </div>
+          {vehiclesEnabled && editingCustomer && <CustomerVehicles key={editingCustomer.id} customerId={editingCustomer.id} />}
           <div className="flex flex-col sm:flex-row gap-2.5 justify-end pt-3.5 border-t border-border/60">
             <Button type="button" variant="secondary" onClick={() => setShowModal(false)} className="w-full sm:w-auto">Cancelar</Button>
             <Button type="submit" loading={createCustomer.isPending || updateCustomer.isPending} className="w-full sm:w-auto">{editingCustomer ? "Actualizar" : "Crear"}</Button>

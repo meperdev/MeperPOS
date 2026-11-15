@@ -95,8 +95,11 @@ with a 409 instead of an error.
 | /api/admin/organizations/:id/status | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/plan | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/electronic-invoicing | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
+| /api/admin/organizations/:organizationId/modules | GET | SUPER_ADMIN | superadmin-global | backend/src/business-modules/admin-business-modules.controller.spec.ts |
+| /api/admin/organizations/:organizationId/modules/:moduleId | PATCH | SUPER_ADMIN | superadmin-global | backend/src/business-modules/admin-business-modules.controller.spec.ts |
 | /api/admin/organizations/:id/transfer-owner | POST | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/metrics | GET | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
+| /api/admin/modules | GET | SUPER_ADMIN | superadmin-global | backend/src/business-modules/admin-module-catalog.controller.spec.ts |
 | /api/admin/organizations/:id | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/members | POST | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/members/:userId/role | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
@@ -141,6 +144,15 @@ with a 409 instead of an error.
 | /api/customers/:id | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/customers/customers.service.int.spec.ts |
 | /api/customers/:id | PUT | ADMIN | org-scoped | backend/src/customers/customers.service.int.spec.ts |
 | /api/customers/:id | DELETE | ADMIN | org-scoped | backend/src/customers/customers.service.int.spec.ts |
+| /api/customers/:customerId/vehicles | GET | ADMIN, MEMBER, CASHIER | org-scoped, vehicles enabled | backend/src/customers/customer-vehicles.service.int.spec.ts |
+| /api/customers/:customerId/vehicles | POST | ADMIN, MEMBER, CASHIER | org-scoped, vehicles enabled | backend/src/customers/customer-vehicles.service.int.spec.ts |
+| /api/customers/:customerId/vehicles/:vehicleId | PATCH | ADMIN | org-scoped, vehicles enabled | backend/src/customers/customer-vehicles.service.int.spec.ts |
+
+## business-modules
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/business-modules | GET | authenticated | org-required | backend/src/business-modules/business-modules.controller.spec.ts |
 
 ## employees
 

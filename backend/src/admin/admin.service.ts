@@ -22,6 +22,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
+import { BusinessModulesService } from '../business-modules/business-modules.service';
 import { PLAN_LIMITS, LimitType } from '../plan-limits/plan-limits.constants';
 import { DEFAULT_EXPENSE_TAXONOMY } from '../expenses/default-expense-categories';
 import { applySystemKeys } from '../settings/settings.service';
@@ -65,6 +66,7 @@ export class AdminService {
     private prisma: PrismaService,
     private authService: AuthService,
     private planLimitService: PlanLimitService,
+    private businessModules: BusinessModulesService,
   ) {}
 
   async createOrganization(dto: CreateOrganizationDto) {
@@ -190,9 +192,15 @@ export class AdminService {
       },
     });
 
+    const enabledModules =
+      await this.businessModules.enabledModulesByOrganization(
+        organizations.map((org) => org.id),
+      );
+
     return organizations.map((org) => ({
       ...org,
       userCount: org._count.users,
+      enabledModules: enabledModules.get(org.id) ?? [],
       _count: undefined,
     }));
   }

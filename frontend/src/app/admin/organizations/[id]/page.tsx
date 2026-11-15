@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import { OrganizationModulesCard } from "./organization-modules-card";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -165,6 +166,8 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </CardContent>
         </Card>
       </div>
+
+      <OrganizationModulesCard organizationId={org.id} />
 
       <Card>
         <CardHeader>
