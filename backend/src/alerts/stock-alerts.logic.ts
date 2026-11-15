@@ -16,6 +16,24 @@ export type StockAlertFailure = (typeof STOCK_ALERT_FAILURES)[number];
 /** How many products one message lists before it summarizes the rest. */
 export const STOCK_ALERT_MESSAGE_LIMIT = 10;
 
+/** Catalog text is bounded before it reaches a chat: WhatsApp, not HTML. */
+export const STOCK_ALERT_NAME_LIMIT = 60;
+export const STOCK_ALERT_SKU_LIMIT = 24;
+
+/**
+ * Normalizes one catalog field for the message: control characters (including
+ * newlines) collapse to a space, runs of whitespace collapse, and the value is
+ * truncated. A product name cannot fabricate list lines or smuggle a link into a
+ * plain-text notification.
+ */
+export function cleanCatalogText(value: string, limit: number): string {
+  return value
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, limit);
+}
+
 export interface EpisodeSnapshot {
   state: StockAlertState;
   episode: number;
@@ -72,10 +90,11 @@ export function renderStockAlertMessage(
     total === 1
       ? 'MeperPOS · Stock bajo\n\n1 producto llegó a su mínimo:'
       : `MeperPOS · Stock bajo\n\n${total} productos llegaron a su mínimo:`;
-  const lines = shown.map(
-    (product) =>
-      `• ${product.name} (${product.sku}): ${product.stock} uds · mínimo ${product.minStock}`,
-  );
+  const lines = shown.map((product) => {
+    const name = cleanCatalogText(product.name, STOCK_ALERT_NAME_LIMIT);
+    const sku = cleanCatalogText(product.sku, STOCK_ALERT_SKU_LIMIT);
+    return `• ${name} (${sku}): ${product.stock} uds · mínimo ${product.minStock}`;
+  });
   const tail =
     remaining > 0
       ? [`… y ${remaining} producto${remaining === 1 ? '' : 's'} más.`]

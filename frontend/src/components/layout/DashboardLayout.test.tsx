@@ -152,6 +152,45 @@ describe("DashboardLayout route gating for /expenses", () => {
     expect(replaceMock).toHaveBeenCalledWith("/pos");
   });
 
+  it("keeps the shell on screen while the session restores instead of blanking the page", () => {
+    useAuthMock.mockReturnValue({
+      isAuthenticated: false,
+      loading: true,
+      user: null,
+      organization: undefined,
+    });
+
+    const { container } = render(
+      <SidebarProvider>
+        <DashboardLayout>
+          <p>Contenido</p>
+        </DashboardLayout>
+      </SidebarProvider>
+    );
+
+    // The chrome stays: no full-page spinner, no redirect while restoring.
+    expect(screen.getByTestId("app-shell-skeleton")).toBeInTheDocument();
+    expect(container.querySelector("main")).toHaveClass("lg:ml-[320px]");
+    expect(screen.queryByText("Contenido")).not.toBeInTheDocument();
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("swaps the skeleton for the real shell once the session is restored", () => {
+    setUser("ADMIN");
+
+    render(
+      <SidebarProvider>
+        <DashboardLayout>
+          <p>Contenido</p>
+        </DashboardLayout>
+      </SidebarProvider>
+    );
+
+    expect(screen.queryByTestId("app-shell-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByText("Contenido")).toBeInTheDocument();
+  });
+
   it("synchronizes the desktop left margin with the collapsed sidebar state", async () => {
     setUser("ADMIN");
 

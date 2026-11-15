@@ -134,6 +134,15 @@ describe("AlertCenter", () => {
     });
   });
 
+  it("links to the notification history from the panel", () => {
+    render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+
+    expect(
+      screen.getByRole("link", { name: "Ver historial de notificaciones" }),
+    ).toHaveAttribute("href", "/alerts");
+  });
+
   it("shows the quiet empty state when nothing is pending", () => {
     alertsState.current = [];
     render(<AlertCenter />);

@@ -31,9 +31,12 @@ interface ProductRow {
   minStock: number;
 }
 
-function build(options: { products?: ProductRow[] } = {}) {
+function build(
+  options: { products?: ProductRow[]; failHistoryFor?: string } = {},
+) {
   const products: ProductRow[] = options.products ?? [];
   const alerts: AlertRow[] = [];
+  const events: Array<Record<string, unknown>> = [];
   let sequence = 0;
 
   const match = (row: AlertRow, where: Record<string, unknown>): boolean => {
@@ -146,6 +149,17 @@ function build(options: { products?: ProductRow[] } = {}) {
     organizationUser: {
       findMany: jest.fn().mockResolvedValue([]),
     },
+    productStockAlertEvent: {
+      createMany: jest.fn(
+        async (args: { data: Array<Record<string, unknown>> }) => {
+          if (options.failHistoryFor && args.data[0]?.kind === options.failHistoryFor) {
+            throw new Error('history unavailable');
+          }
+          events.push(...args.data);
+          return { count: args.data.length };
+        },
+      ),
+    },
   };
 
   const connections = {
@@ -163,7 +177,7 @@ function build(options: { products?: ProductRow[] } = {}) {
     sender as unknown as WhatsAppTextSender,
   );
 
-  return { service, prisma, connections, sender, alerts, products };
+  return { service, prisma, connections, sender, alerts, events, products };
 }
 
 const product = (over: Partial<ProductRow> = {}): ProductRow => ({
@@ -206,6 +220,48 @@ describe('StockAlertsService', () => {
     expect(session).toBe('intelligence');
     expect(message.chatId).toBe('573001234567@c.us');
     expect(message.text).toContain('Café molido 500 g');
+  });
+
+  it('appends the episode history without overwriting it', async () => {
+    const { service, prisma, events } = build({ products: [product()] });
+    recipient(prisma);
+
+    await service.scanOrganization('org-1');
+    prisma.product.findMany.mockResolvedValue([]);
+    await service.scanOrganization('org-1');
+    prisma.product.findMany.mockResolvedValue([product({ stock: 0 })]);
+    await service.scanOrganization('org-1');
+
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'OPENED', episode: 1, productId: 'p1' }),
+      expect.objectContaining({ kind: 'NOTIFIED', episode: 1, productId: 'p1' }),
+      expect.objectContaining({ kind: 'RESOLVED', episode: 1, productId: 'p1' }),
+      expect.objectContaining({ kind: 'OPENED', episode: 2, productId: 'p1' }),
+      expect.objectContaining({ kind: 'NOTIFIED', episode: 2, productId: 'p1' }),
+    ]);
+  });
+
+  it('keeps a delivered episode SENT and continues when the history write fails', async () => {
+    const { service, prisma, alerts, sender } = build({
+      products: [product()],
+      failHistoryFor: 'NOTIFIED',
+    });
+    recipient(prisma);
+
+    const summary = await service.scanOrganization('org-1');
+
+    expect(summary).toEqual({ opened: 1, resolved: 0, notified: 1, failed: 0 });
+    expect(sender.sendText).toHaveBeenCalledTimes(1);
+    expect(alerts[0]).toMatchObject({ notificationStatus: 'SENT' });
+  });
+
+  it('reports every skipped episode of a batch', async () => {
+    const second = product({ id: 'p2', sku: 'BEB-004' });
+    const { service } = build({ products: [product(), second] });
+
+    const summary = await service.scanOrganization('org-1');
+
+    expect(summary).toEqual({ opened: 2, resolved: 0, notified: 0, failed: 2 });
   });
 
   it('does not open or send again on a second scan', async () => {

@@ -27,6 +27,21 @@ const isProduction = process.env.NODE_ENV === "production";
 const isReportOnlyEnabled =
   process.env.CSP_REPORT_ONLY === "true" || process.env.CSP_REPORT_ONLY === "1";
 
+/**
+ * Dev-only same-origin API proxy.
+ *
+ * A phone or another device on the LAN/tailnet cannot reach the API at
+ * `http://<host>:3001` without widening `connect-src` and the backend CORS
+ * list, and the auth cookies would then straddle two hosts. Routing `/api`
+ * through the Next dev server keeps one origin for every device: `'self'`
+ * covers the requests, the cookies stay on the page host, and the backend is
+ * never asked to allow a cross-origin caller. Inert unless the variable is
+ * set, and never active in production.
+ */
+const DEV_API_PROXY_TARGET = isProduction
+  ? ""
+  : (process.env.DEV_API_PROXY_TARGET ?? "").trim().replace(/\/+$/, "");
+
 /** Fixed serialization order for every policy variant. */
 const CSP_DIRECTIVE_ORDER = [
   "default-src",
@@ -207,8 +222,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  async headers() {
-    const globalHeaders = isReportOnlyEnabled
+  /**
+   * Dev-only: see `DEV_API_PROXY_TARGET`. Empty (and production-proof) by
+   * default, so the deployed app keeps calling the API origin directly.
+   */
+  async rewrites() {
+    if (!DEV_API_PROXY_TARGET) return [];
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${DEV_API_PROXY_TARGET}/api/:path*`,
+      },
+    ];
+  },
+  async headers() {    const globalHeaders = isReportOnlyEnabled
       ? [
           ...securityHeaders,
           {

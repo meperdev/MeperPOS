@@ -148,4 +148,40 @@ describe("OrganizationSwitcher", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("caps and scrolls a long organization list instead of growing the rail", async () => {
+    const many = Array.from({ length: 14 }, (_, index) => ({
+      id: `org-${index}`,
+      name: `Organizacion ${index}`,
+      role: "ADMIN",
+      plan: "BASIC",
+      status: "ACTIVE",
+    }));
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: many },
+    });
+
+    render(
+      <OrganizationSwitcher
+        currentOrganizationId="org-0"
+        onSwitch={vi.fn()}
+        placement="up"
+      />,
+      { wrapper }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Cambiar organizacion/i)).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByLabelText(/Cambiar organizacion/i));
+
+    const list = screen.getByTestId("organization-list");
+    // Bounded height + its own scrollbar: 14 organizations never stretch the
+    // rail, and the panel opens upward because the account block is at the end.
+    expect(list).toHaveClass("overflow-y-auto");
+    expect(list).toHaveClass("overscroll-contain");
+    expect(list).toHaveAttribute("data-placement", "up");
+    expect(screen.getByText("Organizacion 13")).toBeInTheDocument();
+  });
 });

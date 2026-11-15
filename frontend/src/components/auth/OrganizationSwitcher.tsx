@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
+  Check,
   ChevronDown,
   ChevronUp,
-  Shield,
-  Loader2,
   Globe,
+  Loader2,
+  Shield,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,12 @@ interface OrganizationSwitcherProps {
   onSwitch: (organizationId: string) => Promise<void>;
   isSuperAdmin?: boolean;
   onSelectAll?: () => void;
+  /**
+   * Where the list opens. The rail's account block sits at the end of the
+   * sidebar, so there the list must open upward or it falls off screen.
+   */
+  placement?: "down" | "up";
+  className?: string;
 }
 
 const planLabels: Record<string, string> = {
@@ -65,6 +72,8 @@ export function OrganizationSwitcher({
   onSwitch,
   isSuperAdmin,
   onSelectAll,
+  placement = "down",
+  className,
 }: OrganizationSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
@@ -91,36 +100,152 @@ export function OrganizationSwitcher({
 
   const query = isSuperAdmin ? adminQuery : userQuery;
 
-  const isLoading = query.isLoading;
-  const error = query.error;
-
-  if (isLoading) {
+  /** Trigger row: compact, in the same visual language as the rail's items. */
+  function renderTrigger(label: string, name: string, meta?: ReactNode) {
     return (
-      <div className="mt-3 flex items-center gap-2 rounded-lg border border-border/60 bg-card/50 p-2.5 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-expanded={isOpen}
+        aria-label={label}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+          isOpen
+            ? "border-border/70 bg-muted/50"
+            : "border-transparent hover:border-border/60 hover:bg-muted/40"
+        )}
+      >
+        <Building2
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12px] font-medium text-foreground">
+            {name}
+          </span>
+          {meta && (
+            <span className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+              {meta}
+            </span>
+          )}
+        </span>
+        {isOpen ? (
+          <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
+      </button>
+    );
+  }
+
+  /**
+   * The list owns its scroll and its height cap: a super admin can belong to
+   * dozens of organizations, and the rail must not grow with them.
+   */
+  function renderList(children: ReactNode) {
+    return (
+      <div
+        data-testid="organization-list"
+        data-placement={placement}
+        className={cn(
+          "absolute inset-x-0 z-[60] flex flex-col gap-0.5 rounded-lg border border-border/70 bg-card p-1 shadow-lg",
+          "max-h-[min(18rem,45vh)] overflow-y-auto overscroll-contain scrollbar-app",
+          placement === "up" ? "bottom-full mb-1.5" : "top-full mt-1.5"
+        )}
+      >
+        {children}
+      </div>
+    );
+  }
+
+  function renderRow({
+    id,
+    label,
+    meta,
+    icon,
+    selected,
+    busy,
+    onSelect,
+  }: {
+    id: string;
+    label: string;
+    meta?: string;
+    icon: ReactNode;
+    selected: boolean;
+    busy: boolean;
+    onSelect: () => void;
+  }) {
+    return (
+      <button
+        key={id}
+        type="button"
+        onClick={onSelect}
+        disabled={busy || selected}
+        aria-current={selected ? "true" : undefined}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+          selected
+            ? "bg-primary/10 text-foreground"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          busy && "opacity-70"
+        )}
+      >
+        {icon}
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
+          {label}
+        </span>
+        {meta && (
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            {meta}
+          </span>
+        )}
+        {busy ? (
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary-text" />
+        ) : selected ? (
+          <Check className="h-3.5 w-3.5 shrink-0 text-primary-text" />
+        ) : null}
+      </button>
+    );
+  }
+
+  if (query.isLoading) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-[11px] text-muted-foreground",
+          className
+        )}
+      >
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
         Cargando organizaciones...
       </div>
     );
   }
 
-  if (error) {
+  if (query.error) {
     return (
-      <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-400">
+      <div
+        className={cn(
+          "rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-500",
+          className
+        )}
+      >
         No se pudieron cargar las organizaciones.
       </div>
     );
   }
 
   if (!isSuperAdmin) {
-    const userOrgs = (query.data as { organizations: SwitcherOrganization[] } | undefined)?.organizations ?? [];
+    const userOrgs =
+      (query.data as { organizations: SwitcherOrganization[] } | undefined)
+        ?.organizations ?? [];
 
     if (userOrgs.length <= 1) {
       return null;
     }
 
     const currentOrg =
-      userOrgs.find((org) => org.id === currentOrganizationId) ??
-      userOrgs[0];
+      userOrgs.find((org) => org.id === currentOrganizationId) ?? userOrgs[0];
 
     const handleSelect = async (organizationId: string) => {
       setSwitchingId(organizationId);
@@ -133,71 +258,43 @@ export function OrganizationSwitcher({
     };
 
     return (
-      <div className="mt-3">
-        <div className="overflow-hidden rounded-xl border border-primary/40 bg-primary/5">
-          <button
-            type="button"
-            onClick={() => setIsOpen((prev) => !prev)}
-            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-            aria-expanded={isOpen}
-            aria-label="Cambiar organizacion"
-          >
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Organizacion</p>
-              <p className="truncate text-sm font-semibold text-foreground">
-                {currentOrg?.name}
-              </p>
-              {currentOrg && (
-                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Shield className="h-3 w-3" />
-                  {roleLabels[currentOrg.role] ?? currentOrg.role}
-                  <span className="text-muted-foreground/60">·</span>
-                  {planLabels[currentOrg.plan] ?? currentOrg.plan}
-                </p>
-              )}
-            </div>
-            {isOpen ? (
-              <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-            )}
-          </button>
+      <div className={cn("relative", className)}>
+        {renderTrigger(
+          "Cambiar organizacion",
+          currentOrg?.name ?? "",
+          currentOrg && (
+            <>
+              <Shield className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {roleLabels[currentOrg.role] ?? currentOrg.role}
+                <span className="text-muted-foreground/60"> · </span>
+                {planLabels[currentOrg.plan] ?? currentOrg.plan}
+              </span>
+            </>
+          )
+        )}
 
-          {isOpen && (
-            <div className="space-y-1 border-t border-primary/20 p-2">
-              {userOrgs.map((org) => (
-                <button
-                  key={org.id}
-                  type="button"
-                  onClick={() => void handleSelect(org.id)}
-                  disabled={
-                    switchingId === org.id || org.id === currentOrganizationId
-                  }
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
-                    org.id === currentOrganizationId
-                      ? "border-primary/40 bg-primary/10 text-foreground"
-                      : "border-border/60 bg-card hover:bg-muted"
-                  )}
-                >
-                  <Building2 className="h-4 w-4 shrink-0 text-primary-text" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{org.name}</p>
-                    <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Shield className="h-3 w-3" />
-                      {roleLabels[org.role] ?? org.role}
-                      <span className="text-muted-foreground/60">·</span>
-                      {planLabels[org.plan] ?? org.plan}
-                    </p>
-                  </div>
-                  {switchingId === org.id && (
-                    <Loader2 className="h-4 w-4 animate-spin text-primary-text" />
-                  )}
-                </button>
-              ))}
-            </div>
+        {isOpen &&
+          renderList(
+            userOrgs.map((org) =>
+              renderRow({
+                id: org.id,
+                label: org.name,
+                meta: `${roleLabels[org.role] ?? org.role} · ${
+                  planLabels[org.plan] ?? org.plan
+                }`,
+                icon: (
+                  <Building2
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                ),
+                selected: org.id === currentOrganizationId,
+                busy: switchingId === org.id,
+                onSelect: () => void handleSelect(org.id),
+              })
+            )
           )}
-        </div>
       </div>
     );
   }
@@ -220,90 +317,54 @@ export function OrganizationSwitcher({
   };
 
   const isAllSelected = !currentOrganizationId;
+  const selectedOrg = adminOrgs.find((org) => org.id === currentOrganizationId);
 
   return (
-    <div className="mt-3">
-      <div className="overflow-hidden rounded-xl border border-primary/40 bg-primary/5">
-        <button
-          type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
-          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-          aria-expanded={isOpen}
-          aria-label="Seleccionar organizacion"
-        >
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">Organizacion</p>
-            <p className="truncate text-sm font-semibold text-foreground">
-              {isAllSelected
-                ? "Todas las organizaciones"
-                : adminOrgs.find((o) => o.id === currentOrganizationId)?.name ?? "Seleccionar..."}
-            </p>
-            {!isAllSelected && currentOrganizationId && (
-              <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <Shield className="h-3 w-3" />
-                {statusLabels[adminOrgs.find((o) => o.id === currentOrganizationId)?.status ?? ""] ?? "—"}
-              </p>
+    <div className={cn("relative", className)}>
+      {renderTrigger(
+        "Seleccionar organizacion",
+        isAllSelected ? "Todas las organizaciones" : selectedOrg?.name ?? "Seleccionar...",
+        !isAllSelected &&
+          selectedOrg && (
+            <>
+              <Shield className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {statusLabels[selectedOrg.status] ?? selectedOrg.status}
+              </span>
+            </>
+          )
+      )}
+
+      {isOpen &&
+        renderList(
+          <>
+            {renderRow({
+              id: "__all__",
+              label: "Todas las organizaciones",
+              meta: "Global",
+              icon: <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />,
+              selected: isAllSelected,
+              busy: false,
+              onSelect: handleSelectAll,
+            })}
+            {adminOrgs.map((org) =>
+              renderRow({
+                id: org.id,
+                label: org.name,
+                meta: statusLabels[org.status] ?? org.status,
+                icon: (
+                  <Building2
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                ),
+                selected: org.id === currentOrganizationId,
+                busy: switchingId === org.id,
+                onSelect: () => void handleSelectAdmin(org.id),
+              })
             )}
-          </div>
-          {isOpen ? (
-            <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-          )}
-        </button>
-
-        {isOpen && (
-          <div className="space-y-1 border-t border-primary/20 p-2">
-            <button
-              type="button"
-              onClick={handleSelectAll}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
-                isAllSelected
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-border/60 bg-card hover:bg-muted"
-              )}
-            >
-              <Globe className="h-4 w-4 shrink-0 text-primary-text" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">Todas las organizaciones</p>
-                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  Vista global sin filtro
-                </p>
-              </div>
-            </button>
-
-            {adminOrgs.map((org) => (
-              <button
-                key={org.id}
-                type="button"
-                onClick={() => void handleSelectAdmin(org.id)}
-                disabled={switchingId === org.id || org.id === currentOrganizationId}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
-                  org.id === currentOrganizationId
-                    ? "border-primary/40 bg-primary/10 text-foreground"
-                    : "border-border/60 bg-card hover:bg-muted"
-                )}
-              >
-                <Building2 className="h-4 w-4 shrink-0 text-primary-text" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{org.name}</p>
-                  <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Shield className="h-3 w-3" />
-                    {statusLabels[org.status] ?? org.status}
-                    <span className="text-muted-foreground/60">·</span>
-                    {planLabels[org.plan] ?? org.plan}
-                  </p>
-                </div>
-                {switchingId === org.id && (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary-text" />
-                )}
-              </button>
-            ))}
-          </div>
+          </>
         )}
-      </div>
     </div>
   );
 }

@@ -270,6 +270,7 @@ module and add its rows in the same change that exposes it.
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/alerts | GET | any org role (per-category visibility decided server-side) | org-scoped | backend/src/alerts/alerts.service.spec.ts |
+| /api/alerts/notifications | GET | ADMIN, INVENTORY_USER (OWNER inherits ADMIN) | org-scoped | backend/src/alerts/alerts.controller.spec.ts |
 
 Note: the route admits every organization role on purpose; `alerts.logic.ts`
 decides which categories each one receives, mirroring the guard hierarchy.
