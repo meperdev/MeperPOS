@@ -565,7 +565,9 @@ export default function TasksPage() {
         />
 
         {/* Main Content: Split Master-Detail */}
-        <div className="@container grid grid-cols-1 @5xl:grid-cols-12 gap-4 lg:gap-5 items-start">
+        {/* @container sits on the parent: a container query never matches its own element. */}
+        <div className="@container">
+        <div className="grid grid-cols-1 @5xl:grid-cols-12 gap-4 lg:gap-5 items-start">
           {/* Left Column: Task List (7 cols) */}
           <div className="@5xl:col-span-7 space-y-4">
             <Card className="overflow-hidden border-border/70 bg-card shadow-2xs">
@@ -985,6 +987,7 @@ export default function TasksPage() {
               </Card>
             )}
           </div>
+        </div>
         </div>
       </div>
 

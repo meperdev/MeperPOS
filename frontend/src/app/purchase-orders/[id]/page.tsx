@@ -171,7 +171,9 @@ export default function PurchaseOrderDetailPage() {
           )}
         </div>
 
-        <div className="@container grid grid-cols-1 @4xl:grid-cols-3 gap-4 lg:gap-5">
+        {/* @container sits on the parent: a container query never matches its own element. */}
+        <div className="@container">
+        <div className="grid grid-cols-1 @4xl:grid-cols-3 gap-4 lg:gap-5">
           <div className="@4xl:col-span-2 space-y-4">
             <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -364,6 +366,7 @@ export default function PurchaseOrderDetailPage() {
               )}
             </div>
           </aside>
+        </div>
         </div>
       </div>
 

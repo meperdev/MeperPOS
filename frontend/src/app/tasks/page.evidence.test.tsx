@@ -292,7 +292,9 @@ describe("Tasks module evidence", () => {
     render(<TasksPage />);
 
     const grid = screen.getByText("Lista de tareas").closest(".grid")!;
-    expect(grid.className).toContain("@container");
+    // A container query never matches its own element: @container lives on the parent.
+    expect(grid.parentElement!.className).toContain("@container");
+    expect(grid.className).not.toContain("@container");
     expect(grid.className).toContain("@5xl:grid-cols-12");
     expect(grid.className).not.toContain("lg:grid-cols-12");
 

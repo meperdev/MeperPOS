@@ -224,7 +224,9 @@ describe("Purchase order detail page behavior", () => {
 
     const aside = screen.getByText("Resumen de costos").closest("aside");
     const grid = aside!.parentElement!;
-    expect(grid.className).toContain("@container");
+    // A container query never matches its own element: @container lives on the parent.
+    expect(grid.parentElement!.className).toContain("@container");
+    expect(grid.className).not.toContain("@container");
     expect(grid.className).toContain("@4xl:grid-cols-3");
     expect(grid.className).not.toContain("lg:grid-cols-3");
     expect(grid.firstElementChild!.className).toContain("@4xl:col-span-2");
