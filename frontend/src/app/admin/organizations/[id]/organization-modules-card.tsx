@@ -1,40 +1,101 @@
 "use client";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { useOrganizationModules, useUpdateOrganizationModule } from "@/hooks/useAdmin";
+import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { useOrganizationModules } from "@/hooks/useAdmin";
 
-export function OrganizationModulesCard({ organizationId }: { organizationId: string }) {
+/**
+ * Read-only summary of the modules the server reports for this organization.
+ *
+ * Activation lives in SuperAdmin > Módulos, one control surface for one piece
+ * of state. Keeping this card linked instead of interactive means the two
+ * surfaces cannot disagree about an operation that writes the same record.
+ */
+export function OrganizationModulesCard({
+  organizationId,
+}: {
+  organizationId: string;
+}) {
   const modules = useOrganizationModules(organizationId);
-  const update = useUpdateOrganizationModule();
+  const catalog = modules.data ?? [];
+
   return (
     <Card>
-      <CardHeader><h3 className="text-sm font-medium">Módulos</h3></CardHeader>
-      <CardContent className="space-y-3">
-        {modules.isLoading && <p>Cargando módulos...</p>}
-        {modules.isError && <p role="alert">No se pudieron cargar los módulos.</p>}
-        {modules.data?.map((module) => (
-          <div key={module.id} className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium">{module.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {module.enabled ? "Activo" : "Inactivo"} · {module.description}
-              </p>
-            </div>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-foreground">Módulos</h3>
+          <Link
+            href="/admin/modules"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground"
+          >
+            Administrar módulos
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {modules.isLoading && (
+          <p className="text-xs text-muted-foreground">Cargando módulos...</p>
+        )}
+
+        {modules.isError && (
+          <div role="alert" className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              No se pudieron cargar los módulos.
+            </p>
             <Button
-              size="sm"
+              type="button"
               variant="secondary"
-              aria-label={`${module.enabled ? "Desactivar" : "Activar"} ${module.name}`}
-              disabled={update.isPending}
-              onClick={() =>
-                update.mutate({ id: organizationId, moduleId: module.id, enabled: !module.enabled })
-              }
+              size="sm"
+              onClick={() => modules.refetch()}
             >
-              {module.enabled ? "Desactivar" : "Activar"}
+              Reintentar
             </Button>
           </div>
-        ))}
-        {update.isError && <p role="alert">No se pudo actualizar el módulo.</p>}
+        )}
+
+        {!modules.isLoading && !modules.isError && catalog.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No hay módulos disponibles para esta organización.
+          </p>
+        )}
+
+        {catalog.length > 0 && (
+          <ul className="divide-y divide-border/60">
+            {catalog.map((module) => (
+              <li key={module.id}>
+                <Link
+                  href={`/admin/modules/${module.id}`}
+                  className="group -mx-2 flex items-center justify-between gap-3 rounded-md px-2 py-2.5 transition-colors duration-150 hover:bg-muted/40"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground transition-colors duration-150 group-hover:text-primary">
+                      {module.name}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {module.description}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <Badge
+                      variant={module.enabled ? "success" : "default"}
+                      dot
+                    >
+                      {module.enabled ? "Activo" : "Inactivo"}
+                    </Badge>
+                    <ChevronRight
+                      className="h-3.5 w-3.5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </CardContent>
     </Card>
   );

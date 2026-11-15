@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../app.module';
-import { configureApp } from '../app-configuration';
+import { configureApp, configureErrorHandling } from '../app-configuration';
 
 describe('Organization modules (HTTP integration)', () => {
   let app: INestApplication;
@@ -25,6 +25,7 @@ describe('Organization modules (HTTP integration)', () => {
     }).compile();
     app = testModule.createNestApplication({ logger: false });
     configureApp(app);
+    configureErrorHandling(app);
     await app.init();
     prisma = new PrismaClient();
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
