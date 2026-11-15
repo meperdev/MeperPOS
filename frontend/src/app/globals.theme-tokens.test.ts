@@ -85,3 +85,42 @@ describe("slice 1: layout font swap Manrope -> Geist (ADR-1)", () => {
     expect(layoutTsx).not.toContain("Manrope");
   });
 });
+
+describe("categorical chart scale (S14): --chart-1..8 for category series", () => {
+  const light = [
+    "--chart-1: var(--primary);",
+    "--chart-2: #2F6B8A;",
+    "--chart-3: #4D7C4A;",
+    "--chart-4: #B7811B;",
+    "--chart-5: #6B5B95;",
+    "--chart-6: #2E8C86;",
+    "--chart-7: #A8456B;",
+    "--chart-8: #78716C;",
+  ];
+  const dark = [
+    "--chart-1: var(--primary);",
+    "--chart-2: #5B9CC0;",
+    "--chart-3: #7FB07A;",
+    "--chart-4: #E0AE4A;",
+    "--chart-5: #9C8BC7;",
+    "--chart-6: #4FB8B0;",
+    "--chart-7: #D27499;",
+    "--chart-8: #A8A29E;",
+  ];
+
+  it("defines all eight chart tokens in the light :root block", () => {
+    const root = globalsCss.slice(globalsCss.indexOf(":root {"), globalsCss.indexOf(".dark {"));
+    for (const decl of light) expect(root).toContain(decl);
+  });
+
+  it("redefines all eight chart tokens for dark mode", () => {
+    const darkBlock = globalsCss.slice(globalsCss.indexOf(".dark {"), globalsCss.indexOf("@theme inline"));
+    for (const decl of dark) expect(darkBlock).toContain(decl);
+  });
+
+  it("maps each chart token into Tailwind as --color-chart-N", () => {
+    for (let n = 1; n <= 8; n++) {
+      expect(globalsCss).toContain(`--color-chart-${n}: var(--chart-${n});`);
+    }
+  });
+});

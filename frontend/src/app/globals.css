@@ -34,6 +34,16 @@
     --info-text: #1D4ED8;
     --coral: #D0453F;
 
+    /* Categorical scale for chart series. Categories, not states: never reuse the status tokens. */
+    --chart-1: var(--primary);
+    --chart-2: #2F6B8A;
+    --chart-3: #4D7C4A;
+    --chart-4: #B7811B;
+    --chart-5: #6B5B95;
+    --chart-6: #2E8C86;
+    --chart-7: #A8456B;
+    --chart-8: #78716C;
+
     --sidebar-bg: #FFFFFF;
     --sidebar-border: #D6D3D1;
     --sidebar-title: #1C1917;
@@ -72,6 +82,15 @@
     --info-text: #60A5FA;
     --coral: #E0524C;
 
+    --chart-1: var(--primary);
+    --chart-2: #5B9CC0;
+    --chart-3: #7FB07A;
+    --chart-4: #E0AE4A;
+    --chart-5: #9C8BC7;
+    --chart-6: #4FB8B0;
+    --chart-7: #D27499;
+    --chart-8: #A8A29E;
+
     --sidebar-bg: #18181C;
     --sidebar-border: #30303A;
     --sidebar-title: #F2F2F5;
@@ -108,6 +127,14 @@
     --color-info: var(--info);
     --color-info-text: var(--info-text);
     --color-coral: var(--coral);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-chart-6: var(--chart-6);
+    --color-chart-7: var(--chart-7);
+    --color-chart-8: var(--chart-8);
     --font-sans: var(--font-geist);
     --font-mono: var(--font-jetbrains-mono);
 }

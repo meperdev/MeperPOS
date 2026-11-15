@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCategoryColorMap,
+  CATEGORY_CHART_PALETTE,
   buildDailyMetricSeries,
   buildDateWindow,
   buildStackedDailySeries,
@@ -131,6 +132,35 @@ describe("buildCategoryColorMap (stacked chart)", () => {
   it("de-duplicates category names", () => {
     const map = buildCategoryColorMap(["A", "A", "B"]);
     expect(map.size).toBe(2);
+  });
+
+  it("exposes the palette as the eight chart CSS variables, never literal colors", () => {
+    expect(CATEGORY_CHART_PALETTE).toEqual([
+      "var(--chart-1)",
+      "var(--chart-2)",
+      "var(--chart-3)",
+      "var(--chart-4)",
+      "var(--chart-5)",
+      "var(--chart-6)",
+      "var(--chart-7)",
+      "var(--chart-8)",
+    ]);
+  });
+
+  it("assigns colors by sorted category name, independent of input order", () => {
+    const forward = buildCategoryColorMap(["Snacks", "Bebidas", "Aseo"]);
+    const reverse = buildCategoryColorMap(["Aseo", "Bebidas", "Snacks"]);
+    expect(forward.get("Aseo")).toBe("var(--chart-1)");
+    expect(forward.get("Bebidas")).toBe("var(--chart-2)");
+    expect(forward.get("Snacks")).toBe("var(--chart-3)");
+    expect([...reverse.entries()]).toEqual([...forward.entries()]);
+  });
+
+  it("wraps the palette after eight categories", () => {
+    const names = ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"];
+    const map = buildCategoryColorMap(names);
+    expect(map.get("c8")).toBe("var(--chart-8)");
+    expect(map.get("c9")).toBe("var(--chart-1)");
   });
 });
 
