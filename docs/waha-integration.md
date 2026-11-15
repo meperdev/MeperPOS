@@ -27,11 +27,12 @@ Sessions are driven through the backend, never through WAHA's dashboard (which s
 | `/api/whatsapp/commercial/session/stop` | `POST` | same guards; `204` |
 | `/api/whatsapp/commercial/session/restart` | `POST` | same guards; `204` |
 | `/api/whatsapp/intelligence/session` | `POST` | JWT + `RolesGuard` `SUPER_ADMIN` only, **no** `OrganizationRequiredGuard`; creates/starts the central session, returns `{ status }` |
-| `/api/whatsapp/intelligence/session` | `GET` | same; returns `{ status }` |
+| `/api/whatsapp/intelligence/session` | `GET` | same; returns the channel read model: `{ status, accountId, sessionName, lastObservedAt }` |
 | `/api/whatsapp/intelligence/session/qr` | `GET` | same; returns `{ data }`, a base64 PNG |
 | `/api/whatsapp/intelligence/session/stop` | `POST` | same; `204` |
 | `/api/whatsapp/intelligence/session/restart` | `POST` | same; `204` |
 | `/api/whatsapp/intelligence/session/logout` | `POST` | same; `204`. Unlinks the number and keeps the session record |
+| `/api/whatsapp/intelligence/session/relink` | `POST` | same; `200`, returns `{ status }`. Unlinks and starts again as one requested operation; when the unlink is refused the session is not started again |
 | `/api/whatsapp/webhook` | `POST` | WAHA HMAC only (see below) |
 
 A session name is **never** accepted from a request. The caller names a channel; the backend derives the session name from the authenticated organization or from the fixed central constant. Authorization comes from the persisted connection row and the token, never from the session string a webhook happens to carry.
@@ -153,9 +154,22 @@ QR responses are `private, no-store` and are capped at 2 MiB before parsing (1 M
 
 ### Linking Número C (intelligence)
 
-The same six steps with the central routes, performed by a platform `SUPER_ADMIN`, on the phone that holds Número C:
+Número C is one physical phone owned by the platform, and it is linked rarely: once, and again only when the phone is unlinked. Pairing is therefore available through two surfaces, and neither of them is a MeperPOS access token produced by hand.
 
-1. `POST /api/whatsapp/intelligence/session` — creates/starts `meper-intelligence`.
+**From a shell (no MeperPOS login).** Run this on a host that holds the provider configuration:
+
+```bash
+npm --prefix backend run whatsapp:link --silent            # pairs, printing the QR to a 0600 file and waiting three minutes
+npm --prefix backend run whatsapp:link --silent -- --status # observes only
+```
+
+The command reads `WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_WEBHOOK_URL` and `WAHA_WEBHOOK_HMAC_KEY`, derives the per-session webhook key, starts the session through the same service the HTTP routes use, writes the QR image to `backend/.tmp/whatsapp-intelligence-qr.png` with owner-only permissions, removes it when the run ends, and persists the observed status. It exits `1` on a timeout, on a `FAILED`/`STOPPED` session, and on a passkey challenge, naming which one happened. Use `whatsapp:link:prod` to read the production environment.
+
+**From the platform console (`/admin/whatsapp`).** A `SUPER_ADMIN` sees the status, the linked number and the last observation, can request the QR, and can re-link, stop or restart the session. Re-linking asks for confirmation first, because it takes the platform's administrative number offline until somebody scans a new code.
+
+Both surfaces share one set of rules; the console drives the same central routes listed above:
+
+1. `POST /api/whatsapp/intelligence/session` (or `.../relink` for a number already linked) — creates/starts `meper-intelligence`.
 2. `GET /api/whatsapp/intelligence/session` until `SCAN_QR_CODE`.
 3. `GET /api/whatsapp/intelligence/session/qr` and show the image.
 4. On the Número C phone: Linked devices → Link a device → scan.

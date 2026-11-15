@@ -1,4 +1,9 @@
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { WAHA_WEBHOOK_KEY } from './whatsapp-webhook.controller';
 import {
   commercialSessionName,
@@ -67,6 +72,29 @@ export class WhatsAppSessionService {
     return this.provider.qr(sessionName);
   }
 
+  /**
+   * The console's read model: provider truth first, then the row the webhook
+   * resolves from. A screen must never show a status the session already left,
+   * and must be able to name the linked number and when it was last observed.
+   */
+  async describe(scope: WhatsAppChannelScope): Promise<{
+    status: WhatsAppSessionStatus;
+    accountId: string | null;
+    sessionName: string;
+    lastObservedAt: Date | null;
+  }> {
+    const channel = await this.resolve(scope);
+    const { status } = await this.mirror(channel);
+    const row = await this.connections.findById(channel.connectionId);
+    if (!row) throw new NotFoundException();
+    return {
+      status,
+      accountId: row.accountId,
+      sessionName: row.sessionName,
+      lastObservedAt: row.statusUpdatedAt,
+    };
+  }
+
   async stop(scope: WhatsAppChannelScope): Promise<void> {
     const channel = await this.resolve(scope);
     await this.provider.stop(channel.sessionName);
@@ -88,6 +116,19 @@ export class WhatsAppSessionService {
     const channel = await this.resolve({ channel: 'INTELLIGENCE' });
     await this.provider.logout(channel.sessionName);
     await this.mirror(channel);
+  }
+
+  /**
+   * Unlink and start again as one operation. Chaining `logout` and `connect`
+   * from a screen would let a failed second call leave the central number
+   * unlinked with nobody watching, so the order and the failure are owned here:
+   * when the unlink is refused, the session is never started again.
+   */
+  async relink(): Promise<{ status: WhatsAppSessionStatus }> {
+    const channel = await this.resolve({ channel: 'INTELLIGENCE' });
+    await this.provider.logout(channel.sessionName);
+    await this.provider.ensureStarted(channel.sessionName, channel.webhookKey);
+    return this.mirror(channel);
   }
 
   private async resolve(scope: WhatsAppChannelScope): Promise<ResolvedChannel> {
