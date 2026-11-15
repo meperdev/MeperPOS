@@ -95,5 +95,9 @@ const createWahaAdapter = () =>
       useClass: UnconfiguredWhatsAppModelProvider,
     },
   ],
+  // The alert pipeline reads the central session and sends plain text; exporting
+  // the connection lookup and the port keeps a second provider client out of the
+  // alerts module.
+  exports: [WhatsAppConnectionsService, WHATSAPP_TEXT_SENDER],
 })
 export class WhatsAppModule {}

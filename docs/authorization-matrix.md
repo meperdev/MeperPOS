@@ -265,13 +265,24 @@ module and add its rows in the same change that exposes it.
 |---|---|---|---|---|
 | /api/plan-limits/status | GET | any authenticated | authenticated-global | backend/src/plan-limits/plan-limits.service.spec.ts |
 
+## alerts
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/alerts | GET | any org role (per-category visibility decided server-side) | org-scoped | backend/src/alerts/alerts.service.spec.ts |
+
+Note: the route admits every organization role on purpose; `alerts.logic.ts`
+decides which categories each one receives, mirroring the guard hierarchy.
+`OWNER` inherits `ADMIN`, `MEMBER` and `CASHIER`; `INVENTORY_USER` inherits nothing
+and only receives stock, loans and tasks.
+
 ## products
 
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/products | POST | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
 | /api/products | GET | any org role | org-scoped | backend/src/products/products.service.int.spec.ts |
-| /api/products/low-stock | GET | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
+| /api/products/low-stock | GET | ADMIN, MEMBER, INVENTORY_USER | org-scoped | backend/src/products/products.low-stock-roles.spec.ts |
 | /api/products/search | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/products/products.controller.spec.ts |
 | /api/products/quick-search | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/products/products.controller.spec.ts |
 | /api/products/:id | GET | any org role | org-scoped | backend/src/products/products.service.int.spec.ts |

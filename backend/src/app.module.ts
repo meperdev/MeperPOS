@@ -35,6 +35,7 @@ import { LoansModule } from './loans/loans.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { BusinessModulesModule } from './business-modules/business-modules.module';
+import { AlertsModule } from './alerts/alerts.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { BusinessModulesModule } from './business-modules/business-modules.modul
     PayrollModule,
     WhatsAppModule,
     BusinessModulesModule,
+    AlertsModule,
   ],
   controllers: [AppController],
   providers: [

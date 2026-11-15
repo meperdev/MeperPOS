@@ -328,20 +328,20 @@ export class ProductsService {
     }
     const { skip, take } = computeSkipTake(page, limit);
 
-    const where: Record<string, unknown> = {
+    const baseWhere: Record<string, unknown> = {
       ...(organizationId ? { organizationId } : {}),
     };
 
     if (status === 'active') {
-      where.active = true;
+      baseWhere.active = true;
     }
 
     if (status === 'inactive') {
-      where.active = false;
+      baseWhere.active = false;
     }
 
     if (search) {
-      where.OR = [
+      baseWhere.OR = [
         { name: { contains: search, mode: 'insensitive' as const } },
         { sku: { contains: search, mode: 'insensitive' as const } },
         { barcode: { contains: search, mode: 'insensitive' as const } },
@@ -349,25 +349,14 @@ export class ProductsService {
     }
 
     if (categoryId) {
-      where.categoryId = categoryId;
+      baseWhere.categoryId = categoryId;
     }
 
-    if (type) where.type = type;
-
-    if (lowStock) {
-      // Field reference: stock <= minStock is evaluated in the database, so
-      // low-stock pages stay coherent without loading every product first.
-      where.stock = { lte: this.prisma.product.fields.minStock };
-      // A service is never low on stock, and neither is untracked merchandise, so
-      // neither can belong on this page.
-      if (type) where.AND = [{ type: ProductType.PRODUCT }];
-      else where.type = ProductType.PRODUCT;
-      where.tracksStock = true;
-    }
+    if (type) baseWhere.type = type;
 
     // Explicit [] is restrictive, unlike an omitted filter. Never truncate IDs:
     // pagination bounds returned rows, not the favorite collection's reachability.
-    if (ids !== undefined) where.id = { in: [...new Set(ids)] };
+    if (ids !== undefined) baseWhere.id = { in: [...new Set(ids)] };
     if (available) {
       const eligibility = {
         OR: [
@@ -376,8 +365,12 @@ export class ProductsService {
           { stock: { gt: this.prisma.product.fields.reservedStock } },
         ],
       };
-      where.AND = [...((where.AND as unknown[]) ?? []), eligibility];
+      baseWhere.AND = [...((baseWhere.AND as unknown[]) ?? []), eligibility];
     }
+
+    const where = lowStock
+      ? this.withLowStockFilter(baseWhere, type)
+      : baseWhere;
 
     // 'name' keeps the inventory list's alphabetical presentation coherent
     // across page boundaries; 'createdAt' (default) preserves the legacy order.
@@ -386,7 +379,7 @@ export class ProductsService {
         ? { name: 'asc' as const }
         : { createdAt: 'desc' as const };
 
-    const [products, total] = await Promise.all([
+    const [products, total, unfilteredLowStockTotal] = await Promise.all([
       this.prisma.product.findMany({
         where,
         skip,
@@ -395,7 +388,17 @@ export class ProductsService {
         orderBy: orderByClause,
       }),
       this.prisma.product.count({ where }),
+      // The inventory badge must answer "how many are low on stock" for the whole
+      // catalog under the active search/category/status filters, not just for the
+      // slice this page returned. When the list is already the low-stock set,
+      // `total` is that answer and a second identical COUNT would buy nothing.
+      lowStock
+        ? Promise.resolve(null)
+        : this.prisma.product.count({
+            where: this.withLowStockFilter(baseWhere, type),
+          }),
     ]);
+    const lowStockCount = unfilteredLowStockTotal ?? total;
 
     return {
       data: products.map((p) => this.enrichProduct(p)),
@@ -404,8 +407,40 @@ export class ProductsService {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
+        lowStockCount,
       },
     };
+  }
+
+  /**
+   * The single low-stock predicate for every Prisma read. The filter that builds a
+   * low-stock page and the independent COUNT that feeds the inventory badge go through
+   * here, so the number on the badge and the list it opens cannot drift apart.
+   *
+   * `stock <= minStock` is a field reference evaluated in the database: pagination stays
+   * coherent without loading every product. A service is never low on stock, and neither
+   * is untracked merchandise, so both are excluded; a service type filter therefore
+   * intersects to an empty set instead of returning merchandise.
+   */
+  private withLowStockFilter(
+    baseWhere: Record<string, unknown>,
+    type: ProductType | undefined,
+  ): Record<string, unknown> {
+    const where: Record<string, unknown> = {
+      ...baseWhere,
+      stock: { lte: this.prisma.product.fields.minStock },
+      tracksStock: true,
+    };
+    if (type) {
+      // Keep the intersection clause first, matching the order callers relied on.
+      where.AND = [
+        { type: ProductType.PRODUCT },
+        ...((baseWhere.AND as unknown[]) ?? []),
+      ];
+    } else {
+      where.type = ProductType.PRODUCT;
+    }
+    return where;
   }
 
   async findOne(id: string, organizationId: string | undefined) {

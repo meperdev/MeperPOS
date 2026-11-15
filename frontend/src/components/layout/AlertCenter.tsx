@@ -33,26 +33,40 @@ const CATEGORY_ICON: Record<AlertCategory, React.ReactNode> = {
   tasks: <ClipboardList className="h-4 w-4" aria-hidden="true" />,
 };
 
-function readSeen(key: string): string[] {
-  if (typeof window === "undefined") return [];
+/**
+ * The read ledger is a map of alert id to the revision the reader acknowledged.
+ * A revision mismatch is what makes the bell ring again: the same low-stock alert
+ * re-alerts when the set of low products changes, and a condition that comes back
+ * after being resolved is new again. The previous shape (a plain array of ids)
+ * silently muted every future occurrence of a condition.
+ */
+type SeenLedger = Record<string, string>;
+
+function readSeen(key: string): SeenLedger {
+  if (typeof window === "undefined") return {};
   try {
     const raw = window.localStorage.getItem(key);
-    if (!raw) return [];
+    if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const seen: SeenLedger = {};
+    for (const [id, revision] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof revision === "string") seen[id] = revision;
+    }
+    return seen;
   } catch {
-    return [];
+    return {};
   }
 }
 
-function writeSeen(key: string, ids: string[]): void {
+function writeSeen(key: string, seen: SeenLedger): void {
   try {
-    window.localStorage.setItem(key, JSON.stringify(ids));
+    window.localStorage.setItem(key, JSON.stringify(seen));
   } catch {
     // Storage can be blocked; the in-memory ledger still works for this session.
   }
   // The desktop rail and the mobile header each mount a bell; keep them in sync.
-  window.dispatchEvent(new CustomEvent(SEEN_EVENT, { detail: { key, ids } }));
+  window.dispatchEvent(new CustomEvent(SEEN_EVENT, { detail: { key, seen } }));
 }
 
 const emptySubscribe = () => () => {};
@@ -68,7 +82,7 @@ export function AlertCenter({
   const alerts = useAlerts();
 
   const storageKey = `${SEEN_PREFIX}${user?.organizationId ?? organization?.id ?? "global"}`;
-  const [seen, setSeen] = useState<string[]>(() => readSeen(storageKey));
+  const [seen, setSeen] = useState<SeenLedger>(() => readSeen(storageKey));
   const [syncedKey, setSyncedKey] = useState(storageKey);
 
   // Organization switch: the ledger is per tenant, so swap it during render.
@@ -88,12 +102,13 @@ export function AlertCenter({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const unread = alerts.filter((alert) => !seen.includes(alert.id));
+  const unread = alerts.filter((alert) => seen[alert.id] !== alert.revision);
   const unreadCount = mounted ? unread.length : 0;
 
   const markSeen = useCallback(
-    (ids: string[]) => {
-      const next = Array.from(new Set([...seen, ...ids]));
+    (entries: AppAlert[]) => {
+      const next: SeenLedger = { ...seen };
+      for (const entry of entries) next[entry.id] = entry.revision;
       setSeen(next);
       writeSeen(storageKey, next);
     },
@@ -103,8 +118,9 @@ export function AlertCenter({
   // Another mounted bell (desktop rail vs mobile header) may have written first.
   useEffect(() => {
     const onChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ key: string; ids: string[] }>).detail;
-      if (detail?.key === storageKey) setSeen(detail.ids);
+      const detail = (event as CustomEvent<{ key: string; seen: SeenLedger }>)
+        .detail;
+      if (detail?.key === storageKey) setSeen(detail.seen);
     };
     window.addEventListener(SEEN_EVENT, onChanged);
     return () => window.removeEventListener(SEEN_EVENT, onChanged);
@@ -150,7 +166,7 @@ export function AlertCenter({
     setOpenedUnread(unread.map((alert) => alert.id));
     setOpen(true);
     if (unread.length > 0) {
-      markSeen(alerts.map((alert) => alert.id));
+      markSeen(alerts);
     }
   };
 
@@ -232,7 +248,7 @@ export function AlertCenter({
                       alert={alert}
                       unread={openedUnread.includes(alert.id)}
                       onOpen={() => {
-                        markSeen([alert.id]);
+                        markSeen([alert]);
                         setOpen(false);
                       }}
                     />
