@@ -151,6 +151,7 @@ export default function AlertHistoryPage() {
             totalItems={meta.total}
             pageSize={meta.limit}
             itemLabel="notificación"
+            itemLabelPlural="notificaciones"
             onPageChange={setPage}
           />
         ) : null}

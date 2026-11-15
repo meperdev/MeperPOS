@@ -429,6 +429,7 @@ export default function OrganizationsPage() {
           totalItems={sorted.length}
           pageSize={PAGE_SIZE}
           itemLabel="organización"
+          itemLabelPlural="organizaciones"
         />
       )}
 

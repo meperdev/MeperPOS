@@ -339,6 +339,7 @@ export default function ModuleDetailPage({
           totalItems={filtered.length}
           pageSize={PAGE_SIZE}
           itemLabel="organización"
+          itemLabelPlural="organizaciones"
         />
       )}
     </div>
