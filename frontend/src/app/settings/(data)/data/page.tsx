@@ -68,6 +68,13 @@ const EXPORT_TILES: ExportTileDefinition[] = [
   },
 ];
 
+const STATUS_LABELS: Record<string, string> = {
+  PARSING: "Analizando archivo",
+  PROCESSING: "Procesando",
+  COMPLETED: "Completada",
+  FAILED: "Falló",
+};
+
 const EXPORT_FORMATS: Array<{ value: "excel" | "csv"; label: string }> = [
   { value: "excel", label: "Excel" },
   { value: "csv", label: "CSV" },
@@ -100,7 +107,7 @@ function ExportTile({ type, title, description, hasDates }: ExportTileDefinition
   return (
     <div
       data-testid={`export-tile-${type}`}
-      className="flex flex-col justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 p-3.5 transition-colors hover:border-border"
+      className="flex flex-col justify-between gap-3 rounded-lg bg-muted/40 p-3.5"
     >
       <div>
         <h3 className="text-xs sm:text-sm font-semibold text-foreground">{title}</h3>
@@ -175,15 +182,15 @@ export default function ImportDataSettingsPage() {
 
   const handleStartImport = async () => {
     if (!selectedFile) {
-      toast.error("Selecciona un archivo para iniciar la importacion");
+      toast.error("Selecciona un archivo para iniciar la importación");
       return;
     }
 
     try {
       await startImport.mutateAsync(selectedFile);
-      toast.success("Importacion iniciada correctamente");
+      toast.success("Importación iniciada correctamente");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "No se pudo iniciar la importacion"));
+      toast.error(getApiErrorMessage(error, "No se pudo iniciar la importación"));
     }
   };
 
@@ -229,7 +236,7 @@ export default function ImportDataSettingsPage() {
       </div>
 
       <SettingsCard
-        title="Importación Multi-Hoja"
+        title="Importación multi-hoja"
         description="Importa productos, clientes, proveedores y usuarios desde un archivo (.xlsx)"
         icon={<Database className="w-4 h-4" />}
       >
@@ -248,7 +255,7 @@ export default function ImportDataSettingsPage() {
                   disabled={!selectedFile}
                   loading={startImport.isPending}
                 >
-                  Iniciar importacion
+                  Iniciar importación
                 </Button>
                 <TemplateDownloadButton
                   onDownload={handleDownloadTemplate}
@@ -260,14 +267,14 @@ export default function ImportDataSettingsPage() {
 
           {hasStarted && (
             <>
-              <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-3">
+              <div className="rounded-lg bg-muted/40 p-3.5 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs font-medium text-muted-foreground">
                       Archivo
                     </p>
                     <p className="text-xs sm:text-sm font-semibold text-foreground truncate mt-0.5">
-                      {selectedFile?.name ?? "Importacion en curso"}
+                      {selectedFile?.name ?? "Importación en curso"}
                     </p>
                   </div>
 
@@ -277,11 +284,11 @@ export default function ImportDataSettingsPage() {
                     }
                     dot
                   >
-                    {status?.status ?? "PARSING"}
+                    {STATUS_LABELS[status?.status ?? "PARSING"] ?? status?.status}
                   </Badge>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono tabular-nums">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 tabular-nums">
                   <Badge variant="secondary" className="justify-center">
                     Procesados: {status?.processedRows ?? 0}
                   </Badge>
@@ -312,9 +319,9 @@ export default function ImportDataSettingsPage() {
                 <div className="flex items-center justify-end gap-2">
                   <div className="flex-1" />
                   {status?.status === "COMPLETED" && (
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                    <div className="flex items-center gap-1.5 text-xs text-success-text">
                       <CheckCircle2 className="w-4 h-4" />
-                      Importacion finalizada
+                      Importación finalizada
                     </div>
                   )}
                   <TemplateDownloadButton
@@ -322,14 +329,14 @@ export default function ImportDataSettingsPage() {
                     loading={downloadTemplate.isPending}
                   />
                   <Button variant="primary" onClick={handleReset}>
-                    <RefreshCcw className="w-4 h-4" /> Nueva importacion
+                    <RefreshCcw className="w-4 h-4" /> Nueva importación
                   </Button>
                 </div>
               )}
             </>
           )}
 
-          <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+          <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
             <FileSpreadsheet className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
             <span>
               El archivo debe contener las hojas Productos, Clientes, Proveedores y

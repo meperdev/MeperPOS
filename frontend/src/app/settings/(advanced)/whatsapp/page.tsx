@@ -320,7 +320,7 @@ function WhatsAppSettings() {
               role="status"
               className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-3"
             >
-              <span className="sr-only">Consultando el estado del canal...</span>
+              <span className="sr-only">Consultando el estado del canal…</span>
               <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-muted-foreground/40" />
               <div className="flex-1 space-y-1.5">
                 <div className="h-2.5 w-24 animate-pulse rounded-full bg-muted-foreground/20" />
@@ -344,7 +344,7 @@ function WhatsAppSettings() {
                   {linkedAccount ? (
                     <>
                       Cuenta del proveedor{" "}
-                      <span className="font-mono tabular-nums text-foreground">
+                      <span className="tabular-nums text-foreground">
                         {linkedAccount}
                       </span>
                     </>
@@ -477,7 +477,7 @@ function WhatsAppSettings() {
               {linkCode && (
                 <span className="text-xs text-muted-foreground">
                   Vence el{" "}
-                  <span className="font-mono tabular-nums text-foreground">
+                  <span className="tabular-nums text-foreground">
                     {formatDateTime(linkCode.expiresAt)}
                   </span>
                 </span>
@@ -507,7 +507,7 @@ function WhatsAppSettings() {
               role="status"
               className="divide-y divide-border/60 border-t border-border/60"
             >
-              <span className="sr-only">Cargando los números vinculados...</span>
+              <span className="sr-only">Cargando los números vinculados…</span>
               {Array.from({ length: 3 }).map((_, index) => (
                 <div
                   key={index}
@@ -546,7 +546,7 @@ function WhatsAppSettings() {
                   className="flex flex-wrap items-center justify-between gap-2 py-2.5"
                 >
                   <div className="min-w-0 space-y-0.5">
-                    <p className="font-mono text-xs tabular-nums text-foreground">
+                    <p className="text-xs tabular-nums text-foreground">
                       {identity.phone}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
@@ -613,13 +613,13 @@ function WhatsAppSettings() {
             <dl className="grid grid-cols-3 overflow-hidden rounded-lg border border-border/70 bg-muted/20">
               <div className="min-w-0 border-r border-border/60 px-3 py-2.5">
                 <dt className="text-[11px] text-muted-foreground">Enviados</dt>
-                <dd className="mt-0.5 font-mono text-sm tabular-nums text-foreground">
+                <dd className="mt-0.5 text-sm tabular-nums text-foreground">
                   {sentCount}
                 </dd>
               </div>
               <div className="min-w-0 border-r border-border/60 px-3 py-2.5">
                 <dt className="text-[11px] text-muted-foreground">Fallidos</dt>
-                <dd className="mt-0.5 font-mono text-sm tabular-nums text-foreground">
+                <dd className="mt-0.5 text-sm tabular-nums text-foreground">
                   {failedCount}
                 </dd>
               </div>
@@ -641,7 +641,7 @@ function WhatsAppSettings() {
               <TableSkeleton
                 columns={4}
                 rows={6}
-                label="Cargando envíos..."
+                label="Cargando envíos…"
                 className="min-w-[420px] rounded-none border-0 bg-transparent"
               />
             ) : deliveriesQuery.isError && !deliveriesQuery.data ? (
@@ -655,19 +655,12 @@ function WhatsAppSettings() {
                 className="mx-4 min-h-[140px] sm:mx-5"
               />
             ) : deliveries.length === 0 ? (
-              <div className="mx-4 flex items-center gap-3 rounded-lg border border-dashed border-border/70 px-4 py-5 sm:mx-5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground">
-                  <Send className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-foreground">
-                    Sin envíos registrados
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    El historial aparece cuando se envía el primer reporte.
-                  </p>
-                </div>
-              </div>
+              <EmptyState
+                icon={<Send className="h-4 w-4" />}
+                title="Sin envíos registrados"
+                subtitle="El historial aparece cuando se envía el primer reporte."
+                className="mx-4 min-h-[140px] sm:mx-5"
+              />
             ) : (
               <Table className="min-w-[420px]">
                 <TableHeader>
@@ -684,7 +677,7 @@ function WhatsAppSettings() {
                       <TableCell className="text-foreground">
                         {KIND_LABELS[delivery.kind]}
                       </TableCell>
-                      <TableCell className="font-mono tabular-nums text-foreground">
+                      <TableCell className="tabular-nums text-foreground">
                         {formatDate(delivery.reportDate)}
                       </TableCell>
                       <TableCell>
@@ -699,7 +692,7 @@ function WhatsAppSettings() {
                             </span>
                           )}
                       </TableCell>
-                      <TableCell className="font-mono tabular-nums text-muted-foreground">
+                      <TableCell className="tabular-nums text-muted-foreground">
                         {delivery.sentAt ? formatDateTime(delivery.sentAt) : "—"}
                       </TableCell>
                     </TableRow>

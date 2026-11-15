@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { settingsSections } from "./sections";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default function SettingsLayout({
   children,
@@ -16,14 +17,10 @@ export default function SettingsLayout({
   return (
     <DashboardLayout>
       <div className="space-y-4 lg:space-y-5">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-            Configuración
-          </h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Ajusta la configuración del sistema
-          </p>
-        </div>
+        <PageHeader
+          title="Configuración"
+          subtitle="Ajusta la configuración del sistema"
+        />
 
         <div className="flex flex-col lg:flex-row lg:gap-6">
           <nav
@@ -44,8 +41,8 @@ export default function SettingsLayout({
                       scroll={false}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "inline-flex lg:flex h-9 items-center gap-2.5 rounded-lg px-3 text-xs whitespace-nowrap transition-colors duration-150",
-                        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
+                        "inline-flex lg:flex h-9 items-center gap-2 rounded-lg px-3 text-xs whitespace-nowrap transition-colors duration-150",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                         isActive
                           ? "bg-muted/70 text-foreground font-semibold border border-border/70 shadow-2xs"
                           : "text-muted-foreground font-medium border border-transparent hover:text-foreground hover:bg-muted/40",

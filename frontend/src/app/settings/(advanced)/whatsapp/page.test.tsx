@@ -67,7 +67,6 @@ import WhatsAppSettingsPage from "./page";
  */
 function expectSharedStatusBadge(label: string) {
   const badge = screen.getByText(label);
-  expect(badge.className).toContain("font-mono");
   expect(badge.firstElementChild).not.toBeNull();
 }
 
@@ -157,7 +156,7 @@ describe("WhatsApp settings page", () => {
     render(<WhatsAppSettingsPage />);
 
     const skeleton = screen.getByRole("status");
-    expect(screen.getByText("Cargando envíos...")).toBeInTheDocument();
+    expect(screen.getByText("Cargando envíos…")).toBeInTheDocument();
     // Four bars in the header band: the table it stands in for has four columns.
     expect(skeleton.querySelector("div")?.children).toHaveLength(4);
     expect(screen.queryByRole("table")).toBeNull();

@@ -132,10 +132,10 @@ describe("ImportDataSettingsPage", () => {
     render(<ImportDataSettingsPage />);
 
     expect(screen.getByText("Importar y exportar datos")).toBeInTheDocument();
-    expect(screen.getByText("Importación Multi-Hoja")).toBeInTheDocument();
-    expect(screen.getByText(/Arrastra un archivo o haz click para subir/i)).toBeInTheDocument();
+    expect(screen.getByText("Importación multi-hoja")).toBeInTheDocument();
+    expect(screen.getByText(/Arrastra un archivo o haz clic para subir/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Plantilla/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Iniciar importacion/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Iniciar importación/i })).toBeInTheDocument();
   });
 
   it("requires an .xlsx file before starting", async () => {
@@ -149,7 +149,7 @@ describe("ImportDataSettingsPage", () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     expect(toastError).toHaveBeenCalledWith("Formato no soportado. Usa un archivo .xlsx");
-    expect(screen.getByRole("button", { name: /Iniciar importacion/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Iniciar importación/i })).toBeDisabled();
   });
 
   it("starts a full import when a valid .xlsx file is selected and submitted", async () => {
@@ -162,11 +162,11 @@ describe("ImportDataSettingsPage", () => {
     const file = new File(["xlsx"], "import.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
-    fireEvent.click(screen.getByRole("button", { name: /Iniciar importacion/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Iniciar importación/i }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledOnce());
     expect(mutateAsync).toHaveBeenCalledWith(file);
-    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Importacion iniciada correctamente"));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Importación iniciada correctamente"));
   });
 
   it("renders the per-sheet progress and errors after an import completes", () => {
@@ -176,7 +176,7 @@ describe("ImportDataSettingsPage", () => {
 
     expect(screen.getAllByText("Productos").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Clientes").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("COMPLETED").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Completada").length).toBeGreaterThan(0);
     expect(screen.getByText(/Errores por hoja/)).toBeInTheDocument();
     expect(screen.getByText("Documento invalido")).toBeInTheDocument();
   });

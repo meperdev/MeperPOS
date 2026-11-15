@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { SettingsCard } from "../../_components/SettingsCard";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -49,7 +50,7 @@ export default function AdvancedSettingsPage() {
     return (
       <LoadingState
         icon={<SlidersHorizontal className="w-4 h-4 text-muted-foreground" />}
-        message="Cargando configuración..."
+        message="Cargando configuración…"
       />
     );
   }
@@ -75,7 +76,7 @@ export default function AdvancedSettingsPage() {
       await updateSettings.mutateAsync({ custom });
       toast.success("Configuración guardada correctamente");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al guardar la configuración"));
+      toast.error(getApiErrorMessage(error, "No se pudo guardar la configuración"));
     }
   };
 
@@ -97,9 +98,11 @@ export default function AdvancedSettingsPage() {
       >
         <form onSubmit={handleSubmit} className="space-y-3">
           {entries.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">
-              No hay claves personalizadas.
-            </p>
+            <EmptyState
+              icon={<SlidersHorizontal className="w-4 h-4" />}
+              title="No hay claves personalizadas"
+              className="min-h-0 py-4"
+            />
           ) : (
             entries.map((entry, index) => (
               <div
@@ -121,7 +124,7 @@ export default function AdvancedSettingsPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => removeEntry(index)}
-                  aria-label="Eliminar"
+                  aria-label={`Eliminar clave ${entry.key || "sin nombre"}`}
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>

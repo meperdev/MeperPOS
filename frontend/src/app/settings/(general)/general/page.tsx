@@ -35,7 +35,7 @@ export default function GeneralSettingsPage() {
     return (
       <LoadingState
         icon={<Building2 className="w-4 h-4 text-muted-foreground" />}
-        message="Cargando configuración..."
+        message="Cargando configuración…"
       />
     );
   }
@@ -47,7 +47,7 @@ export default function GeneralSettingsPage() {
       await uploadLogo.mutateAsync(file);
       toast.success("Logo actualizado correctamente");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al subir el logo"));
+      toast.error(getApiErrorMessage(error, "No se pudo subir el logo"));
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -59,7 +59,7 @@ export default function GeneralSettingsPage() {
       await updateOrganizationName.mutateAsync(name);
       toast.success("Nombre actualizado correctamente");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al actualizar el nombre"));
+      toast.error(getApiErrorMessage(error, "No se pudo actualizar el nombre"));
     }
   };
 
@@ -102,7 +102,7 @@ export default function GeneralSettingsPage() {
             <p className="text-xs font-medium text-muted-foreground mb-2.5">
               Logo del negocio
             </p>
-            <div className="flex items-center gap-3.5">
+            <div className="flex items-center gap-3">
               {settings.organization.logoUrl ? (
                 <div className="relative w-14 h-14 rounded-xl border border-border/70 overflow-hidden bg-muted/30">
                   <Image

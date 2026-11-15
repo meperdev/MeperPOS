@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
+import { SettingsCard } from "../../_components/SettingsCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
@@ -118,13 +119,13 @@ export default function BillingSettingsPage() {
       setShowPaymentForm(false);
       setPaymentForm({ amount: "", method: "CASH", date: new Date().toISOString().split("T")[0] });
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al registrar el pago"));
+      toast.error(getApiErrorMessage(error, "No se pudo registrar el pago"));
     }
   };
 
   if (isLoading) {
     return (
-      <LoadingState icon={<CreditCard className="w-4 h-4 text-muted-foreground" />} message="Cargando información de suscripción..." />
+      <LoadingState icon={<CreditCard className="w-4 h-4 text-muted-foreground" />} message="Cargando información de suscripción…" />
     );
   }
 
@@ -150,14 +151,8 @@ export default function BillingSettingsPage() {
       </div>
 
       {/* Plan Card */}
-      <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
-        <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-border/60">
-          <Shield className="w-4 h-4 text-muted-foreground shrink-0" />
-          <h3 className="text-xs sm:text-sm font-semibold text-foreground">
-            Plan actual
-          </h3>
-        </div>
-        <div className="p-4 sm:p-5 space-y-4">
+      <SettingsCard title="Plan actual" icon={<Shield className="w-4 h-4" />}>
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-medium text-muted-foreground">Plan</p>
@@ -187,29 +182,29 @@ export default function BillingSettingsPage() {
               <Calendar className="w-3.5 h-3.5 shrink-0" />
               <span>
                 Fin de prueba:{" "}
-                <span className="font-mono font-semibold text-foreground tabular-nums">
+                <span className="font-semibold text-foreground tabular-nums">
                   {formatDate(billingStatus.trialEndsAt)}
                 </span>
               </span>
             </div>
           )}
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Downgrade Banner */}
       {downgradeFlags && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 overflow-hidden">
-          <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-amber-500/20">
-            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <h3 className="text-xs sm:text-sm font-semibold text-amber-900 dark:text-amber-100">
+        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-warning-text shrink-0" />
+            <h3 className="text-xs sm:text-sm font-semibold text-warning-text">
               Ajuste de plan requerido
             </h3>
           </div>
-          <div className="p-4 space-y-2">
-            <p className="text-xs text-amber-800 dark:text-amber-200">
+          <div className="space-y-2">
+            <p className="text-xs text-warning-text">
               Tu plan cambió a <span className="font-semibold">Básico</span> y algunos recursos exceden los nuevos límites:
             </p>
-            <ul className="text-xs text-amber-800 dark:text-amber-200 space-y-1 list-disc list-inside">
+            <ul className="text-xs text-warning-text space-y-1 list-disc list-inside">
               {downgradeFlags.usersOverLimit && <li>Usuarios sobre el límite</li>}
               {downgradeFlags.productsOverLimit && <li>Productos sobre el límite</li>}
               {downgradeFlags.customersOverLimit && <li>Clientes sobre el límite</li>}
@@ -225,14 +220,8 @@ export default function BillingSettingsPage() {
       )}
 
       {/* Limits Card */}
-      <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
-        <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-border/60">
-          <TrendingUp className="w-4 h-4 text-muted-foreground shrink-0" />
-          <h3 className="text-xs sm:text-sm font-semibold text-foreground">
-            Uso y Límites
-          </h3>
-        </div>
-        <div className="p-4 sm:p-5 space-y-3">
+      <SettingsCard title="Uso y límites" icon={<TrendingUp className="w-4 h-4" />}>
+        <div className="space-y-3">
           {isLimitsError && !planLimits ? (
             <ErrorState
               message="No se pudo cargar los límites del plan."
@@ -264,15 +253,15 @@ export default function BillingSettingsPage() {
                       </span>
                       {typeLabels[limit.type]}
                     </span>
-                    <span className="font-mono text-xs tabular-nums">
+                    <span className="text-xs tabular-nums">
                       {isUnlimited ? (
                         <span className="text-muted-foreground">Ilimitado</span>
                       ) : (
                         <span
                           className={cn(
                             "text-foreground",
-                            isOverLimit && "text-rose-600 dark:text-rose-400 font-semibold",
-                            (isAtLimit || isWarning) && "text-amber-600 dark:text-amber-400 font-semibold"
+                            isOverLimit && "text-danger-text font-semibold",
+                            (isAtLimit || isWarning) && "text-warning-text font-semibold"
                           )}
                         >
                           {limit.current} / {limit.limit}
@@ -281,14 +270,14 @@ export default function BillingSettingsPage() {
                     </span>
                   </div>
                   {!isUnlimited && (
-                    <div className="h-2 rounded-[3px] bg-muted/60 overflow-hidden">
+                    <div className="h-2 rounded-sm bg-muted/60 overflow-hidden">
                       <div
                         className={cn(
-                          "h-full rounded-[3px] transition-all duration-150",
+                          "h-full rounded-sm transition-[width] duration-150",
                           isOverLimit
-                            ? "bg-rose-500"
+                            ? "bg-danger"
                             : isAtLimit || isWarning
-                            ? "bg-amber-500"
+                            ? "bg-warning"
                             : "bg-foreground/80"
                         )}
                         style={{ width: `${Math.min(pct, 100)}%` }}
@@ -300,18 +289,14 @@ export default function BillingSettingsPage() {
             })
           )}
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Payments History */}
-      <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/60">
-          <div className="flex items-center gap-2.5">
-            <CreditCard className="w-4 h-4 text-muted-foreground shrink-0" />
-            <h3 className="text-xs sm:text-sm font-semibold text-foreground">
-              Historial de pagos
-            </h3>
-          </div>
-          {isSuperAdmin && (
+      <SettingsCard
+        title="Historial de pagos"
+        icon={<CreditCard className="w-4 h-4" />}
+        actions={
+          isSuperAdmin ? (
             <Button
               size="sm"
               variant="secondary"
@@ -319,11 +304,11 @@ export default function BillingSettingsPage() {
             >
               {showPaymentForm ? "Cancelar" : "Registrar pago"}
             </Button>
-          )}
-        </div>
-
+          ) : undefined
+        }
+      >
         {showPaymentForm && isSuperAdmin && (
-          <div className="p-4 border-b border-border/60 bg-muted/20">
+          <div className="mb-4 rounded-lg bg-muted/40 p-4">
             <form onSubmit={handleRegisterPayment} className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Input
@@ -369,62 +354,60 @@ export default function BillingSettingsPage() {
           </div>
         )}
 
-        <div className="p-4">
-          {paymentsLoading ? (
-            <p className="text-xs text-muted-foreground">Cargando pagos...</p>
-          ) : isPaymentsError && !payments ? (
-            <ErrorState
-              message="No se pudo cargar el historial de pagos."
-              retryLabel="Reintentar"
-              onRetry={refetchPayments}
-              className="min-h-0"
-            />
-          ) : !payments ? null : payments.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">
-              No hay pagos registrados.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {payments.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3.5 py-2.5"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-muted/60 border border-border/70 flex items-center justify-center shrink-0">
-                      <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="font-mono text-xs font-semibold text-foreground tabular-nums">
-                        {formatCurrency(Number(payment.amount))}
-                      </p>
-                      <p className="font-mono text-[11px] text-muted-foreground tabular-nums">
-                        {formatDate(payment.date)}
-                      </p>
-                    </div>
+        {paymentsLoading ? (
+          <p className="text-xs text-muted-foreground">Cargando pagos…</p>
+        ) : isPaymentsError && !payments ? (
+          <ErrorState
+            message="No se pudo cargar el historial de pagos."
+            retryLabel="Reintentar"
+            onRetry={refetchPayments}
+            className="min-h-0"
+          />
+        ) : !payments ? null : payments.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-4">
+            No hay pagos registrados.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {payments.map((payment) => (
+              <div
+                key={payment.id}
+                className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3.5 py-2.5"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-card border border-border/70 flex items-center justify-center shrink-0">
+                    <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
-                  <Badge
-                    dot
-                    variant={
-                      payment.status === "PAID"
-                        ? "success"
-                        : payment.status === "PENDING"
-                        ? "warning"
-                        : "danger"
-                    }
-                  >
-                    {payment.status === "PAID"
-                      ? "Pagado"
-                      : payment.status === "PENDING"
-                      ? "Pendiente"
-                      : "Fallido"}
-                  </Badge>
+                  <div>
+                    <p className="text-xs font-semibold text-foreground tabular-nums">
+                      {formatCurrency(Number(payment.amount))}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground tabular-nums">
+                      {formatDate(payment.date)}
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+                <Badge
+                  dot
+                  variant={
+                    payment.status === "PAID"
+                      ? "success"
+                      : payment.status === "PENDING"
+                      ? "warning"
+                      : "danger"
+                  }
+                >
+                  {payment.status === "PAID"
+                    ? "Pagado"
+                    : payment.status === "PENDING"
+                    ? "Pendiente"
+                    : "Fallido"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </SettingsCard>
     </div>
   );
 }
