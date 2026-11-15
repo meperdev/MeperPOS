@@ -194,6 +194,19 @@ describe("RecentSalesCard (compact recent sales)", () => {
     expect(container.querySelector(".overflow-y-auto")).toBeNull();
   });
 
+  it("sets money in the tabular sans, not the mono face, in both layouts", () => {
+    useSalesMock.mockReturnValue({ data: { data: [sale(1)] } });
+
+    render(<RecentSalesCard />);
+
+    const rowTotal = within(screen.getByTestId("recent-sale-row")).getByText(/\$\s119\.000/);
+    const stackedTotal = within(screen.getByTestId("recent-sale-item")).getByText(/\$\s119\.000/);
+    for (const total of [rowTotal, stackedTotal]) {
+      expect(total).not.toHaveClass("font-mono");
+      expect(total).toHaveClass("tabular-nums");
+    }
+  });
+
   it("links 'Ver todas' to the sales page", () => {
     render(<RecentSalesCard />);
 

@@ -97,7 +97,7 @@ export function RecentSalesCard() {
                   <TableCell className="px-2 py-2">
                     <span className={getPaymentState(sale.payments, sale.financed).className}>{getPaymentState(sale.payments, sale.financed).label}</span>
                   </TableCell>
-                  <TableCell className="px-2 py-2 text-right font-mono font-semibold tabular-nums">
+                  <TableCell className="px-2 py-2 text-right font-semibold tabular-nums">
                     {formatCurrency(sale.total)}
                   </TableCell>
                   <TableCell className="px-2 py-2 text-right">
@@ -138,7 +138,7 @@ export function RecentSalesCard() {
                     </div>
                     <div className="min-w-0 space-y-0.5">
                       <dt className="text-muted-foreground">Total</dt>
-                      <dd className="font-mono font-semibold tabular-nums text-foreground">
+                      <dd className="font-semibold tabular-nums text-foreground">
                         {formatCurrency(sale.total)}
                       </dd>
                     </div>
