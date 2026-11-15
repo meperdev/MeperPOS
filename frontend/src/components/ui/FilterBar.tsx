@@ -89,7 +89,8 @@ export function FilterGroup({
           items[(index + step + items.length) % items.length]?.focus();
         }}
         className={cn(
-          "inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5 max-w-full overflow-x-auto",
+          // Track is the inset surface: muted on light, the page background on dark (darker than the card it sits on).
+          "inline-flex items-center gap-0.5 rounded-lg bg-muted dark:bg-background p-0.5 max-w-full overflow-x-auto",
           innerClassName,
         )}
       >
@@ -113,10 +114,11 @@ export function FilterOptionButton({
       type="button"
       aria-pressed={active}
       className={cn(
-        "h-8 px-3 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+        // inline-flex centring: a bare inline SVG sits on the text baseline and drifts off-centre in icon-only segments.
+        "inline-flex h-8 items-center justify-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         active
-          ? "bg-card text-foreground shadow-2xs border border-border/60"
+          ? "bg-card dark:bg-muted text-foreground shadow-2xs border border-border/60"
           : "border border-transparent text-muted-foreground hover:text-foreground",
         className,
       )}
