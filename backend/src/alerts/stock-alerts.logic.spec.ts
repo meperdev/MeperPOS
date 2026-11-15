@@ -1,4 +1,5 @@
 import {
+  cleanCatalogText,
   decideEpisode,
   renderStockAlertMessage,
   STOCK_ALERT_MESSAGE_LIMIT,
@@ -68,5 +69,25 @@ describe('renderStockAlertMessage', () => {
     expect(message.match(/• /g)).toHaveLength(STOCK_ALERT_MESSAGE_LIMIT);
     expect(message).toContain('… y 3 productos más.');
     expect(message).toContain('13 productos llegaron a su mínimo');
+  });
+});
+
+describe('cleanCatalogText', () => {
+  it('collapses control characters and whitespace so a name cannot forge lines', () => {
+    expect(cleanCatalogText('Café\n\n• Falso (X): 0 uds', 60)).toBe(
+      'Café • Falso (X): 0 uds',
+    );
+  });
+
+  it('truncates to the given limit', () => {
+    expect(cleanCatalogText('a'.repeat(100), 10)).toBe('aaaaaaaaaa');
+  });
+
+  it('keeps the rendered message to one bullet per product', () => {
+    const message = renderStockAlertMessage([
+      { name: 'Café\n• inyectado', sku: 'BEB-1', stock: 1, minStock: 5 },
+    ]);
+
+    expect(message.match(/^• /gm)).toHaveLength(1);
   });
 });

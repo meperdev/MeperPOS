@@ -30,6 +30,10 @@ function build() {
     },
     moneyLoan: { findMany: jest.fn().mockResolvedValue([]) },
     task: { findMany: jest.fn().mockResolvedValue([]) },
+    productStockAlertEvent: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
   };
   const planLimits = {
     getLimitStatus: jest.fn().mockResolvedValue({
@@ -200,5 +204,44 @@ describe('AlertsService', () => {
     const alerts = await service.list(user());
 
     expect(alerts.map((alert) => alert.id)).toEqual(['billing:past-due']);
+  });
+
+  it('returns the notification history newest first with clamped pagination', async () => {
+    const { service, prisma } = build();
+    prisma.productStockAlertEvent.findMany.mockResolvedValue([
+      {
+        id: 'e1',
+        episode: 2,
+        kind: 'NOTIFIED',
+        failureReason: null,
+        createdAt: new Date('2026-11-15T10:00:00.000Z'),
+        product: { id: 'p1', name: 'Café', sku: 'BEB-003' },
+      },
+    ]);
+    prisma.productStockAlertEvent.count.mockResolvedValue(11);
+
+    const page = await service.history(user(), 2, 500);
+
+    expect(prisma.productStockAlertEvent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-1' },
+        orderBy: { createdAt: 'desc' },
+        skip: 100,
+        take: 100,
+      }),
+    );
+    expect(page.meta).toEqual({ total: 11, page: 2, limit: 100, totalPages: 1 });
+    expect(page.data).toHaveLength(1);
+  });
+
+  it('never reads history without an organization scope', async () => {
+    const { service, prisma } = build();
+
+    const page = await service.history(
+      user({ organizationId: undefined, role: 'SUPER_ADMIN' }),
+    );
+
+    expect(page.data).toEqual([]);
+    expect(prisma.productStockAlertEvent.findMany).not.toHaveBeenCalled();
   });
 });

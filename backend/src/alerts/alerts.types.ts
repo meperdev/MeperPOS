@@ -57,3 +57,26 @@ export interface AlertSignals {
   overdueLoans: Array<{ id: string; dueAt: Date }>;
   overdueTasks: Array<{ id: string }>;
 }
+
+/** The closed set of episode transitions the history records. */
+export type StockAlertEventKind =
+  | 'OPENED'
+  | 'RESOLVED'
+  | 'NOTIFIED'
+  | 'FAILED'
+  | 'SKIPPED';
+
+/** One immutable history row, joined with the product it belongs to. */
+export interface StockAlertHistoryItem {
+  id: string;
+  product: { id: string; name: string; sku: string };
+  episode: number;
+  kind: StockAlertEventKind;
+  failureReason: string | null;
+  createdAt: Date;
+}
+
+export interface StockAlertHistoryPage {
+  data: StockAlertHistoryItem[];
+  meta: { total: number; page: number; limit: number; totalPages: number };
+}

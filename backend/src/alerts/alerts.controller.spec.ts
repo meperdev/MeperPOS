@@ -47,4 +47,27 @@ describe('AlertsController', () => {
     await expect(controller.list(user)).resolves.toEqual([{ id: 'stock:low' }]);
     expect(alerts.list).toHaveBeenCalledWith(user);
   });
+
+  it('serves the notification history under /alerts/notifications', () => {
+    expect(
+      Reflect.getMetadata(
+        PATH_METADATA,
+        AlertsController.prototype.history,
+      ),
+    ).toBe('notifications');
+    expect(
+      Reflect.getMetadata(ROLES_KEY, AlertsController.prototype.history),
+    ).toEqual(expect.arrayContaining([OrgRole.ADMIN, OrgRole.INVENTORY_USER]));
+  });
+
+  it('parses the history pagination and delegates it', async () => {
+    const page = { data: [], meta: { total: 0, page: 3, limit: 10, totalPages: 0 } };
+    const alerts = {
+      history: jest.fn().mockResolvedValue(page),
+    } as unknown as AlertsService;
+    const controller = new AlertsController(alerts);
+
+    await expect(controller.history(user, '3', '10')).resolves.toBe(page);
+    expect(alerts.history).toHaveBeenCalledWith(user, 3, 10, undefined);
+  });
 });

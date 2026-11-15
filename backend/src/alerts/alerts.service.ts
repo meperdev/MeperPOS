@@ -13,7 +13,13 @@ import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { alertVisibility, buildAlerts } from './alerts.logic';
-import type { OrgAlert } from './alerts.types';
+import type {
+  OrgAlert,
+  StockAlertEventKind,
+  StockAlertHistoryItem,
+  StockAlertHistoryPage,
+} from './alerts.types';
+import { lowStockProductWhere } from './low-stock.where';
 
 const LIMIT_TYPES: readonly LimitType[] = [
   'users',
@@ -125,6 +131,56 @@ export class AlertsService {
   }
 
   /**
+   * The notification history for the caller's organization, newest first.
+   *
+   * Rows are append-only events written by the scan, so a product that crossed its
+   * minimum several times keeps every episode instead of only the last one.
+   */
+  async history(
+    user: RequestUser,
+    page = 1,
+    limit = 20,
+    kind?: StockAlertEventKind,
+  ): Promise<StockAlertHistoryPage> {
+    const organizationId = user.organizationId;
+    if (!organizationId) {
+      return { data: [], meta: { total: 0, page: 1, limit, totalPages: 0 } };
+    }
+
+    const safePage = Math.max(1, Math.trunc(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Math.trunc(limit) || 20));
+    const where = { organizationId, ...(kind ? { kind } : {}) };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.productStockAlertEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+        select: {
+          id: true,
+          episode: true,
+          kind: true,
+          failureReason: true,
+          createdAt: true,
+          product: { select: { id: true, name: true, sku: true } },
+        },
+      }),
+      this.prisma.productStockAlertEvent.count({ where }),
+    ]);
+
+    return {
+      data: rows as StockAlertHistoryItem[],
+      meta: {
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
+  }
+
+  /**
    * The same rule as every other stock surface (tracked, active merchandise at or
    * below its minimum), evaluated in the database through a field reference so
    * the feed never loads the catalog to count it.
@@ -133,13 +189,10 @@ export class AlertsService {
     organizationId: string,
   ): Promise<Array<{ id: string; stock: number; minStock: number }>> {
     return this.prisma.product.findMany({
-      where: {
+      where: lowStockProductWhere(
         organizationId,
-        active: true,
-        type: ProductType.PRODUCT,
-        tracksStock: true,
-        stock: { lte: this.prisma.product.fields.minStock },
-      } as Prisma.ProductWhereInput,
+        this.prisma.product.fields.minStock,
+      ),
       select: { id: true, stock: true, minStock: true },
     });
   }
