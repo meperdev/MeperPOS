@@ -111,6 +111,28 @@ async function loadRules(env: Record<string, string>): Promise<HeaderRule[]> {
   }
 }
 
+interface RewriteRule {
+  source: string;
+  destination: string;
+}
+
+/** Re-evaluate next.config.ts and read the rewrites it would install. */
+async function loadRewrites(
+  env: Record<string, string>,
+): Promise<RewriteRule[]> {
+  vi.resetModules();
+  for (const [key, value] of Object.entries(env)) {
+    vi.stubEnv(key, value);
+  }
+  try {
+    const mod = await import("../../next.config");
+    const rewrites = await mod.default.rewrites?.();
+    return (rewrites ?? []) as RewriteRule[];
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
 function policyOf(rules: HeaderRule[], key: string): string | undefined {
   return rules
     .find((r) => r.source === ROUTE_SOURCE)
@@ -343,5 +365,57 @@ describe("Cache-Control: no-store on authenticated routes (spec S3, task T3)", (
   it("does not attach no-store to the global /:path* rule", () => {
     const globalRule = noStoreSources.includes(ROUTE_SOURCE);
     expect(globalRule).toBe(false);
+  });
+});
+
+describe("dev-only same-origin API proxy (phone preview over the tailnet)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // A phone reaching the dev server by LAN or tailnet address cannot talk to
+  // `http://<host>:3001` without widening `connect-src` and the backend CORS
+  // list, and the auth cookies would straddle two hosts. Proxying `/api`
+  // through Next keeps a single origin: `'self'` covers the requests, the
+  // cookies stay on the page host and the backend never sees CORS.
+  it("is inert unless DEV_API_PROXY_TARGET is set", async () => {
+    const rewrites = await loadRewrites({
+      NODE_ENV: "development",
+      DEV_API_PROXY_TARGET: "",
+    });
+
+    expect(rewrites).toEqual([]);
+  });
+
+  it("routes /api to the local backend, keeping the /api prefix", async () => {
+    const rewrites = await loadRewrites({
+      NODE_ENV: "development",
+      DEV_API_PROXY_TARGET: "http://127.0.0.1:3001",
+    });
+
+    expect(rewrites).toEqual([
+      {
+        source: "/api/:path*",
+        destination: "http://127.0.0.1:3001/api/:path*",
+      },
+    ]);
+  });
+
+  it("never proxies in production, even when the variable leaks into the environment", async () => {
+    const rewrites = await loadRewrites({
+      NODE_ENV: "production",
+      DEV_API_PROXY_TARGET: "http://127.0.0.1:3001",
+    });
+
+    expect(rewrites).toEqual([]);
+  });
+
+  it("trims a trailing slash so the destination keeps a single separator", async () => {
+    const rewrites = await loadRewrites({
+      NODE_ENV: "development",
+      DEV_API_PROXY_TARGET: "http://127.0.0.1:3001/",
+    });
+
+    expect(rewrites[0]?.destination).toBe("http://127.0.0.1:3001/api/:path*");
   });
 });
