@@ -39,6 +39,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
 import { PaymentStateBadge, getPaymentState } from "@/components/sales/PaymentState";
+import { SaleCardRow } from "@/components/sales/SaleCardRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 function SalesPageContent() {
@@ -283,25 +284,17 @@ function SalesPageContent() {
                     </div>
 
                     <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between items-center text-muted-foreground">
-                        <span>Cliente</span>
-                        <span className="font-medium text-foreground truncate max-w-[180px]">
-                          {sale.customer?.name || "Sin cliente"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-start gap-2 text-muted-foreground">
-                        <span className="shrink-0">Fecha</span>
-                        <span className="text-right leading-tight text-[11px]">{formatDateTime(sale.createdAt)}</span>
-                      </div>
+                      <SaleCardRow label="Cliente" truncate>{sale.customer?.name || "Sin cliente"}</SaleCardRow>
+                      <SaleCardRow label="Fecha">
+                        <span className="leading-tight text-[11px]">{formatDateTime(sale.createdAt)}</span>
+                      </SaleCardRow>
                       {isAdmin && sale.user?.name && (
-                        <div className="flex justify-between items-center text-muted-foreground">
-                          <span>Vendedor</span>
-                          <span className="text-foreground">{sale.user.name}</span>
-                        </div>
+                        <SaleCardRow label="Vendedor">{sale.user.name}</SaleCardRow>
                       )}
-                      <div className="flex justify-between items-center text-muted-foreground pt-0.5">
-                        <span>Método de pago</span>
-                        <div><PaymentStateBadge payments={sale.payments} financed={sale.financed} short /></div>
+                      <div className="pt-0.5">
+                        <SaleCardRow label="Método de pago">
+                          <PaymentStateBadge payments={sale.payments} financed={sale.financed} />
+                        </SaleCardRow>
                       </div>
                     </div>
 
