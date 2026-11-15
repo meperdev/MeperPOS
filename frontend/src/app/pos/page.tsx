@@ -1118,6 +1118,7 @@ export default function POSPage() {
               {totalPages > 1 && (
                 <div className="w-full">
                   <Pagination
+                    pinned={false}
                     className="[&>div]:flex-wrap [&>div]:justify-center"
                     currentPage={visibleCurrentPage}
                     totalPages={totalPages}
