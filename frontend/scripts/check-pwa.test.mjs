@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { checkPwaSurface } from "./check-pwa.mjs";
+import { checkPwaSurface, runCli } from "./check-pwa.mjs";
 
 const BASE = "http://127.0.0.1:3101";
 
@@ -38,6 +38,7 @@ self.addEventListener("fetch", () => {});
 function html({ apple = true, legacy = true, manifestLink = true } = {}) {
   return [
     "<html><head>",
+    '<link rel="stylesheet" href="/_next/static/chunks/app.css">',
     manifestLink ? '<link rel="manifest" href="/manifest.webmanifest">' : "",
     legacy ? '<meta name="mobile-web-app-capable" content="yes">' : "",
     apple ? '<meta name="apple-mobile-web-app-capable" content="yes">' : "",
@@ -67,6 +68,12 @@ function transport(overrides = {}) {
         headers: { "content-type": "text/html" },
       }),
     "/offline": () => new Response("<html></html>", { status: 200 }),
+    "/_next/static/chunks/app.css": () =>
+      new Response(
+        overrides.css ??
+          ":root{--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--mobile-header:3.5rem}.pt-\\[calc\\(var\\(--mobile-header\\)\\)\\]{padding-top:calc(var(--mobile-header) + 1rem)}",
+        { status: 200, headers: { "content-type": "text/css" } }
+      ),
     ...overrides.routes,
   };
 
@@ -264,5 +271,97 @@ describe("checkPwaSurface", () => {
     });
 
     expect(checks(failures)).toContain("/manifest.webmanifest status");
+  });
+});
+
+describe("checkPwaSurface — built stylesheet", () => {
+  it("reports a stylesheet that lost the safe-area tokens", async () => {
+    const failures = await checkPwaSurface({
+      fetchImpl: transport({ css: ":root{--primary:#000}" }),
+      base: BASE,
+    });
+
+    expect(checks(failures)).toContain("built stylesheet");
+    expect(failures.some((f) => f.detail.includes("safe-area top"))).toBe(true);
+  });
+
+  it("reports a page with no stylesheet link at all", async () => {
+    const failures = await checkPwaSurface({
+      fetchImpl: transport({
+        html: '<html><head><link rel="manifest" href="/manifest.webmanifest"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"></head></html>',
+      }),
+      base: BASE,
+    });
+
+    expect(failures.some((f) => f.detail.includes("no stylesheet link"))).toBe(
+      true
+    );
+  });
+});
+
+/**
+ * The half CI actually reads. A guard that prints failures and exits 0 is the
+ * same vacuous class this whole task exists to close.
+ */
+describe("runCli exit code", () => {
+  function cli(overrides = {}) {
+    const lines = [];
+    const log = {
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+    };
+    return {
+      lines,
+      promise: runCli({
+        fetchImpl: transport(overrides.transport),
+        env: {},
+        findFreePortImpl: async () => "3123",
+        waitForServerImpl: overrides.waitForServerImpl ?? (async () => true),
+        spawnImpl:
+          overrides.spawnImpl ??
+          (() => ({
+            // `exit` resolves immediately: the real `waitForExit` has a 5s
+            // backstop and a fake child that never exits would spend it.
+            once: (event, handler) => {
+              if (event === "exit") handler();
+            },
+            kill: () => undefined,
+            on: () => undefined,
+          })),
+        log,
+        ...overrides.rest,
+      }),
+    };
+  }
+
+  it("exits 0 on a clean surface", async () => {
+    const { promise } = cli();
+    await expect(promise).resolves.toBe(0);
+  });
+
+  it("exits 1 when a check fails", async () => {
+    const { promise, lines } = cli({
+      transport: { manifest: manifest({ display: "browser" }) },
+    });
+
+    await expect(promise).resolves.toBe(1);
+    expect(lines.some((line) => line.includes("display"))).toBe(true);
+  });
+
+  it("exits 1 when the app never answers", async () => {
+    const { promise, lines } = cli({ waitForServerImpl: async () => false });
+
+    await expect(promise).resolves.toBe(1);
+    expect(lines.some((line) => line.includes("never answered"))).toBe(true);
+  });
+
+  it("exits 1 when the app cannot be spawned at all", async () => {
+    const { promise } = cli({
+      spawnImpl: () => {
+        throw new Error("npx missing");
+      },
+    });
+
+    await expect(promise).resolves.toBe(1);
   });
 });

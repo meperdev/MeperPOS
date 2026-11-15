@@ -8,10 +8,12 @@
  * response carries, the same way the security-header step does.
  *
  * The logic is exported separately from the CLI so the assertions themselves
- * can be tested with a fake transport instead of a running server.
+ * can be tested with a fake transport, and the CLI is exported too so its exit
+ * code — the only thing CI reads — is not the untested half.
  */
 
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { pathToFileURL } from "node:url";
 
 const MANIFEST_FIELDS = [
@@ -30,6 +32,18 @@ const CAPABILITY_TAGS = [
   "apple-mobile-web-app-capable",
 ];
 
+/**
+ * Strings the built stylesheet must carry. Tailwind compiles arbitrary values
+ * from source class names, and an arbitrary value it decides to drop leaves a
+ * green class assertion and an unprotected device behind.
+ */
+const REQUIRED_CSS_FRAGMENTS = [
+  { label: "the safe-area top token", fragment: "--safe-top:env(" },
+  { label: "the safe-area bottom token", fragment: "--safe-bottom:env(" },
+  { label: "the mobile header token", fragment: "--mobile-header:" },
+  { label: "a composed header offset", fragment: "var(--mobile-header)" },
+];
+
 async function readText(response) {
   return response.text();
 }
@@ -37,6 +51,21 @@ async function readText(response) {
 /** Whether the page declares a meta tag with exactly this name attribute. */
 function hasMetaName(html, name) {
   return new RegExp(`name="${name}"`).test(html);
+}
+
+/** Absolute URLs of the stylesheets a page links. */
+function styleSheetUrls(html, base) {
+  const urls = [];
+  const pattern = /<link[^>]+href="([^"]+\.css)"/g;
+  let match;
+  while ((match = pattern.exec(html)) !== null) {
+    try {
+      urls.push(new URL(match[1], base).href);
+    } catch {
+      // A malformed href is not worth failing over on its own.
+    }
+  }
+  return urls;
 }
 
 /**
@@ -132,20 +161,21 @@ export async function checkPwaSurface({ fetchImpl, base }) {
   }
 
   const loginResponse = await get("/login");
+  let loginHtml = "";
   if (loginResponse) {
     if (!loginResponse.ok) {
       fail("/login status", `HTTP ${loginResponse.status}`);
     }
-    const html = await readText(loginResponse);
+    loginHtml = await readText(loginResponse);
     for (const tag of CAPABILITY_TAGS) {
       // Matched as an attribute, never as a substring: the Apple tag contains
       // the generic name, so `includes("mobile-web-app-capable")` reports
       // success on a page that only carries the Apple one.
-      if (!hasMetaName(html, tag)) {
+      if (!hasMetaName(loginHtml, tag)) {
         fail("/login markup", `missing "${tag}"`);
       }
     }
-    if (!/rel="manifest"/.test(html)) {
+    if (!/rel="manifest"/.test(loginHtml)) {
       fail("/login markup", "no manifest link");
     }
   }
@@ -155,6 +185,33 @@ export async function checkPwaSurface({ fetchImpl, base }) {
     fail("/offline status", `HTTP ${offlineResponse.status}`);
   }
 
+  // The stylesheet is where the safe-area work actually lives: the class names
+  // in the markup prove nothing on their own.
+  const sheetUrls = styleSheetUrls(loginHtml, base);
+  if (sheetUrls.length === 0) {
+    fail("/login stylesheet", "no stylesheet link found");
+  }
+
+  let css = "";
+  for (const url of sheetUrls.slice(0, 5)) {
+    try {
+      const response = await fetchImpl(url);
+      if (!response.ok) {
+        fail("stylesheet status", `HTTP ${response.status} for ${url}`);
+        continue;
+      }
+      css += await readText(response);
+    } catch (error) {
+      fail("stylesheet reachable", `${url}: ${String(error)}`);
+    }
+  }
+
+  for (const { label, fragment } of REQUIRED_CSS_FRAGMENTS) {
+    if (!css.includes(fragment)) {
+      fail("built stylesheet", `missing ${label} ("${fragment}")`);
+    }
+  }
+
   return failures;
 }
 
@@ -162,9 +219,9 @@ export async function checkPwaSurface({ fetchImpl, base }) {
 // `npm run check:pwa` after a build. Boots `next start` itself unless
 // PWA_CHECK_BASE points at a server that is already running.
 
-const DEFAULT_PORT = "3101";
+const STARTUP_TIMEOUT_MS = 60_000;
 
-async function waitForServer(base, deadlineMs = 60_000) {
+export async function waitForServer(base, deadlineMs = STARTUP_TIMEOUT_MS) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < deadlineMs) {
@@ -180,40 +237,97 @@ async function waitForServer(base, deadlineMs = 60_000) {
   return false;
 }
 
-async function main() {
-  const explicitBase = process.env.PWA_CHECK_BASE;
-  const port = process.env.PWA_CHECK_PORT ?? DEFAULT_PORT;
+/**
+ * Asks the OS for a port nobody is using. A fixed port would let any lingering
+ * `next start` from an earlier run answer for this one, which makes a green
+ * result meaningless.
+ */
+export function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, () => {
+      const { port } = server.address();
+      server.close(() => resolve(String(port)));
+    });
+  });
+}
+
+/** Waits for the child to exit, so a killed server cannot outlive the check. */
+function waitForExit(child, timeoutMs = 5_000) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+/**
+ * The whole command, returning the exit code CI actually reads. Everything with
+ * a side effect is injectable so the failure plumbing is testable.
+ */
+export async function runCli({
+  fetchImpl = fetch,
+  spawnImpl = spawn,
+  waitForServerImpl = waitForServer,
+  findFreePortImpl = findFreePort,
+  log = console,
+  env = process.env,
+} = {}) {
+  const explicitBase = env.PWA_CHECK_BASE;
+  const port =
+    env.PWA_CHECK_PORT ?? (explicitBase ? null : await findFreePortImpl());
   const base = explicitBase ?? `http://127.0.0.1:${port}`;
 
   let server = null;
 
   if (!explicitBase) {
-    server = spawn("npx", ["next", "start", "-p", port], {
-      stdio: ["ignore", "ignore", "inherit"],
-      env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+    try {
+      server = spawnImpl("npx", ["next", "start", "-p", port], {
+        stdio: ["ignore", "ignore", "inherit"],
+        env: { ...env, NEXT_TELEMETRY_DISABLED: "1" },
+      });
+    } catch (error) {
+      log.error(`check:pwa — could not start the app: ${String(error)}`);
+      return 1;
+    }
+
+    let spawnError = null;
+    server.once("error", (error) => {
+      spawnError = error;
     });
 
-    if (!(await waitForServer(base))) {
-      console.error(`check:pwa — the app never answered on ${base}`);
-      server.kill("SIGTERM");
-      process.exit(1);
+    if (!(await waitForServerImpl(base))) {
+      await waitForExit(server);
+      log.error(
+        `check:pwa — the app never answered on ${base}${
+          spawnError ? ` (${String(spawnError)})` : ""
+        }`
+      );
+      return 1;
     }
   }
 
   try {
-    const failures = await checkPwaSurface({ fetchImpl: fetch, base });
+    const failures = await checkPwaSurface({ fetchImpl, base });
 
     if (failures.length === 0) {
-      console.log(`check:pwa — PWA surface intact on ${base}`);
-      return;
+      log.log(`check:pwa — PWA surface intact on ${base}`);
+      return 0;
     }
 
     for (const failure of failures) {
-      console.error(`check:pwa — ${failure.check}: ${failure.detail}`);
+      log.error(`check:pwa — ${failure.check}: ${failure.detail}`);
     }
-    process.exitCode = 1;
+    return 1;
   } finally {
-    if (server) server.kill("SIGTERM");
+    if (server) {
+      server.kill("SIGTERM");
+      await waitForExit(server);
+    }
   }
 }
 
@@ -221,5 +335,5 @@ const invokedDirectly =
   process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (invokedDirectly) {
-  await main();
+  process.exitCode = await runCli();
 }
