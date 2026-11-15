@@ -61,7 +61,7 @@ const STATUS_TONE: Record<StatusKey, string> = {
 
 /** The stock count sits on the dark scrim with a subtle semantic tint. */
 const STOCK_TONE: Partial<Record<StatusKey, string>> = {
-  healthy: "border-success/30 bg-success/15 text-white/85",
+  healthy: "border-success/30 bg-success/15 text-success-text",
   low: "border-warning/35 bg-warning/15 text-warning-text",
   depleted: "border-danger/35 bg-danger/15 text-danger-text",
 };
@@ -140,7 +140,7 @@ function ProductMedia({ product }: { product: ProductCardData }) {
           <div className="absolute inset-0 rounded-[inherit] bg-muted" aria-hidden="true" />
           {/* Centred in the visible upper space above the content sheet. */}
           <div className="absolute inset-x-0 top-0 bottom-[8.25rem] flex items-center justify-center">
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.03]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-card/60">
               <Package className="h-5 w-5 stroke-[1.5] text-muted-foreground" aria-hidden="true" />
             </div>
           </div>
@@ -178,7 +178,7 @@ function RailButton({
     >
       <span
         className={cn(
-          "flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/40 text-white transition-colors",
+          "flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground transition-colors",
           tone,
         )}
       >
@@ -260,8 +260,8 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
               label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
               tone={
                 isFavorite
-                  ? "border-warning/60 bg-warning/35 text-white"
-                  : "group-hover/rail:bg-black/55 group-hover/rail:text-warning"
+                  ? "border-warning/60 bg-warning/35 text-warning-text"
+                  : "group-hover/rail:text-foreground"
               }
               onClick={onToggleFavorite}
             >
@@ -271,7 +271,11 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
           {isInventory && footerHandler && (
             <RailButton
               label={isInactive ? "Reactivar producto" : "Desactivar producto"}
-              tone={isInactive ? "group-hover/rail:bg-success/70" : "group-hover/rail:bg-danger/70"}
+              tone={
+                isInactive
+                  ? "group-hover/rail:bg-success/70 group-hover/rail:text-white"
+                  : "group-hover/rail:bg-danger/70 group-hover/rail:text-white"
+              }
               onClick={footerHandler}
             >
               {isInactive ? <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> : <Power className="h-3.5 w-3.5" aria-hidden="true" />}
@@ -281,30 +285,30 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
       )}
 
       {/*
-        The content block is a flat dark panel docked to the bottom of the photo (no gradient,
-        no blur), so white text stays readable on any picture. It is the only in-flow child and
+        The content block is a flat card-coloured panel docked to the bottom of the photo (no
+        gradient, no blur), theme tokens only, so its text reads in both light and dark mode. It is the only in-flow child and
         a plain relative block, so the full-card click surface above it still receives every
         click on the name, meta and price.
       */}
       <div
         data-testid="product-sheet"
-        className="relative mt-auto flex w-full min-w-0 flex-col border-t border-white/10 bg-zinc-950/80 px-3 pb-3 pt-3"
+        className="relative mt-auto flex w-full min-w-0 flex-col border-t border-border bg-card px-3 pb-3 pt-3 text-foreground"
       >
-        <h3 className="line-clamp-2 min-h-[2.25rem] min-w-0 break-words text-sm sm:text-[15px] font-semibold leading-snug text-white">
+        <h3 className="line-clamp-2 min-h-[2.25rem] min-w-0 break-words text-sm sm:text-[15px] font-semibold leading-snug text-foreground">
           {product.name}
         </h3>
 
         {(product.sku || showStock) && (
           <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
             {product.sku && (
-              <span className="min-w-0 truncate font-mono text-[11px] text-white/60">{product.sku}</span>
+              <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">{product.sku}</span>
             )}
             {showStock && (
               <span
                 data-testid="product-stock"
                 className={cn(
                   "ml-auto shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium leading-none tabular-nums",
-                  STOCK_TONE[status] ?? "border-white/10 bg-white/[0.06] text-white/85",
+                  STOCK_TONE[status] ?? "border-border bg-muted text-foreground",
                 )}
               >
                 {product.stock} uds.
@@ -314,21 +318,21 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
         )}
 
         <div data-testid="product-price-panel" className={cn("min-w-0", product.sku || showStock ? "mt-2" : "mt-auto pt-2")}>
-          <span className="block w-fit max-w-full truncate rounded-md border border-primary/50 bg-primary/25 px-2 py-1 text-[11px] font-semibold leading-none text-white/90">
+          <span className="block w-fit max-w-full truncate rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-[11px] font-semibold leading-none text-primary-text">
             {categoryName}
           </span>
           {/* Wraps so the list price drops below the selling price instead of overflowing. */}
           <div className="mt-1.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span
               data-testid={hasPromo ? "offer-effective-price" : undefined}
-              className="whitespace-nowrap text-xl font-semibold leading-none tabular-nums tracking-tight text-white"
+              className="whitespace-nowrap text-xl font-semibold leading-none tabular-nums tracking-tight text-foreground"
             >
               {formatCurrency(sellingPrice)}
             </span>
             {hasPromo && (
               <s
                 data-testid="offer-list-price"
-                className="whitespace-nowrap text-xs tabular-nums text-white/60 line-through"
+                className="whitespace-nowrap text-xs tabular-nums text-muted-foreground line-through"
               >
                 {formatCurrency(Number(product.salePrice))}
               </s>

@@ -868,7 +868,7 @@ describe("ProductCard — premium card v2: shape and layers", () => {
     const sheet = screen.getByTestId("product-sheet");
 
     expect(card?.lastElementChild).toBe(sheet);
-    expect(sheet).toHaveClass("relative", "mt-auto", "px-3", "pb-3", "pt-3", "bg-zinc-950/80");
+    expect(sheet).toHaveClass("relative", "mt-auto", "px-3", "pb-3", "pt-3", "bg-card", "text-foreground");
     expect(sheet.className).not.toMatch(/backdrop-/);
     expect(Array.from(sheet.children).some((child) => child.classList.contains("absolute"))).toBe(false);
   });
@@ -907,7 +907,7 @@ describe("ProductCard — premium card v2: chips", () => {
 
     const category = screen.getByText("Ropa");
 
-    expect(category).toHaveClass("rounded-md", "max-w-full", "truncate", "border", "border-primary/50", "bg-primary/25", "text-white/90");
+    expect(category).toHaveClass("rounded-md", "max-w-full", "truncate", "border", "border-primary/40", "bg-primary/15", "text-primary-text");
     expect(category).not.toHaveClass("rounded-full");
   });
 
@@ -956,16 +956,16 @@ describe("ProductCard — premium card v2: chips", () => {
 });
 
 describe("ProductCard — premium card v2: content block", () => {
-  it("sets the name, SKU and price in white over the scrim without truncating the price", () => {
+  it("sets the name, SKU and price in theme text tokens without truncating the price", () => {
     render(<ProductCard product={baseProduct} mode="inventory" />);
 
     const name = screen.getByRole("heading", { name: "Camisa de lino natural" });
     const sku = screen.getByText("SKU-0001");
     const price = screen.getByText("$ 45.000");
 
-    expect(name).toHaveClass("line-clamp-2", "break-words", "text-sm", "font-semibold", "text-white");
-    expect(sku).toHaveClass("min-w-0", "truncate", "font-mono", "text-white/60");
-    expect(price).toHaveClass("text-xl", "font-semibold", "tabular-nums", "whitespace-nowrap", "text-white");
+    expect(name).toHaveClass("line-clamp-2", "break-words", "text-sm", "font-semibold", "text-foreground");
+    expect(sku).toHaveClass("min-w-0", "truncate", "font-mono", "text-muted-foreground");
+    expect(price).toHaveClass("text-xl", "font-semibold", "tabular-nums", "whitespace-nowrap", "text-foreground");
     expect(price).not.toHaveClass("truncate");
   });
 
@@ -985,7 +985,7 @@ describe("ProductCard — premium card v2: content block", () => {
   });
 
   it.each([
-    { label: "healthy", product: baseProduct, tone: /(?:^|\s)text-white\/85(?=\s|$)/ },
+    { label: "healthy", product: baseProduct, tone: /(?:^|\s)text-success-text(?=\s|$)/ },
     { label: "low", product: { ...baseProduct, stock: 3, isLowStock: true }, tone: /(?:^|\s)text-warning-text(?=\s|$)/ },
     { label: "depleted", product: { ...baseProduct, stock: 0, isLowStock: true }, tone: /(?:^|\s)text-danger-text(?=\s|$)/ },
   ] satisfies Array<{ label: string; product: CardProduct; tone: RegExp }>)(
@@ -1004,7 +1004,7 @@ describe("ProductCard — premium card v2: content block", () => {
     const list = screen.getByTestId("offer-list-price");
 
     expect(list.tagName).toBe("S");
-    expect(list).toHaveClass("line-through", "text-white/60");
+    expect(list).toHaveClass("line-through", "text-muted-foreground");
     expect(effective.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(list.parentElement).toBe(effective.parentElement);
     expect(effective.parentElement).toHaveClass("flex", "flex-wrap", "items-baseline");
@@ -1032,7 +1032,7 @@ describe("ProductCard — premium card v2: control rail", () => {
     );
     // 44px hit area around a small, flat, quiet disc.
     expect(deactivate).toHaveClass("h-11", "w-11");
-    expect(deactivate.firstElementChild).toHaveClass("h-7", "w-7", "bg-black/40", "border-white/20", "text-white");
+    expect(deactivate.firstElementChild).toHaveClass("h-7", "w-7", "bg-card/90", "border-border", "text-muted-foreground");
   });
 
   it("renders no rail at all in inventory when there is no deactivate or reactivate handler", () => {
@@ -1051,6 +1051,35 @@ describe("ProductCard — premium card v2: control rail", () => {
     expect(screen.queryByRole("button", { name: /^\+ agregar$/i })).toBeNull();
     expect(favorite.parentElement?.className).not.toMatch(/opacity-0/);
     expect(favorite).toHaveClass("h-11", "w-11");
-    expect(favorite.firstElementChild).toHaveClass("h-7", "w-7");
+    expect(favorite.firstElementChild).toHaveClass("h-7", "w-7", "bg-card/90", "border-border", "text-muted-foreground");
+  });
+
+  it("keeps the warning fill on an active favorite star, with a theme-aware glyph", () => {
+    render(<ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} isFavorite onToggleFavorite={vi.fn()} />);
+
+    const favorite = screen.getByRole("button", { name: /quitar de favoritos/i });
+
+    expect(favorite.firstElementChild).toHaveClass("bg-warning/35", "border-warning/60", "text-warning-text");
+    expect(favorite.firstElementChild?.className).not.toMatch(/(?:^|\s)text-white(?=\s|$)/);
+  });
+});
+
+describe("ProductCard — theme tokens only", () => {
+  // Matches base (unprefixed) utilities that paint a literal palette hue or white/black.
+  // Variant-prefixed tokens (e.g. group-hover/rail:text-white on a solid fill) are allowed.
+  const LITERAL_COLOR = /^(?:bg|text|border)-(?:white|black|zinc|gray|neutral|stone|slate)(?:\/|-|$)/;
+
+  it.each([
+    { label: "POS", props: { mode: "pos" as const, onClick: vi.fn(), onToggleFavorite: vi.fn(), isFavorite: false } },
+    { label: "POS favorite", props: { mode: "pos" as const, onClick: vi.fn(), onToggleFavorite: vi.fn(), isFavorite: true } },
+    { label: "inventory", props: { mode: "inventory" as const, onClick: vi.fn(), onDelete: vi.fn() } },
+  ])("paints the $label card without literal palette or white/black surfaces", ({ props }) => {
+    const { container } = render(<ProductCard product={promoProduct} {...props} />);
+
+    const offending = Array.from(container.querySelectorAll("*"))
+      .flatMap((node) => Array.from(node.classList))
+      .filter((token) => LITERAL_COLOR.test(token));
+
+    expect(offending).toEqual([]);
   });
 });
