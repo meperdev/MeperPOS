@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import {
@@ -420,12 +420,14 @@ describe("Sidebar", () => {
 
     // One block, not two: the clock is a child of the account block.
     expect(account.contains(clock)).toBe(true);
-    expect(clock).toHaveTextContent(/\d{4}/);
+    expect(clock.tagName).toBe("TIME");
+    expect(clock).toHaveAttribute("dateTime");
     expect(clock).toHaveTextContent(/\d{1,2}:\d{2}/);
+    expect(clock).not.toHaveClass("font-mono");
     expect(account).toHaveTextContent("Ana Perez");
   });
 
-  it("uses the identity itself as the account menu trigger", async () => {
+  it("renders the identity as plain text with the role below the name, no card or chip", async () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations: [organizations[0]] },
     });
@@ -436,12 +438,72 @@ describe("Sidebar", () => {
       expect(api.get).toHaveBeenCalledWith("/auth/organizations");
     });
 
-    const trigger = screen.getByRole("button", { name: "Opciones de cuenta" });
+    const account = screen.getByTestId("sidebar-user");
+    expect(screen.getByText("Ana Perez")).toHaveClass("text-sm", "font-medium", "truncate");
+    expect(screen.getByText("Administrador")).toHaveClass("text-xs", "text-muted-foreground");
+    // Footer separator only: no bordered card, and no online presence dot.
+    expect(account).toHaveClass("border-t");
+    expect(account.querySelector(".bg-success")).toBeNull();
+    expect(account.querySelector("[data-slot='badge'], .rounded-xl")).toBeNull();
+  });
 
-    // One target for the whole identity card: avatar, name and role inside it.
-    expect(trigger).toHaveTextContent("AP");
-    expect(trigger).toHaveTextContent("Ana Perez");
-    expect(trigger).toHaveTextContent("Administrador");
+  it("puts the bell and the account menu trigger side by side in the expanded footer", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
+    });
+
+    // The mobile header renders its own bell in the DOM, so scope to the footer.
+    const footer = within(screen.getByTestId("sidebar-user"));
+    const menuTrigger = footer.getByRole("button", { name: "Opciones de cuenta" });
+    const bell = footer.getByRole("button", { name: "Alertas" });
+
+    // Bell first, then the ⋮ menu, both frameless icon buttons.
+    expect(
+      bell.compareDocumentPosition(menuTrigger) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(bell).toHaveClass("h-9", "w-9");
+    expect(menuTrigger).toHaveClass("h-9", "w-9", "border-transparent", "bg-transparent");
+  });
+
+  it("collapses the footer to the bell, the avatar menu trigger and the org button", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <SidebarProvider>
+          <Sidebar />
+        </SidebarProvider>
+      </QueryClientProvider>
+    );
+
+    // The rail starts expanded (beforeEach), so one toggle collapses it.
+    await userEvent.click(await screen.findByTestId("sidebar-collapse-toggle"));
+
+    const account = screen.getByTestId("sidebar-user");
+    // No clock in the rail: the time lives in the expanded footer only.
+    expect(screen.queryByTestId("sidebar-clock")).not.toBeInTheDocument();
+    expect(account).not.toHaveTextContent("Ana Perez");
+
+    const footer = within(screen.getByTestId("sidebar-user"));
+    const bell = footer.getByRole("button", { name: /Alertas/ });
+    const avatarTrigger = footer.getByRole("button", { name: "Opciones de cuenta" });
+    expect(avatarTrigger).toHaveTextContent("AP");
+    expect(
+      bell.compareDocumentPosition(avatarTrigger) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      footer.getByRole("button", { name: "Mostrar organizaciones (expandir barra)" })
+    ).toBeInTheDocument();
   });
 
   it("separates Cerrar sesión from the rest of the account menu", async () => {

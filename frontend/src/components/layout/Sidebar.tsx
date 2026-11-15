@@ -38,7 +38,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
-import { Badge } from "@/components/ui/Badge";
+import { formatSidebarClock } from "@/components/layout/sidebar-clock";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn, safeGetItem, safeSetItem } from "@/lib/utils";
@@ -176,6 +176,14 @@ const roleLabels: Record<string, string> = {
   CASHIER: "Cajero",
   INVENTORY_USER: "Inventario",
 };
+
+// Footer actions are frameless icon buttons: the bell and the ⋮ menu are the
+// only chrome the account area keeps, so they share one treatment.
+const footerIconButtonClass =
+  "h-9 w-9 lg:h-9 lg:w-9 rounded-lg border-transparent bg-transparent text-muted-foreground transition-colors hover:border-transparent hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
+const avatarCircleClass =
+  "grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -378,25 +386,8 @@ export function Sidebar() {
     },
   ];
 
-  const formattedDate = new Intl.DateTimeFormat("es-CO", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(now);
-  // es-CO lowercases the weekday; the rail reads better with it capitalized.
-  const dateLabel = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
-
-  const formattedTime = new Intl.DateTimeFormat("es-CO", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(now);
-
-  const timeMatch = formattedTime.match(/^(\d{1,2}:\d{2})\s*(.*)$/);
-  const timeDigits = timeMatch ? timeMatch[1] : formattedTime;
-  const timePeriod = timeMatch && timeMatch[2]
-    ? timeMatch[2].replace(/[\.\s]/g, "").toUpperCase()
-    : "";
+  const clockLabel = formatSidebarClock(now);
+  const clockIso = now.toISOString();
 
   const sidebarContent = (
     <>
@@ -563,124 +554,82 @@ export function Sidebar() {
           )}
         >
           {isCollapsed ? (
-            <div className="flex flex-col items-center gap-1.5">
-              <div
-                data-testid="sidebar-clock"
-                className="flex flex-col items-center leading-none"
-                title={`${formattedDate}, ${formattedTime}`}
-              >
-                <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
-                  {timeDigits}
-                </span>
-                {timePeriod && (
-                  <span className="mt-0.5 font-mono text-[11px] leading-none text-muted-foreground">
-                    {timePeriod}
+            <div className="flex flex-col items-center gap-1">
+              <AlertCenter
+                collapsed
+                className="inline-flex"
+                buttonClassName={footerIconButtonClass}
+              />
+
+              <RowActions
+                label="Opciones de cuenta"
+                menuOffset={RAIL_FLYOUT_GAP}
+                preferSide="right"
+                items={accountItems}
+                triggerClassName={cn(footerIconButtonClass, "rounded-full")}
+                triggerContent={
+                  <span aria-hidden="true" className={avatarCircleClass}>
+                    {initials}
                   </span>
-                )}
-                <span className="sr-only">, {formattedDate}</span>
-              </div>
+                }
+              />
 
-              <div className="mt-0.5 flex w-full flex-col items-center gap-1.5 border-t border-border/60 pt-1.5">
-                <RowActions
-                  label="Opciones de cuenta"
-                  menuOffset={24}
-                  items={accountItems}
-                  triggerClassName="h-10 w-10 rounded-lg border-0 bg-transparent p-0 hover:border-transparent hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:h-9 lg:w-9"
-                  triggerContent={
-                    <span className="grid h-full w-full place-items-center rounded-lg bg-primary font-mono text-[11px] font-semibold text-white">
-                      {initials}
-                    </span>
-                  }
-                />
-
-                <button
-                  type="button"
-                  onClick={toggleCollapse}
-                  className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8"
-                  aria-label="Mostrar organizaciones (expandir barra)"
-                  title="Mostrar organizaciones (expandir barra)"
-                >
-                  <Building2 className="h-4 w-4" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={toggleCollapse}
+                className={cn(footerIconButtonClass, "flex items-center justify-center")}
+                aria-label="Mostrar organizaciones (expandir barra)"
+                title="Mostrar organizaciones (expandir barra)"
+              >
+                <Building2 className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
           ) : (
-            <div className="flex flex-col">
-              {/* The clock leads the block: the time is the biggest number in
-                  the rail, so it reads at a glance and anchors the footer. */}
-              <div
+            <div className="flex flex-col gap-2">
+              {/* The time leads the footer as one quiet line; the identity row
+                  and its two actions sit under it. */}
+              <time
                 data-testid="sidebar-clock"
-                className="flex items-center justify-between gap-2"
+                dateTime={clockIso}
+                className="truncate text-xs tabular-nums text-muted-foreground"
               >
-                <div
-                  className="min-w-0"
-                  title={`${dateLabel}, ${formattedTime}`}
-                >
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-mono text-[30px] font-semibold leading-none tracking-tight text-foreground tabular-nums">
-                      {timeDigits}
+                {clockLabel}
+              </time>
+
+              <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <span aria-hidden="true" className={avatarCircleClass}>
+                    {initials}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">
+                      {user.name}
                     </span>
-                    {timePeriod && (
-                      <span className="font-mono text-[11px] font-semibold leading-none text-muted-foreground">
-                        {timePeriod}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1.5 truncate text-[11px] tracking-wide text-muted-foreground">
-                    {dateLabel}
-                  </p>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {roleLabels[user.role] ?? user.role}
+                    </span>
+                  </span>
                 </div>
 
                 <AlertCenter
-                  collapsed={isCollapsed}
-                  className="hidden lg:inline-flex shrink-0"
-                  buttonClassName="h-9 w-9 rounded-lg hover:bg-muted/60"
+                  className="shrink-0"
+                  buttonClassName={footerIconButtonClass}
                 />
-              </div>
 
-              {/* Hairline that fades at both ends: a full-bleed rule would read
-                  as a section break instead of a seam. */}
-              <div
-                aria-hidden="true"
-                className="mt-3 h-px bg-gradient-to-r from-transparent via-border to-transparent"
-              />
-
-              <div className="mt-2.5">
                 <RowActions
                   label="Opciones de cuenta"
                   menuOffset={RAIL_FLYOUT_GAP}
                   preferSide="right"
                   items={accountItems}
-                  triggerClassName="group h-auto w-full justify-start gap-0 rounded-xl border-border/70 bg-muted/40 px-2 py-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  triggerClassName={footerIconButtonClass}
                   triggerContent={
-                    <span className="flex w-full items-center gap-3">
-                      <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary font-mono text-[11px] font-semibold text-white">
-                        {initials}
-                        <span
-                          aria-hidden="true"
-                          className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-success"
-                        />
-                      </span>
-                      <span className="min-w-0 flex-1 text-left">
-                        <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">
-                          {user.name}
-                        </span>
-                        <Badge variant="secondary" className="mt-1 max-w-full truncate">
-                          {roleLabels[user.role] ?? user.role}
-                        </Badge>
-                      </span>
-                      <MoreVertical
-                        className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
-                        aria-hidden="true"
-                      />
-                    </span>
+                    <MoreVertical className="h-4 w-4" aria-hidden="true" />
                   }
                 />
               </div>
 
               {user.isSuperAdmin ? (
                 <OrganizationSwitcher
-                  className="mt-2"
                   placement="up"
                   currentOrganizationId={selectedOrgId}
                   onSwitch={async (orgId) => {
@@ -695,7 +644,6 @@ export function Sidebar() {
                 />
               ) : (
                 <OrganizationSwitcher
-                  className="mt-2"
                   placement="up"
                   currentOrganizationId={user.organizationId ?? undefined}
                   onSwitch={switchOrganization}
