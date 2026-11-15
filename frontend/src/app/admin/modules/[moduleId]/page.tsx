@@ -138,7 +138,7 @@ export default function ModuleDetailPage({
     return (
       <div className="space-y-4">
         <BackToModules />
-        <TableSkeleton rows={4} columns={4} label="Cargando módulo..." />
+        <TableSkeleton rows={4} columns={4} label="Cargando módulo…" />
       </div>
     );
   }
@@ -198,7 +198,7 @@ export default function ModuleDetailPage({
         <TableSkeleton
           rows={6}
           columns={4}
-          label="Cargando organizaciones..."
+          label="Cargando organizaciones…"
         />
       </div>
     );
@@ -295,7 +295,7 @@ export default function ModuleDetailPage({
                             <p className="truncate text-xs font-medium text-foreground">
                               {organization.name}
                             </p>
-                            <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                               {organization.slug}
                             </p>
                           </div>

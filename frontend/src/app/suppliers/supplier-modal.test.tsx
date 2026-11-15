@@ -109,11 +109,9 @@ describe("Suppliers page modal — customer-supplier-info-fields (T19)", () => {
     const accountNumberInput = await screen.findByLabelText(/Número de cuenta/i);
     expect(accountNumberInput).toBeTruthy();
 
-    const selectTriggers = screen.getAllByRole("button", { name: /Seleccionar.../i });
-    expect(selectTriggers.length).toBeGreaterThanOrEqual(2);
-
-    const bankTrigger = selectTriggers[0];
-    const accountTypeTrigger = selectTriggers[1];
+    // BentoSelect triggers are named by their visible label, not by the selected text.
+    const bankTrigger = screen.getByRole("button", { name: /Banco \/ Entidad/i });
+    const accountTypeTrigger = screen.getByRole("button", { name: /Tipo de cuenta/i });
 
     await user.type(screen.getByLabelText(/Nombre \/ Razón social/i), "Dist Test");
     await user.type(screen.getByLabelText(/NIT \/ Documento/i), "900");
@@ -176,8 +174,8 @@ describe("Suppliers page modal — customer-supplier-info-fields (T19)", () => {
     const accountNumberInput = await screen.findByLabelText(/Número de cuenta/i);
     expect(accountNumberInput).toHaveValue("0111111111");
     // BentoSelect value=Bancolombia and value=CHECKING render their labels as the trigger text.
-    expect(screen.getByRole("button", { name: /Bancolombia/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Corriente/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Banco \/ Entidad/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Tipo de cuenta/i })).toBeTruthy();
   });
 
   it("renders bank badge and account type/number on the supplier card", () => {

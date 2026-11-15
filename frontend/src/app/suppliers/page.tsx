@@ -63,7 +63,7 @@ function SupplierAvatar({ name }: { name: string }) {
     .toUpperCase();
   return (
     <div className="w-9 h-9 rounded-lg bg-muted/60 border border-border/70 flex items-center justify-center shrink-0">
-      <span className="font-mono text-xs font-semibold text-foreground tracking-tight">
+      <span className="text-xs font-semibold text-foreground">
         {initials}
       </span>
     </div>
@@ -222,7 +222,7 @@ export default function SuppliersPage() {
       setShowModal(false);
       setFormData({});
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al guardar el proveedor"));
+      toast.error(getApiErrorMessage(error, "No se pudo guardar el proveedor"));
     }
   };
 
@@ -292,7 +292,7 @@ export default function SuppliersPage() {
 
         {/* Content */}
         {isLoading ? (
-          <TableSkeleton columns={4} rows={6} label="Cargando proveedores..." />
+          <TableSkeleton columns={4} rows={6} label="Cargando proveedores…" />
         ) : suppliers.length === 0 ? (
           <EmptyState
             icon={<Truck className="w-5 h-5 text-muted-foreground" />}
@@ -310,7 +310,7 @@ export default function SuppliersPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 lg:gap-4 stagger-children">
+              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
                 {suppliers.map((supplier) => {
                   const hasContactInfo = Boolean(
                     supplier.contactName ||
@@ -338,8 +338,8 @@ export default function SuppliersPage() {
                     >
                       <div>
                         {/* Card Header: Avatar + Name + NIT + Status */}
-                        <div className="flex items-start justify-between gap-2.5">
-                          <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <SupplierAvatar name={supplier.name} />
                             <div className="min-w-0">
                               <h3 className="text-sm font-semibold text-foreground truncate leading-snug">
@@ -444,14 +444,14 @@ export default function SuppliersPage() {
                                   onClick={(e) =>
                                     handleCopyAccount(e, supplier)
                                   }
-                                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
+                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                                   title="Copiar número de cuenta"
                                   aria-label={`Copiar cuenta de ${supplier.name}`}
                                 >
                                   {copiedSupplierId === supplier.id ? (
-                                    <Check className="w-3 h-3 text-emerald-500" />
+                                    <Check className="w-3.5 h-3.5 text-success-text" />
                                   ) : (
-                                    <Copy className="w-3 h-3" />
+                                    <Copy className="w-3.5 h-3.5" />
                                   )}
                                 </button>
                               )}
@@ -472,23 +472,25 @@ export default function SuppliersPage() {
                                   e.stopPropagation();
                                   handleAskDeactivate(supplier.id);
                                 }}
-                                className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-rose-500 hover:border-rose-500/30 hover:bg-rose-500/10 transition-colors"
+                                className="flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-danger-text hover:border-danger/30 hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                                 title="Desactivar"
                                 aria-label={`Desactivar ${supplier.name}`}
                               >
                                 <PowerOff className="w-3.5 h-3.5" />
                               </button>
                             ) : (
-                              <button
+                              <Button
                                 type="button"
+                                variant="outline"
+                                size="sm"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleReactivate(supplier.id);
                                 }}
-                                className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+                                className="text-success-text"
                               >
                                 <Power className="w-3 h-3" /> Reactivar
-                              </button>
+                              </Button>
                             )}
                           </div>
                         )}
@@ -498,7 +500,7 @@ export default function SuppliersPage() {
                 })}
               </div>
             ) : (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden animate-fade-in flex-1">
+              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
                 <div className="overflow-x-auto">
                   <Table className="min-w-[720px]">
                     <TableHeader>
@@ -534,7 +536,7 @@ export default function SuppliersPage() {
                         }
                       >
                         <TableCell>
-                          <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
                             <SupplierAvatar name={supplier.name} />
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-foreground truncate">
@@ -615,14 +617,14 @@ export default function SuppliersPage() {
                                   onClick={(e) =>
                                     handleCopyAccount(e, supplier)
                                   }
-                                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
+                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                                   title="Copiar número de cuenta"
                                   aria-label={`Copiar cuenta de ${supplier.name}`}
                                 >
                                   {copiedSupplierId === supplier.id ? (
-                                    <Check className="w-3 h-3 text-emerald-500" />
+                                    <Check className="w-3.5 h-3.5 text-success-text" />
                                   ) : (
-                                    <Copy className="w-3 h-3" />
+                                    <Copy className="w-3.5 h-3.5" />
                                   )}
                                 </button>
                               )}
@@ -653,20 +655,22 @@ export default function SuppliersPage() {
                                   onClick={() =>
                                     handleAskDeactivate(supplier.id)
                                   }
-                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-rose-500 hover:border-rose-500/30 hover:bg-rose-500/10 transition-colors"
+                                  className="flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-danger-text hover:border-danger/30 hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                                   title="Desactivar"
                                   aria-label={`Desactivar ${supplier.name}`}
                                 >
                                   <PowerOff className="w-3.5 h-3.5" />
                                 </button>
                               ) : (
-                                <button
+                                <Button
                                   type="button"
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => handleReactivate(supplier.id)}
-                                  className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+                                  className="text-success-text"
                                 >
                                   <Power className="w-3 h-3" /> Reactivar
-                                </button>
+                                </Button>
                               )}
                             </div>
                           </TableCell>
@@ -705,7 +709,7 @@ export default function SuppliersPage() {
             <h3 className="text-xs font-semibold text-foreground">
               Datos comerciales y contacto
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input
                 label="Nombre / Razón social"
                 placeholder="Ej: Tostadora de Café San Alberto S.A.S."
@@ -767,7 +771,7 @@ export default function SuppliersPage() {
             <h3 className="text-xs font-semibold text-foreground">
               Datos bancarios y pagos
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <BentoSelect
                 label="Banco / Entidad"
                 value={formData.bank || ""}
@@ -840,7 +844,7 @@ export default function SuppliersPage() {
         isOpen={canManage && showConfirmDeactivate}
         onClose={() => setShowConfirmDeactivate(false)}
         onConfirm={confirmDeactivate}
-        title="Desactivar Proveedor"
+        title="Desactivar proveedor"
         message="El proveedor quedará inactivo y no podrá usarse en nuevas órdenes de compra. Podrás reactivarlo cuando quieras."
         confirmText="Desactivar"
         cancelText="Cancelar"

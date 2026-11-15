@@ -234,7 +234,7 @@ describe("ModuleDetailPage", () => {
 
     await renderPage();
 
-    expect(screen.getByRole("status")).toHaveTextContent("Cargando módulo...");
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando módulo…");
   });
 
   it("shows an organization loading state once the module is known", async () => {
@@ -246,7 +246,7 @@ describe("ModuleDetailPage", () => {
       screen.getByRole("heading", { name: "Vehículos" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Cargando organizaciones...",
+      "Cargando organizaciones…",
     );
   });
 

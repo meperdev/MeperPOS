@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -158,24 +159,16 @@ export default function UsersPage() {
   return (
     <div>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
-                Usuarios
-              </h1>
-              <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
-                {users.length} {users.length === 1 ? "miembro" : "miembros"}
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Administración centralizada de usuarios y accesos
-            </p>
-          </div>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4" /> Nuevo usuario
-          </Button>
-        </div>
+        <PageHeader
+          title="Usuarios"
+          count={`${users.length} ${users.length === 1 ? "miembro" : "miembros"}`}
+          subtitle="Administración centralizada de usuarios y accesos"
+          actions={
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4" /> Nuevo usuario
+            </Button>
+          }
+        />
 
         <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs">
           <div className="border-b border-border/60 px-4 py-3 flex items-center gap-2">
@@ -189,7 +182,7 @@ export default function UsersPage() {
             {isLoading ? (
               <LoadingState
                 icon={<UsersIcon className="w-4 h-4 text-muted-foreground" />}
-                message="Cargando usuarios..."
+                message="Cargando usuarios…"
               />
             ) : users.length === 0 ? (
               <EmptyState
@@ -197,7 +190,7 @@ export default function UsersPage() {
                 title="No hay usuarios registrados."
               />
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y divide-border/60">
                 {users.map((user) => {
                   const initials = user.name
                     .split(" ")
@@ -209,11 +202,11 @@ export default function UsersPage() {
                   return (
                     <div
                       key={user.id}
-                      className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 p-3.5 transition-colors hover:border-border sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-9 h-9 rounded-lg bg-muted/60 border border-border/70 flex items-center justify-center shrink-0">
-                          <span className="font-mono text-xs font-semibold text-foreground tracking-tight">
+                          <span className="text-xs font-semibold text-foreground">
                             {initials}
                           </span>
                         </div>
@@ -221,7 +214,7 @@ export default function UsersPage() {
                           <p className="truncate text-xs sm:text-sm font-semibold text-foreground">
                             {user.name}
                           </p>
-                          <p className="truncate font-mono text-xs text-muted-foreground">
+                          <p className="truncate text-xs text-muted-foreground">
                             {user.email}
                           </p>
                         </div>
@@ -237,6 +230,7 @@ export default function UsersPage() {
                         <Button
                           size="sm"
                           variant="secondary"
+                          aria-label={`${user.active ? "Desactivar" : "Activar"} usuario ${user.name}`}
                           onClick={() => handleToggleActive(user.id)}
                           disabled={
                             user.id === currentUser?.id || toggleUserActive.isPending
@@ -257,6 +251,7 @@ export default function UsersPage() {
                             <Button
                               size="sm"
                               variant="secondary"
+                              className="h-9 w-9 px-0"
                               aria-label={`Restablecer contraseña de ${user.name}`}
                               onClick={() => {
                                 setUserToReset(user);
@@ -269,6 +264,7 @@ export default function UsersPage() {
                             <Button
                               size="sm"
                               variant="danger"
+                              className="h-9 w-9 px-0"
                               aria-label={`Eliminar usuario ${user.name}`}
                               onClick={() => {
                                 setUserToDelete(user.id);

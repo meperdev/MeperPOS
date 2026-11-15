@@ -24,7 +24,7 @@ export default function ModulesPage() {
     return (
       <div className="space-y-4">
         {header}
-        <TableSkeleton rows={3} columns={2} label="Cargando módulos..." />
+        <TableSkeleton rows={3} columns={2} label="Cargando módulos…" />
       </div>
     );
   }

@@ -66,7 +66,7 @@ describe("ModulesPage", () => {
 
     render(<ModulesPage />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Cargando módulos...");
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando módulos…");
   });
 
   it("offers a retry when the catalog request fails", async () => {

@@ -210,7 +210,7 @@ describe("OrganizationDetailPage", () => {
       const pulse = document.querySelector(".animate-pulse");
       expect(pulse).toBeInTheDocument();
       expect(
-        screen.getByText("Cargando organizaci\u00f3n...")
+        screen.getByText("Cargando organizaci\u00f3n…")
       ).toBeInTheDocument();
     });
   });

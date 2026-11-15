@@ -71,7 +71,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
   const [deleteError, setDeleteError] = useState("");
 
   if (isLoading) {
-    return <LoadingState icon={<Building2 className="w-5 h-5 text-primary/50" />} message="Cargando organización..." />;
+    return <LoadingState icon={<Building2 className="w-5 h-5 text-primary/50" />} message="Cargando organización…" />;
   }
 
   if (!org) {
@@ -176,7 +176,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <h3 className="text-sm font-medium text-foreground">
                 Usuarios de la organización
               </h3>
-              <span className="rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+              <span className="rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground tabular-nums">
                 {members.length}
               </span>
             </div>
@@ -234,7 +234,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                       <TableCell>
                         {ou.isPrimaryOwner ? (
                           <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
-                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
                             Sí
                           </span>
                         ) : (
@@ -300,7 +300,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             options={roleOptions}
             onChange={(value) => setNewMember((prev) => ({ ...prev, role: value }))}
           />
-          {addMemberError && <p className="text-sm text-red-500">{addMemberError}</p>}
+          {addMemberError && <p className="text-sm text-danger-text">{addMemberError}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setShowAddMember(false)}>
               Cancelar
@@ -324,7 +324,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                   {
                     onSuccess: () => setShowAddMember(false),
                     onError: (err) =>
-                      setAddMemberError(getApiErrorMessage(err, "Error al añadir miembro")),
+                      setAddMemberError(getApiErrorMessage(err, "No se pudo añadir el miembro")),
                   },
                 );
               }}
@@ -342,13 +342,13 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
         size="sm"
       >
         <div className="space-y-4">
-          <div className="flex gap-3 rounded-lg border border-rose-500/30 bg-rose-500/[0.06] p-4">
-            <ShieldAlert className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+          <div className="flex gap-3 rounded-lg border border-danger/30 bg-danger/10 p-4">
+            <ShieldAlert className="h-5 w-5 shrink-0 text-danger-text" />
             <div>
-              <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
+              <p className="text-sm font-medium text-danger-text">
                 Esta acción es irreversible
               </p>
-              <p className="mt-1 text-xs text-rose-600 dark:text-rose-300/80">
+              <p className="mt-1 text-xs text-danger-text">
                 Todos los datos de la organización serán eliminados permanentemente,
                 incluyendo productos, ventas, clientes y usuarios.
               </p>
@@ -360,12 +360,13 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </p>
 
           <Input
+            label="Nombre de la organización"
             value={deleteConfirmName}
             onChange={(e) => setDeleteConfirmName(e.target.value)}
             placeholder={org.name}
           />
 
-          {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
+          {deleteError && <p className="text-sm text-danger-text">{deleteError}</p>}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setShowDelete(false)}>
@@ -385,7 +386,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                   {
                     onSuccess: () => router.push("/admin/organizations"),
                     onError: (err) =>
-                      setDeleteError(getApiErrorMessage(err, "Error al eliminar")),
+                      setDeleteError(getApiErrorMessage(err, "No se pudo eliminar la organización")),
                   },
                 );
               }}
@@ -460,7 +461,7 @@ function OrganizationGeneralCard({
             Guardar cambios
           </Button>
           {organization.trialEndsAt && (
-            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground tabular-nums">
+            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground tabular-nums">
               Trial finaliza: {formatDate(organization.trialEndsAt)}
             </span>
           )}
@@ -470,7 +471,7 @@ function OrganizationGeneralCard({
           {metadata.map((item) => (
             <div key={item.label}>
               <dt className="text-[11px] text-muted-foreground">{item.label}</dt>
-              <dd className="mt-0.5 truncate font-mono text-[13px] text-foreground tabular-nums">
+              <dd className="mt-0.5 truncate text-[13px] text-foreground tabular-nums">
                 {item.value}
               </dd>
             </div>

@@ -203,7 +203,7 @@ describe("OrganizationsPage", () => {
 
     expect(screen.getByText("Editar organización")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Activa" }));
+    await user.click(screen.getByRole("button", { name: /Estado/i }));
     await user.click(screen.getByText("Suspendida"));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
