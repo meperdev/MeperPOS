@@ -48,7 +48,7 @@ interface OrganizationSwitcherProps {
 }
 
 const planLabels: Record<string, string> = {
-  BASIC: "Basico",
+  BASIC: "Básico",
   PRO: "Pro",
 };
 
@@ -124,7 +124,7 @@ export function OrganizationSwitcher({
             {name}
           </span>
           {meta && (
-            <span className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+            <span className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted-foreground">
               {meta}
             </span>
           )}
@@ -195,7 +195,7 @@ export function OrganizationSwitcher({
           {label}
         </span>
         {meta && (
-          <span className="shrink-0 text-[10px] text-muted-foreground">
+          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
             {meta}
           </span>
         )}
@@ -217,7 +217,7 @@ export function OrganizationSwitcher({
         )}
       >
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-        Cargando organizaciones...
+        Cargando organizaciones…
       </div>
     );
   }
@@ -226,7 +226,7 @@ export function OrganizationSwitcher({
     return (
       <div
         className={cn(
-          "rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-500",
+          "rounded-md border border-danger/30 bg-danger/10 px-2 py-1.5 text-[11px] text-danger-text",
           className
         )}
       >
@@ -260,7 +260,7 @@ export function OrganizationSwitcher({
     return (
       <div className={cn("relative", className)}>
         {renderTrigger(
-          "Cambiar organizacion",
+          "Cambiar organización",
           currentOrg?.name ?? "",
           currentOrg && (
             <>
@@ -322,8 +322,8 @@ export function OrganizationSwitcher({
   return (
     <div className={cn("relative", className)}>
       {renderTrigger(
-        "Seleccionar organizacion",
-        isAllSelected ? "Todas las organizaciones" : selectedOrg?.name ?? "Seleccionar...",
+        "Seleccionar organización",
+        isAllSelected ? "Todas las organizaciones" : selectedOrg?.name ?? "Seleccionar…",
         !isAllSelected &&
           selectedOrg && (
             <>

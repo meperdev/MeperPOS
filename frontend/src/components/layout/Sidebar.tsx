@@ -60,7 +60,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    label: "Dashboard",
+    label: "Panel",
     href: "/dashboard",
     icon: <LayoutDashboard className="w-4 h-4" />,
     roles: ["ADMIN", "INVENTORY_USER"],
@@ -423,7 +423,7 @@ export function Sidebar() {
           />
           <p
             className={cn(
-              "text-[30px] font-black text-foreground truncate leading-none tracking-tight",
+              "text-[30px] font-bold text-foreground truncate leading-none tracking-tight",
               isCollapsed ? "sr-only" : "min-w-0"
             )}
           >
@@ -465,7 +465,7 @@ export function Sidebar() {
               className={groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined}
             >
               {!isCollapsed && (
-                <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground/70">
+                <p className="mb-1.5 px-2 text-xs font-medium text-muted-foreground">
                   {group.label}
                 </p>
               )}
@@ -503,7 +503,7 @@ export function Sidebar() {
                         "sidebar-item flex items-center rounded-md text-[13px] font-medium select-none transition-colors duration-150",
                         isCollapsed
                           ? "mx-auto h-9 w-9 justify-center"
-                          : "h-11 w-full gap-2.5 px-2 lg:h-9",
+                          : "h-11 w-full gap-2 px-2 lg:h-9",
                         isActive
                           ? "active bg-muted/70 text-foreground"
                           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -573,7 +573,7 @@ export function Sidebar() {
                   {timeDigits}
                 </span>
                 {timePeriod && (
-                  <span className="mt-0.5 font-mono text-[8px] leading-none text-muted-foreground">
+                  <span className="mt-0.5 font-mono text-[11px] leading-none text-muted-foreground">
                     {timePeriod}
                   </span>
                 )}
@@ -587,7 +587,7 @@ export function Sidebar() {
                   items={accountItems}
                   triggerClassName="h-10 w-10 rounded-lg border-0 bg-transparent p-0 hover:border-transparent hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:h-9 lg:w-9"
                   triggerContent={
-                    <span className="grid h-full w-full place-items-center rounded-lg bg-gradient-to-br from-primary to-primary-dark font-mono text-[11px] font-semibold text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                    <span className="grid h-full w-full place-items-center rounded-lg bg-primary font-mono text-[11px] font-semibold text-white">
                       {initials}
                     </span>
                   }
@@ -621,7 +621,7 @@ export function Sidebar() {
                       {timeDigits}
                     </span>
                     {timePeriod && (
-                      <span className="font-mono text-[10px] font-semibold uppercase leading-none text-muted-foreground">
+                      <span className="font-mono text-[11px] font-semibold leading-none text-muted-foreground">
                         {timePeriod}
                       </span>
                     )}
@@ -651,14 +651,14 @@ export function Sidebar() {
                   menuOffset={RAIL_FLYOUT_GAP}
                   preferSide="right"
                   items={accountItems}
-                  triggerClassName="group h-auto w-full justify-start gap-0 rounded-xl border-border/70 bg-gradient-to-br from-muted/40 to-muted/15 px-2 py-2 shadow-xs transition-all duration-200 hover:border-border hover:from-muted/60 hover:to-muted/25 hover:shadow-sm active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  triggerClassName="group h-auto w-full justify-start gap-0 rounded-xl border-border/70 bg-muted/40 px-2 py-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                   triggerContent={
-                    <span className="flex w-full items-center gap-2.5">
-                      <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary-dark font-mono text-[11px] font-semibold text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                    <span className="flex w-full items-center gap-3">
+                      <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary font-mono text-[11px] font-semibold text-white">
                         {initials}
                         <span
                           aria-hidden="true"
-                          className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-500"
+                          className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-success"
                         />
                       </span>
                       <span className="min-w-0 flex-1 text-left">
@@ -739,7 +739,7 @@ export function Sidebar() {
           <button
             onClick={toggleMobileMenu}
             className="-ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={isMobileMenuOpen ? "Cerrar menu" : "Abrir menu"}
+            aria-label={isMobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
             aria-expanded={isMobileMenuOpen}
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -751,7 +751,7 @@ export function Sidebar() {
             height={192}
             className="w-9 h-9 shrink-0 object-contain drop-shadow-xs"
           />
-          <span className="truncate text-lg font-black tracking-tight text-foreground">
+          <span className="truncate text-lg font-bold tracking-tight text-foreground">
             Meper
             <span className="text-[#B45309] underline decoration-[#B45309] decoration-2 underline-offset-4 dark:text-[#FF9933] dark:decoration-[#FF9933]">
               POS
@@ -766,7 +766,7 @@ export function Sidebar() {
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
+          className="lg:hidden fixed inset-0 bg-black/40 dark:bg-black/60 z-40"
           onClick={closeMobileMenu}
         />
       )}
@@ -778,7 +778,7 @@ export function Sidebar() {
           "fixed bottom-0 left-0 lg:top-0 lg:bottom-auto lg:h-screen flex flex-col z-50",
           "top-[calc(var(--mobile-header)+var(--safe-top))]",
           "pl-[var(--safe-left)] pr-[var(--safe-right)]",
-          "bg-card border-r border-border/80 shadow-2xl lg:shadow-none",
+          "bg-card border-r border-border/80 shadow-lg shadow-black/10 lg:shadow-none",
           "transition-[width,transform] duration-300 ease-in-out",
           "lg:translate-x-0",
           isCollapsed ? "lg:w-[72px]" : "lg:w-[320px]",

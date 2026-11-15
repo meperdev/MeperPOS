@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { useSales } from "@/hooks/useSales";
@@ -11,15 +12,13 @@ import { formatCurrency, formatDateTime } from "@/lib/utils";
 /** The card is a compact peek at the last sales; it never asks for more. */
 const RECENT_SALES_LIMIT = 5;
 
-
-
 /**
  * Compact "Ventas recientes" peek: the last few sales in a minimum-column
  * table. The list is capped and never scrolls internally, so the dashboard
  * height does not depend on how many sales exist.
  */
 export function RecentSalesCard() {
-  const { data } = useSales({ limit: RECENT_SALES_LIMIT });
+  const { data, isLoading, isError, refetch } = useSales({ limit: RECENT_SALES_LIMIT });
   const sales = (data?.data ?? []).slice(0, RECENT_SALES_LIMIT);
 
   return (
@@ -33,14 +32,27 @@ export function RecentSalesCard() {
         </p>
         <Link
           href="/sales"
-          className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-3 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
         >
           Ver todas
           <ArrowRight className="h-3 w-3" aria-hidden="true" />
         </Link>
       </div>
 
-      {sales.length === 0 ? (
+      {isLoading ? (
+        <div className="mt-3 space-y-2" aria-busy="true" data-testid="recent-sales-skeleton">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="h-8 animate-pulse rounded-md bg-muted" />
+          ))}
+        </div>
+      ) : isError ? (
+        <ErrorState
+          className="mt-3 min-h-0 py-4 shadow-none"
+          message="No pudimos cargar las ventas recientes."
+          retryLabel="Reintentar"
+          onRetry={() => refetch()}
+        />
+      ) : sales.length === 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">
           Sin ventas recientes
         </p>
@@ -79,7 +91,7 @@ export function RecentSalesCard() {
                     {formatDateTime(sale.createdAt)}
                   </TableCell>
                   <TableCell className="max-w-[12rem] truncate px-2 py-2">
-                    {sale.customer?.name ?? "Cliente general"}
+                    {sale.customer?.name ?? "Sin cliente"}
                   </TableCell>
                   <TableCell className="px-2 py-2">
                     <span className={getPaymentState(sale.payments, sale.financed).className}>{getPaymentState(sale.payments, sale.financed).label}</span>

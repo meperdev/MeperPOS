@@ -18,7 +18,7 @@ describe("OrganizationSelectModal", () => {
 
     expect(screen.getByText("Org One")).toBeInTheDocument();
     expect(screen.getByText("Org Two")).toBeInTheDocument();
-    expect(screen.getByText("Selecciona una organizacion")).toBeInTheDocument();
+    expect(screen.getByText("Selecciona una organización")).toBeInTheDocument();
   });
 
   it("calls onSelect with correct organization id when clicked", () => {

@@ -60,7 +60,7 @@ describe("OrganizationSwitcher", () => {
     });
 
     expect(screen.getByText(/Administrador/)).toBeInTheDocument();
-    expect(screen.getByText(/Basico/)).toBeInTheDocument();
+    expect(screen.getByText(/Básico/)).toBeInTheDocument();
   });
 
   it("opens the list and calls onSwitch with the selected organization", async () => {
@@ -78,10 +78,10 @@ describe("OrganizationSwitcher", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/Cambiar organizacion/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Cambiar organización/i)).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByLabelText(/Cambiar organizacion/i));
+    await userEvent.click(screen.getByLabelText(/Cambiar organización/i));
 
     expect(screen.getByText("Org B")).toBeInTheDocument();
     expect(screen.getByText(/Miembro/)).toBeInTheDocument();
@@ -171,10 +171,10 @@ describe("OrganizationSwitcher", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/Cambiar organizacion/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Cambiar organización/i)).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByLabelText(/Cambiar organizacion/i));
+    await userEvent.click(screen.getByLabelText(/Cambiar organización/i));
 
     const list = screen.getByTestId("organization-list");
     // Bounded height + its own scrollbar: 14 organizations never stretch the

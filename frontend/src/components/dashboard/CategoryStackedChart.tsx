@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
-import { X } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 import { useSalesByCategoryDaily } from "@/hooks/useReports";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -44,7 +43,7 @@ interface CategoryTooltipContentProps {
 
 /**
  * Recharts tooltip content: the hovered day's total plus its per-category
- * breakdown in a dark-glass card that follows the active bar dynamically.
+ * breakdown in a floating card that follows the active bar dynamically.
  */
 export function CategoryTooltipContent({
   active,
@@ -72,7 +71,7 @@ export function CategoryTooltipContent({
   return (
     <div
       data-testid="category-tooltip"
-      className="pointer-events-none min-w-[175px] rounded-lg border border-border/80 bg-card/95 px-3 py-2.5 shadow-lg backdrop-blur-xs text-foreground animate-in fade-in-0 duration-300 ease-out"
+      className="pointer-events-none min-w-[175px] rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg shadow-black/10 text-foreground"
     >
       <p className="text-[11px] font-medium text-muted-foreground capitalize">
         {formatCategoryTooltipDate(typeof row?.date === "string" ? row.date : "")}
@@ -89,7 +88,7 @@ export function CategoryTooltipContent({
             >
               <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
                 <span
-                  className="inline-block h-2 w-2 rounded-[2px]"
+                  className="inline-block h-2 w-2 rounded-sm"
                   style={{ backgroundColor: entry.color }}
                 />
                 {entry.name ?? entry.dataKey}
@@ -112,84 +111,30 @@ interface CategoryDayDetailModalProps {
 }
 
 /**
- * Modal triggered when clicking a day on the bar chart.
- * Uses createPortal to render outside any parent container transforms,
- * locks body scroll, and offers a spacious, detailed breakdown in both themes.
+ * Day detail opened from a bar. The dialog itself (focus trap, Escape, scroll
+ * lock, focus restore) is the kit Modal; this component only owns the content.
  */
 export function CategoryDayDetailModal({
   day,
   onClose,
   colorMap,
 }: CategoryDayDetailModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!day) return;
-    const originalOverflow = document.body.style.overflow;
-    const previousFocus = document.activeElement as HTMLElement | null;
-    document.body.style.overflow = "hidden";
-    dialogRef.current?.focus();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-      previousFocus?.focus?.();
-    };
-  }, [day, onClose]);
-
-  if (!day || typeof document === "undefined") return null;
+  if (!day) return null;
 
   const totalQuantity = day.segments.reduce((sum, s) => sum + s.quantity, 0);
   const activeSegments = day.segments.filter((s) => s.total > 0);
 
-  return createPortal(
-    <div
-      data-testid="category-day-detail-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6 backdrop-blur-xs overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={formatCategoryTooltipDate(day.date)}
+      size="md"
     >
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        data-testid="category-day-detail-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="category-day-detail-title"
-        className="relative w-full max-w-2xl rounded-2xl border border-border/80 bg-card p-6 sm:p-7 shadow-2xl text-foreground my-auto animate-in fade-in-0 zoom-in-95 duration-150 ease-out"
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-4">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground">
-              Detalle del día
-            </p>
-            <h3
-              id="category-day-detail-title"
-              className="text-xl sm:text-2xl font-semibold text-foreground capitalize mt-0.5 tracking-tight truncate"
-            >
-              {formatCategoryTooltipDate(day.date)}
-            </h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar detalle"
-            className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
+      <div data-testid="category-day-detail-modal" className="text-foreground">
         {/* Summary metrics: Total recaudado gets double width so large COP figures never overflow */}
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-12 gap-3">
-          <div className="sm:col-span-6 rounded-xl border border-border/60 bg-muted/30 p-3.5 min-w-0">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+          <div className="sm:col-span-6 rounded-lg bg-muted/40 p-3.5 min-w-0">
             <span className="text-xs font-medium text-muted-foreground block">
               Total recaudado
             </span>
@@ -201,7 +146,7 @@ export function CategoryDayDetailModal({
             </span>
           </div>
 
-          <div className="sm:col-span-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 min-w-0">
+          <div className="sm:col-span-3 rounded-lg bg-muted/40 p-3.5 min-w-0">
             <span className="text-xs font-medium text-muted-foreground block">
               Unidades
             </span>
@@ -213,7 +158,7 @@ export function CategoryDayDetailModal({
             </span>
           </div>
 
-          <div className="sm:col-span-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 min-w-0">
+          <div className="sm:col-span-3 rounded-lg bg-muted/40 p-3.5 min-w-0">
             <span className="text-xs font-medium text-muted-foreground block">
               Categorías
             </span>
@@ -239,25 +184,25 @@ export function CategoryDayDetailModal({
           </div>
 
           {activeSegments.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-xs text-muted-foreground">
+            <div className="rounded-lg bg-muted/40 p-6 text-center text-xs text-muted-foreground">
               Sin ventas registradas en esta fecha.
             </div>
           ) : (
             <ul className="space-y-2 max-h-80 sm:max-h-96 overflow-y-auto scrollbar-app pr-1">
               {activeSegments.map((segment) => {
-                const color = colorMap.get(segment.category) ?? "#C25E36";
+                const color = colorMap.get(segment.category) ?? "var(--primary)";
                 const percentage =
                   day.total > 0 ? Math.round((segment.total / day.total) * 100) : 0;
 
                 return (
                   <li
                     key={segment.category}
-                    className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2 hover:bg-muted/40 transition-colors"
+                    className="rounded-lg bg-muted/40 p-3 space-y-2"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="flex items-center gap-2 font-medium text-sm text-foreground truncate">
                         <span
-                          className="inline-block h-3 w-3 rounded-[3px] shrink-0"
+                          className="inline-block h-3 w-3 rounded-sm shrink-0"
                           style={{ backgroundColor: color }}
                         />
                         <span className="truncate">{segment.category}</span>
@@ -270,7 +215,7 @@ export function CategoryDayDetailModal({
                     <div className="flex items-center gap-3">
                       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                         <div
-                          className="h-full rounded-full transition-all duration-300"
+                          className="h-full rounded-full transition-[width] duration-300"
                           style={{ width: `${percentage}%`, backgroundColor: color }}
                         />
                       </div>
@@ -288,18 +233,8 @@ export function CategoryDayDetailModal({
             </ul>
           )}
         </div>
-
-        {/* Action Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-5 w-full rounded-lg border border-border/70 bg-muted/40 hover:bg-muted py-2.5 text-xs font-semibold text-foreground transition-colors text-center"
-        >
-          Cerrar
-        </button>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 
@@ -383,7 +318,7 @@ export function CategoryStackedChart({
   );
 
   const isDenseRange = days.length > 15;
-  const barSize = days.length <= 7 ? 32 : days.length <= 15 ? 20 : 12;
+  const barSize = days.length <= 7 ? 24 : days.length <= 15 ? 20 : 12;
   const tooltipOffset = Math.max(
     18,
     Math.round((chartWidth - 24) / Math.max(days.length, 1) / 2) + 8,

@@ -190,8 +190,8 @@ export function AlertCenter({
     unread.length === 0
       ? null
       : unread.some((alert) => alert.severity === "critical")
-        ? "bg-rose-500"
-        : "bg-amber-500";
+        ? "bg-danger"
+        : "bg-warning";
 
   return (
     <div className={cn("inline-flex", className)}>
@@ -233,7 +233,7 @@ export function AlertCenter({
             aria-label="Alertas"
             style={coords ?? undefined}
             className={cn(
-              "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl animate-toast-in",
+              "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg shadow-black/10",
               coords
                 ? "w-[22rem]"
                 : "inset-x-3 top-16 max-h-[calc(100dvh-5rem)]",
@@ -305,15 +305,15 @@ function AlertRow({
     <Link
       href={alert.href}
       onClick={onOpen}
-      className="flex items-start gap-2.5 px-3.5 py-2.5 transition-colors duration-150 hover:bg-muted/40"
+      className="flex items-start gap-2 px-3.5 py-2.5 transition-colors duration-150 hover:bg-muted/40"
     >
       <span
         className={cn(
           "mt-0.5 shrink-0",
           alert.severity === "critical"
-            ? "text-rose-600 dark:text-rose-400"
+            ? "text-danger-text"
             : alert.severity === "warning"
-              ? "text-amber-600 dark:text-amber-400"
+              ? "text-warning-text"
               : "text-muted-foreground",
         )}
       >
@@ -331,7 +331,7 @@ function AlertRow({
         <span
           aria-hidden="true"
           data-testid="alert-unread-dot"
-          className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+          className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
         />
       )}
     </Link>

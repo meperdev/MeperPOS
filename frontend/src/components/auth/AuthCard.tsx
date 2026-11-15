@@ -14,8 +14,8 @@ interface AuthCardProps {
 export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 md:p-6">
-      <div className="w-full max-w-md animate-fade-in-up">
-        <div className="rounded-3xl p-8 md:p-10 bg-card border border-border/80 shadow-2xl shadow-black/10 space-y-6">
+      <div className="w-full max-w-md">
+        <div className="rounded-2xl p-8 md:p-10 bg-card border border-border/80 space-y-6">
           {/* Logo & Header */}
           <div className="text-center space-y-2">
             <Image
@@ -32,7 +32,7 @@ export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
               height={300}
               className="mx-auto mb-4 hidden h-10 w-auto dark:block"
             />
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {title}
             </h1>
             {subtitle && (

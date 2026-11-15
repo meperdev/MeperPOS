@@ -151,7 +151,7 @@ describe("CategoryDayDetailModal", () => {
     );
 
     expect(screen.getByTestId("category-day-detail-modal")).toBeTruthy();
-    expect(screen.getByText("Detalle del día")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.getByText(/\$\s150\.000/)).toBeTruthy();
     expect(screen.getByText(/6 unidades/)).toBeTruthy();
     expect(screen.getByText("Bebidas")).toBeTruthy();

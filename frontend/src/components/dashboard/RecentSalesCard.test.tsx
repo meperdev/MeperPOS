@@ -105,14 +105,14 @@ describe("RecentSalesCard (compact recent sales)", () => {
     expect(row.getByText("Completada")).toBeTruthy();
   });
 
-  it("falls back to 'Cliente general' when the sale has no customer", () => {
+  it("falls back to 'Sin cliente' when the sale has no customer", () => {
     useSalesMock.mockReturnValue({
       data: { data: [sale(1, { customer: undefined, customerId: null })] },
     });
 
     render(<RecentSalesCard />);
 
-    expect(screen.getByText("Cliente general")).toBeTruthy();
+    expect(screen.getByText("Sin cliente")).toBeTruthy();
   });
 
   it("derives the payment label: none, single and mixed", () => {

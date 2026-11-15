@@ -10,9 +10,9 @@ import { formatCurrency, formatPaymentMethod } from "@/lib/utils";
  * bucket: an unknown method is simply not invented here.
  */
 const PAYMENT_METHODS = [
-  { method: "CASH", label: formatPaymentMethod("CASH"), color: "#C25E36" },
-  { method: "CARD", label: formatPaymentMethod("CARD"), color: "#2563EB" },
-  { method: "TRANSFER", label: formatPaymentMethod("TRANSFER"), color: "#059669" },
+  { method: "CASH", label: formatPaymentMethod("CASH"), color: "var(--primary)" },
+  { method: "CARD", label: formatPaymentMethod("CARD"), color: "var(--info)" },
+  { method: "TRANSFER", label: formatPaymentMethod("TRANSFER"), color: "var(--success)" },
 ] as const;
 
 interface PaymentSlice {
@@ -119,7 +119,7 @@ export function PaymentMethodsCard({
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span
-                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-[3px]"
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
                   style={{ backgroundColor: slice.color }}
                 />
                 <span className="truncate font-medium text-foreground">

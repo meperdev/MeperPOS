@@ -93,7 +93,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen w-full flex-col bg-background selection:bg-primary/20 selection:text-primary-text">
       {/* Barra superior: ecosistema MeperSoft + tema */}
       <header className="flex items-center justify-between pl-[max(1.5rem,var(--safe-left))] pr-[max(1.5rem,var(--safe-right))] pt-[max(1.5rem,var(--safe-top))] sm:pl-[max(2.5rem,var(--safe-left))] sm:pr-[max(2.5rem,var(--safe-right))] sm:pt-[max(2rem,var(--safe-top))]">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <Image
             src="/brand/mepersoft-icon-192.png"
             alt="MeperSoft logo"
@@ -138,7 +138,7 @@ export default function LoginPage() {
               className="mb-4 h-28 w-28 object-contain sm:h-32 sm:w-32"
               priority
             />
-            <div className="text-4xl font-semibold leading-none tracking-tight text-foreground sm:text-[42px]">
+            <div className="text-4xl font-semibold leading-none tracking-tight text-foreground">
               Meper<span className="text-[#B45309] dark:text-[#FF9933]">POS</span>
             </div>
             <div className="mt-3 h-1.5 w-11 rounded-full bg-[#FF9933]" />
@@ -146,10 +146,6 @@ export default function LoginPage() {
 
           {/* Encabezado del formulario */}
           <div className="mb-6 space-y-1.5">
-            <div className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              <ShieldCheck className="h-4 w-4" />
-              <span>Acceso al sistema</span>
-            </div>
             <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
               Iniciar sesión
             </h1>
@@ -162,7 +158,7 @@ export default function LoginPage() {
             {error && (
               <div
                 role="alert"
-                className="flex items-start gap-2.5 rounded-lg border border-rose-500/25 bg-rose-500/10 p-3.5 text-xs font-medium text-rose-700 dark:text-rose-300"
+                className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3.5 text-xs font-medium text-danger-text"
               >
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span className="leading-relaxed">{error}</span>
@@ -173,7 +169,7 @@ export default function LoginPage() {
               id="email"
               name="email"
               type="email"
-              label="Correo Electrónico"
+              label="Correo electrónico"
               placeholder="usuario@negocio.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -202,7 +198,6 @@ export default function LoginPage() {
                   aria-label={
                     showPassword ? "Ocultar contraseña" : "Ver contraseña"
                   }
-                  tabIndex={-1}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -219,15 +214,8 @@ export default function LoginPage() {
               loading={loading}
               className="mt-2 flex h-11 w-full items-center justify-center gap-2 text-sm font-semibold"
             >
-              <span>Ingresar al Sistema</span>
-              {!loading && (
-                <span className="flex items-center gap-1.5 opacity-90">
-                  <ArrowRight className="h-4 w-4" />
-                  <kbd className="hidden items-center rounded bg-white/20 px-1.5 py-0.5 font-mono text-[11px] leading-none text-white dark:bg-black/20 sm:inline-flex">
-                    ↵ Enter
-                  </kbd>
-                </span>
-              )}
+              <span>Ingresar al sistema</span>
+              {!loading && <ArrowRight className="h-4 w-4" />}
             </Button>
           </form>
 
@@ -238,7 +226,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowSupportModal(true)}
-              className="inline-flex min-h-7 items-center gap-1 font-semibold text-primary-text underline underline-offset-2 transition-colors hover:text-primary-dark"
+              className="inline-flex min-h-9 items-center gap-1 font-semibold text-primary-text underline underline-offset-2 transition-colors hover:text-primary-dark"
             >
               <HelpCircle className="h-3.5 w-3.5" />
               <span>Ayuda y soporte</span>
@@ -256,7 +244,7 @@ export default function LoginPage() {
             href="https://folio.mepersoft.app/"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-7 items-center gap-1 font-medium text-primary-text underline underline-offset-2 transition-colors hover:text-primary-dark"
+            className="inline-flex min-h-9 items-center gap-1 font-medium text-primary-text underline underline-offset-2 transition-colors hover:text-primary-dark"
           >
             <span>folio.mepersoft.app</span>
             <ExternalLink className="h-3 w-3" />
@@ -268,11 +256,11 @@ export default function LoginPage() {
       <Modal
         isOpen={showSupportModal}
         onClose={() => setShowSupportModal(false)}
-        title="Ayuda y Soporte de Acceso"
+        title="Ayuda y soporte de acceso"
         size="sm"
       >
         <div className="space-y-4 text-xs sm:text-sm text-foreground p-1">
-          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-muted/40 border border-border/70">
+          <div className="flex items-start gap-3 p-3.5 rounded-lg bg-muted/40">
             <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary-text flex items-center justify-center shrink-0 mt-0.5">
               <ShieldCheck className="w-4 h-4" />
             </div>
@@ -288,7 +276,7 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <h4 className="font-bold text-foreground flex items-center gap-1.5 text-xs sm:text-sm">
+            <h4 className="font-semibold text-foreground flex items-center gap-1.5 text-xs sm:text-sm">
               <CheckCircle2 className="w-4 h-4 text-primary-text shrink-0" />
               ¿Cómo obtengo credenciales de acceso?
             </h4>
@@ -300,7 +288,7 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <h4 className="font-bold text-foreground flex items-center gap-1.5 text-xs sm:text-sm">
+            <h4 className="font-semibold text-foreground flex items-center gap-1.5 text-xs sm:text-sm">
               <CheckCircle2 className="w-4 h-4 text-primary-text shrink-0" />
               ¿Olvidaste tu contraseña?
             </h4>
@@ -310,15 +298,15 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-muted/60 border border-border/80 text-xs text-muted-foreground space-y-1.5">
+          <div className="p-3.5 rounded-lg bg-muted/40 text-xs text-muted-foreground space-y-1.5">
             <p className="font-semibold text-foreground">
               ¿Eres propietario y requieres habilitar tu negocio?
             </p>
             <p>Escribe directamente al equipo de aprovisionamiento de MeperPOS:</p>
-            <p className="font-mono text-primary-text font-bold text-xs pt-0.5">
+            <p className="font-mono text-primary-text font-semibold text-xs pt-0.5">
               soporte@meperpos.com
             </p>
-            <div className="pt-1.5 border-t border-border/60 text-[11px] flex items-center gap-1 text-muted-foreground">
+            <div className="pt-1.5 text-[11px] flex items-center gap-1 text-muted-foreground">
               <span>Portafolio y referencias:</span>
               <a
                 href="https://folio.mepersoft.app/"

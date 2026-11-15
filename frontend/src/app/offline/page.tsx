@@ -15,9 +15,9 @@ import { APP_NAME } from "@/lib/constants";
  */
 export default function OfflinePage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6">
+    <main className="flex min-h-screen items-center justify-center bg-background pl-[max(1.5rem,var(--safe-left))] pr-[max(1.5rem,var(--safe-right))] pt-[max(1.5rem,var(--safe-top))] pb-[max(1.5rem,var(--safe-bottom))]">
       <div className="flex max-w-sm flex-col items-center gap-4 text-center">
-        <div className="rounded-2xl bg-primary-light p-4 text-primary">
+        <div className="rounded-xl bg-primary-light p-4 text-primary">
           <CloudOff className="h-8 w-8" aria-hidden="true" />
         </div>
 

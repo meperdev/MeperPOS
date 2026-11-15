@@ -74,11 +74,11 @@ export function TodayStatsInner({ today }: { today: string }) {
     .slice(-SPARKLINE_DAYS);
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       {/* Row 1 — day KPIs with sparkline + real delta vs yesterday */}
       <div
         data-testid="kpi-row-1"
-        className="grid grid-cols-2 gap-2.5 md:grid-cols-4"
+        className="grid grid-cols-2 gap-3 md:grid-cols-4"
       >
         <MetricCard
           label="Ventas hoy"
@@ -117,12 +117,12 @@ export function TodayStatsInner({ today }: { today: string }) {
       {/* Row 2 — accumulated totals, no sparkline and no delta */}
       <div
         data-testid="kpi-row-2"
-        className="grid grid-cols-2 gap-2.5 md:grid-cols-4"
+        className="grid grid-cols-2 gap-3 md:grid-cols-4"
       >
         <MetricCard
           label="Ventas completadas"
           value={(dashboard?.totalSales ?? 0).toLocaleString("es-CO")}
-          helper="total"
+          helper="acumulado"
           tone="primary"
         />
         <MetricCard

@@ -2,6 +2,7 @@
 
 import { Building2, Shield, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/Badge";
 
 interface Organization {
   id: string;
@@ -16,7 +17,7 @@ interface OrganizationSelectModalProps {
 }
 
 const planLabels: Record<string, string> = {
-  BASIC: "Basico",
+  BASIC: "Básico",
   PRO: "Pro",
 };
 
@@ -35,21 +36,21 @@ export function OrganizationSelectModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 dark:bg-black/60" />
 
       {/* Panel */}
       <div
         className={cn(
-          "relative w-full max-w-md overflow-hidden rounded-xl border border-border/60",
-          "bg-card shadow-2xl shadow-black/30 animate-fade-in-up"
+          "relative w-full max-w-md overflow-hidden rounded-xl border border-border",
+          "bg-card shadow-lg shadow-black/10"
         )}
       >
         <div className="border-b border-border/60 px-6 py-4">
           <h2 className="text-lg font-semibold text-foreground">
-            Selecciona una organizacion
+            Selecciona una organización
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tu cuenta pertenece a multiples organizaciones. Elige una para continuar.
+            Tu cuenta pertenece a múltiples organizaciones. Elige una para continuar.
           </p>
         </div>
 
@@ -61,10 +62,10 @@ export function OrganizationSelectModal({
               className={cn(
                 "w-full flex items-center gap-4 rounded-lg border border-border/60 p-4",
                 "bg-card text-left transition-colors hover:bg-muted/60 hover:border-primary/40",
-                "focus:outline-none focus:ring-2 focus:ring-primary/50"
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
               )}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-text">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                 <Building2 className="h-5 w-5" />
               </div>
 
@@ -80,17 +81,13 @@ export function OrganizationSelectModal({
                 </div>
               </div>
 
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
-                  org.plan === "PRO"
-                    ? "bg-terracotta/10 text-terracotta border border-terracotta/20"
-                    : "bg-muted text-muted-foreground border border-border"
-                )}
+              <Badge
+                variant={org.plan === "PRO" ? "primary" : "default"}
+                className="gap-1"
               >
                 <Crown className="h-3 w-3" />
                 {planLabels[org.plan] || org.plan}
-              </span>
+              </Badge>
             </button>
           ))}
         </div>

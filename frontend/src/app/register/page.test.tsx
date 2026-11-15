@@ -30,10 +30,10 @@ describe("RegisterPage Standby State", () => {
   it("renders the institutional standby message and back to login button", async () => {
     render(<RegisterPage />);
 
-    expect(screen.getByText("Acceso Restringido")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Creación de cuentas por invitación" })
+      screen.getByRole("heading", { level: 1, name: "Creación de cuentas por invitación" })
     ).toBeInTheDocument();
+    expect(screen.queryByText("Acceso Restringido")).not.toBeInTheDocument();
     expect(screen.getByText(/soporte@meperpos.com/i)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /folio\.mepersoft\.app/i })

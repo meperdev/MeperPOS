@@ -120,7 +120,7 @@ describe("Sidebar", () => {
     });
 
     expect(
-      screen.getByLabelText(/Cambiar organizacion/i)
+      screen.getByLabelText(/Cambiar organización/i)
     ).toBeInTheDocument();
   });
 
@@ -136,7 +136,7 @@ describe("Sidebar", () => {
     });
 
     expect(
-      screen.queryByLabelText(/Cambiar organizacion/i)
+      screen.queryByLabelText(/Cambiar organización/i)
     ).not.toBeInTheDocument();
   });
 
@@ -166,7 +166,7 @@ describe("Sidebar", () => {
 
     const links = screen.getAllByRole("link").map((link) => link.textContent?.trim());
     expect(links).toEqual([
-      "Dashboard",
+      "Panel",
       "POS",
       "Ventas",
       "Clientes",
@@ -327,7 +327,7 @@ describe("Sidebar", () => {
     });
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Seleccionar organizacion" })
+      await screen.findByRole("button", { name: "Seleccionar organización" })
     );
     await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
 
@@ -579,12 +579,12 @@ describe("Sidebar", () => {
     const toggleBtn = await screen.findByTestId("sidebar-collapse-toggle");
     await userEvent.click(toggleBtn);
 
-    const dashboardLink = screen.getByRole("link", { name: "Dashboard" });
+    const dashboardLink = screen.getByRole("link", { name: "Panel" });
     await userEvent.hover(dashboardLink);
 
     const tooltip = await screen.findByTestId("sidebar-rail-tooltip");
     expect(tooltip).toBeInTheDocument();
-    expect(tooltip).toHaveTextContent("Dashboard");
+    expect(tooltip).toHaveTextContent("Panel");
   });
 
   // The mobile header and the drawer are the two fixed surfaces a notch and a

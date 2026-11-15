@@ -31,9 +31,9 @@ export function UpdateAvailableBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="mb-4 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary-light px-4 py-3 text-sm text-foreground animate-fade-in sm:flex-row sm:items-center sm:justify-between"
+      className="mb-4 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary-light px-4 py-3 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between"
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2">
         <RefreshCw
           className="mt-0.5 h-4 w-4 shrink-0 text-primary-text"
           aria-hidden="true"

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ArrowRight, ListTodo, Receipt, ShoppingBag } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useTasks } from "@/hooks/useTasks";
 import { computePendingAmount, filterOpenTasks } from "@/lib/dashboard";
@@ -56,7 +57,7 @@ export function AlertPanels() {
   const visibleExpenses = partialExpenses.slice(0, VISIBLE_CAP);
 
   return (
-    <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
       {/* Partial expenses panel */}
       <div className="min-w-0 flex flex-col justify-between rounded-xl border border-border/70 bg-card px-4 py-4 text-foreground hover:border-border transition-colors">
         <div>
@@ -73,7 +74,7 @@ export function AlertPanels() {
                   {visibleExpenses.map((expense) => (
                     <li
                       key={expense.id}
-                      className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/35 px-3 py-2"
+                      className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2"
                     >
                       <span className="truncate text-sm font-medium text-foreground">
                         {expense.description || "Gasto"}
@@ -84,7 +85,7 @@ export function AlertPanels() {
                     </li>
                   ))}
                 </ul>
-                <div className="mt-2.5 flex items-center justify-between rounded-lg border border-border/60 bg-muted/50 px-3 py-2">
+                <div className="mt-2.5 flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
                   <span className="text-xs font-medium text-muted-foreground">
                     Total pendiente
                   </span>
@@ -99,23 +100,15 @@ export function AlertPanels() {
         {(partialExpenses.length > VISIBLE_CAP || partialExpenses.length > 0) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {partialExpenses.length > VISIBLE_CAP && (
-              <button
-                type="button"
-                onClick={() => router.push("/expenses")}
-                className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
-              >
-                Ver {partialExpenses.length - VISIBLE_CAP} más
-              </button>
+              <Button type="button" variant="outline" size="sm" onClick={() => router.push("/expenses")}>
+                  Ver {partialExpenses.length - VISIBLE_CAP} más
+                </Button>
             )}
             {partialExpenses.length > 0 && (
-              <button
-                type="button"
-                onClick={() => router.push("/expenses")}
-                className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
-              >
-                Ver gastos
-                <ArrowRight className="h-3 w-3" aria-hidden="true" />
-              </button>
+              <Button type="button" variant="outline" size="sm" onClick={() => router.push("/expenses")}>
+                  Ver gastos
+                  <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                </Button>
             )}
           </div>
         )}
@@ -138,7 +131,7 @@ export function AlertPanels() {
                   return (
                     <li
                       key={task.id}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-muted/35 px-3 py-2"
+                      className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -163,14 +156,10 @@ export function AlertPanels() {
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => router.push("/tasks")}
-          className="mt-3 inline-flex items-center gap-1.5 self-start rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
-        >
-          Ver tareas
-          <ArrowRight className="h-3 w-3" aria-hidden="true" />
-        </button>
+        <Button type="button" variant="outline" size="sm" className="mt-3 self-start" onClick={() => router.push("/tasks")}>
+            Ver tareas
+            <ArrowRight className="h-3 w-3" aria-hidden="true" />
+          </Button>
       </div>
     </div>
   );
