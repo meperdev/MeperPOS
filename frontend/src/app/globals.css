@@ -389,3 +389,59 @@ h4 {
     /* Gap between that header and the first content row. */
     --mobile-header-gap: 1.5rem;
 }
+
+/* ─── Installed app shell ──────────────────────────────── */
+/*
+ * In a browser tab most of this is invisible. In a standalone app each rule is
+ * the difference between "an app" and "a website in a window", which is what
+ * the owner asked for: that it never reads as a browser.
+ *
+ * Applied unconditionally where it is harmless: `display-mode` behaves the same
+ * in a narrow desktop window, and a media query that silently stops matching is
+ * worse than a rule that costs nothing.
+ */
+html {
+    /* No rubber-band bounce, no pull-to-refresh: the app owns its scroll. */
+    overscroll-behavior: none;
+    /* Rotation must not resize text. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    overscroll-behavior: none;
+    /* No grey flash on every tap; the app paints its own pressed states. */
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (display-mode: standalone) {
+    /* A long press is the browser's menu on a website and nothing on an app. */
+    body {
+        -webkit-touch-callout: none;
+    }
+
+    /*
+     * Selection is disabled on chrome only. Content stays selectable on purpose:
+     * an operator copying an invoice number or an error id is a real task, and
+     * blanket `user-select: none` breaks it while fixing nothing.
+     */
+    header,
+    nav,
+    aside,
+    button,
+    [role="button"] {
+        user-select: none;
+        -webkit-user-select: none;
+    }
+}
+
+/* Kills the double-tap zoom on controls; pinch-to-zoom is untouched. */
+button,
+[role="button"],
+a,
+input,
+select,
+textarea,
+label {
+    touch-action: manipulation;
+}

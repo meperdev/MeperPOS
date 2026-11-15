@@ -42,6 +42,18 @@ const REQUIRED_CSS_FRAGMENTS = [
   { label: "the safe-area bottom token", fragment: "--safe-bottom:env(" },
   { label: "the mobile header token", fragment: "--mobile-header:" },
   { label: "a composed header offset", fragment: "var(--mobile-header)" },
+  {
+    label: "the app-shell overscroll guard",
+    fragment: "overscroll-behavior:none",
+  },
+  {
+    label: "the tap-highlight reset",
+    fragment: "-webkit-tap-highlight-color:transparent",
+  },
+  {
+    label: "the double-tap-zoom reset",
+    fragment: "touch-action:manipulation",
+  },
 ];
 
 async function readText(response) {

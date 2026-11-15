@@ -71,7 +71,7 @@ function transport(overrides = {}) {
     "/_next/static/chunks/app.css": () =>
       new Response(
         overrides.css ??
-          ":root{--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--mobile-header:3.5rem}.pt-\\[calc\\(var\\(--mobile-header\\)\\)\\]{padding-top:calc(var(--mobile-header) + 1rem)}",
+          ":root{--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--mobile-header:3.5rem}body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}button{touch-action:manipulation}.pt-\\[calc\\(var\\(--mobile-header\\)\\)\\]{padding-top:calc(var(--mobile-header) + 1rem)}",
         { status: 200, headers: { "content-type": "text/css" } }
       ),
     ...overrides.routes,
