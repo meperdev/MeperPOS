@@ -228,15 +228,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Preview-only: restored from `feat/api-same-origin-proxy` so a Vercel
-  // preview can be exercised without touching backend CORS.
-  // The same-origin /api proxy lives on `feat/api-same-origin-proxy`, not here:
-  // it is the one piece of PWA work that changes production routing, so it is
-  // reviewed and merged on its own. Merge it BEFORE this branch, otherwise an
-  // installed iOS app asks for a login on every launch.
-  //
-  // `DEV_API_PROXY_TARGET` takes precedence when set: it is the dev-only
-  // same-origin proxy, empty (and production-proof) by default.
+  /**
+   * Same-origin `/api` proxy.
+   *
+   * WebKit blocks third-party cookies outright, so with the API on its own
+   * origin the httpOnly refresh cookie never comes back and an installed iOS
+   * app asks for a login on every launch. Serving the API under this origin
+   * keeps those cookies first-party; `apiProxyRewrites` registers the rewrite
+   * only when `BACKEND_ORIGIN` is set, so local development and direct mode
+   * stay untouched.
+   *
+   * `DEV_API_PROXY_TARGET` takes precedence when set: it is the dev-only
+   * proxy for reaching the API from another device, empty (and
+   * production-proof) by default.
+   */
   async rewrites() {
     if (DEV_API_PROXY_TARGET) {
       return [
