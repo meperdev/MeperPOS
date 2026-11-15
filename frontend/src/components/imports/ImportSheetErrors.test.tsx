@@ -41,6 +41,23 @@ describe("ImportSheetErrors", () => {
     expect(screen.getByText("Fila 9")).toBeInTheDocument();
   });
 
+  it("shows the Spanish label for the error code and never the raw code", () => {
+    render(
+      <ImportSheetErrors
+        errors={[
+          makeError({ code: "DUPLICATE_DOCUMENT" }),
+          makeError({ row: 9, sheetId: "productos", code: undefined, errorCode: "INVALID_PRICE", field: undefined, editableFields: [] }),
+        ]}
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Documento ya registrado")).toBeInTheDocument();
+    expect(screen.getByText("Precio inválido")).toBeInTheDocument();
+    expect(screen.queryByText("DUPLICATE_DOCUMENT")).not.toBeInTheDocument();
+    expect(screen.queryByText("INVALID_PRICE")).not.toBeInTheDocument();
+  });
+
   it("renders the error message and editable fields", () => {
     render(<ImportSheetErrors errors={[makeError()]} onRetry={vi.fn()} />);
 

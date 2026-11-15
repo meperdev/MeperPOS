@@ -5,7 +5,7 @@ import { Pencil, RefreshCcw } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { fieldLabel, sheetLabel } from "./labels";
+import { fieldLabel, getImportErrorCodeLabel, sheetLabel } from "./labels";
 import type { ImportSheetId, ImportSheetRowError } from "@/types";
 
 type EditableValues = Record<string, string>;
@@ -97,7 +97,7 @@ export function ImportSheetErrors({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Badge variant={mapErrorVariant(error.code ?? error.errorCode ?? "UNKNOWN_ERROR")}>
-                        {error.code ?? error.errorCode}
+                        {getImportErrorCodeLabel(error.code ?? error.errorCode)}
                       </Badge>
                       <span className="text-xs text-muted-foreground tabular-nums">
                         Fila {error.row ?? error.rowIndex}
