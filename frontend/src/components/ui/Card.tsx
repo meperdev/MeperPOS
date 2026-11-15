@@ -1,14 +1,18 @@
 import { cn } from "@/lib/utils";
 
-interface CardProps {
+interface CardProps
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, "onClick"> {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
 }
 
-export function Card({ children, className = "", onClick }: CardProps) {
+// Extra div attributes (role, tabIndex, aria-label, onKeyDown) pass through so a
+// clickable card can also be a keyboard edit target.
+export function Card({ children, className = "", onClick, ...props }: CardProps) {
   return (
     <div
+      {...props}
       onClick={onClick}
       className={cn(
         "rounded-xl border border-border/70 bg-card shadow-2xs transition-colors duration-150",

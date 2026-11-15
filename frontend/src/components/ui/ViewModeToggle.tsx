@@ -25,8 +25,8 @@ export function ViewModeToggle({
       aria-label="Cambiar vista"
       className={cn("ml-auto hidden sm:inline-flex", className)}
     >
-      {/* 36px track = 1px border + 1px padding + 32px segments: the whole control is h-9, like a field. */}
-      <FilterGroup innerClassName="h-9 p-px overflow-visible max-w-none">
+      {/* Same borderless track as every FilterGroup: 2px padding + h-8 segments = 36px, the field height (h-9). */}
+      <FilterGroup innerClassName="overflow-visible max-w-none">
         <FilterOptionButton
           active={value === "grid"}
           onClick={() => onChange("grid")}

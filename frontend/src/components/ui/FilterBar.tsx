@@ -89,7 +89,7 @@ export function FilterGroup({
           items[(index + step + items.length) % items.length]?.focus();
         }}
         className={cn(
-          "inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 max-w-full overflow-x-auto",
+          "inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5 max-w-full overflow-x-auto",
           innerClassName,
         )}
       >

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterBar, FilterGroup, FilterOptionButton } from "@/components/ui/FilterBar";
 
 afterEach(() => {
   cleanup();
@@ -51,5 +51,30 @@ describe("FilterBar container layout", () => {
     expect(controls.className).toContain("flex-wrap");
     expect(controls.className).toContain("w-full");
     expect(controls.className).toContain("@3xl:w-auto");
+  });
+});
+
+describe("FilterGroup track", () => {
+  function renderGroup(innerClassName?: string) {
+    render(
+      <FilterGroup label="Estado" innerClassName={innerClassName}>
+        <FilterOptionButton active>Todos</FilterOptionButton>
+        <FilterOptionButton>Activos</FilterOptionButton>
+      </FilterGroup>,
+    );
+    return screen.getByText("Todos").parentElement as HTMLElement;
+  }
+
+  it("is a borderless muted track with symmetric p-0.5 padding", () => {
+    const track = renderGroup();
+
+    expect(track.className).toContain("bg-muted");
+    expect(track.className).toContain("p-0.5");
+    expect(track.className).not.toMatch(/\bborder\b/);
+    expect(track.className).not.toContain("bg-muted/40");
+  });
+
+  it("clips overflowing text segments by default", () => {
+    expect(renderGroup().className).toContain("overflow-x-auto");
   });
 });

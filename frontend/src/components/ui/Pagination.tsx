@@ -12,6 +12,11 @@ interface PaginationProps {
   pageSize?: number;
   itemLabel?: string;
   isDisabled?: boolean;
+  /**
+   * Pages pin the footer to the bottom of their flex column (the page root fills
+   * the viewport, see DashboardLayout). Inline callers, such as modals, opt out.
+   */
+  pinned?: boolean;
   className?: string;
 }
 
@@ -23,6 +28,7 @@ export function Pagination({
   pageSize,
   itemLabel = "elemento",
   isDisabled = false,
+  pinned = true,
   className,
 }: PaginationProps) {
   // The footer stays on screen whenever there are results, so a one-page list
@@ -48,6 +54,8 @@ export function Pagination({
     <div
       className={cn(
         "flex flex-wrap items-center justify-between gap-3 text-xs",
+        pinned &&
+          "mt-auto sticky bottom-0 z-10 bg-background border-t border-border py-3",
         className,
       )}
     >

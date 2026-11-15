@@ -98,6 +98,8 @@ export const DashboardLayout = memo(function DashboardLayout({
           <Sidebar />
           <main
             className={cn(
+              // Full-height flex column: a page root that grows to fill it can pin its paginator to the bottom.
+              "flex min-h-screen flex-col",
               // Derived, not magic: the mobile header is `--mobile-header`, the gap
               // below it is `--mobile-header-gap`, and the notch inset is added on
               // top. Changing the header height moves this column with it. `lg:`
@@ -108,7 +110,7 @@ export const DashboardLayout = memo(function DashboardLayout({
               isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
             )}
           >
-            <div className="mx-auto w-full max-w-[1600px]">
+            <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col">
               <UpdateAvailableBanner />
               <ConnectionStatus />
               <PlanLimitBanner />

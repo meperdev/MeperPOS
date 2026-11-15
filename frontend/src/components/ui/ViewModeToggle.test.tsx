@@ -13,13 +13,16 @@ function getTrack() {
 }
 
 describe("ViewModeToggle geometry", () => {
-  it("is exactly the field height (h-9) with no clipping wrapper", () => {
+  it("uses the shared borderless track with symmetric p-0.5 and no clipping", () => {
     render(<ViewModeToggle value="grid" onChange={vi.fn()} />);
 
     const track = getTrack();
     expect(track).not.toBeNull();
-    expect(track!.className).toContain("h-9");
-    expect(track!.className).toContain("p-px");
+    expect(track!.className).toContain("bg-muted");
+    expect(track!.className).toContain("p-0.5");
+    expect(track!.className).not.toMatch(/\bborder\b/);
+    expect(track!.className).not.toContain("h-9");
+    expect(track!.className).not.toContain("p-px");
     expect(track!.className).not.toContain("overflow-x-auto");
     expect(track!.className).not.toContain("max-w-full");
   });
