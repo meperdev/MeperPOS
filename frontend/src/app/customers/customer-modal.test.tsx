@@ -16,12 +16,20 @@ const {
   deleteCustomerMutateAsyncMock,
   toastSuccessMock,
   toastErrorMock,
+  moduleState,
 } = vi.hoisted(() => ({
   createCustomerMutateAsyncMock: vi.fn(),
   updateCustomerMutateAsyncMock: vi.fn(),
   deleteCustomerMutateAsyncMock: vi.fn(),
   toastSuccessMock: vi.fn(),
   toastErrorMock: vi.fn(),
+  moduleState: { enabled: true },
+}));
+
+vi.mock("./customer-vehicles", () => ({ CustomerVehicles: () => null }));
+
+vi.mock("@/hooks/useBusinessModules", () => ({
+  useVehiclesModule: () => ({ data: moduleState, isLoading: false }),
 }));
 
 vi.mock("@/components/layout/DashboardLayout", () => ({
@@ -97,6 +105,7 @@ import CustomersPage from "./page";
 describe("Customers page modal — customer-supplier-info-fields (T18)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    moduleState.enabled = true;
     createCustomerMutateAsyncMock.mockResolvedValue({} as never);
     updateCustomerMutateAsyncMock.mockResolvedValue({} as never);
     deleteCustomerMutateAsyncMock.mockResolvedValue({} as never);
@@ -104,6 +113,16 @@ describe("Customers page modal — customer-supplier-info-fields (T18)", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("hides the motorcycle plate when the vehicles module is disabled", async () => {
+    moduleState.enabled = false;
+    const user = userEvent.setup();
+    render(<CustomersPage />);
+    expect(screen.queryByText("ABC-12D")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /nuevo cliente/i }));
+    expect(screen.queryByLabelText(/Placa de la moto/i)).toBeNull();
+    expect(screen.getByLabelText(/Referencia/i)).toBeTruthy();
   });
 
   it("renders Referencia and Placa de la moto and sends them to createCustomer", async () => {

@@ -7,6 +7,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { CreateCustomerDto, UpdateCustomerDto } from './dto/customer.dto';
+import { Prisma } from '@prisma/client';
+import { synchronizeLegacyCustomerPlate } from './legacy-customer-plate';
 
 @Injectable()
 export class CustomersService {
@@ -31,9 +33,25 @@ export class CustomersService {
       );
     }
 
-    const customer = await this.prisma.customer.create({
-      data: { ...createCustomerDto, organizationId },
-    });
+    const customer = createCustomerDto.placaMoto?.trim()
+      ? await this.prisma.$transaction(
+          async (tx) => {
+            const created = await tx.customer.create({
+              data: { ...createCustomerDto, organizationId },
+            });
+            await synchronizeLegacyCustomerPlate(
+              tx,
+              organizationId,
+              created.id,
+              createCustomerDto.placaMoto,
+            );
+            return created;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        )
+      : await this.prisma.customer.create({
+          data: { ...createCustomerDto, organizationId },
+        });
 
     this.planLimitService.invalidateCache('customers', organizationId);
 
@@ -142,6 +160,24 @@ export class CustomersService {
       }
     }
 
+    if (updateCustomerDto.placaMoto !== undefined) {
+      return this.prisma.$transaction(
+        async (tx) => {
+          const updated = await tx.customer.update({
+            where: { id, organizationId },
+            data: updateCustomerDto,
+          });
+          await synchronizeLegacyCustomerPlate(
+            tx,
+            organizationId,
+            id,
+            updateCustomerDto.placaMoto,
+          );
+          return updated;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    }
     return this.prisma.customer.update({
       where: { id },
       data: updateCustomerDto,
