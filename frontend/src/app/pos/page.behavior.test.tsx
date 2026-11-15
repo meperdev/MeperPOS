@@ -558,6 +558,14 @@ describe("POS behavior evidence (#19, #18)", () => {
     cleanup();
   });
 
+  it("paints the search icon above the scanner input and out of its pointer path", () => {
+    render(<POSPage />);
+    const input = screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código...");
+    const icon = input.closest<HTMLElement>(".min-w-\\[14rem\\]")!.querySelector("svg.lucide-search");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveClass("absolute", "z-10", "pointer-events-none");
+  });
+
   it("reaches saved favorites beyond the first adaptive page with a multi-page pager", async () => {
     const list = Array.from({ length: 25 }, (_, i) => makeProduct(`00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, `Favorito ${i}`));
     const ids = list.slice(10).map((p) => p.id);
@@ -827,7 +835,8 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
     const area = screen.getByTestId("pos-capacity-area");
     expect(area.contains(screen.getByTestId("pos-pager"))).toBe(false);
-    expect(area.className).not.toMatch(/overflow-y-auto/);
+    // Desktop measures a fixed area and never scrolls it; phones scroll it, so the lg override must hold.
+    expect(area.className).toContain("lg:overflow-visible");
     height = 300;
     act(() => resize());
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 3, page: 1 }));

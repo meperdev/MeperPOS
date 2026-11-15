@@ -63,7 +63,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { hasAnyRole } from "@/lib/auth";
 import { api, getApiErrorMessage } from "@/lib/api";
 
-import { observePOSGrid, POS_GRID_TEMPLATE_COLUMNS } from "./pos-layout";
+import { observePOSGrid, POS_GRID_ROW_CLASSES, POS_GRID_TEMPLATE_COLUMNS } from "./pos-layout";
 
 // S1 code splitting (#98): the payment modal and mobile cart drawer are the
 // heaviest POS-only components; they load as separate chunks on first open
@@ -997,7 +997,7 @@ export default function POSPage() {
               {/* Intrinsic wrap, like FilterBar: Favoritos and the category select share a row under the search when narrow. */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[14rem] flex-[999_1_16rem]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     ref={scannerInputRef}
                     placeholder="Escanear o buscar por nombre, SKU o código..."
@@ -1066,12 +1066,15 @@ export default function POSPage() {
             </div>
 
             {/* Product Grid */}
-            <div ref={capacityAreaRef} data-testid="pos-capacity-area" className="min-h-[280px] flex-1 p-4">
+            {/* Below lg the panel is a fixed dvh height, so this area scrolls and the pager stays put. */}
+            <div ref={capacityAreaRef} data-testid="pos-capacity-area" className="min-h-[280px] flex-1 overflow-y-auto p-4 lg:overflow-visible">
               <div
                 ref={productGridRef}
                 style={{ gridTemplateColumns: POS_GRID_TEMPLATE_COLUMNS }}
                 className={cn(
-                  "grid h-full auto-rows-[224px] grid-rows-[repeat(auto-fill,minmax(224px,1fr))] gap-3 transition-opacity duration-150 [&>div]:aspect-auto [&>div]:h-full [&>div]:min-h-0 [&>div]:max-h-none",
+                  "grid",
+                  POS_GRID_ROW_CLASSES,
+                  "transition-opacity duration-150",
                   isFetching && !searching ? "opacity-60" : "opacity-100",
                 )}
               >
