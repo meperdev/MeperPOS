@@ -100,7 +100,12 @@ export const DashboardLayout = memo(function DashboardLayout({
       <Sidebar />
       <main
         className={cn(
-          "px-4 pb-6 pt-20 lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
+          // Mobile chrome is a fixed 3.5rem header, so the top padding tracks
+          // that header plus the notch inset instead of a magic 5rem. `lg:`
+          // keeps the desktop column as it was; physical insets are zero there.
+          "pt-[calc(5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]",
+          "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]",
+          "lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
           isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
         )}
       >

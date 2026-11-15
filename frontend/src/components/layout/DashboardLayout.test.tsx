@@ -178,4 +178,30 @@ describe("DashboardLayout route gating for /expenses", () => {
     await userEvent.click(screen.getByRole("button", { name: "Toggle" }));
     expect(mainElement).toHaveClass("lg:ml-[320px]");
   });
+
+  // Pins the safe-area composition of the content column. jsdom resolves
+  // `env()` to nothing, so the class name is the only observable here: this is
+  // a regression pin, not visual proof. Dropping the inset has to fail a test
+  // rather than reach a notched device unnoticed.
+  it("keeps the content column clear of the notch and the home indicator", () => {
+    setUser("ADMIN");
+
+    const { container } = render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    const mainElement = container.querySelector("main");
+    expect(mainElement?.className).toContain("pt-[calc(5rem+var(--safe-top))]");
+    expect(mainElement?.className).toContain(
+      "pb-[calc(1.5rem+var(--safe-bottom))]"
+    );
+    expect(mainElement?.className).toContain(
+      "pl-[calc(1rem+var(--safe-left))]"
+    );
+    expect(mainElement?.className).toContain(
+      "pr-[calc(1rem+var(--safe-right))]"
+    );
+  });
 });

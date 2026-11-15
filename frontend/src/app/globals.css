@@ -361,3 +361,21 @@ h4 {
 .scrollbar-app::-webkit-scrollbar-thumb:hover {
     background: color-mix(in oklab, var(--primary) 65%, transparent);
 }
+
+/* ─── Safe areas ───────────────────────────────────────── */
+/*
+ * `viewport-fit=cover` (buildPwaViewport) makes the app draw edge to edge, so
+ * every fixed surface has to pay the inset back itself: nothing else will keep
+ * content out from under a notch, a rounded corner or the home indicator.
+ *
+ * `env()` resolves to 0px in a browser tab and on any device without an inset,
+ * so the compensation is applied unconditionally. There is deliberately no
+ * "standalone or not" branch: a single code path cannot drift from the reality
+ * of the device the way a media query or a feature test can.
+ */
+:root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+}
