@@ -34,6 +34,8 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
     const reactId = useId();
     const inputId = id || reactId;
     const innerInputRef = useRef<HTMLInputElement | null>(null);
+    // Stepper buttons are named after the field: its visible label, else its aria-label.
+    const stepperName = typeof label === "string" && label ? label : props["aria-label"];
     const isNumber = !textarea && type === "number";
     const focusedRef = useRef(false);
     const [numericText, setNumericText] = useState<string | null>(null);
@@ -176,7 +178,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
               <button
                 type="button"
                 tabIndex={-1}
-                aria-label={typeof label === "string" && label ? `Aumentar ${label}` : "Aumentar"}
+                aria-label={stepperName ? `Aumentar ${stepperName}` : "Aumentar"}
                 // Keep focus in the field, as the old spans did.
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => stepNumber(1)}
@@ -187,7 +189,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
               <button
                 type="button"
                 tabIndex={-1}
-                aria-label={typeof label === "string" && label ? `Disminuir ${label}` : "Disminuir"}
+                aria-label={stepperName ? `Disminuir ${stepperName}` : "Disminuir"}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => stepNumber(-1)}
                 className="flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted cursor-pointer transition-colors select-none"

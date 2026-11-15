@@ -17,6 +17,13 @@ describe("Input number stepper", () => {
     expect(screen.getByRole("button", { name: "Disminuir Precio" })).toBeInTheDocument();
   });
 
+  it("names the steppers from aria-label when the field is labelled that way", () => {
+    render(<Input aria-label="Cantidad de producto" type="number" defaultValue="1" />);
+
+    expect(screen.getByRole("button", { name: "Aumentar Cantidad de producto" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Disminuir Cantidad de producto" })).toBeInTheDocument();
+  });
+
   it("falls back to generic stepper names when the field has no text label", () => {
     render(<Input type="number" defaultValue="1" />);
 
