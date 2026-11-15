@@ -220,10 +220,13 @@ export default function UsersPage() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 @2xl:shrink-0 @2xl:justify-end">
-                        <Badge variant="default">
-                          <Shield className="mr-1 h-3 w-3 text-muted-foreground" />
-                          {roleLabel[user.role] || user.role}
-                        </Badge>
+                        {/* GET /users currently omits `role`; an icon-only badge would read as broken. */}
+                        {user.role && (
+                          <Badge variant="default">
+                            <Shield className="mr-1 h-3 w-3 text-muted-foreground" />
+                            {roleLabel[user.role] || user.role}
+                          </Badge>
+                        )}
                         <Badge variant={user.active ? "success" : "danger"} dot>
                           {user.active ? "Activo" : "Inactivo"}
                         </Badge>

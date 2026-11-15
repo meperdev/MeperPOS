@@ -92,4 +92,27 @@ describe("Users list responsive layout", () => {
     expect(badge.className).toContain("whitespace-nowrap");
     expect(badge.className).toContain("shrink-0");
   });
+
+  it("omits the role badge when the API sends no role instead of rendering an icon-only pill", () => {
+    // GET /users currently returns users without `role`.
+    (usersData as User[]).push({
+      id: "user-3",
+      email: "norole@example.com",
+      name: "Sin Rol",
+      active: true,
+      createdAt: "2026-03-24T00:00:00.000Z",
+      updatedAt: "2026-03-24T00:00:00.000Z",
+    } as unknown as User);
+    try {
+      render(<UsersPage />);
+
+      const row = screen.getByText("Sin Rol").closest("[class~='py-3.5']")!;
+      const badges = Array.from(row.querySelectorAll("span")).filter((el) =>
+        el.querySelector("svg.lucide-shield"),
+      );
+      expect(badges).toHaveLength(0);
+    } finally {
+      usersData.pop();
+    }
+  });
 });
