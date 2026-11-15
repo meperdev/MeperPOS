@@ -1155,26 +1155,27 @@ export default function POSPage() {
                 cart.map((item) => (
                   <div
                     key={item.productId}
-                    className="flex items-stretch gap-3 p-3 bg-muted/20 rounded-xl border border-border/60 hover:border-border transition-colors duration-150"
+                    className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 transition-colors duration-150"
                   >
-                    <div className="relative w-12 self-stretch min-h-[4.5rem] bg-muted/60 border border-border/50 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="flex items-start gap-3">
+                    <div className="relative h-10 w-10 shrink-0 bg-muted/60 border border-border/50 rounded-md flex items-center justify-center overflow-hidden">
                       {item.product.imageUrl ? (
                         <Image
                           src={item.product.imageUrl}
                           alt={item.product.name}
                           fill
-                          sizes="80px"
+                          sizes="40px"
                           className="object-cover"
                         />
                       ) : (
-                        <Package className="w-6 h-6 text-muted-foreground/50" />
+                        <Package className="w-4 h-4 text-muted-foreground/50" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground line-clamp-2 break-words mb-1">
+                      <p className="text-sm font-medium leading-snug text-foreground line-clamp-2 break-words">
                         {item.product.name}
                       </p>
-                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-muted-foreground tabular-nums mb-2">
+                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground tabular-nums mt-0.5">
                         {cartItemOffer(item) && (
                           <Badge
                             variant="danger"
@@ -1220,12 +1221,27 @@ export default function POSPage() {
                           </span>
                         )}
                       </p>
-                      <div className="flex flex-wrap items-center gap-2">
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end text-right">
+                      <span className="text-sm font-semibold tabular-nums whitespace-nowrap text-foreground">
+                        {formatCurrency(
+                          item.quantity * item.unitPrice - item.discountAmount,
+                        )}
+                      </span>
+                      {item.discountAmount > 0 && (
+                        <s className="text-xs text-muted-foreground line-through tabular-nums whitespace-nowrap">
+                          {formatCurrency(item.quantity * item.unitPrice)}
+                        </s>
+                      )}
+                    </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
                         <Stepper
                           value={item.quantity}
                           min={1}
                           max={item.availableStock}
-                          size="sm"
+                          size="md"
                           onChange={(value) =>
                             updateQuantity(item.productId, value)
                           }
@@ -1235,6 +1251,8 @@ export default function POSPage() {
                             máx.
                           </span>
                         )}
+                      </div>
+                      <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => openDiscountModal(item.productId)}
@@ -1247,20 +1265,13 @@ export default function POSPage() {
                         <button
                           type="button"
                           onClick={() => removeFromCart(item.productId)}
-                          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10 transition-colors duration-150"
+                          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                           title="Eliminar"
                           aria-label={`Eliminar ${item.product.name}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end justify-center text-right">
-                      <span className="stat-number text-base font-semibold text-foreground tabular-nums">
-                        {formatCurrency(
-                          item.quantity * item.unitPrice - item.discountAmount,
-                        )}
-                      </span>
                     </div>
                   </div>
                 ))

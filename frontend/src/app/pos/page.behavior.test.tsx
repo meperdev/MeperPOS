@@ -724,16 +724,42 @@ describe("POS behavior evidence (#19, #18)", () => {
     render(<POSPage />);
     await userEvent.click(screen.getByRole("button", { name: "Arroz Integral Premium Paquete 5 kg" }));
 
-    const row = screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").closest<HTMLElement>("div.items-stretch");
-    expect(row).not.toBeNull();
-    const name = row!.querySelector("p");
-    expect(name!.className).toContain("line-clamp-2");
-    expect(name!.className).not.toContain("line-clamp-1");
-    expect(name!.parentElement!.className).toContain("min-w-0");
-    expect(name!.parentElement!.className).toContain("flex-1");
+    const card = screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").closest<HTMLElement>("div.rounded-lg");
+    expect(card).not.toBeNull();
+    expect(card!.className).toContain("flex-col");
+
+    // Row 1: fixed square thumbnail, flexible text block, total on the right.
+    const header = card!.firstElementChild as HTMLElement;
+    expect(header.className).toContain("items-start");
+    const thumb = header.firstElementChild as HTMLElement;
+    expect(thumb.className).toContain("h-10");
+    expect(thumb.className).toContain("w-10");
+    expect(thumb.className).toContain("shrink-0");
+    expect(thumb.className).not.toContain("self-stretch");
+    const textBlock = thumb.nextElementSibling as HTMLElement;
+    expect(textBlock.className).toContain("min-w-0");
+    expect(textBlock.className).toContain("flex-1");
+    const name = textBlock.querySelector("p")!;
+    expect(name.className).toContain("line-clamp-2");
+    expect(name.className).not.toContain("line-clamp-1");
     expect(screen.getByText("× 1").className).toContain("whitespace-nowrap");
-    expect(row!.querySelector("span.stat-number")!.parentElement!.className).toContain("shrink-0");
+    expect(screen.getByText("× 1").parentElement!.className).toContain("tabular-nums");
+
+    const totalColumn = header.lastElementChild as HTMLElement;
+    expect(totalColumn.className).toContain("shrink-0");
+    const total = totalColumn.firstElementChild as HTMLElement;
+    expect(total.className).toContain("font-semibold");
+    expect(total.className).toContain("tabular-nums");
+    expect(total.className).toContain("whitespace-nowrap");
+    expect(total.className).not.toContain("stat-number");
+
+    // Row 2: stepper on the left; discount and delete on the right, 40px touch targets.
+    const actions = screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").parentElement!;
+    expect(actions.parentElement!.className).toContain("justify-between");
+    expect(screen.getByLabelText("Descuento para Arroz Integral Premium Paquete 5 kg").className).toContain("h-10 w-10");
+    expect(screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").className).toContain("h-10 w-10");
   });
+
 
   it("gives the products search its own full row below the @xl container width", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
@@ -1364,6 +1390,22 @@ describe("POS item price override (pos-edit-item-price)", () => {
     const discount = screen.getByTestId("line-discount");
     expect(discount.textContent).toContain(formatCurrency(5000));
     expect(discount.textContent).not.toContain("%");
+  });
+
+  it("strikes through the pre-discount line subtotal under the total of a discounted line", async () => {
+    renderWithSingleProduct("Producto Descontado", 50000);
+    await userEvent.click(screen.getByRole("button", { name: "Producto Descontado" }));
+    await openDiscountModal();
+    await userEvent.type(screen.getByPlaceholderText("0.00"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+
+    const card = screen.getByLabelText("Eliminar Producto Descontado").closest<HTMLElement>("div.rounded-lg")!;
+    const struck = card.querySelector<HTMLElement>("s");
+    expect(struck).not.toBeNull();
+    expect(struck!.textContent).toBe(formatCurrency(50000));
+    expect(struck!.className).toContain("line-through");
+    expect(struck!.className).toContain("text-xs");
+    expect(struck!.parentElement!.className).toContain("shrink-0");
   });
 
   it("clamps a fixed discount so the line total never goes negative", async () => {
