@@ -75,14 +75,14 @@ These are the items the first pass deliberately left out. They are now in scope 
 - [x] **T5 — Wave 2d, settings / users / admin / suppliers.** S2–S10 on `app/{settings,users,admin,suppliers}`. Evidence: #2688 (BentoSelect accessible name is the field label; StatusBadge no longer carries `font-mono`).
 - [x] **T6 — Adversarial review.** Fresh-context review over the whole diff found 7 defects, all fixed. Evidence: #2692.
 - [x] **T7 — Verification.** `tsc` clean, vitest 1136/1136, `eslint` at the master baseline (11 pre-existing problems), `next build` OK, `impeccable` detector `[]`. Evidence: #2692.
-- [~] **T8 — Visual check in the browser.** Done for dark at 1060px with the sidebar expanded via headless Chromium (playwright-core in the scratchpad, `admin@cafeteria-demo.com`); light theme and collapsed sidebar not yet captured. Findings became S16. Light/dark, mobile POS. Blocked in the previous session (no running stack); the stack is now up on :3000/:3001, so this is executable.
+- [x] **T8 — Visual check in the browser.** Headless Chromium at 1060px (dark and light, sidebar expanded and collapsed) and 390×844 touch. Findings became S16. Standalone PWA (safe areas) cannot be emulated headless: the user verifies on a device. Light/dark, mobile POS. Blocked in the previous session (no running stack); the stack is now up on :3000/:3001, so this is executable.
 - [x] **T9 — Work-unit commits on `feat/ui-polish`.** 152 files, +2160/−2056, split into 15 commits by area, each holding its own colocated tests. Verified before committing: `tsc --noEmit` exit 0, vitest 124 files / 1136 tests green. Commits, in order: `705b1e2` tokens, `da9b0da` kit, `d60033a` shell/pwa/auth/dashboard, `ec61717` POS, `a152f7b` inventory, `cd1bdb4` sales, `aa27c95` reports, `55c6729` tasks, `b3887bc` loans, `f82e60f` expenses, `d444bd2` employees/payroll, `42166b2` settings, `32e2cf0` admin/suppliers/users, `1e42436` purchase-orders/imports/billing, `932fbbf` alerts/profile.
 - [ ] **T10 — Delivery decision.** The diff exceeds ~400 authored lines, so `ask-on-risk` requires choosing `stacked-to-main` or `feature-branch-chain` before the first PR. Nothing is pushed yet.
 - [x] **T11 — S13, import error labels.** `1d282d5`: `CODE_LABELS` + `getImportErrorCodeLabel` (28 codes, fallback "Error de validación").
 - [x] **T12 — S14, category chart colors.** `bf37846`: categorical `--chart-1..8` tokens (light/dark), palette is `var(--chart-N)`, stable by sorted name.
 - [ ] **T13 — S11, kit pair merges.** Select/BentoSelect and CurrencyInput/MoneyField; large refactor, its own chain decision.
 - [ ] **T14 — S12, dashboard metric cards.** Design decision first (S12), then code.
-- [ ] **T15 — S15, design annotations document.** Scope resolved (L9): one document under `docs/design-system/`, no code changes. Create the scaffold covering the 10 pages, store the screenshot in `docs/design-system/previews/`, and fill only the notes the user actually supplies.
+- [x] **T15 — S15, design annotations document.** `docs/design-system/VIEW_MODE_TOGGLE_ANNOTATIONS.md` lists the 10 pages; the only user note ("los botones se ven corridos") is recorded as resolved by `2a151f8` and `5041ef7`. Screenshot in `docs/design-system/previews/view-mode-toggle.png`.
 
 ## Log
 
