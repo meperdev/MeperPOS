@@ -77,6 +77,7 @@ model Organization {
   whatsAppInternalContacts WhatsAppInternalContact[]
   whatsAppIdentities WhatsAppIdentity[]
   whatsAppLinkChallenges WhatsAppLinkChallenge[]
+  productStockAlerts ProductStockAlert[]
 
   @@index([status, trialEndsAt])
 }
@@ -512,6 +513,7 @@ model Product {
   saleItems           SaleItem[]
   inventoryLoanItems  InventoryLoanItem[]
   posLoanSaleReservations PosLoanSaleReservation[]
+  stockAlerts         ProductStockAlert[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, sku])
@@ -1555,4 +1557,49 @@ enum WhatsAppDeliveryStatus {
   PENDING
   SENT
   FAILED
+}
+
+/// One episode of a product being at or below its minimum, and the out-of-app
+/// notification for it. One row per product: the scan reconciles the open episode
+/// instead of appending a new one, and the unique key makes two concurrent scans
+/// resolve to the same episode.
+model ProductStockAlert {
+  id                    String                             @id @default(uuid())
+  organizationId        String
+  productId             String                             @unique
+  state                 ProductStockAlertState             @default(OPEN)
+  /// Increments every time the product re-enters the low-stock set.
+  episode               Int                                @default(1)
+  stockAtOpen           Int
+  minStockAtOpen        Int
+  openedAt              DateTime                           @default(now())
+  resolvedAt            DateTime?
+  notificationStatus    ProductStockAlertNotificationStatus @default(PENDING)
+  /// Fixed failure code from a closed set; never provider text.
+  notificationFailure   String?
+  notificationAttempts  Int                                @default(0)
+  notifiedAt            DateTime?
+  updatedAt             DateTime                           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, state])
+  @@index([organizationId, notificationStatus])
+}
+
+enum ProductStockAlertState {
+  OPEN
+  RESOLVED
+}
+
+/// `SENDING` is the claim between "not attempted" and "attempted": a row left in
+/// it by a crash is never retried automatically, which is what keeps delivery at
+/// most once.
+enum ProductStockAlertNotificationStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
 }
