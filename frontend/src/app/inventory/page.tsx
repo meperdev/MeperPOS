@@ -25,6 +25,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import {
   FilterBar,
@@ -132,7 +133,14 @@ function InventoryContent() {
   // Server-side pagination: every request — filtered or not — is bounded to
   // one page of rows. Low stock and alphabetical order are resolved by the
   // backend (findAll lowStock/orderBy) so pages stay coherent.
-  const { data, isLoading, isFetching } = useProducts({
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isError: productsFailed,
+    error: productsError,
+    refetch: refetchProducts,
+  } = useProducts({
     page: urlFilterChanged ? 1 : page,
     limit: 10,
     search: search || undefined,
@@ -359,7 +367,7 @@ function InventoryContent() {
         Number.isNaN(parsedPromotionValue) ||
         parsedPromotionValue <= 0
       ) {
-        toast.error("Ingresa un valor de oferta valido");
+        toast.error("Ingresa un valor de oferta válido");
         return;
       }
     }
@@ -512,32 +520,31 @@ function InventoryContent() {
                   })),
                 ]}
               />
-              <button
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={toggleLowStockOnly}
                 aria-pressed={showLowStockOnly}
                 className={cn(
-                  "inline-flex items-center gap-1.5 h-[38px] px-3 rounded-lg text-xs font-medium transition-colors border shadow-2xs shrink-0",
-                  showLowStockOnly
-                    ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/35"
-                    : "bg-card text-muted-foreground border-border/70 hover:border-border hover:text-foreground",
+                  "shrink-0 gap-1.5",
+                  showLowStockOnly && "border-danger/35 bg-danger/10 text-danger-text hover:bg-danger/15",
                 )}
               >
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Stock Bajo</span>
+                <span className="hidden sm:inline">Stock bajo</span>
                 {lowStockCount > 0 && (
                   <span
                     className={cn(
-                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md font-mono text-[11px] font-semibold tabular-nums shrink-0",
+                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-[11px] font-semibold tabular-nums shrink-0",
                       showLowStockOnly
-                        ? "bg-rose-600 text-white"
-                        : "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+                        ? "bg-danger text-white"
+                        : "bg-danger/15 text-danger-text",
                     )}
                   >
                     {lowStockCount}
                   </span>
                 )}
-              </button>
+              </Button>
               <ViewModeToggle
                 value={viewMode}
                 onChange={(mode) => {
@@ -552,7 +559,7 @@ function InventoryContent() {
               <div className="flex items-center gap-2 mt-2 pt-2 px-1 border-t border-border/60">
                 <SlidersHorizontal className="w-3 h-3 text-muted-foreground shrink-0" />
                 <span className="text-xs text-muted-foreground">
-                  <span className="font-mono font-semibold text-foreground tabular-nums">
+                  <span className="font-semibold text-foreground tabular-nums">
                     {displayProducts.length}
                   </span>{" "}
                   resultado{displayProducts.length !== 1 ? "s" : ""}
@@ -569,7 +576,7 @@ function InventoryContent() {
                     <>
                       {" "}
                       ·{" "}
-                      <span className="font-medium text-rose-600 dark:text-rose-400">
+                      <span className="font-medium text-danger-text">
                         stock bajo
                       </span>
                     </>
@@ -590,7 +597,13 @@ function InventoryContent() {
         />
 
         {/* Content */}
-        {isLoading ? (
+        {productsFailed && !data ? (
+          <ErrorState
+            message={getApiErrorMessage(productsError, "No se pudieron cargar los productos.")}
+            retryLabel="Reintentar"
+            onRetry={() => void refetchProducts()}
+          />
+        ) : isLoading ? (
           <CardSkeleton count={6} label="Cargando productos..." />
         ) : displayProducts.length === 0 ? (
           <EmptyState
@@ -610,7 +623,7 @@ function InventoryContent() {
             )}
             {viewMode === "grid" ? (
               <div
-                className="grid flex-1 content-start justify-items-center grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 lg:gap-4 stagger-children"
+                className="grid flex-1 content-start justify-items-center grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 lg:gap-4"
                 aria-busy={isFetching}
               >
                 {displayProducts.map((product) => (
@@ -635,7 +648,7 @@ function InventoryContent() {
                 ))}
               </div>
             ) : (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden animate-fade-in flex-1">
+              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
                 <div className="overflow-x-auto">
                   <Table variant="default" className="min-w-[720px]">
                     <TableHeader>
@@ -694,18 +707,18 @@ function InventoryContent() {
                                 {product.name}
                               </span>
                             </TableCell>
-                            <TableCell className="font-mono text-xs text-muted-foreground">
+                            <TableCell className="text-xs text-muted-foreground">
                               {product.sku}
                             </TableCell>
                             <TableCell>
-                              <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 font-mono text-xs font-medium text-foreground">
+                              <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
                                 {product.category?.name || "Sin categoría"}
                               </span>
                             </TableCell>
-                            <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                            <TableCell className="text-right tabular-nums text-muted-foreground">
                               {formatCurrency(toFiniteNumber(product.costPrice))}
                             </TableCell>
-                            <TableCell className="text-right font-mono font-semibold tabular-nums text-foreground">
+                            <TableCell className="text-right font-semibold tabular-nums text-foreground">
                               {formatCurrency(sellingPrice)}
                               {hasPromo && (
                                 <s className="ml-1.5 text-[11px] font-normal text-muted-foreground">
@@ -713,7 +726,7 @@ function InventoryContent() {
                                 </s>
                               )}
                             </TableCell>
-                            <TableCell className="text-right font-mono tabular-nums">
+                            <TableCell className="text-right tabular-nums">
                               {isSrv ? (
                                 <span className="text-muted-foreground">Servicio</span>
                               ) : isUntracked ? (
@@ -723,9 +736,9 @@ function InventoryContent() {
                                   className={cn(
                                     "font-semibold",
                                     product.stock === 0
-                                      ? "text-rose-600 dark:text-rose-400"
+                                      ? "text-danger-text"
                                       : product.isLowStock
-                                        ? "text-amber-600 dark:text-amber-400"
+                                        ? "text-warning-text"
                                         : "text-foreground",
                                   )}
                                 >
@@ -764,7 +777,7 @@ function InventoryContent() {
                                       onClick={() => handleDeactivate(product.id)}
                                       title="Desactivar producto"
                                       aria-label={`Desactivar producto ${product.name}`}
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-danger/30 hover:bg-danger/10 hover:text-danger-text"
                                     >
                                       <Power className="h-3.5 w-3.5" />
                                     </button>
@@ -774,7 +787,7 @@ function InventoryContent() {
                                       onClick={() => handleReactivate(product.id)}
                                       title="Reactivar producto"
                                       aria-label={`Reactivar producto ${product.name}`}
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-success/30 hover:bg-success/10 hover:text-success-text"
                                     >
                                       <RotateCcw className="h-3.5 w-3.5" />
                                     </button>
@@ -906,7 +919,7 @@ function InventoryContent() {
                 </div>
                 <div role="group" aria-label="Oferta" className="sm:col-span-2 min-w-0 space-y-1.5">
                   <h3 className="text-xs font-medium text-muted-foreground">Oferta</h3>
-                  <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                     <div className="w-full min-w-0 sm:flex-1">
                       <BentoSelect
                         value={promotionTypeInput}
@@ -960,7 +973,7 @@ function InventoryContent() {
                             setPromotionTypeInput("");
                             setPromotionValueInput("");
                           }}
-                          className="self-start h-[38px] w-[38px] p-0 shrink-0"
+                          className="self-start h-10 sm:h-9 w-10 sm:w-9 p-0 shrink-0"
                         >
                           <X className="w-4 h-4" />
                         </Button>
@@ -983,23 +996,19 @@ function InventoryContent() {
                 const marginPct = sale > 0 ? Math.round((profit / sale) * 100) : 0;
                 const isNegative = profit < 0;
                 return (
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums",
-                      isNegative
-                        ? "border-rose-500/35 bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                        : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                    )}
+                  <Badge
+                    variant={isNegative ? "danger" : "success"}
+                    className="gap-1.5 text-[11px] tabular-nums"
                   >
                     <span>Utilidad: {profit >= 0 ? "+" : ""}{formatCurrency(profit)}</span>
                     {sale > 0 && <span>· {marginPct}%</span>}
-                  </span>
+                  </Badge>
                 );
               })()}
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3.5 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
               <CurrencyInput
-                label="Precio de Costo"
+                label="Precio de costo"
                 value={formData.costPrice || ""}
                 onChange={(value) =>
                   setFormData({ ...formData, costPrice: value })
@@ -1007,7 +1016,7 @@ function InventoryContent() {
                 required
               />
               <CurrencyInput
-                label="Precio de Venta"
+                label="Precio de venta"
                 value={formData.salePrice || ""}
                 onChange={(value) =>
                   setFormData({ ...formData, salePrice: value })
@@ -1030,7 +1039,7 @@ function InventoryContent() {
                 <h3 className="text-xs font-semibold text-foreground">Inventario</h3>
                 <label
                   htmlFor="tracksStock"
-                  className="inline-flex items-center gap-2.5 text-sm font-medium text-foreground cursor-pointer select-none"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none"
                 >
                   <input
                     id="tracksStock"
@@ -1045,7 +1054,7 @@ function InventoryContent() {
                 </label>
               </div>
               {formData.tracksStock !== false && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3.5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3">
                   <Input
                     label="Stock"
                     type="number"
@@ -1056,7 +1065,7 @@ function InventoryContent() {
                     required
                   />
                   <Input
-                    label="Stock Mín."
+                    label="Stock mín."
                     type="number"
                     value={formData.minStock ?? 0}
                     onChange={(e) =>
@@ -1072,7 +1081,7 @@ function InventoryContent() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row gap-2.5 justify-end pt-4 border-t border-border/60">
+          <div className="flex flex-col sm:flex-row gap-2 justify-end pt-4 border-t border-border/60">
             {editingProduct?.active && (
               <Button
                 type="button"

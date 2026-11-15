@@ -250,7 +250,7 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }),
+      screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }),
     );
 
     expect(screen.getByText("Panela Baja")).toBeInTheDocument();
@@ -291,7 +291,7 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }),
+      screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }),
     );
 
     expect(screen.getByText("Panela Baja")).toBeInTheDocument();
@@ -319,7 +319,7 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }),
+      screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }),
     );
 
     expect(screen.getByText("Panela Baja")).toBeInTheDocument();
@@ -341,14 +341,14 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }),
+      screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }),
     );
 
     expect(screen.getByText("Panela Baja")).toBeInTheDocument();
     expect(screen.queryByText("Papel sin conteo")).not.toBeInTheDocument();
     // The low-stock badge counts only what the server flagged: 1, not 2.
     expect(
-      screen.getByRole("button", { name: /^Stock Bajo ?1$/ }),
+      screen.getByRole("button", { name: /^Stock bajo ?1$/ }),
     ).toBeInTheDocument();
   });
 
@@ -366,7 +366,7 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     expect(
-      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+      screen.getByRole("button", { name: /^Stock bajo ?10$/ }),
     ).toBeInTheDocument();
   });
 
@@ -382,11 +382,11 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+      screen.getByRole("button", { name: /^Stock bajo ?10$/ }),
     );
 
     expect(
-      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+      screen.getByRole("button", { name: /^Stock bajo ?10$/ }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 });

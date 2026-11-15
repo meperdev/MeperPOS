@@ -849,7 +849,7 @@ describe("ProductCard — premium card v2: shape and layers", () => {
     const media = screen.getByTestId("product-media");
 
     expect(media).toHaveClass("absolute", "inset-0", "rounded-[inherit]");
-    expect(media.querySelector('[class*="bg-zinc-900"]')).not.toBeNull();
+    expect(media.querySelector('[class*="bg-muted"]')).not.toBeNull();
     expect(media.querySelector("svg")).not.toBeNull();
   });
 
@@ -889,7 +889,7 @@ describe("ProductCard — premium card v2: chips", () => {
 
     const chip = screen.getByText(label);
 
-    expect(chip).toHaveClass("rounded-md", "bg-white/90", "dark:bg-zinc-900/90");
+    expect(chip).toHaveClass("rounded-md", "bg-card/90");
     expect(chip).not.toHaveClass("rounded-full");
   });
 
@@ -898,7 +898,7 @@ describe("ProductCard — premium card v2: chips", () => {
 
     const offer = screen.getByText(/Oferta/);
 
-    expect(offer).toHaveClass("rounded-md", "bg-white/90", "dark:bg-zinc-900/90");
+    expect(offer).toHaveClass("rounded-md", "bg-card/90");
     expect(offer).not.toHaveClass("rounded-full");
   });
 
@@ -907,7 +907,7 @@ describe("ProductCard — premium card v2: chips", () => {
 
     const category = screen.getByText("Ropa");
 
-    expect(category).toHaveClass("rounded-md", "font-mono", "max-w-full", "truncate", "border", "border-primary/50", "bg-primary/25", "text-orange-200");
+    expect(category).toHaveClass("rounded-md", "max-w-full", "truncate", "border", "border-primary/50", "bg-primary/25", "text-white/90");
     expect(category).not.toHaveClass("rounded-full");
   });
 
@@ -965,7 +965,7 @@ describe("ProductCard — premium card v2: content block", () => {
 
     expect(name).toHaveClass("line-clamp-2", "break-words", "text-sm", "font-semibold", "text-white");
     expect(sku).toHaveClass("min-w-0", "truncate", "font-mono", "text-white/60");
-    expect(price).toHaveClass("font-mono", "text-[1.375rem]", "font-extrabold", "tabular-nums", "whitespace-nowrap", "text-white");
+    expect(price).toHaveClass("text-xl", "font-semibold", "tabular-nums", "whitespace-nowrap", "text-white");
     expect(price).not.toHaveClass("truncate");
   });
 
@@ -986,8 +986,8 @@ describe("ProductCard — premium card v2: content block", () => {
 
   it.each([
     { label: "healthy", product: baseProduct, tone: /(?:^|\s)text-white\/85(?=\s|$)/ },
-    { label: "low", product: { ...baseProduct, stock: 3, isLowStock: true }, tone: /(?:^|\s)text-amber-\d+(?=\s|$)/ },
-    { label: "depleted", product: { ...baseProduct, stock: 0, isLowStock: true }, tone: /(?:^|\s)text-rose-\d+(?=\s|$)/ },
+    { label: "low", product: { ...baseProduct, stock: 3, isLowStock: true }, tone: /(?:^|\s)text-warning-text(?=\s|$)/ },
+    { label: "depleted", product: { ...baseProduct, stock: 0, isLowStock: true }, tone: /(?:^|\s)text-danger-text(?=\s|$)/ },
   ] satisfies Array<{ label: string; product: CardProduct; tone: RegExp }>)(
     "tones the stock count of a $label tracked good by its resolved status",
     ({ product, tone }) => {

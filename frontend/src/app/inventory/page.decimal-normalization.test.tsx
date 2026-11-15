@@ -91,8 +91,8 @@ describe("inventory product form with Decimal strings from the API", () => {
 
     // 15000.00 must read as 15.000, never as the digit-stripped 1.500.000.
     // The real Input appends a required marker, so match the label by prefix.
-    expect(within(dialog).getByLabelText(/^Precio de Venta/)).toHaveValue("15.000");
-    expect(within(dialog).getByLabelText(/^Precio de Costo/)).toHaveValue("9.000");
+    expect(within(dialog).getByLabelText(/^Precio de venta/)).toHaveValue("15.000");
+    expect(within(dialog).getByLabelText(/^Precio de costo/)).toHaveValue("9.000");
     expect(within(dialog).getByLabelText("Impuesto (%)")).toHaveValue(19);
     expect(within(dialog).getByPlaceholderText("Valor")).toHaveValue("8.000");
     expect(dialog.textContent).not.toContain("1.500.000");

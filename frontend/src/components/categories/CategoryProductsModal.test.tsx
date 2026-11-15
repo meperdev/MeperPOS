@@ -179,34 +179,34 @@ describe("CategoryProductsModal stock badge — server low-stock flag", () => {
     setProducts([buildProduct({ stock: 20, minStock: 5, isLowStock: false })]);
     render(<CategoryProductsModal category={category} onClose={vi.fn()} />);
     expect(screen.getByText("20 uds.")).toBeInTheDocument();
-    expect(badgeClasses("Arroz Diana")).toContain("emerald-500/10");
+    expect(badgeClasses("Arroz Diana")).toContain("bg-success/10");
   });
 
   it("badges a tracked product at or below minStock as low, using the server flag", () => {
     setProducts([buildProduct({ stock: 3, minStock: 5, isLowStock: true })]);
     render(<CategoryProductsModal category={category} onClose={vi.fn()} />);
-    expect(badgeClasses("Arroz Diana")).toContain("amber-500/10");
+    expect(badgeClasses("Arroz Diana")).toContain("bg-warning/10");
   });
 
   it("does NOT badge an untracked product as low on stock (the regression this fixes)", () => {
     setProducts([buildProduct({ id: "p-2", name: "Papel sin conteo", type: "PRODUCT", tracksStock: false, stock: 2, minStock: 5, isLowStock: false })]);
     render(<CategoryProductsModal category={category} onClose={vi.fn()} />);
     expect(screen.getByText("Papel sin conteo")).toBeInTheDocument();
-    expect(badgeClasses("Papel sin conteo")).toContain("emerald-500/10");
-    expect(badgeClasses("Papel sin conteo")).not.toContain("amber-500/10");
+    expect(badgeClasses("Papel sin conteo")).toContain("bg-success/10");
+    expect(badgeClasses("Papel sin conteo")).not.toContain("bg-warning/10");
   });
 
   it("does NOT badge a service as low on stock whatever its numbers say", () => {
     setProducts([buildProduct({ id: "p-3", name: "Mantenimiento", type: "SERVICE", tracksStock: false, stock: 0, minStock: 5, isLowStock: false })]);
     render(<CategoryProductsModal category={category} onClose={vi.fn()} />);
     expect(screen.getByText("Servicio")).toBeInTheDocument();
-    expect(badgeClasses("Mantenimiento")).not.toContain("amber-500/10");
+    expect(badgeClasses("Mantenimiento")).not.toContain("bg-warning/10");
   });
 
   it("badges a depleted tracked product as out of stock, ahead of the low flag", () => {
     setProducts([buildProduct({ stock: 0, minStock: 5, isLowStock: true })]);
     render(<CategoryProductsModal category={category} onClose={vi.fn()} />);
-    expect(badgeClasses("Arroz Diana")).toContain("rose-500/10");
-    expect(badgeClasses("Arroz Diana")).not.toContain("amber-500/10");
+    expect(badgeClasses("Arroz Diana")).toContain("bg-danger/10");
+    expect(badgeClasses("Arroz Diana")).not.toContain("bg-warning/10");
   });
 });
