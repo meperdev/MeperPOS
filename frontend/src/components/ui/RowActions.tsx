@@ -29,6 +29,10 @@ export type RowActionItem =
       accept: string;
       onFile: (file: File) => void;
       disabled?: boolean;
+    }
+  | {
+      /** Rule that groups the items below it, e.g. a destructive exit. */
+      kind: "separator";
     };
 
 const MENU_WIDTH = 192;
@@ -43,12 +47,25 @@ export function RowActions({
   label = "Más acciones",
   className,
   triggerClassName,
+  triggerContent,
+  preferSide,
   menuOffset = 8,
 }: {
   items: RowActionItem[];
   label?: string;
   className?: string;
   triggerClassName?: string;
+  /**
+   * Replaces the three-dot glyph with custom trigger content, so a caller can
+   * make a whole card open the menu instead of adding a second control.
+   */
+  triggerContent?: ReactNode;
+  /**
+   * "right" opens the menu beside the trigger when the viewport has room, the
+   * way a footer control in a rail is expected to behave. It falls back to the
+   * default anchoring on narrow screens, where the menu would leave the view.
+   */
+  preferSide?: "right";
   /** Extra distance between the menu and the trigger, per side. */
   menuOffset?: number;
 }) {
@@ -79,6 +96,28 @@ export function RowActions({
     const EDGE = 8;
     const alignRight = rect.right - MENU_WIDTH;
     const spaceBelow = window.innerHeight - rect.bottom;
+    // A flyout has to clear the rail, not the trigger: the trigger sits inside
+    // the rail's padding, so anchoring to its right edge overlaps the panel
+    // that contains it.
+    const rail = triggerRef.current?.closest("[data-sidebar-root]");
+    const railRight = rail ? rail.getBoundingClientRect().right : rect.right;
+    const besideTrigger = Math.max(
+      EDGE,
+      Math.min(railRight + menuOffset, window.innerWidth - MENU_WIDTH - EDGE),
+    );
+    const roomOnRight = window.innerWidth - railRight - EDGE * 2;
+
+    // A footer control in the rail reads as a flyout: the menu appears beside
+    // it. Only when the viewport cannot host that does it fall back below.
+    if (preferSide === "right" && roomOnRight >= MENU_WIDTH) {
+      setPosition({
+        position: "fixed",
+        left: besideTrigger,
+        top: rect.top,
+        width: MENU_WIDTH,
+      });
+      return;
+    }
 
     // A rail (collapsed sidebar) leaves no room to align right edges: the menu
     // opens beside the trigger instead, top aligned, so it clears the stack of
@@ -86,7 +125,7 @@ export function RowActions({
     if (alignRight < EDGE) {
       setPosition({
         position: "fixed",
-        left: Math.min(rect.right + EDGE, window.innerWidth - MENU_WIDTH - EDGE),
+        left: besideTrigger,
         top: rect.top,
         width: MENU_WIDTH,
       });
@@ -188,7 +227,9 @@ export function RowActions({
           triggerClassName,
         )}
       >
-        <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+        {triggerContent ?? (
+          <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
       </button>
 
       {open &&
@@ -201,7 +242,17 @@ export function RowActions({
             style={position}
             className="z-50 rounded-lg border border-border/70 bg-card p-1 shadow-lg"
           >
-            {items.map((item) => {
+            {items.map((item, index) => {
+              if (item.kind === "separator") {
+                return (
+                  <div
+                    key={`separator-${index}`}
+                    role="separator"
+                    className="my-1 h-px bg-border/70"
+                  />
+                );
+              }
+
               const disabled = item.disabled;
               if (item.kind === "file") {
                 return (

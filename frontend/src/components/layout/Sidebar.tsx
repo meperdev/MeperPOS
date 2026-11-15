@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { OrganizationSwitcher } from "@/components/auth/OrganizationSwitcher";
 import { AlertCenter } from "@/components/layout/AlertCenter";
@@ -35,14 +35,19 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   HandCoins,
+  MoreVertical,
 } from "lucide-react";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
+import { Badge } from "@/components/ui/Badge";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
-import { cn, safeGetItem } from "@/lib/utils";
-import { APP_NAME } from "@/lib/constants";
+import { cn, safeGetItem, safeSetItem } from "@/lib/utils";
+import { APP_NAME, RAIL_FLYOUT_GAP } from "@/lib/constants";
 import { hasAnyRole, type AppRole } from "@/lib/auth";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+
+/** Rail scroll offset, kept across the session shell remounting around it. */
+export const SIDEBAR_SCROLL_KEY = "meper_sidebar_scroll_top";
 
 interface NavItem {
   label: string;
@@ -153,24 +158,11 @@ const navItems: NavItem[] = [
     group: "Equipo",
   },
   {
-    label: "Mi perfil",
-    href: "/profile",
-    icon: <UserIcon className="w-4 h-4" />,
-    group: "Cuenta",
-  },
-  {
-    label: "Configuración",
-    href: "/settings",
-    icon: <Settings className="w-4 h-4" />,
-    roles: ["ADMIN"],
-    group: "Cuenta",
-  },
-  {
     label: "SuperAdmin",
     href: "/admin",
     icon: <Shield className="w-4 h-4" />,
     roles: ["SUPER_ADMIN"],
-    group: "Cuenta",
+    group: "Administración",
   },
 ];
 
@@ -187,6 +179,7 @@ const roleLabels: Record<string, string> = {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, logout, switchOrganization } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isCollapsed, toggleCollapse } = useSidebar();
@@ -201,6 +194,10 @@ export function Sidebar() {
   } | null>(null);
   const [now, setNow] = useState(() => new Date());
   const navRef = useRef<HTMLElement>(null);
+  const hasRestoredScrollRef = useRef(false);
+  const restoredScrollTopRef = useRef(0);
+  const scrollFrameRef = useRef<number | null>(null);
+  const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
 
   const filteredItems = navItems.filter(
     (item) => OWNER_ADMIN_ONLY_ROUTES.includes(item.href)
@@ -241,22 +238,92 @@ export function Sidebar() {
     return () => window.clearInterval(intervalId);
   }, []);
 
-  // Scroll the active nav item into view only if it is actually hidden outside the viewport
+  // The rail paints no scrollbar, so the edge fades are its only affordance:
+  // they follow the real overflow instead of the content length.
+  const syncScrollEdges = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const remaining = nav.scrollHeight - nav.clientHeight - nav.scrollTop;
+    setScrollEdges({
+      top: nav.scrollTop > 2,
+      bottom: remaining > 2,
+    });
+  }, []);
+
+  const persistScrollTop = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    safeSetItem(SIDEBAR_SCROLL_KEY, String(Math.round(nav.scrollTop)));
+  }, []);
+
+  // Restore the rail offset before the first paint. The authenticated shell
+  // unmounts the sidebar while the session is restored, so without this every
+  // session entry renders the navigation at the top and then jumps to the item.
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav || hasRestoredScrollRef.current) return;
+    hasRestoredScrollRef.current = true;
+
+    const stored = Number(safeGetItem(SIDEBAR_SCROLL_KEY) ?? 0);
+    if (Number.isFinite(stored) && stored > 0) {
+      nav.scrollTop = stored;
+      restoredScrollTopRef.current = stored;
+    }
+    syncScrollEdges();
+  }, [syncScrollEdges]);
+
+  // Scroll the active nav item into view only if it is actually hidden outside
+  // the viewport, and before paint so the rail never appears to jump. Right
+  // after a restored offset the user's own position wins over the anchor.
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    if (restoredScrollTopRef.current > 0) {
+      restoredScrollTopRef.current = 0;
+      syncScrollEdges();
+      return;
+    }
+
+    const activeLink = nav.querySelector<HTMLElement>(".sidebar-item.active");
+    if (activeLink) {
+      const navRect = nav.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+      const isOutOfView =
+        linkRect.top < navRect.top || linkRect.bottom > navRect.bottom;
+
+      if (isOutOfView && activeLink.scrollIntoView) {
+        activeLink.scrollIntoView({ block: "nearest", behavior: "instant" });
+      }
+    }
+
+    syncScrollEdges();
+  }, [pathname, isCollapsed, syncScrollEdges]);
+
+  // Persist and re-measure on a frame: a wheel gesture fires far more scroll
+  // events than the fades or the stored offset ever need.
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
 
-    const activeLink = nav.querySelector<HTMLElement>(".sidebar-item.active");
-    if (!activeLink) return;
+    const handleScroll = () => {
+      if (scrollFrameRef.current !== null) return;
+      scrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollFrameRef.current = null;
+        syncScrollEdges();
+        persistScrollTop();
+      });
+    };
 
-    const navRect = nav.getBoundingClientRect();
-    const linkRect = activeLink.getBoundingClientRect();
-    const isOutOfView = linkRect.top < navRect.top || linkRect.bottom > navRect.bottom;
-
-    if (isOutOfView && activeLink.scrollIntoView) {
-      activeLink.scrollIntoView({ block: "nearest", behavior: "instant" });
-    }
-  }, [pathname]);
+    nav.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      nav.removeEventListener("scroll", handleScroll);
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
+  }, [syncScrollEdges, persistScrollTop]);
 
   const initials = user?.name
     ? user.name
@@ -267,8 +334,30 @@ export function Sidebar() {
         .toUpperCase()
     : "?";
 
-  // The account actions live in one menu so the footer stays quiet.
+  // Everything that belongs to this identity, not to the daily operation, lives
+  // in one menu: the rail spine stays for the work itself.
+  const canSeeSettings = Boolean(user && hasAnyRole(user.role, ["ADMIN"]));
   const accountItems: RowActionItem[] = [
+    {
+      label: "Mi perfil",
+      icon: <UserIcon className="h-3.5 w-3.5" aria-hidden="true" />,
+      onSelect: () => {
+        closeMobileMenu();
+        router.push("/profile");
+      },
+    },
+    ...(canSeeSettings
+      ? [
+          {
+            label: "Configuración",
+            icon: <Settings className="h-3.5 w-3.5" aria-hidden="true" />,
+            onSelect: () => {
+              closeMobileMenu();
+              router.push("/settings");
+            },
+          } satisfies RowActionItem,
+        ]
+      : []),
     {
       label:
         theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro",
@@ -280,6 +369,7 @@ export function Sidebar() {
         ),
       onSelect: toggleTheme,
     },
+    { kind: "separator" },
     {
       label: "Cerrar sesión",
       icon: <LogOut className="h-3.5 w-3.5" aria-hidden="true" />,
@@ -289,10 +379,13 @@ export function Sidebar() {
   ];
 
   const formattedDate = new Intl.DateTimeFormat("es-CO", {
+    weekday: "short",
     day: "numeric",
-    month: "long",
+    month: "short",
     year: "numeric",
   }).format(now);
+  // es-CO lowercases the weekday; the rail reads better with it capitalized.
+  const dateLabel = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
 
   const formattedTime = new Intl.DateTimeFormat("es-CO", {
     hour: "numeric",
@@ -356,150 +449,111 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Block 2: Date + time and the persistent alert bell */}
-      <div
-        data-testid="sidebar-clock"
-        className={cn("shrink-0", isCollapsed ? "px-2 pt-3" : "px-3 pt-3")}
-      >
-        <div
+      {/* Block 2: Navigation - role-filtered, active styling, edge-faded scroll */}
+      <div className="relative flex-1 min-h-0">
+        <nav
+          data-testid="sidebar-nav"
+          ref={navRef}
           className={cn(
-            "flex items-center gap-2",
-            isCollapsed ? "flex-col" : "justify-between",
+            "h-full overflow-y-auto overscroll-contain pb-[calc(5rem+var(--safe-bottom))] lg:pb-3 sidebar-scroll",
+            isCollapsed ? "px-2 py-3" : "px-3 py-3"
           )}
         >
-          <div
-            className={cn(
-              "flex items-center rounded-md border border-border/60 bg-muted/30 px-2 py-1.5",
-              isCollapsed
-                ? "w-full justify-center"
-                : "min-w-0 flex-1 justify-between gap-2",
-            )}
-            title={`${formattedDate}, ${formattedTime}`}
-          >
-            {isCollapsed ? (
-              <div className="flex flex-col items-center leading-none">
-                <span className="font-mono text-[11px] font-semibold text-foreground tabular-nums">
-                  {timeDigits}
-                </span>
-                {timePeriod && (
-                  <span className="mt-0.5 font-mono text-[9px] text-muted-foreground leading-none">
-                    {timePeriod}
-                  </span>
+          {navGroups.map((group, groupIndex) => (
+            <div
+              key={group.label}
+              className={groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined}
+            >
+              {!isCollapsed && (
+                <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground/70">
+                  {group.label}
+                </p>
+              )}
+              <div
+                className={cn(
+                  "flex flex-col",
+                  isCollapsed ? "items-center gap-1" : "gap-0.5"
                 )}
-                <span className="sr-only">, {formattedDate}</span>
+              >
+                {group.items.map((item) => {
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== "/dashboard" &&
+                      pathname.startsWith(`${item.href}/`));
+  
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => {
+                        closeMobileMenu();
+                        setHoveredTooltip(null);
+                      }}
+                      onMouseEnter={(e) => {
+                        if (isCollapsed) {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setHoveredTooltip({
+                            label: item.label,
+                            top: rect.top + rect.height / 2,
+                          });
+                        }
+                      }}
+                      onMouseLeave={() => setHoveredTooltip(null)}
+                      className={cn(
+                        "sidebar-item flex items-center rounded-md text-[13px] font-medium select-none transition-colors duration-150",
+                        isCollapsed
+                          ? "mx-auto h-9 w-9 justify-center"
+                          : "h-11 w-full gap-2.5 px-2 lg:h-9",
+                        isActive
+                          ? "active bg-muted/70 text-foreground"
+                          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                      )}
+                      title={isCollapsed ? item.label : undefined}
+                    >
+                      <span
+                        className={cn(
+                          "shrink-0 flex items-center justify-center",
+                          isActive ? "text-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {item.icon}
+                      </span>
+                      <span
+                        className={cn("truncate", isCollapsed ? "sr-only" : "inline")}
+                      >
+                        {item.label}
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
-            ) : (
-              <>
-                <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground tabular-nums">
-                  {formattedDate}
-                </span>
-                <span className="shrink-0 font-mono text-[11px] font-semibold text-foreground tabular-nums">
-                  {timeDigits} {timePeriod}
-                </span>
-              </>
-            )}
-          </div>
+            </div>
+          ))}
+        </nav>
 
-          <AlertCenter
-            collapsed={isCollapsed}
-            className="hidden lg:inline-flex shrink-0"
-          />
-        </div>
+        {/* The rail hides its scrollbar, so these fades carry the affordance */}
+        <div
+          aria-hidden="true"
+          data-testid="sidebar-scroll-fade-top"
+          data-visible={scrollEdges.top}
+          className={cn(
+            "pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-card to-transparent transition-opacity duration-200",
+            scrollEdges.top ? "opacity-100" : "opacity-0"
+          )}
+        />
+        <div
+          aria-hidden="true"
+          data-testid="sidebar-scroll-fade-bottom"
+          data-visible={scrollEdges.bottom}
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-card to-transparent transition-opacity duration-200",
+            scrollEdges.bottom ? "opacity-100" : "opacity-0"
+          )}
+        />
       </div>
 
-      {/* Block 3: Navigation - role-filtered, active styling, scroll into view */}
-      <nav
-        data-testid="sidebar-nav"
-        ref={navRef}
-        className={cn(
-          "flex-1 overflow-y-auto overscroll-contain pb-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-bottom))] lg:pb-3 scrollbar-app",
-          isCollapsed ? "px-2 py-3" : "px-3 py-3"
-        )}
-      >
-        {navGroups.map((group, groupIndex) => (
-          <div
-            key={group.label}
-            className={groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined}
-          >
-            {!isCollapsed && (
-              <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground/70">
-                {group.label}
-              </p>
-            )}
-            <div
-              className={cn(
-                "flex flex-col",
-                isCollapsed ? "items-center gap-1" : "gap-0.5"
-              )}
-            >
-              {group.items.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== "/dashboard" &&
-                    pathname.startsWith(`${item.href}/`));
+      {/* Block 3: Account - clock, identity and the account menu, fused */}
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => {
-                      closeMobileMenu();
-                      setHoveredTooltip(null);
-                    }}
-                    onMouseEnter={(e) => {
-                      if (isCollapsed) {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setHoveredTooltip({
-                          label: item.label,
-                          top: rect.top + rect.height / 2,
-                        });
-                      }
-                    }}
-                    onMouseLeave={() => setHoveredTooltip(null)}
-                    className={cn(
-                      "sidebar-item flex items-center rounded-md text-[13px] font-medium select-none transition-colors duration-150",
-                      isCollapsed
-                        ? "mx-auto h-9 w-9 justify-center"
-                        : "h-11 w-full gap-2.5 px-2 lg:h-9",
-                      isActive
-                        ? "active bg-muted/70 text-foreground"
-                        : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-                    )}
-                    title={isCollapsed ? item.label : undefined}
-                  >
-                    <span
-                      className={cn(
-                        "shrink-0 flex items-center justify-center",
-                        isActive ? "text-foreground" : "text-muted-foreground"
-                      )}
-                    >
-                      {item.icon}
-                    </span>
-                    <span
-                      className={cn("truncate", isCollapsed ? "sr-only" : "inline")}
-                    >
-                      {item.label}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
-
-      {/* Floating tooltip for collapsed rail items */}
-      {isCollapsed && hoveredTooltip && (
-        <div
-          data-testid="sidebar-rail-tooltip"
-          style={{ top: hoveredTooltip.top }}
-          className="fixed left-[78px] -translate-y-1/2 z-[70] rounded-md border border-border/70 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-lg pointer-events-none whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150"
-        >
-          {hoveredTooltip.label}
-        </div>
-      )}
-
-      {/* Block 4: User - avatar, name, role badge, theme toggle and logout */}
       {user && (
         <div
           data-testid="sidebar-user"
@@ -511,82 +565,123 @@ export function Sidebar() {
           {isCollapsed ? (
             <div className="flex flex-col items-center gap-1.5">
               <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/60 font-mono text-[11px] font-semibold text-foreground"
-                title={`${user.name} (${roleLabels[user.role] ?? user.role})`}
+                data-testid="sidebar-clock"
+                className="flex flex-col items-center leading-none"
+                title={`${formattedDate}, ${formattedTime}`}
               >
-                {initials}
-                <span className="sr-only">
-                  {user.name} ({roleLabels[user.role] ?? user.role})
+                <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
+                  {timeDigits}
                 </span>
+                {timePeriod && (
+                  <span className="mt-0.5 font-mono text-[8px] leading-none text-muted-foreground">
+                    {timePeriod}
+                  </span>
+                )}
+                <span className="sr-only">, {formattedDate}</span>
               </div>
 
-              <RowActions
-                label="Opciones de cuenta"
-                triggerClassName="h-11 w-11 lg:h-8 lg:w-8"
-                menuOffset={24}
-                items={accountItems}
-              />
+              <div className="mt-0.5 flex w-full flex-col items-center gap-1.5 border-t border-border/60 pt-1.5">
+                <RowActions
+                  label="Opciones de cuenta"
+                  menuOffset={24}
+                  items={accountItems}
+                  triggerClassName="h-10 w-10 rounded-lg border-0 bg-transparent p-0 hover:border-transparent hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:h-9 lg:w-9"
+                  triggerContent={
+                    <span className="grid h-full w-full place-items-center rounded-lg bg-gradient-to-br from-primary to-primary-dark font-mono text-[11px] font-semibold text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                      {initials}
+                    </span>
+                  }
+                />
 
-              <div className="w-full border-t border-border/60 pt-1.5 flex justify-center">
                 <button
                   type="button"
                   onClick={toggleCollapse}
                   className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8"
-                  aria-label="Cambiar organizacion (expandir)"
-                  title="Cambiar organizacion (expandir barra)"
+                  aria-label="Mostrar organizaciones (expandir barra)"
+                  title="Mostrar organizaciones (expandir barra)"
                 >
                   <Building2 className="h-4 w-4" />
                 </button>
               </div>
-
-              <div className="hidden">
-                {user.isSuperAdmin ? (
-                  <OrganizationSwitcher
-                    currentOrganizationId={selectedOrgId}
-                    onSwitch={async (orgId) => {
-                      setSelectedOrgId(orgId);
-                      applyOrganizationScope(queryClient, orgId);
-                    }}
-                    isSuperAdmin
-                    onSelectAll={() => {
-                      setSelectedOrgId(null);
-                      applyOrganizationScope(queryClient, null);
-                    }}
-                  />
-                ) : (
-                  <OrganizationSwitcher
-                    currentOrganizationId={user.organizationId ?? undefined}
-                    onSwitch={switchOrganization}
-                  />
-                )}
-              </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/60 font-mono text-[11px] font-semibold text-foreground">
-                  {initials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold leading-tight text-foreground">
-                    {user.name}
-                  </p>
-                  <p className="truncate text-[11px] text-muted-foreground">
-                    {roleLabels[user.role] ?? user.role}
+            <div className="flex flex-col">
+              {/* The clock leads the block: the time is the biggest number in
+                  the rail, so it reads at a glance and anchors the footer. */}
+              <div
+                data-testid="sidebar-clock"
+                className="flex items-center justify-between gap-2"
+              >
+                <div
+                  className="min-w-0"
+                  title={`${dateLabel}, ${formattedTime}`}
+                >
+                  <div className="flex items-baseline gap-1">
+                    <span className="font-mono text-[30px] font-semibold leading-none tracking-tight text-foreground tabular-nums">
+                      {timeDigits}
+                    </span>
+                    {timePeriod && (
+                      <span className="font-mono text-[10px] font-semibold uppercase leading-none text-muted-foreground">
+                        {timePeriod}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 truncate text-[11px] tracking-wide text-muted-foreground">
+                    {dateLabel}
                   </p>
                 </div>
 
+                <AlertCenter
+                  collapsed={isCollapsed}
+                  className="hidden lg:inline-flex shrink-0"
+                  buttonClassName="h-9 w-9 rounded-lg hover:bg-muted/60"
+                />
+              </div>
+
+              {/* Hairline that fades at both ends: a full-bleed rule would read
+                  as a section break instead of a seam. */}
+              <div
+                aria-hidden="true"
+                className="mt-3 h-px bg-gradient-to-r from-transparent via-border to-transparent"
+              />
+
+              <div className="mt-2.5">
                 <RowActions
                   label="Opciones de cuenta"
-                  className="shrink-0"
-                  triggerClassName="h-7 w-7"
-                  menuOffset={24}
+                  menuOffset={RAIL_FLYOUT_GAP}
+                  preferSide="right"
                   items={accountItems}
+                  triggerClassName="group h-auto w-full justify-start gap-0 rounded-xl border-border/70 bg-gradient-to-br from-muted/40 to-muted/15 px-2 py-2 shadow-xs transition-all duration-200 hover:border-border hover:from-muted/60 hover:to-muted/25 hover:shadow-sm active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  triggerContent={
+                    <span className="flex w-full items-center gap-2.5">
+                      <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary-dark font-mono text-[11px] font-semibold text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                        {initials}
+                        <span
+                          aria-hidden="true"
+                          className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-500"
+                        />
+                      </span>
+                      <span className="min-w-0 flex-1 text-left">
+                        <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">
+                          {user.name}
+                        </span>
+                        <Badge variant="secondary" className="mt-1 max-w-full truncate">
+                          {roleLabels[user.role] ?? user.role}
+                        </Badge>
+                      </span>
+                      <MoreVertical
+                        className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+                        aria-hidden="true"
+                      />
+                    </span>
+                  }
                 />
               </div>
 
               {user.isSuperAdmin ? (
                 <OrganizationSwitcher
+                  className="mt-2"
+                  placement="up"
                   currentOrganizationId={selectedOrgId}
                   onSwitch={async (orgId) => {
                     setSelectedOrgId(orgId);
@@ -600,6 +695,8 @@ export function Sidebar() {
                 />
               ) : (
                 <OrganizationSwitcher
+                  className="mt-2"
+                  placement="up"
                   currentOrganizationId={user.organizationId ?? undefined}
                   onSwitch={switchOrganization}
                 />
@@ -608,6 +705,18 @@ export function Sidebar() {
           )}
         </div>
       )}
+
+      {/* Floating tooltip for collapsed rail items */}
+      {isCollapsed && hoveredTooltip && (
+        <div
+          data-testid="sidebar-rail-tooltip"
+          style={{ top: hoveredTooltip.top }}
+          className="fixed left-[78px] -translate-y-1/2 z-[70] rounded-md border border-border/70 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-lg pointer-events-none whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150"
+        >
+          {hoveredTooltip.label}
+        </div>
+      )}
+
     </>
   );
 

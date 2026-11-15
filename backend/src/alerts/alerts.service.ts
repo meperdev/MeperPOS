@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   MoneyLoanStatus,
   Prisma,
@@ -13,7 +13,13 @@ import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { alertVisibility, buildAlerts } from './alerts.logic';
-import type { OrgAlert } from './alerts.types';
+import type {
+  OrgAlert,
+  StockAlertEventKind,
+  StockAlertHistoryItem,
+  StockAlertHistoryPage,
+} from './alerts.types';
+import { lowStockProductWhere } from './low-stock.where';
 
 const LIMIT_TYPES: readonly LimitType[] = [
   'users',
@@ -34,10 +40,37 @@ const LIMIT_TYPES: readonly LimitType[] = [
  */
 @Injectable()
 export class AlertsService {
+  private readonly logger = new Logger(AlertsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly planLimits: PlanLimitService,
   ) {}
+
+  /**
+   * Runs one signal query and falls back to an empty signal on failure.
+   *
+   * Containment is per source on purpose: the feed is a convenience surface, and
+   * losing every category because one of four queries timed out is worse than
+   * serving the categories that answered. Only the source name and the error type
+   * are logged — never a tenant, a count or a query.
+   */
+  private async settle<T>(
+    source: 'limits' | 'stock' | 'loans' | 'tasks',
+    fallback: T,
+    load: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await load();
+    } catch (error) {
+      this.logger.warn({
+        event: 'alerts_signal_failed',
+        source,
+        reason: error instanceof Error ? error.name : 'unknown',
+      });
+      return fallback;
+    }
+  }
 
   /**
    * Returns the caller's alerts. An account without an organization scope (a
@@ -59,20 +92,30 @@ export class AlertsService {
     });
     if (!organization) return [];
 
+    // Each source is contained on its own: one failing dependency must drop only
+    // its category, never the whole feed. The previous client derivation degraded
+    // per source, and a bell that goes empty on a transient loans timeout is
+    // indistinguishable from a healthy "nothing to report".
     const [limits, lowStock, overdueLoans, overdueTasks] = await Promise.all([
       visible.billing
         ? Promise.all(
             LIMIT_TYPES.map((type) =>
-              this.planLimits.getLimitStatus(type, organizationId),
+              this.settle<PlanLimitResult | null>('limits', null, () =>
+                this.planLimits.getLimitStatus(type, organizationId),
+              ),
             ),
+          ).then((rows) =>
+            rows.filter((row): row is PlanLimitResult => row !== null),
           )
         : Promise.resolve<PlanLimitResult[]>([]),
-      visible.stock ? this.lowStock(organizationId) : Promise.resolve([]),
-      visible.operations
-        ? this.overdueLoans(organizationId, now)
+      visible.stock
+        ? this.settle('stock', [], () => this.lowStock(organizationId))
         : Promise.resolve([]),
       visible.operations
-        ? this.overdueTasks(organizationId, now)
+        ? this.settle('loans', [], () => this.overdueLoans(organizationId, now))
+        : Promise.resolve([]),
+      visible.operations
+        ? this.settle('tasks', [], () => this.overdueTasks(organizationId, now))
         : Promise.resolve([]),
     ]);
 
@@ -88,6 +131,56 @@ export class AlertsService {
   }
 
   /**
+   * The notification history for the caller's organization, newest first.
+   *
+   * Rows are append-only events written by the scan, so a product that crossed its
+   * minimum several times keeps every episode instead of only the last one.
+   */
+  async history(
+    user: RequestUser,
+    page = 1,
+    limit = 20,
+    kind?: StockAlertEventKind,
+  ): Promise<StockAlertHistoryPage> {
+    const organizationId = user.organizationId;
+    if (!organizationId) {
+      return { data: [], meta: { total: 0, page: 1, limit, totalPages: 0 } };
+    }
+
+    const safePage = Math.max(1, Math.trunc(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Math.trunc(limit) || 20));
+    const where = { organizationId, ...(kind ? { kind } : {}) };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.productStockAlertEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+        select: {
+          id: true,
+          episode: true,
+          kind: true,
+          failureReason: true,
+          createdAt: true,
+          product: { select: { id: true, name: true, sku: true } },
+        },
+      }),
+      this.prisma.productStockAlertEvent.count({ where }),
+    ]);
+
+    return {
+      data: rows as StockAlertHistoryItem[],
+      meta: {
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
+  }
+
+  /**
    * The same rule as every other stock surface (tracked, active merchandise at or
    * below its minimum), evaluated in the database through a field reference so
    * the feed never loads the catalog to count it.
@@ -96,13 +189,10 @@ export class AlertsService {
     organizationId: string,
   ): Promise<Array<{ id: string; stock: number; minStock: number }>> {
     return this.prisma.product.findMany({
-      where: {
+      where: lowStockProductWhere(
         organizationId,
-        active: true,
-        type: ProductType.PRODUCT,
-        tracksStock: true,
-        stock: { lte: this.prisma.product.fields.minStock },
-      } as Prisma.ProductWhereInput,
+        this.prisma.product.fields.minStock,
+      ),
       select: { id: true, stock: true, minStock: true },
     });
   }

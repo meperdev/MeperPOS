@@ -33,6 +33,21 @@ const isProduction = process.env.NODE_ENV === "production";
 const isReportOnlyEnabled =
   process.env.CSP_REPORT_ONLY === "true" || process.env.CSP_REPORT_ONLY === "1";
 
+/**
+ * Dev-only same-origin API proxy.
+ *
+ * A phone or another device on the LAN/tailnet cannot reach the API at
+ * `http://<host>:3001` without widening `connect-src` and the backend CORS
+ * list, and the auth cookies would then straddle two hosts. Routing `/api`
+ * through the Next dev server keeps one origin for every device: `'self'`
+ * covers the requests, the cookies stay on the page host, and the backend is
+ * never asked to allow a cross-origin caller. Inert unless the variable is
+ * set, and never active in production.
+ */
+const DEV_API_PROXY_TARGET = isProduction
+  ? ""
+  : (process.env.DEV_API_PROXY_TARGET ?? "").trim().replace(/\/+$/, "");
+
 /** Fixed serialization order for every policy variant. */
 const CSP_DIRECTIVE_ORDER = [
   "default-src",
@@ -215,13 +230,24 @@ const nextConfig: NextConfig = {
   },
   // Preview-only: restored from `feat/api-same-origin-proxy` so a Vercel
   // preview can be exercised without touching backend CORS.
-  async rewrites() {
-    return apiProxyRewrites(process.env.BACKEND_ORIGIN);
-  },
   // The same-origin /api proxy lives on `feat/api-same-origin-proxy`, not here:
   // it is the one piece of PWA work that changes production routing, so it is
   // reviewed and merged on its own. Merge it BEFORE this branch, otherwise an
   // installed iOS app asks for a login on every launch.
+  //
+  // `DEV_API_PROXY_TARGET` takes precedence when set: it is the dev-only
+  // same-origin proxy, empty (and production-proof) by default.
+  async rewrites() {
+    if (DEV_API_PROXY_TARGET) {
+      return [
+        {
+          source: "/api/:path*",
+          destination: `${DEV_API_PROXY_TARGET}/api/:path*`,
+        },
+      ];
+    }
+    return apiProxyRewrites(process.env.BACKEND_ORIGIN);
+  },
   async headers() {
     const globalHeaders = isReportOnlyEnabled
       ? [

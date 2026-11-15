@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, memo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { AppShellSkeleton } from "@/components/layout/AppShellSkeleton";
 import { PlanLimitBanner } from "@/components/billing/PlanLimitBanner";
 import { ConnectionStatus } from "@/components/pwa/ConnectionStatus";
 import { UpdateAvailableBanner } from "@/components/pwa/UpdateAvailableBanner";
@@ -31,6 +32,7 @@ const routeRoleMap: Array<{ prefix: string; roles: UserRole[] }> = [
   { prefix: "/reports", roles: ["ADMIN"] },
   { prefix: "/users", roles: ["ADMIN"] },
   { prefix: "/tasks", roles: ["ADMIN", "CASHIER", "INVENTORY_USER"] },
+  { prefix: "/alerts", roles: ["ADMIN", "INVENTORY_USER"] },
   { prefix: "/categories", roles: ["ADMIN", "INVENTORY_USER"] },
   { prefix: "/settings", roles: ["ADMIN"] },
   { prefix: "/profile", roles: ["ADMIN", "CASHIER", "INVENTORY_USER"] },
@@ -82,43 +84,39 @@ export const DashboardLayout = memo(function DashboardLayout({
     }
   }, [isAuthenticated, loading, pathname, router, userRole]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary-light border border-primary/30 flex items-center justify-center animate-pulse">
-            <div className="w-4 h-4 rounded-sm bg-primary" />
-          </div>
-          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) return null;
+  // The session cookie is exchanged for an access token after hydration. The
+  // shell stays mounted through that window so the rail keeps its geometry and
+  // the page never blanks; only the authenticated content waits.
+  if (!loading && !isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-background" data-org-status={organizationStatus}>
-      <Sidebar />
-      <main
-        className={cn(
-          // Derived, not magic: the mobile header is `--mobile-header`, the gap
-          // below it is `--mobile-header-gap`, and the notch inset is added on
-          // top. Changing the header height moves this column with it. `lg:`
-          // keeps the desktop column as it was; physical insets are zero there.
-          "pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]",
-          "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]",
-          "lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
-          isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
-        )}
-      >
-        <div className="mx-auto w-full max-w-[1600px]">
-          <UpdateAvailableBanner />
-          <ConnectionStatus />
-          <PlanLimitBanner />
-          {children}
-        </div>
-      </main>
+      {loading ? (
+        <AppShellSkeleton isCollapsed={isCollapsed} />
+      ) : (
+        <>
+          <Sidebar />
+          <main
+            className={cn(
+              // Derived, not magic: the mobile header is `--mobile-header`, the gap
+              // below it is `--mobile-header-gap`, and the notch inset is added on
+              // top. Changing the header height moves this column with it. `lg:`
+              // keeps the desktop column as it was; physical insets are zero there.
+              "pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]",
+              "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]",
+              "lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
+              isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
+            )}
+          >
+            <div className="mx-auto w-full max-w-[1600px]">
+              <UpdateAvailableBanner />
+              <ConnectionStatus />
+              <PlanLimitBanner />
+              {children}
+            </div>
+          </main>
+        </>
+      )}
     </div>
   );
 });

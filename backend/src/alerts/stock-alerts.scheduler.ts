@@ -16,6 +16,8 @@ export const STOCK_ALERTS_CRON = '*/5 * * * *';
 @Injectable()
 export class StockAlertsScheduler implements OnApplicationBootstrap {
   private readonly logger = new Logger(StockAlertsScheduler.name);
+  /** One pass at a time: a tick that lands mid-scan is skipped, not stacked. */
+  private running = false;
 
   constructor(private readonly stockAlerts: StockAlertsService) {}
 
@@ -38,6 +40,16 @@ export class StockAlertsScheduler implements OnApplicationBootstrap {
    * per-organization failure is already logged and skipped inside the service.
    */
   async run(trigger: 'bootstrap' | 'cron'): Promise<void> {
+    if (this.running) {
+      this.logger.log({
+        event: 'stock_alert_scan',
+        trigger,
+        outcome: 'skipped_overlap',
+      });
+      return;
+    }
+
+    this.running = true;
     try {
       const summary = await this.stockAlerts.scanAll();
       this.logger.log({
@@ -55,6 +67,8 @@ export class StockAlertsScheduler implements OnApplicationBootstrap {
         outcome: 'failed',
         reason: error instanceof Error ? error.name : 'unknown',
       });
+    } finally {
+      this.running = false;
     }
   }
 }

@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { Sidebar, applyOrganizationScope } from "./Sidebar";
+import {
+  Sidebar,
+  applyOrganizationScope,
+  SIDEBAR_SCROLL_KEY,
+} from "./Sidebar";
 import { SidebarProvider, SIDEBAR_COLLAPSED_KEY } from "@/contexts/SidebarContext";
 import { safeGetItem, safeSetItem } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -176,10 +180,11 @@ describe("Sidebar", () => {
       "Empleados",
       "Nómina",
       "Tareas",
-      "Mi perfil",
-      "Configuración",
     ]);
     expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
+    // Account destinations live in the account menu, not in the rail spine.
+    expect(screen.queryByRole("link", { name: "Mi perfil" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Configuración" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -196,7 +201,6 @@ describe("Sidebar", () => {
     const link = screen.queryByRole("link", { name: "Empleados" });
     if (permitted) expect(link).toHaveAttribute("href", "/employees");
     else expect(link).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Mi perfil" })).toHaveAttribute("href", "/profile");
   });
 
   it.each([
@@ -371,7 +375,7 @@ describe("Sidebar", () => {
     });
   });
 
-  it("stacks the four sidebar blocks in the approved order", async () => {
+  it("stacks the three sidebar blocks in the approved order", async () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations: [organizations[0]] },
     });
@@ -382,10 +386,9 @@ describe("Sidebar", () => {
       expect(api.get).toHaveBeenCalledWith("/auth/organizations");
     });
 
-    // Document order is the contract: brand -> date/time -> navigation -> user.
+    // Document order is the contract: brand -> navigation -> account.
     const blocks = [
       screen.getByTestId("sidebar-brand"),
-      screen.getByTestId("sidebar-clock"),
       screen.getByTestId("sidebar-nav"),
       screen.getByTestId("sidebar-user"),
     ];
@@ -396,9 +399,12 @@ describe("Sidebar", () => {
           Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
     }
+
+    // The account block carries the user, and nothing else follows it.
+    expect(blocks[2].nextElementSibling).toBeNull();
   });
 
-  it("renders the es-CO date and time as its own block below the brand", async () => {
+  it("integrates the date and time inside the account block", async () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations: [organizations[0]] },
     });
@@ -409,9 +415,112 @@ describe("Sidebar", () => {
       expect(api.get).toHaveBeenCalledWith("/auth/organizations");
     });
 
+    const account = screen.getByTestId("sidebar-user");
     const clock = screen.getByTestId("sidebar-clock");
+
+    // One block, not two: the clock is a child of the account block.
+    expect(account.contains(clock)).toBe(true);
     expect(clock).toHaveTextContent(/\d{4}/);
     expect(clock).toHaveTextContent(/\d{1,2}:\d{2}/);
+    expect(account).toHaveTextContent("Ana Perez");
+  });
+
+  it("uses the identity itself as the account menu trigger", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
+    });
+
+    const trigger = screen.getByRole("button", { name: "Opciones de cuenta" });
+
+    // One target for the whole identity card: avatar, name and role inside it.
+    expect(trigger).toHaveTextContent("AP");
+    expect(trigger).toHaveTextContent("Ana Perez");
+    expect(trigger).toHaveTextContent("Administrador");
+  });
+
+  it("separates Cerrar sesión from the rest of the account menu", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Opciones de cuenta" })
+    );
+
+    expect(screen.getByRole("separator")).toBeInTheDocument();
+  });
+
+  it("keeps the account destinations inside the account menu", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Opciones de cuenta" })
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: /Mi perfil/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Configuración/ })
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: /Mi perfil/ }));
+
+    expect(pushMock).toHaveBeenCalledWith("/profile");
+  });
+
+  it("hides Configuración from the account menu when the role is not allowed", async () => {
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "user-2",
+        name: "Carlos Cajero",
+        role: "CASHIER",
+        active: true,
+        organizationId: "org-a",
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Opciones de cuenta" })
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: /Mi perfil/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Configuración/ })
+    ).not.toBeInTheDocument();
   });
 
   it("renders the collapse toggle button and toggles collapsed state", async () => {
@@ -531,6 +640,92 @@ describe("Sidebar", () => {
     await userEvent.click(toggleBtn);
 
     expect(wordmark).toHaveClass("sr-only");
+  });
+
+  describe("rail scrolling", () => {
+    // The rail paints no scrollbar, so overflow is signalled by edge fades and
+    // the offset has to survive the session shell remounting around it.
+    function mockRailBox(nav: HTMLElement, scrollHeight: number, clientHeight: number) {
+      Object.defineProperty(nav, "scrollHeight", {
+        value: scrollHeight,
+        configurable: true,
+      });
+      Object.defineProperty(nav, "clientHeight", {
+        value: clientHeight,
+        configurable: true,
+      });
+    }
+
+    beforeEach(() => {
+      localStorage.removeItem(SIDEBAR_SCROLL_KEY);
+    });
+
+    it("hides the native scrollbar instead of painting the app track over the icons", () => {
+      render(<Sidebar />, { wrapper });
+
+      const nav = screen.getByTestId("sidebar-nav");
+      expect(nav).toHaveClass("sidebar-scroll");
+      expect(nav).not.toHaveClass("scrollbar-app");
+    });
+
+    it("restores the stored offset so entering a session never snaps the rail to the top", () => {
+      safeSetItem(SIDEBAR_SCROLL_KEY, "180");
+
+      render(<Sidebar />, { wrapper });
+
+      expect(screen.getByTestId("sidebar-nav").scrollTop).toBe(180);
+    });
+
+    it("remembers the offset after a manual scroll", async () => {
+      render(<Sidebar />, { wrapper });
+
+      const nav = screen.getByTestId("sidebar-nav");
+      mockRailBox(nav, 900, 300);
+      nav.scrollTop = 240;
+
+      fireEvent.scroll(nav);
+
+      await waitFor(() => expect(safeGetItem(SIDEBAR_SCROLL_KEY)).toBe("240"));
+    });
+
+    it("shows the edge fades only while hidden content remains to scroll to", async () => {
+      render(<Sidebar />, { wrapper });
+
+      const nav = screen.getByTestId("sidebar-nav");
+      expect(screen.getByTestId("sidebar-scroll-fade-top")).toHaveAttribute(
+        "data-visible",
+        "false"
+      );
+      expect(screen.getByTestId("sidebar-scroll-fade-bottom")).toHaveAttribute(
+        "data-visible",
+        "false"
+      );
+
+      mockRailBox(nav, 900, 300);
+      nav.scrollTop = 240;
+      fireEvent.scroll(nav);
+
+      await waitFor(() =>
+        expect(screen.getByTestId("sidebar-scroll-fade-top")).toHaveAttribute(
+          "data-visible",
+          "true"
+        )
+      );
+      expect(screen.getByTestId("sidebar-scroll-fade-bottom")).toHaveAttribute(
+        "data-visible",
+        "true"
+      );
+
+      nav.scrollTop = 600;
+      fireEvent.scroll(nav);
+
+      await waitFor(() =>
+        expect(screen.getByTestId("sidebar-scroll-fade-bottom")).toHaveAttribute(
+          "data-visible",
+          "false"
+        )
+      );
+    });
   });
 });
 
