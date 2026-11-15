@@ -512,7 +512,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
       )}
 
       {/* Sticky footer ensuring buttons never get buried */}
-      <div className="sticky bottom-0 bg-card/95 backdrop-blur-xs flex justify-end gap-2 pt-3 pb-1 border-t border-border/60 mt-4 z-10">
+      <div className="sticky bottom-0 bg-card/95 backdrop-blur-xs flex justify-end gap-2 pt-3 pb-[max(0.25rem,var(--safe-bottom))] border-t border-border/60 mt-4 z-10">
         <Button type="button" variant="secondary" onClick={onClose}>
           Cancelar
         </Button>
