@@ -2,25 +2,26 @@ import { BadRequestException } from '@nestjs/common';
 import { BusinessModulesController } from './business-modules.controller';
 
 describe('BusinessModulesController', () => {
-  const modules = { getForOrganization: jest.fn() };
+  const modules = { listForOrganization: jest.fn() };
   const controller = new BusinessModulesController(modules as never);
 
-  it('reads module state for the authenticated organization', async () => {
-    modules.getForOrganization.mockResolvedValue({ enabled: true });
+  it('lists the catalog for the authenticated organization', async () => {
+    const catalog = [
+      { id: 'vehicles', name: 'Vehículos', description: '...', enabled: true },
+    ];
+    modules.listForOrganization.mockResolvedValue(catalog);
+
     await expect(
-      controller.find({ organizationId: 'org-1' } as never),
-    ).resolves.toEqual({ enabled: true });
-    expect(modules.getForOrganization).toHaveBeenCalledWith(
-      'org-1',
-      'vehicles',
-    );
+      controller.findAll({ organizationId: 'org-1' } as never),
+    ).resolves.toEqual(catalog);
+    expect(modules.listForOrganization).toHaveBeenCalledWith('org-1');
   });
 
   it('rejects missing organization context without reading module state', async () => {
-    modules.getForOrganization.mockClear();
-    await expect(controller.find({} as never)).rejects.toBeInstanceOf(
+    modules.listForOrganization.mockClear();
+    await expect(controller.findAll({} as never)).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(modules.getForOrganization).not.toHaveBeenCalled();
+    expect(modules.listForOrganization).not.toHaveBeenCalled();
   });
 });

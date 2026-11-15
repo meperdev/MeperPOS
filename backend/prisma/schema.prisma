@@ -544,6 +544,19 @@ model InventoryMovement {
   @@index([organizationId, productId, createdAt])
 }
 
+model CustomerVehicle {
+  id             String   @id @default(uuid())
+  organizationId String
+  customerId     String
+  plate          String
+  model          String?
+  legacyCustomerId String? @unique
+  createdAt      DateTime @default(now())
+  customer       Customer @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([organizationId, customerId])
+}
+
 model Customer {
   id             String          @id @default(uuid())
   name           String
@@ -561,6 +574,7 @@ model Customer {
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sales          Sale[]
+  vehicles       CustomerVehicle[]
   moneyLoans     MoneyLoan[]
   inventoryLoans InventoryLoan[]
   posLoanSaleIntents PosLoanSaleIntent[]
