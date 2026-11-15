@@ -32,8 +32,8 @@ import {
   Wallet,
   Banknote,
   Building2,
-  PanelLeftClose,
-  PanelLeftOpen,
+  ChevronsLeft,
+  ChevronsRight,
   HandCoins,
   MoreVertical,
 } from "lucide-react";
@@ -437,14 +437,14 @@ export function Sidebar() {
           type="button"
           onClick={toggleCollapse}
           data-testid="sidebar-collapse-toggle"
-          className="hidden lg:flex items-center justify-center p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+          className="hidden lg:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           aria-label={isCollapsed ? "Expandir barra lateral" : "Colapsar barra lateral"}
           title={isCollapsed ? "Expandir barra lateral (Ctrl+B)" : "Colapsar barra lateral (Ctrl+B)"}
         >
           {isCollapsed ? (
-            <PanelLeftOpen className="w-4 h-4" />
+            <ChevronsRight className="w-4 h-4" />
           ) : (
-            <PanelLeftClose className="w-4 h-4" />
+            <ChevronsLeft className="w-4 h-4" />
           )}
         </button>
       </div>
