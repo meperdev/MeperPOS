@@ -144,7 +144,8 @@ export default function PurchaseOrdersPage() {
                   label: opt.label,
                 }))}
               />
-              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              {/* Two equal tracks on phones so neither date can push past the card edge. */}
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:gap-1.5">
                 <Input
                   type="date"
                   value={dateFrom}
@@ -152,7 +153,7 @@ export default function PurchaseOrdersPage() {
                     setPage(1);
                     setDateFrom(e.target.value);
                   }}
-                  className="sm:w-40"
+                  className="min-w-0 w-full sm:w-40"
                   aria-label="Fecha inicial"
                 />
                 <Input
@@ -162,7 +163,7 @@ export default function PurchaseOrdersPage() {
                     setPage(1);
                     setDateTo(e.target.value);
                   }}
-                  className="sm:w-40"
+                  className="min-w-0 w-full sm:w-40"
                   aria-label="Fecha final"
                 />
               </div>
@@ -351,6 +352,7 @@ export default function PurchaseOrdersPage() {
                 onPageChange={setPage}
                 totalItems={meta.total}
                 itemLabel="orden"
+                itemLabelPlural="órdenes"
               />
             )}
           </>

@@ -93,3 +93,24 @@ describe("Purchase orders list page — create action is gated by the role hiera
     expect(screen.queryByRole("link", { name: /nueva orden/i })).toBeNull();
   });
 });
+
+describe("Purchase orders date filters on narrow screens", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("puts the two date inputs in a two-column grid that cannot overflow the filter card", () => {
+    render(<PurchaseOrdersPage />);
+    const from = screen.getByLabelText("Fecha inicial");
+    const to = screen.getByLabelText("Fecha final");
+    // Input wraps its <input> in its own block, so the shared grid is the nearest ancestor.
+    const wrapper = from.closest<HTMLElement>(".grid")!;
+
+    expect(wrapper).toContainElement(to);
+    expect(wrapper).toHaveClass("grid", "grid-cols-2", "gap-2");
+    expect(wrapper).toHaveClass("sm:flex", "sm:w-auto");
+    for (const input of [from, to]) {
+      expect(input).toHaveClass("min-w-0", "w-full");
+    }
+  });
+});
