@@ -37,11 +37,15 @@ export function useAlerts(): AppAlert[] {
   // The payload is tenant-scoped, so the cache key must be too: after an
   // in-session organization switch the bell stays mounted, and a constant key
   // would keep serving the previous organization's alerts until the next refetch.
-  const organizationId = user?.organizationId ?? "none";
+  // Without an organization scope there is nothing to ask for, so the query stays
+  // disabled instead of sharing one fallback key across tenants.
+  const organizationId = user?.organizationId;
+  const enabled = Boolean(organizationId);
 
   const { data } = useQuery({
-    queryKey: ["alerts", organizationId],
+    queryKey: ["alerts", organizationId ?? "none"],
     queryFn: () => api.get<AppAlert[]>("/alerts").then((res) => res.data),
+    enabled,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });

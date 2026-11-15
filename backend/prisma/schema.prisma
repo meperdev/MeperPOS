@@ -78,6 +78,7 @@ model Organization {
   whatsAppIdentities WhatsAppIdentity[]
   whatsAppLinkChallenges WhatsAppLinkChallenge[]
   productStockAlerts ProductStockAlert[]
+  productStockAlertEvents ProductStockAlertEvent[]
 
   @@index([status, trialEndsAt])
 }
@@ -514,6 +515,7 @@ model Product {
   inventoryLoanItems  InventoryLoanItem[]
   posLoanSaleReservations PosLoanSaleReservation[]
   stockAlerts         ProductStockAlert[]
+  stockAlertEvents    ProductStockAlertEvent[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, sku])
@@ -1600,6 +1602,36 @@ enum ProductStockAlertNotificationStatus {
   PENDING
   SENDING
   SENT
+  FAILED
+  SKIPPED
+}
+
+/// One immutable transition of a product's low-stock episode. The current state
+/// lives on `ProductStockAlert`; this table is the record of what happened, so a
+/// re-crossing never overwrites the previous episode's history.
+model ProductStockAlertEvent {
+  id             String                    @id @default(uuid())
+  organizationId String
+  productId      String
+  /// The episode this transition belongs to.
+  episode        Int
+  kind           ProductStockAlertEventKind
+  /// Fixed failure code on FAILED/SKIPPED events; null otherwise.
+  failureReason  String?
+  createdAt      DateTime                  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, kind])
+  @@index([productId, episode])
+}
+
+enum ProductStockAlertEventKind {
+  OPENED
+  RESOLVED
+  NOTIFIED
   FAILED
   SKIPPED
 }

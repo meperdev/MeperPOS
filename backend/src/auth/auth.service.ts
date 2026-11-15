@@ -258,6 +258,23 @@ export class AuthService {
       },
     });
 
+    // The browser needs the organization facts the bell, the billing banner and
+    // the status interceptor read. Only `/auth/profile` used to return them, so a
+    // fresh login or an organization switch left the client without an
+    // organization until a full reload.
+    const organization = orgUser.organizationId
+      ? await this.prisma.organization.findUnique({
+          where: { id: orgUser.organizationId },
+          select: {
+            id: true,
+            plan: true,
+            status: true,
+            trialEndsAt: true,
+            billingStatus: true,
+          },
+        })
+      : null;
+
     return {
       accessToken,
       refreshToken: rawRefreshToken,
@@ -267,6 +284,7 @@ export class AuthService {
         name: user.name,
         organizationId: orgUser.organizationId,
         role: orgUser.role,
+        organization,
       },
     };
   }

@@ -256,6 +256,16 @@ export function AlertCenter({
                 ))}
               </ul>
             )}
+
+            <div className="border-t border-border/60 px-3.5 py-2">
+              <Link
+                href="/alerts"
+                onClick={() => setOpen(false)}
+                className="text-[11px] font-medium text-primary hover:underline"
+              >
+                Ver historial de notificaciones
+              </Link>
+            </div>
           </div>,
           document.body,
         )}

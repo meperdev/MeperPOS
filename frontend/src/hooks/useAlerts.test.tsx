@@ -72,6 +72,17 @@ describe("useAlerts", () => {
     await waitFor(() => expect(result.current[0]?.revision).toBe("abc123"));
   });
 
+  it("does not ask for a feed without an organization scope", async () => {
+    authState.current = { user: { organizationId: undefined } };
+
+    const { result } = renderHook(() => useAlerts(), { wrapper });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(api.get).not.toHaveBeenCalled();
+    expect(result.current).toEqual([]);
+  });
+
   it("keys the cache by organization so a switch cannot serve the previous tenant", async () => {
     vi.mocked(api.get).mockResolvedValue(respond([alert]));
 

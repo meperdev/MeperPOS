@@ -30,6 +30,10 @@ La campanita ya no calcula nada. El backend arma la lista y la entrega completa:
   facturación, límites, stock, préstamos y tareas; `INVENTORY_USER` ve stock,
   préstamos y tareas; `CASHIER` ve préstamos y tareas; `MEMBER` ve préstamos y
   tareas. Un rol sin permiso no recibe la categoría, aunque la pida.
+- **Degradación por fuente**: si una consulta falla (por ejemplo, un timeout en
+  préstamos), se pierde solo esa categoría; las demás se siguen sirviendo. Cada
+  fallo queda en el log como `alerts_signal_failed` con el nombre de la fuente y
+  el tipo de error, nunca con datos del tenant.
 
 ### El ledger de leídos
 
@@ -57,7 +61,9 @@ Un **episodio** por producto (`ProductStockAlert`):
 - vuelve a bajar → se abre el episodio siguiente y se notifica de nuevo.
 
 El barrido corre cada 5 minutos (`StockAlertsScheduler`) y una vez al arrancar el
-proceso, así que un reinicio no pierde un cruce. El barrido de arranque **no
+proceso, así que un reinicio no pierde un cruce. Es de un solo vuelo: si un tick
+llega mientras el anterior sigue corriendo, se omite con
+`stock_alert_scan/skipped_overlap` en vez de apilar otro barrido. El barrido de arranque **no
 bloquea el listen**: se lanza en segundo plano, porque una sesión de WhatsApp
 lenta o caída no puede retrasar el arranque del servicio. Es idempotente:
 repetirlo no duplica episodios ni mensajes.
@@ -85,7 +91,10 @@ WAHA_WEBHOOK_URL=...
 ```
 
 El mensaje es texto plano, sin enlaces, y lista hasta 10 productos; si hay más,
-resume el resto (`… y N productos más`).
+resume el resto (`… y N productos más`). El nombre y el SKU se normalizan antes de
+renderizar: los caracteres de control (incluidos saltos de línea) se colapsan y el
+texto se trunca, así que un nombre de catálogo no puede fabricar renglones ni
+colar un enlace.
 
 ### Garantías
 
@@ -105,7 +114,43 @@ resume el resto (`… y N productos más`).
 funcionando. Es la variable que usan las suites end-to-end para no tocar al
 proveedor.
 
-## 3. Operación
+## 3. Historial de notificaciones
+
+Cada transición de un episodio queda como una fila inmutable en
+`ProductStockAlertEvent`: `OPENED`, `RESOLVED`, `NOTIFIED`, `FAILED` y `SKIPPED`.
+La tabla actual (`ProductStockAlert`) guarda el estado corriente; el historial no
+se sobrescribe cuando el producto vuelve a cruzar su mínimo, así que cada
+episodio conserva su apertura, su resolución y el resultado de su aviso.
+
+`GET /api/alerts/notifications?page=1&limit=20&kind=FAILED` devuelve la página más
+reciente primero:
+
+```json
+{
+  "data": [
+    {
+      "id": "evt_1",
+      "product": { "id": "p1", "name": "Café molido 500 g", "sku": "BEB-003" },
+      "episode": 2,
+      "kind": "NOTIFIED",
+      "failureReason": null,
+      "createdAt": "2026-11-15T10:00:00.000Z"
+    }
+  ],
+  "meta": { "total": 1, "page": 1, "limit": 20, "totalPages": 1 }
+}
+```
+
+- Roles: `ADMIN` (OWNER hereda) e `INVENTORY_USER`, los mismos que ya ven alertas
+  de stock. El tenant sale del token.
+- `limit` se acota a 100 y `page` a un mínimo de 1; un `kind` fuera del conjunto
+  cerrado responde 400.
+
+En la aplicación, `/alerts` muestra ese historial con filtro por estado,
+paginación y enlace desde el panel de alertas. Es la pantalla para responder "¿a
+quién le llegó qué y cuándo?" sin mirar la base.
+
+## 4. Operación
 
 | Síntoma | Causa probable | Qué mirar |
 | --- | --- | --- |
@@ -113,8 +158,9 @@ proveedor.
 | El mensaje no llegó | `SKIPPED` / `no_recipient` | `ProductStockAlert.notificationStatus` y `notificationFailure` |
 | El mensaje falló | `FAILED` / `provider_rejected` | sesión WAHA `INTELLIGENCE` conectada y credenciales |
 | Llegó dos veces por el mismo producto | no debería: un episodio, un envío | `episode` y `notificationAttempts` de la fila |
+| No sé si el aviso salió | consultá `/alerts` | historial por episodio y estado (`NOTIFIED`, `FAILED`, `SKIPPED`) |
 
-## 4. Lo que no está implementado
+## 5. Lo que no está implementado
 
 - **Email y push**: no existe transporte en el repositorio. Agregar uno implica
   dependencia nueva (SMTP o web-push), credenciales y suscripciones por

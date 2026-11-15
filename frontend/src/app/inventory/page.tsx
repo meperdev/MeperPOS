@@ -1058,7 +1058,7 @@ function InventoryContent() {
                   <Input
                     label="Stock Mín."
                     type="number"
-                    value={formData.minStock || 5}
+                    value={formData.minStock ?? 0}
                     onChange={(e) =>
                       setFormData({
                         ...formData,

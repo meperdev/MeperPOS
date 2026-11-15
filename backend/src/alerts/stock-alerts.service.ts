@@ -5,10 +5,9 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import {
-  Prisma,
+  ProductStockAlertEventKind as EventKind,
   ProductStockAlertNotificationStatus as NotificationStatus,
   ProductStockAlertState as AlertState,
-  ProductType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppConnectionsService } from '../whatsapp/whatsapp-connections.service';
@@ -22,6 +21,7 @@ import {
   renderStockAlertMessage,
   type StockAlertFailure,
 } from './stock-alerts.logic';
+import { lowStockProductWhere, lowStockSweepWhere } from './low-stock.where';
 
 /** What one scan changed. Used by the scheduler log and by the specs. */
 export interface StockAlertScanSummary {
@@ -103,7 +103,10 @@ export class StockAlertsService {
 
     const [lowProducts, existing] = await Promise.all([
       this.prisma.product.findMany({
-        where: this.lowStockWhere(organizationId),
+        where: lowStockProductWhere(
+          organizationId,
+          this.prisma.product.fields.minStock,
+        ),
         select: { id: true, stock: true, minStock: true },
       }),
       this.prisma.productStockAlert.findMany({
@@ -121,6 +124,16 @@ export class StockAlertsService {
         where: { id: row.id, state: AlertState.OPEN },
         data: { state: AlertState.RESOLVED, resolvedAt: now },
       });
+      if (resolved.count > 0) {
+        await this.recordEvents([
+          {
+            organizationId,
+            productId: row.productId,
+            episode: row.episode,
+            kind: EventKind.RESOLVED,
+          },
+        ]);
+      }
       summary.resolved += resolved.count;
     }
 
@@ -131,7 +144,12 @@ export class StockAlertsService {
         true,
       );
       if (decision.action === 'open') {
-        const created = await this.openEpisode(organizationId, product, now, 1);
+        const created = await this.openEpisode(
+          organizationId,
+          product,
+          now,
+          decision.episode,
+        );
         if (created) summary.opened += 1;
       } else if (decision.action === 'reopen' && current) {
         const reopened = await this.prisma.productStockAlert.updateMany({
@@ -149,7 +167,17 @@ export class StockAlertsService {
             notifiedAt: null,
           },
         });
-        if (reopened.count > 0) summary.opened += 1;
+        if (reopened.count > 0) {
+          await this.recordEvents([
+            {
+              organizationId,
+              productId: product.id,
+              episode: current.episode + 1,
+              kind: EventKind.OPENED,
+            },
+          ]);
+          summary.opened += 1;
+        }
       }
     }
 
@@ -163,12 +191,7 @@ export class StockAlertsService {
   private async organizationsToScan(): Promise<string[]> {
     const [low, open] = await Promise.all([
       this.prisma.product.findMany({
-        where: {
-          active: true,
-          type: ProductType.PRODUCT,
-          tracksStock: true,
-          stock: { lte: this.prisma.product.fields.minStock },
-        } as Prisma.ProductWhereInput,
+        where: lowStockSweepWhere(this.prisma.product.fields.minStock),
         select: { organizationId: true },
         distinct: ['organizationId'],
       }),
@@ -208,6 +231,14 @@ export class StockAlertsService {
           openedAt: now,
         },
       });
+      await this.recordEvents([
+        {
+          organizationId,
+          productId: product.id,
+          episode,
+          kind: EventKind.OPENED,
+        },
+      ]);
       return true;
     } catch (error) {
       if (isUniqueViolation(error)) return false;
@@ -229,11 +260,12 @@ export class StockAlertsService {
         state: AlertState.OPEN,
         notificationStatus: NotificationStatus.PENDING,
       },
-      select: { id: true, productId: true },
+      select: { id: true, productId: true, episode: true },
     });
     if (pending.length === 0) return { notified: 0, failed: 0 };
 
-    const claimed: Array<{ id: string; productId: string }> = [];
+    const claimed: Array<{ id: string; productId: string; episode: number }> =
+      [];
     for (const row of pending) {
       const claim = await this.prisma.productStockAlert.updateMany({
         where: {
@@ -250,6 +282,18 @@ export class StockAlertsService {
     if (claimed.length === 0) return { notified: 0, failed: 0 };
 
     const ids = claimed.map((row) => row.id);
+    const history = (
+      kind: EventKind,
+      failureReason: StockAlertFailure | null = null,
+    ) =>
+      claimed.map((row) => ({
+        organizationId,
+        productId: row.productId,
+        episode: row.episode,
+        kind,
+        failureReason,
+      }));
+
     const products = await this.prisma.product.findMany({
       where: { id: { in: claimed.map((row) => row.productId) } },
       select: { id: true, name: true, sku: true, stock: true, minStock: true },
@@ -257,25 +301,16 @@ export class StockAlertsService {
     const byId = new Map(products.map((product) => [product.id, product]));
 
     const recipient = await this.administrativeRecipient(organizationId);
-    if (!recipient) {
-      await this.finish(ids, NotificationStatus.SKIPPED, 'no_recipient');
-      this.logger.warn({
-        event: 'stock_alert',
-        outcome: 'skipped',
-        reason: 'no_recipient',
-      });
-      return { notified: 0, failed: 1 };
-    }
-
-    const chatId = chatIdFor(recipient);
+    const chatId = recipient ? chatIdFor(recipient) : null;
     if (!chatId) {
       await this.finish(ids, NotificationStatus.SKIPPED, 'no_recipient');
+      await this.recordEvents(history(EventKind.SKIPPED, 'no_recipient'));
       this.logger.warn({
         event: 'stock_alert',
         outcome: 'skipped',
         reason: 'no_recipient',
       });
-      return { notified: 0, failed: 1 };
+      return { notified: 0, failed: claimed.length };
     }
 
     const text = renderStockAlertMessage(
@@ -294,22 +329,63 @@ export class StockAlertsService {
     try {
       const connection = await this.connections.getOrCreateIntelligence();
       await this.sender.sendText(connection.sessionName, { chatId, text });
-      await this.finish(ids, NotificationStatus.SENT, null, new Date());
-      this.logger.log({
-        event: 'stock_alert',
-        outcome: 'sent',
-        episodes: claimed.length,
-      });
-      return { notified: claimed.length, failed: 0 };
     } catch (error) {
       const reason: StockAlertFailure =
         error instanceof ServiceUnavailableException
           ? 'provider_rejected'
           : 'send_failed';
       await this.finish(ids, NotificationStatus.FAILED, reason);
+      await this.recordEvents(history(EventKind.FAILED, reason));
       this.logger.warn({ event: 'stock_alert', outcome: 'failed', reason });
       return { notified: 0, failed: claimed.length };
     }
+
+    // The provider accepted the message. Bookkeeping is auxiliary and runs
+    // outside the send's verdict: a failing status or history write must neither
+    // turn a delivered alert into a recorded failure nor abort the rest of the
+    // organization's episodes. A failure here leaves the rows as they were and
+    // only shortens the history.
+    try {
+      await this.finish(ids, NotificationStatus.SENT, null, new Date());
+      await this.recordEvents(history(EventKind.NOTIFIED));
+    } catch (error) {
+      this.logger.warn({
+        event: 'stock_alert',
+        outcome: 'bookkeeping_failed',
+        reason: error instanceof Error ? error.name : 'unknown',
+      });
+    }
+    this.logger.log({
+      event: 'stock_alert',
+      outcome: 'sent',
+      episodes: claimed.length,
+    });
+    return { notified: claimed.length, failed: 0 };
+  }
+
+  /**
+   * Appends immutable history rows. Nothing here updates an existing event, which
+   * is what keeps an earlier episode's record alive after a re-crossing.
+   */
+  private async recordEvents(
+    events: Array<{
+      organizationId: string;
+      productId: string;
+      episode: number;
+      kind: EventKind;
+      failureReason?: StockAlertFailure | null;
+    }>,
+  ): Promise<void> {
+    if (events.length === 0) return;
+    await this.prisma.productStockAlertEvent.createMany({
+      data: events.map((event) => ({
+        organizationId: event.organizationId,
+        productId: event.productId,
+        episode: event.episode,
+        kind: event.kind,
+        failureReason: event.failureReason ?? null,
+      })),
+    });
   }
 
   private finish(
@@ -358,15 +434,6 @@ export class StockAlertsService {
     return identities.find((row) => allowed.has(row.userId))?.phone ?? null;
   }
 
-  private lowStockWhere(organizationId: string): Prisma.ProductWhereInput {
-    return {
-      organizationId,
-      active: true,
-      type: ProductType.PRODUCT,
-      tracksStock: true,
-      stock: { lte: this.prisma.product.fields.minStock },
-    } as Prisma.ProductWhereInput;
-  }
 
   private logScan(
     outcome: string,

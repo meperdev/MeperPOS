@@ -1,5 +1,6 @@
+import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
 import type { StockAlertsService } from './stock-alerts.service';
-import { StockAlertsScheduler } from './stock-alerts.scheduler';
+import { STOCK_ALERTS_CRON, StockAlertsScheduler } from './stock-alerts.scheduler';
 
 const summary = { opened: 1, resolved: 0, notified: 1, failed: 0 };
 
@@ -64,5 +65,33 @@ describe('StockAlertsScheduler', () => {
     const scheduler = new StockAlertsScheduler(alerts);
 
     await expect(scheduler.handleScan()).resolves.toBeUndefined();
+  });
+
+  it('pins the five-minute cron on the scan handler', () => {
+    const options = Reflect.getMetadata(
+      SCHEDULE_CRON_OPTIONS,
+      StockAlertsScheduler.prototype.handleScan,
+    );
+
+    expect(options).toEqual({ cronTime: STOCK_ALERTS_CRON });
+  });
+
+  it('skips a trigger that lands while a scan is running', async () => {
+    let release!: () => void;
+    const gate = new Promise<typeof summary>((resolve) => {
+      release = () => resolve(summary);
+    });
+    const alerts = {
+      scanAll: jest.fn(() => gate),
+    } as unknown as StockAlertsService;
+    const scheduler = new StockAlertsScheduler(alerts);
+
+    const first = scheduler.run('cron');
+    await scheduler.run('cron');
+
+    expect(alerts.scanAll).toHaveBeenCalledTimes(1);
+
+    release();
+    await first;
   });
 });
