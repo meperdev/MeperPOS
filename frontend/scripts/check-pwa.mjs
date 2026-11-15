@@ -34,6 +34,11 @@ async function readText(response) {
   return response.text();
 }
 
+/** Whether the page declares a meta tag with exactly this name attribute. */
+function hasMetaName(html, name) {
+  return new RegExp(`name="${name}"`).test(html);
+}
+
 /**
  * Returns one entry per failed expectation. An empty array means the deployed
  * shape is intact.
@@ -133,7 +138,10 @@ export async function checkPwaSurface({ fetchImpl, base }) {
     }
     const html = await readText(loginResponse);
     for (const tag of CAPABILITY_TAGS) {
-      if (!html.includes(tag)) {
+      // Matched as an attribute, never as a substring: the Apple tag contains
+      // the generic name, so `includes("mobile-web-app-capable")` reports
+      // success on a page that only carries the Apple one.
+      if (!hasMetaName(html, tag)) {
         fail("/login markup", `missing "${tag}"`);
       }
     }

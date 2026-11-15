@@ -215,6 +215,23 @@ describe("checkPwaSurface", () => {
     );
   });
 
+  /**
+   * The Apple tag contains the generic name, so a substring check reports
+   * success on a page that only carries the Apple one. This is the vacuity the
+   * first version shipped with, pinned so it cannot come back.
+   */
+  it("reports a page that carries only the Apple capability tag", async () => {
+    const failures = await checkPwaSurface({
+      fetchImpl: transport({ html: html({ legacy: false }) }),
+      base: BASE,
+    });
+
+    expect(checks(failures)).toContain("/login markup");
+    expect(
+      failures.some((f) => f.detail.includes('missing "mobile-web-app-capable"'))
+    ).toBe(true);
+  });
+
   it("reports a served page with no manifest link", async () => {
     const failures = await checkPwaSurface({
       fetchImpl: transport({ html: html({ manifestLink: false }) }),
