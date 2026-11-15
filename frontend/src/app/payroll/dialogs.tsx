@@ -155,7 +155,7 @@ function DateWithToday({
         type="button"
         variant="secondary"
         size="sm"
-        className="mb-px h-[38px] shrink-0"
+        className="mb-px h-10 shrink-0 sm:h-9"
         onClick={() => onChange(getBogotaDateInputValue())}
       >
         Hoy
@@ -333,7 +333,7 @@ export function CreatePaymentDialog({
           Selecciona un empleado para ver sus jornadas
         </p>
       ) : shifts.isLoading ? (
-        <p className="text-xs text-muted-foreground">Cargando jornadas...</p>
+        <p className="text-xs text-muted-foreground">Cargando jornadas…</p>
       ) : shifts.isError ? (
         <ErrorState
           className="min-h-[140px]"
@@ -356,7 +356,7 @@ export function CreatePaymentDialog({
               checked={selectedShiftIds.includes(shift.id)}
               onChange={(checked) => toggleShift(shift.id, checked)}
             >
-              <span className="font-mono text-foreground tabular-nums">
+              <span className="text-foreground tabular-nums">
                 {payrollDate(shift.date)} · {SHIFT_KIND_LABELS[shift.kind]} ·{" "}
                 {payrollMoney(shift.amount)}
               </span>
@@ -725,7 +725,7 @@ export function ReplacementPaymentDialog({
             checked={selectedIds.includes(installment.id)}
             onChange={(checked) => toggleInstallment(installment.id, checked)}
           >
-            <span className="font-mono text-foreground tabular-nums">
+            <span className="text-foreground tabular-nums">
               {payrollDate(installment.outflow.date)} ·{" "}
               {PAYMENT_METHODS[installment.outflow.method]} ·{" "}
               {payrollMoney(installment.outflow.amount)}

@@ -31,7 +31,7 @@ function FormError({ message }: { message: string | null }) {
   return message ? (
     <p
       role="alert"
-      className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-xs font-medium text-danger"
+      className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-xs font-medium text-danger-text"
     >
       {message}
     </p>
@@ -112,7 +112,7 @@ export function PayrollFacts({
   return (
     <dl
       className={cn(
-        "grid grid-cols-1 gap-2 rounded-xl border border-border/60 bg-muted/25 p-3 text-xs",
+        "grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-3 text-xs",
         columns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
         className,
       )}
@@ -124,7 +124,7 @@ export function PayrollFacts({
           </dt>
           <dd
             data-testid={item.testId}
-            className="mt-0.5 truncate font-mono font-semibold text-foreground tabular-nums"
+            className="mt-0.5 truncate font-semibold text-foreground tabular-nums"
           >
             {item.value}
           </dd>

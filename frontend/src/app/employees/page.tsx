@@ -75,7 +75,7 @@ function Meta({
         className={cn(
           "truncate text-xs",
           EMPTY_LABELS.has(value) ? "text-muted-foreground" : "text-foreground",
-          mono && "font-mono tabular-nums",
+          mono && "tabular-nums",
         )}
       >
         {value}
@@ -123,7 +123,7 @@ function EmployeeCard({
   return (
     <Card className="flex flex-col" onClick={onEdit}>
       <div className="flex items-start gap-3 p-4 pb-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 font-mono text-xs font-semibold text-primary-text">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-xs font-semibold text-primary-text">
           {initials(employee.name)}
         </div>
         <div className="min-w-0 flex-1">
@@ -141,7 +141,7 @@ function EmployeeCard({
         </div>
       </div>
 
-      <dl className="grid flex-1 grid-cols-2 gap-x-3 gap-y-2.5 px-4 pb-4">
+      <dl className="grid flex-1 grid-cols-2 gap-x-3 gap-y-2 px-4 pb-4">
         <Meta
           label="Identificación"
           value={employee.identification ?? "Sin registrar"}
@@ -287,7 +287,7 @@ export default function EmployeesPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-4 lg:gap-5">
+      <div className="min-h-[calc(100vh-4rem)] space-y-4 lg:space-y-5">
         <PageHeader
           title="Empleados"
           subtitle="Datos, jornadas y estado del equipo"
@@ -306,7 +306,7 @@ export default function EmployeesPage() {
             setQuery(value);
             setPage(1);
           }}
-          searchPlaceholder="Buscar por nombre, cargo o documento..."
+          searchPlaceholder="Buscar por nombre, cargo o documento…"
           filterControls={
             <>
               <FilterGroup label="Estado">
@@ -335,8 +335,8 @@ export default function EmployeesPage() {
         />
 
         {employees.isLoading ? (
-          <CardSkeleton count={6} label="Cargando empleados..." />
-        ) : employees.isError ? (
+          <CardSkeleton count={6} label="Cargando empleados…" />
+        ) : employees.isError && !employees.data ? (
           <ErrorState
             message="No se pudieron cargar los empleados"
             retryLabel="Reintentar"
@@ -384,7 +384,7 @@ export default function EmployeesPage() {
                           >
                             <TableCell>
                               <div className="flex items-center gap-2.5">
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/10 font-mono text-[10px] font-semibold text-primary-text">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/10 text-[11px] font-semibold text-primary-text">
                                   {initials(employee.name)}
                                 </span>
                                 <div className="min-w-0">
@@ -409,7 +409,7 @@ export default function EmployeesPage() {
                                   : "Sin definir"}
                               </span>
                             </TableCell>
-                            <TableCell className="text-right font-mono text-xs tabular-nums">
+                            <TableCell className="text-right text-xs tabular-nums">
                               {employee.referenceAmount !== null
                                 ? formatCurrency(toFiniteNumber(employee.referenceAmount))
                                 : "—"}
@@ -449,7 +449,7 @@ export default function EmployeesPage() {
                     </Table>
                   </div>
                 </div>
-                <div className="stagger-children grid grid-cols-1 gap-3.5 sm:hidden">
+                <div className="grid grid-cols-1 gap-3 sm:hidden">
                   {paged.map((employee) => (
                     <EmployeeCard
                       key={employee.id}
@@ -463,7 +463,7 @@ export default function EmployeesPage() {
                 </div>
               </>
             ) : (
-              <div className="stagger-children grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {paged.map((employee) => (
                   <EmployeeCard
                     key={employee.id}
