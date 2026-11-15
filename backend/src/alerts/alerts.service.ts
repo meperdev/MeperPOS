@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   MoneyLoanStatus,
   Prisma,
@@ -34,10 +34,37 @@ const LIMIT_TYPES: readonly LimitType[] = [
  */
 @Injectable()
 export class AlertsService {
+  private readonly logger = new Logger(AlertsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly planLimits: PlanLimitService,
   ) {}
+
+  /**
+   * Runs one signal query and falls back to an empty signal on failure.
+   *
+   * Containment is per source on purpose: the feed is a convenience surface, and
+   * losing every category because one of four queries timed out is worse than
+   * serving the categories that answered. Only the source name and the error type
+   * are logged — never a tenant, a count or a query.
+   */
+  private async settle<T>(
+    source: 'limits' | 'stock' | 'loans' | 'tasks',
+    fallback: T,
+    load: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await load();
+    } catch (error) {
+      this.logger.warn({
+        event: 'alerts_signal_failed',
+        source,
+        reason: error instanceof Error ? error.name : 'unknown',
+      });
+      return fallback;
+    }
+  }
 
   /**
    * Returns the caller's alerts. An account without an organization scope (a
@@ -59,20 +86,30 @@ export class AlertsService {
     });
     if (!organization) return [];
 
+    // Each source is contained on its own: one failing dependency must drop only
+    // its category, never the whole feed. The previous client derivation degraded
+    // per source, and a bell that goes empty on a transient loans timeout is
+    // indistinguishable from a healthy "nothing to report".
     const [limits, lowStock, overdueLoans, overdueTasks] = await Promise.all([
       visible.billing
         ? Promise.all(
             LIMIT_TYPES.map((type) =>
-              this.planLimits.getLimitStatus(type, organizationId),
+              this.settle<PlanLimitResult | null>('limits', null, () =>
+                this.planLimits.getLimitStatus(type, organizationId),
+              ),
             ),
+          ).then((rows) =>
+            rows.filter((row): row is PlanLimitResult => row !== null),
           )
         : Promise.resolve<PlanLimitResult[]>([]),
-      visible.stock ? this.lowStock(organizationId) : Promise.resolve([]),
-      visible.operations
-        ? this.overdueLoans(organizationId, now)
+      visible.stock
+        ? this.settle('stock', [], () => this.lowStock(organizationId))
         : Promise.resolve([]),
       visible.operations
-        ? this.overdueTasks(organizationId, now)
+        ? this.settle('loans', [], () => this.overdueLoans(organizationId, now))
+        : Promise.resolve([]),
+      visible.operations
+        ? this.settle('tasks', [], () => this.overdueTasks(organizationId, now))
         : Promise.resolve([]),
     ]);
 

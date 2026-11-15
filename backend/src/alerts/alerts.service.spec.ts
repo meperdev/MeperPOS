@@ -153,4 +153,52 @@ describe('AlertsService', () => {
     expect(where.status.notIn).toEqual(['COMPLETED', 'CANCELLED']);
     expect(where.dueDate.lt).toBeInstanceOf(Date);
   });
+
+  it('keeps the stock alert when the loans query fails', async () => {
+    const { service, prisma } = build();
+    prisma.product.findMany.mockResolvedValue([
+      { id: 'p1', stock: 2, minStock: 5 },
+    ]);
+    prisma.moneyLoan.findMany.mockRejectedValue(new Error('timeout'));
+
+    const alerts = await service.list(user());
+
+    expect(alerts.map((alert) => alert.id)).toEqual(['stock:low']);
+  });
+
+  it('keeps every category when one plan-limit lookup fails', async () => {
+    const { service, planLimits } = build();
+    planLimits.getLimitStatus
+      .mockResolvedValueOnce({
+        type: 'users',
+        current: 1,
+        limit: 3,
+        exceeded: false,
+        warningAt: 2,
+      })
+      .mockRejectedValueOnce(new Error('count failed'))
+      .mockResolvedValue({
+        type: 'products',
+        current: 1,
+        limit: 100,
+        exceeded: false,
+        warningAt: 80,
+      });
+
+    await expect(service.list(user())).resolves.toEqual([]);
+    expect(planLimits.getLimitStatus).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not let a failing tasks query empty the feed', async () => {
+    const { service, prisma } = build();
+    prisma.task.findMany.mockRejectedValue(new Error('db down'));
+    prisma.organization.findUnique.mockResolvedValue({
+      status: 'PAST_DUE',
+      trialEndsAt: null,
+    });
+
+    const alerts = await service.list(user());
+
+    expect(alerts.map((alert) => alert.id)).toEqual(['billing:past-due']);
+  });
 });

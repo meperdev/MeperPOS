@@ -30,6 +30,10 @@ La campanita ya no calcula nada. El backend arma la lista y la entrega completa:
   facturación, límites, stock, préstamos y tareas; `INVENTORY_USER` ve stock,
   préstamos y tareas; `CASHIER` ve préstamos y tareas; `MEMBER` ve préstamos y
   tareas. Un rol sin permiso no recibe la categoría, aunque la pida.
+- **Degradación por fuente**: si una consulta falla (por ejemplo, un timeout en
+  préstamos), se pierde solo esa categoría; las demás se siguen sirviendo. Cada
+  fallo queda en el log como `alerts_signal_failed` con el nombre de la fuente y
+  el tipo de error, nunca con datos del tenant.
 
 ### El ledger de leídos
 
