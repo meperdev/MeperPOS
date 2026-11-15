@@ -30,7 +30,7 @@ function InfoItem({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-lg border border-border/60 bg-muted/25 px-3 py-2.5", className)}>
+    <div className={cn("rounded-lg bg-muted/40 px-3 py-2.5", className)}>
       <p className="text-xs font-medium text-muted-foreground">
         {label}
       </p>
@@ -52,7 +52,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
   const remaining = Math.max(Number(expense.total) - paidSum, 0);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Detalle del Gasto" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Detalle del gasto" size="xl">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Left Column: Info, Amounts and Payments */}
         <div className="space-y-4 flex flex-col justify-between">
@@ -61,12 +61,12 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
             <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">
-                  Total Registrado
+                  Total registrado
                 </p>
-                <p className="font-mono text-xl sm:text-2xl font-semibold text-foreground tracking-tight tabular-nums mt-0.5">
+                <p className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight tabular-nums mt-0.5">
                   {formatCurrency(Number(expense.total))}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground font-mono tabular-nums">
+                <p className="mt-1 text-xs text-muted-foreground tabular-nums">
                   Fecha: {formatDate(expense.date)}
                 </p>
               </div>
@@ -74,7 +74,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
             </div>
 
             {/* Grid Details */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 gap-2">
               <InfoItem
                 label="Grupo / etiqueta"
                 value={expense.label?.group?.name ? `${expense.label.group.name} / ${expense.label.name}` : expense.label?.name ?? "—"}
@@ -83,7 +83,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
               {expense.purchaseOrder ? (
                 <>
                   <InfoItem
-                    label="Orden de Compra"
+                    label="Orden de compra"
                     value={`OC-${expense.purchaseOrder.orderNumber}`}
                   />
                   <InfoItem label="Descripción" value={expense.description ?? "—"} />
@@ -98,12 +98,12 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
             </div>
 
             {/* Payments List */}
-            <div className="rounded-xl border border-border/70 bg-card p-4 space-y-2.5 shadow-2xs">
+            <div className="rounded-xl border border-border/70 bg-card p-4 space-y-2 shadow-2xs">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-foreground">
-                  Abonos y Pagos ({payments.length})
+                  Abonos y pagos ({payments.length})
                 </span>
-                <span className="text-xs font-mono font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
+                <span className="text-xs font-medium text-success-text tabular-nums">
                   Pagado: {formatCurrency(paidSum)}
                 </span>
               </div>
@@ -117,7 +117,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
                   {payments.map((p) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/30 border border-border/50 text-xs font-mono tabular-nums"
+                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 text-xs tabular-nums"
                     >
                       <span className="font-medium text-foreground">
                         {PAYMENT_METHOD_LABELS[p.method] || p.method}
@@ -131,9 +131,9 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
               )}
 
               {remaining > 0 && (
-                <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs font-mono tabular-nums">
+                <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs tabular-nums">
                   <span className="text-muted-foreground font-medium">Pendiente:</span>
-                  <span className="font-semibold text-amber-600 dark:text-amber-400">
+                  <span className="font-semibold text-warning-text">
                     {formatCurrency(remaining)}
                   </span>
                 </div>
@@ -147,11 +147,11 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
           <div className="flex items-center gap-2 pb-2.5 border-b border-border/60 mb-3">
             <FileText className="w-4 h-4 text-muted-foreground" />
             <span className="text-xs font-semibold text-foreground">
-              Comprobante / Factura Adjunta
+              Comprobante o factura adjunta
             </span>
           </div>
 
-          <div className="flex-1 min-h-[260px] rounded-xl border border-border/60 bg-muted/20 relative overflow-hidden flex items-center justify-center">
+          <div className="flex-1 min-h-[260px] rounded-lg bg-muted/40 relative overflow-hidden flex items-center justify-center">
             {expense.receiptUrl ? (
               <Image
                 src={expense.receiptUrl}

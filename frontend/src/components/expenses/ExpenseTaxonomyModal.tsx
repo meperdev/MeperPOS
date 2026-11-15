@@ -77,7 +77,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
       size="xl"
       footer={
         <div className="flex items-center justify-between w-full">
-          <p className="text-xs text-muted-foreground font-mono tabular-nums">
+          <p className="text-xs text-muted-foreground tabular-nums">
             {groups.length} {groups.length === 1 ? "grupo activo" : "grupos activos"}
           </p>
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -97,7 +97,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
               Organiza tus salidas en grupos lógicos para clasificar compras, suministros, nómina y servicios.
             </p>
           </div>
-          <div className="flex flex-col items-stretch gap-2.5 sm:flex-row sm:items-end">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">
               <Input
                 label="Nuevo grupo"
@@ -125,11 +125,11 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
 
         {isLoading && (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            Cargando grupos...
+            Cargando grupos…
           </div>
         )}
         {isError && (
-          <p role="alert" className="py-4 text-sm text-danger text-center">
+          <p role="alert" className="py-4 text-sm text-danger-text text-center">
             No se pudieron cargar los grupos.
           </p>
         )}
@@ -147,7 +147,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
             return (
               <div
                 key={group.id}
-                className="min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border flex flex-col max-h-[340px]"
+                className="min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-2xs flex flex-col max-h-[340px]"
               >
                 {/* Group Header */}
                 <div className="flex items-center gap-2 pb-3 border-b border-border/60 shrink-0">
@@ -175,7 +175,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                         <h3 className="font-semibold text-sm text-foreground truncate">
                           {group.name}
                         </h3>
-                        <span className="text-[11px] font-mono text-muted-foreground px-1.5 py-0.5 rounded-md bg-muted/50 border border-border/60 tabular-nums shrink-0">
+                        <span className="text-[11px] text-muted-foreground px-1.5 py-0.5 rounded-md bg-muted/50 border border-border/60 tabular-nums shrink-0">
                           {activeLabels.length} {activeLabels.length === 1 ? "etiqueta" : "etiquetas"}
                         </span>
                       </div>
@@ -202,7 +202,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                       variant="ghost"
                       aria-label={`Editar ${group.name}`}
                       onClick={() => setEditing({ id: group.id, value: group.name })}
-                      className="p-1 h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:border-border/70 hover:bg-muted/60"
+                      className="p-1 h-9 w-9 rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:border-border/70 hover:bg-muted/60"
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                     </Button>
@@ -212,7 +212,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                     variant="ghost"
                     aria-label={`Desactivar ${group.name}`}
                     onClick={() => void run(() => deleteGroup.mutateAsync(group.id), "Grupo desactivado")}
-                    className="p-1 h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:text-rose-500 hover:border-rose-500/30 hover:bg-rose-500/10"
+                    className="p-1 h-9 w-9 rounded-md border border-transparent text-muted-foreground hover:text-danger-text hover:border-danger/30 hover:bg-danger/10"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                   </Button>
@@ -224,7 +224,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                     <div className="h-full flex flex-col items-center justify-center text-center py-6 px-2">
                       <Tag className="w-5 h-5 text-muted-foreground/30 mb-1.5" />
                       <p className="text-xs text-muted-foreground/70">Sin etiquetas</p>
-                      <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+                      <p className="text-[11px] text-muted-foreground/70 mt-0.5">
                         Agrega una abajo para clasificar este grupo
                       </p>
                     </div>
@@ -232,7 +232,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                     activeLabels.map((label) => (
                       <div
                         key={label.id}
-                        className="flex items-center gap-2 text-xs py-1.5 px-2.5 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors border border-transparent hover:border-border/40"
+                        className="flex items-center gap-2 text-xs py-1 px-2.5 rounded-lg bg-muted/40 transition-colors hover:bg-muted/60"
                       >
                         <Tag className="w-3 h-3 text-muted-foreground/60 shrink-0" />
                         {editing?.id === label.id ? (
@@ -282,7 +282,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                             onClick={() =>
                               setEditing({ id: label.id, groupId: group.id, value: label.name })
                             }
-                            className="p-1 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                            className="p-1 h-9 w-9 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
                           >
                             <Pencil className="h-3 w-3" aria-hidden="true" />
                           </Button>
@@ -297,7 +297,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                               "Etiqueta desactivada",
                             )
                           }
-                          className="p-1 h-6 w-6 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
+                          className="p-1 h-9 w-9 rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10"
                         >
                           <Trash2 className="h-3 w-3" aria-hidden="true" />
                         </Button>

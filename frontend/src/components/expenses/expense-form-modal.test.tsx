@@ -117,7 +117,7 @@ async function pickGroup(
   user: ReturnType<typeof userEvent.setup>,
   group: string,
 ) {
-  await user.click(screen.getByRole("button", { name: "Selecciona un grupo" }));
+  await user.click(screen.getByRole("button", { name: "Grupo" }));
   await user.click(screen.getByText(group));
 }
 
@@ -125,7 +125,7 @@ async function pickLabel(
   user: ReturnType<typeof userEvent.setup>,
   label: string,
 ) {
-  await user.click(screen.getByRole("button", { name: /selecciona una etiqueta/i }));
+  await user.click(screen.getByRole("button", { name: "Etiqueta" }));
   await user.click(screen.getByText(label));
 }
 
@@ -263,8 +263,8 @@ describe("ExpenseFormModal", () => {
   it("starts with the label select disabled until a group is selected", async () => {
     render(<ExpenseFormModal isOpen onClose={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: "Selecciona un grupo" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /selecciona un grupo primero/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Grupo" })).toHaveTextContent("Selecciona un grupo");
+    expect(screen.getByRole("button", { name: "Etiqueta" })).toBeDisabled();
   });
 
   it("filters labels by group and clears the label when the group changes", async () => {
@@ -272,16 +272,16 @@ describe("ExpenseFormModal", () => {
     render(<ExpenseFormModal isOpen onClose={vi.fn()} />);
 
     await pickGroup(user, "Gastos del local");
-    await user.click(screen.getByRole("button", { name: /selecciona una etiqueta/i }));
+    await user.click(screen.getByRole("button", { name: "Etiqueta" }));
     expect(screen.getByText("Arriendo")).toBeInTheDocument();
     expect(screen.queryByText("Compras menores")).not.toBeInTheDocument();
     await user.click(screen.getByText("Arriendo"));
 
-    await user.click(screen.getByRole("button", { name: "Gastos del local" }));
+    await user.click(screen.getByRole("button", { name: "Grupo" }));
     await user.click(screen.getByText("Caja menor"));
 
-    expect(screen.getByRole("button", { name: /selecciona una etiqueta/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Arriendo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Etiqueta" })).toHaveTextContent("Selecciona una etiqueta");
+    expect(screen.getByRole("button", { name: "Etiqueta" })).not.toHaveTextContent("Arriendo");
   });
 
   it("boots edit mode from the expense snapshot and submits an update", async () => {
@@ -295,8 +295,8 @@ describe("ExpenseFormModal", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Gastos del local" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Arriendo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Grupo" })).toHaveTextContent("Gastos del local");
+    expect(screen.getByRole("button", { name: "Etiqueta" })).toHaveTextContent("Arriendo");
     expect(screen.getByDisplayValue("Renta agosto")).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText("Descripción (opcional)"), {

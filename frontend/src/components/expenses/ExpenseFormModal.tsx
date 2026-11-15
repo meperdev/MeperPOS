@@ -4,6 +4,7 @@ import { useId, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import {
@@ -237,7 +238,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
               setLabelId("");
             }}
             options={[
-              { value: "", label: isGroupsLoading ? "Cargando grupos..." : "Selecciona un grupo" },
+              { value: "", label: isGroupsLoading ? "Cargando grupos…" : "Selecciona un grupo" },
               ...groups
                 .filter((group) => group.active)
                 .map((group) => ({ value: group.id, label: group.name })),
@@ -256,7 +257,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
               {
                 value: "",
                 label: isGroupsLoading
-                  ? "Cargando etiquetas..."
+                  ? "Cargando etiquetas…"
                   : !effectiveGroupId
                     ? "Selecciona un grupo primero"
                     : labelOptions.length
@@ -300,13 +301,13 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             >
               Fecha
             </label>
-            <input
+            <Input
               id={`${uid}-date`}
               type="date"
               aria-label="Fecha"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full h-[38px] rounded-lg border border-border/70 bg-muted/30 px-3 text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
+              className="tabular-nums"
             />
           </div>
 
@@ -325,13 +326,13 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             >
               Descripción
             </label>
-            <textarea
+            <Input
+              textarea
               id={`${uid}-description`}
               rows={3}
               placeholder="Descripción (opcional)"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border focus:bg-background resize-none transition-colors"
             />
           </div>
         </div>
@@ -345,7 +346,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                 <span className="text-xs font-semibold text-foreground">
                   Pagos registrados ({expense.payments?.length ?? 0})
                 </span>
-                <span className="text-xs font-mono font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
+                <span className="text-xs font-medium text-success-text tabular-nums">
                   {formatCurrency(existingPaymentsSum)}
                 </span>
               </div>
@@ -358,7 +359,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                   (expense.payments ?? []).map((p) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/20 border border-border/40 text-xs font-mono tabular-nums"
+                      className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/40 text-xs tabular-nums"
                     >
                       <span className="font-medium text-foreground">
                         {PAYMENT_METHOD_OPTIONS.find((m) => m.value === p.method)?.label || p.method}
@@ -381,7 +382,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                   <span className="text-xs font-semibold text-foreground">
                     Pagos
                   </span>
-                  <span className="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60 tabular-nums">
+                  <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60 tabular-nums">
                     {rows.length} {rows.length === 1 ? "abono" : "abonos"}
                   </span>
                 </div>
@@ -390,13 +391,13 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                   type="button"
                   variant="secondary"
                   onClick={handleAddRow}
-                  className="h-7 text-xs px-2"
+                  className="text-xs px-2"
                 >
                   <Plus className="w-3.5 h-3.5" /> Agregar pago
                 </Button>
               </div>
 
-              <div className="p-3 space-y-2.5">
+              <div className="p-3 space-y-2">
                 {/* Scrollable payments list with bounded height */}
                 <div
                   ref={paymentsListRef}
@@ -437,7 +438,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                           >
                             Fecha pago
                           </label>
-                          <input
+                          <Input
                             id={`${uid}-paydate-${row.tempId}`}
                             type="date"
                             aria-label="Fecha del pago"
@@ -445,7 +446,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                             onChange={(e) =>
                               updateRow(row.tempId, { date: e.target.value })
                             }
-                            className="w-full h-[38px] rounded-lg border border-border/70 bg-card px-2.5 text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border transition-colors"
+                            className="tabular-nums"
                           />
                         </div>
                         <button
@@ -457,7 +458,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                             )
                           }
                           disabled={rows.length === 1}
-                          className="h-9 w-9 mb-0.5 rounded-lg flex items-center justify-center shrink-0 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          className="h-9 w-9 mb-0.5 rounded-lg flex items-center justify-center shrink-0 text-muted-foreground hover:text-danger-text hover:bg-danger/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -468,7 +469,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
 
                 <div className="pt-2 border-t border-border/50 flex items-center justify-between shrink-0">
                   <span className="text-xs text-muted-foreground">Total de pagos:</span>
-                  <span className="font-semibold font-mono text-foreground tabular-nums text-sm">
+                  <span className="font-semibold text-foreground tabular-nums text-sm">
                     {formatCurrency(paymentsSum)}
                   </span>
                 </div>
@@ -508,11 +509,11 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
       </div>
 
       {error && (
-        <p className="mt-4 text-xs font-medium text-rose-600 dark:text-rose-400">{error}</p>
+        <p className="mt-4 text-xs font-medium text-danger-text">{error}</p>
       )}
 
       {/* Sticky footer ensuring buttons never get buried */}
-      <div className="sticky bottom-0 bg-card/95 backdrop-blur-xs flex justify-end gap-2 pt-3 pb-[max(0.25rem,var(--safe-bottom))] border-t border-border/60 mt-4 z-10">
+      <div className="sticky bottom-0 bg-card flex justify-end gap-2 pt-3 pb-[max(0.25rem,var(--safe-bottom))] border-t border-border/60 mt-4 z-10">
         <Button type="button" variant="secondary" onClick={onClose}>
           Cancelar
         </Button>

@@ -16,6 +16,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { cn, formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { Pagination } from "@/components/ui/Pagination";
@@ -89,6 +91,11 @@ const STATUS_OPTIONS: Array<{ value: "" | ExpenseStatus; label: string }> = [
   { value: "PAID", label: "Pagado" },
 ];
 
+/** Names the row for assistive tech, since the per-row icon controls repeat. */
+function expenseName(expense: Expense): string {
+  return expense.label?.name ?? expense.description ?? "salida general";
+}
+
 export default function ExpensesPage() {
   const toast = useToast();
   const { user } = useAuth();
@@ -128,7 +135,7 @@ export default function ExpensesPage() {
   const { data: summary } = useExpenseSummary(month);
   const { data: groupsData } = useExpenseGroups();
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
-  const { data, isLoading } = useExpenses({
+  const { data, isLoading, isError, error, refetch } = useExpenses({
     page,
     limit: viewMode === "grid" ? 9 : 10,
     month,
@@ -212,7 +219,7 @@ export default function ExpensesPage() {
   };
 
   /**
-   * One action list for the table row and the card so both layouts offer the
+   * One action list for the table row and the cards so every layout offers the
    * same operations through the same overflow menu.
    */
   const actionsFor = (
@@ -252,7 +259,7 @@ export default function ExpensesPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-3 lg:min-h-[calc(100vh-4rem)] lg:gap-3">
+      <div className="space-y-4 lg:min-h-[calc(100vh-4rem)] lg:space-y-5">
         <PageHeader
           title="Salidas"
           subtitle="Registra los gastos y pagos de tu negocio"
@@ -334,10 +341,10 @@ export default function ExpensesPage() {
             setPage(1);
             setSearch(value);
           }}
-          searchPlaceholder="Buscar por descripción..."
+          searchPlaceholder="Buscar por descripción…"
           filterControls={
             <>
-              <input
+              <Input
                 type="month"
                 aria-label="Mes"
                 value={month}
@@ -345,7 +352,7 @@ export default function ExpensesPage() {
                   setPage(1);
                   setMonth(e.target.value);
                 }}
-                className="h-[38px] px-3 rounded-lg text-xs font-mono font-medium bg-muted/40 border border-transparent focus:border-border/70 focus:bg-background text-foreground focus:outline-none tabular-nums transition-colors w-full sm:w-auto cursor-pointer"
+                className="w-full sm:w-auto cursor-pointer tabular-nums"
               />
               <BentoSelect
                 value={labelId}
@@ -405,7 +412,14 @@ export default function ExpensesPage() {
         />
 
         {isLoading ? (
-          <CardSkeleton count={6} label="Cargando salidas..." />
+          <CardSkeleton count={6} label="Cargando salidas…" />
+        ) : isError && !data ? (
+          <ErrorState
+            message={getApiErrorMessage(error, "No se pudieron cargar las salidas")}
+            retryLabel="Reintentar"
+            onRetry={() => void refetch()}
+            className="min-h-[240px]"
+          />
         ) : (
           <>
             {/* Mobile Cards (Always visible on mobile) */}
@@ -426,11 +440,12 @@ export default function ExpensesPage() {
                     0,
                   );
                   const remaining = Math.max(Number(expense.total) - paidSum, 0);
+                  const name = expenseName(expense);
 
                   return (
                     <div
                       key={expense.id}
-                      className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3 hover:border-border transition-colors"
+                      className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 truncate">
@@ -463,10 +478,10 @@ export default function ExpensesPage() {
                         )}
                         <div className="flex justify-between items-center text-muted-foreground">
                           <span>Fecha</span>
-                          <span className="font-mono tabular-nums text-foreground">{formatDate(expense.date)}</span>
+                          <span className="tabular-nums text-foreground">{formatDate(expense.date)}</span>
                         </div>
                         {expense.receiptUrl && (
-                          <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          <div className="flex items-center gap-1 text-[11px] text-success-text font-medium">
                             <FileCheck className="w-3.5 h-3.5" />
                             <span>Comprobante adjunto</span>
                           </div>
@@ -476,29 +491,30 @@ export default function ExpensesPage() {
                       <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
                         <div>
                           <p className="text-[11px] font-medium text-muted-foreground">Total</p>
-                          <p className="text-sm font-semibold font-mono text-foreground tabular-nums">
+                          <p className="text-sm font-semibold text-foreground tabular-nums">
                             {formatCurrency(Number(expense.total))}
                           </p>
                           {!isPaid && remaining > 0 && (
-                            <p className="text-[11px] font-mono text-amber-600 dark:text-amber-400 tabular-nums">
+                            <p className="text-[11px] text-warning-text tabular-nums">
                               Saldo: {formatCurrency(remaining)}
                             </p>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          aria-label="Ver detalle"
-                          title="Ver detalle"
-                          onClick={() => setDetailExpense(expense)}
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-                        </button>
-                        <RowActions
-                          label="Más acciones"
-                          items={actionsFor(expense, isPaid, paymentButtonLabel)}
-                        />
-
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label={`Ver detalle de ${name}`}
+                            title="Ver detalle"
+                            onClick={() => setDetailExpense(expense)}
+                            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                          >
+                            <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <RowActions
+                            label={`Más acciones de ${name}`}
+                            items={actionsFor(expense, isPaid, paymentButtonLabel)}
+                          />
+                        </div>
                       </div>
                     </div>
                   );
@@ -509,7 +525,7 @@ export default function ExpensesPage() {
             {/* Desktop Table View */}
             {viewMode === "table" ? (
               <div className="hidden md:block flex-1">
-                <div className="h-full rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs animate-fade-in">
+                <div className="h-full rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
                   <div className="overflow-x-auto">
                     <Table className="min-w-[860px]">
                       <TableHeader>
@@ -529,10 +545,10 @@ export default function ExpensesPage() {
                           <TableCell as="th" className="w-28">
                             Estado
                           </TableCell>
-                          <TableCell as="th" className="text-right w-32">
+                          <TableCell as="th" numeric className="w-32">
                             Total
                           </TableCell>
-                          <TableCell as="th" className="text-right w-48">
+                          <TableCell as="th" numeric className="w-20">
                             Acciones
                           </TableCell>
                         </TableRow>
@@ -563,7 +579,7 @@ export default function ExpensesPage() {
 
                             return (
                               <TableRow key={expense.id}>
-                                <TableCell className="text-muted-foreground whitespace-nowrap font-mono text-xs tabular-nums">
+                                <TableCell className="text-muted-foreground whitespace-nowrap text-xs tabular-nums">
                                   {formatDate(expense.date)}
                                 </TableCell>
                                 <TableCell>
@@ -582,7 +598,7 @@ export default function ExpensesPage() {
                                     {expense.receiptUrl && (
                                       <span
                                         title="Comprobante adjunto"
-                                        className="inline-flex shrink-0 items-center text-emerald-600 dark:text-emerald-400"
+                                        className="inline-flex shrink-0 items-center text-success-text"
                                       >
                                         <FileCheck className="w-3.5 h-3.5" />
                                       </span>
@@ -597,85 +613,31 @@ export default function ExpensesPage() {
                                 <TableCell>
                                   <ExpenseStatusBadge status={expense.status} />
                                 </TableCell>
-                                <TableCell className="text-right">
+                                <TableCell numeric>
                                   <div className="flex flex-col items-end">
-                                    <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                                    <span className="text-xs font-semibold text-foreground tabular-nums">
                                       {formatCurrency(Number(expense.total))}
                                     </span>
                                     {!isPaid && remaining > 0 && (
-                                      <span className="font-mono text-[11px] text-amber-600 dark:text-amber-400 tabular-nums">
+                                      <span className="text-[11px] text-warning-text tabular-nums">
                                         Saldo: {formatCurrency(remaining)}
                                       </span>
                                     )}
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      type="button"
-                                      aria-label="Ver detalle"
-                                      title="Ver detalle"
-                                      onClick={() => setDetailExpense(expense)}
-                                      className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      aria-label={paymentButtonLabel}
-                                      title={paymentButtonLabel}
-                                      disabled={isPaid}
-                                      onClick={() => setPaymentExpense(expense)}
-                                      className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                                    >
-                                      <Wallet className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      aria-label="Ver historial"
-                                      title="Ver historial"
-                                      onClick={() => setHistoryExpense(expense)}
-                                      className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                                    >
-                                      <History className="w-3.5 h-3.5" />
-                                    </button>
-                                    <label
-                                      className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent cursor-pointer text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                                      title="Subir comprobante"
-                                    >
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        aria-label="Subir comprobante"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                          const file = e.target.files?.[0];
-                                          if (file) {
-                                            handleReceiptUpload(expense, file);
-                                          }
-                                          e.target.value = "";
-                                        }}
-                                      />
-                                      <Upload className="w-3.5 h-3.5" />
-                                    </label>
-                                    <button
-                                      type="button"
-                                      aria-label="Duplicar gasto"
-                                      title="Duplicar gasto"
-                                      onClick={() => setDuplicateTarget(expense)}
-                                      className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                                    >
-                                      <Copy className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      aria-label="Editar gasto"
-                                      title="Editar gasto"
-                                      onClick={() => openEdit(expense)}
-                                      className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
+                                <TableCell numeric>
+                                  <div className="flex justify-end">
+                                    <RowActions
+                                      label={`Más acciones de ${expenseName(expense)}`}
+                                      items={[
+                                        {
+                                          label: "Ver detalle",
+                                          icon: <Eye className="w-3.5 h-3.5" aria-hidden="true" />,
+                                          onSelect: () => setDetailExpense(expense),
+                                        },
+                                        ...actionsFor(expense, isPaid, paymentButtonLabel),
+                                      ]}
+                                    />
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -689,7 +651,7 @@ export default function ExpensesPage() {
               </div>
             ) : (
               /* Desktop Grid View */
-              <div className="hidden md:grid flex-1 content-start md:grid-cols-2 lg:grid-cols-3 gap-2.5 stagger-children">
+              <div className="hidden md:grid flex-1 content-start md:grid-cols-2 lg:grid-cols-3 gap-2">
                 {expenses.length === 0 ? (
                   <div className="col-span-full py-14">
                     <EmptyState
@@ -710,11 +672,12 @@ export default function ExpensesPage() {
                       0,
                     );
                     const remaining = Math.max(Number(expense.total) - paidSum, 0);
+                    const name = expenseName(expense);
 
                     return (
                       <div
                         key={expense.id}
-                        className="rounded-xl border border-border/70 bg-card p-2.5 shadow-2xs space-y-2 hover:border-border transition-colors flex flex-col justify-between"
+                        className="rounded-xl border border-border/70 bg-card p-2.5 shadow-2xs space-y-2 flex flex-col justify-between"
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
@@ -751,11 +714,11 @@ export default function ExpensesPage() {
                             </div>
                             <div className="flex justify-between items-center text-muted-foreground">
                               <span>Fecha</span>
-                              <span className="inline-flex items-center gap-1.5 font-mono tabular-nums text-foreground">
+                              <span className="inline-flex items-center gap-1.5 tabular-nums text-foreground">
                                 {formatDate(expense.date)}
                                 {expense.receiptUrl && (
                                   <FileCheck
-                                    className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
+                                    className="w-3.5 h-3.5 text-success-text"
                                     aria-label="Comprobante adjunto"
                                   />
                                 )}
@@ -767,11 +730,11 @@ export default function ExpensesPage() {
                         <div className="flex items-center justify-between pt-2 border-t border-border/60 mt-auto">
                           <div>
                             <p className="text-[11px] font-medium text-muted-foreground">Total</p>
-                            <p className="text-sm font-semibold font-mono text-foreground tabular-nums">
+                            <p className="text-sm font-semibold text-foreground tabular-nums">
                               {formatCurrency(Number(expense.total))}
                             </p>
                             {!isPaid && remaining > 0 && (
-                              <p className="text-[11px] font-mono text-amber-600 dark:text-amber-400 tabular-nums">
+                              <p className="text-[11px] text-warning-text tabular-nums">
                                 Saldo: {formatCurrency(remaining)}
                               </p>
                             )}
@@ -779,15 +742,15 @@ export default function ExpensesPage() {
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              aria-label="Ver detalle"
+                              aria-label={`Ver detalle de ${name}`}
                               title="Ver detalle"
                               onClick={() => setDetailExpense(expense)}
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors"
+                              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                             >
                               <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                             </button>
                             <RowActions
-                              label="Más acciones"
+                              label={`Más acciones de ${name}`}
                               items={actionsFor(expense, isPaid, paymentButtonLabel)}
                             />
                           </div>
@@ -801,7 +764,7 @@ export default function ExpensesPage() {
             )}
 
             {meta && (
-              <div className="sticky bottom-0 z-10 -mx-1 border-t border-border/60 bg-background/95 px-1 py-[max(0.375rem,var(--safe-bottom))] backdrop-blur-sm">
+              <div className="sticky bottom-0 z-10 -mx-1 border-t border-border/60 bg-card px-1 py-[max(0.375rem,var(--safe-bottom))]">
                 <Pagination
                   currentPage={page}
                   totalPages={meta.totalPages}
