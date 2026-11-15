@@ -194,7 +194,7 @@ export function MobileCartDrawer({
                     <div className="flex items-center gap-2">
                       <Stepper
                         value={item.quantity}
-                        min={0}
+                        min={1}
                         max={item.availableStock}
                         size="sm"
                         onChange={(value) => onUpdateQuantity(item.productId, value)}
@@ -221,13 +221,18 @@ export function MobileCartDrawer({
                         item.quantity * item.unitPrice - item.discountAmount,
                       )}
                     </span>
+                    {/*
+                      44px, the size a thumb needs. The old 28px target sat one
+                      mis-tap away from the quantity stepper, and the keyboard
+                      moving the drawer under the finger did the rest.
+                    */}
                     <button
                       type="button"
                       onClick={() => onRemoveFromCart(item.productId)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                      className="ml-1 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-colors"
                       aria-label={`Eliminar ${item.product.name}`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>

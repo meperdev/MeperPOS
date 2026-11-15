@@ -17,6 +17,10 @@ Risk tier: high. A service worker is delivery/runtime surface for every installe
 - **S7 — CI guard.** A check MUST fail the pipeline when `/manifest.webmanifest` loses a required field, when `sw.js` stops being served, or when either capability tag disappears from a served route. It must run against a built app on a real HTTP response, the way the existing security-header step does, because a config-level unit test cannot see build-time loss.
 - **S8 — Update flow.** A new service worker MUST NOT take over a running session silently. It waits; the app surfaces "Nueva versión disponible" with an explicit reload, and the operator decides when to swap code, because a POS can have an open cart. Choosing reload is the only path that activates the waiting worker.
 - **S9 — Delivery debt.** Both build-time variables MUST be documented in `frontend/.env.example`, and the same-origin `/api` rewrite MUST live on its own branch so this feature can merge without changing production routing; the merge order is dependency-ordered and recorded.
+- **S10 — Installed, not a tab.** The owner said: "quiero como todo cubierto, no quiero que si realmente se llega a notar que es un explorador". In standalone display the app MUST NOT rubber-band, MUST NOT pull-to-refresh, MUST NOT show a tap highlight, MUST NOT pop a long-press callout on chrome, MUST NOT double-tap-zoom, and MUST NOT let a rotation resize text. Text stays selectable where reading or copying matters, and inputs stay selectable everywhere.
+- **S11 — Safe areas everywhere.** Every fixed or sticky surface — modal, toast stack, POS floating bar, POS cart drawer, expense and purchase-order action bars, sidebar, content column, auth pages — MUST pay back `env(safe-area-inset-*)`. The earlier work covered six surfaces; this closes the rest.
+- **S12 — A cartridge line cannot be lost by a stray tap.** The owner said a quantity edit "me elimino un producto del carrito". Root cause found: the stepper is `min={0}` and `updateQuantity(0)` removes the line, so one extra tap on "−" deletes it, and the trash button is 28×28 px next to it. The stepper MUST NOT reach 0; removal MUST be undoable for a bounded window; the trash target MUST be at least 44×44 px and separated from the quantity control; a locked cart MUST stay locked.
+- **S13 — Gestures do not eject the operator.** The owner said the back gesture "me sacó del login". In standalone mode, a left-edge back swipe at a root route or on the auth screens MUST NOT leave the app; inside the app it MUST keep working as normal navigation.
 
 ## Non-goals (parent-scoped, pending user confirmation)
 
@@ -60,6 +64,11 @@ Risk tier: high. A service worker is delivery/runtime surface for every installe
 - [x] **T28** — Close the review follow-ups on the update flow: the swap stays pending until `controllerchange` confirms it, an unanswered swap restores the offer after a bounded wait, `reloadRequested` stops being permanent, and the snapshot is derived from the waiting worker. S8. Commit `f151265`.
 - [x] **T29** — Derive the mobile chrome geometry from `--mobile-header`/`--mobile-header-gap` instead of a hand-copied `3.5rem`. S5. Commit `c43917f`.
 - [x] **T30** — Serve the guard its own evidence: assert the built stylesheet's safe-area tokens, export the CLI and test its exit code, choose the port from the OS and await the child's exit. S7. Commit `9f45d64`.
+- [ ] **T31** — App-shell touch behaviour: overscroll, tap highlight, touch-action, callout, text-size-adjust, selection policy. S10.
+- [ ] **T32** — Safe areas on the remaining fixed surfaces: modal, toast stack, POS bars, expense and purchase-order action bars. S11.
+- [ ] **T33** — Cart line safety: stepper floor of 1, undoable removal, 44 px trash target, locked cart respected. S12.
+- [ ] **T34** — Standalone back-gesture guard on root routes and auth screens. S13.
+- [ ] **T35** — Deploy the preview again and verify the update banner end to end on the installed iPhone. S8.
 
 ### Owner actions
 
