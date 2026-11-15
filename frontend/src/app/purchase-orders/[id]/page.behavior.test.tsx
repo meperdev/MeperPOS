@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { PurchaseOrder } from "@/types";
 
@@ -173,5 +173,61 @@ describe("Purchase order detail page behavior", () => {
       screen.getByText("La orden de compra no existe o fue eliminada."),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /Ir a órdenes/i })).toBeTruthy();
+  });
+
+  it("shows the items table only from the @2xl container breakpoint", () => {
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder(),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    const tableWrapper = screen.getByRole("table").closest(".overflow-x-auto");
+    expect(tableWrapper).not.toBeNull();
+    expect(tableWrapper!.className).toContain("hidden");
+    expect(tableWrapper!.className).toContain("@2xl:block");
+    expect(tableWrapper!.className).not.toContain("lg:");
+  });
+
+  it("renders a stacked list for narrow containers with the same figures", () => {
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder(),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    const list = screen.getByTestId("po-item-list");
+    expect(list.className).toContain("@2xl:hidden");
+
+    const row = within(list).getByTestId("po-item-row");
+    expect(within(row).getByText("Producto Uno")).toBeTruthy();
+    expect(within(row).getByText("SKU-1")).toBeTruthy();
+    expect(within(row).getByText("2 / 5")).toBeTruthy();
+    expect(within(row).getByText("19%")).toBeTruthy();
+    expect(within(row).getByText(/595/)).toBeTruthy();
+    expect(within(row).getByText("Recibido / Ordenado")).toBeTruthy();
+    expect(within(row).getByText("Costo unit.")).toBeTruthy();
+  });
+
+  it("puts the cost summary beside the items only from the @4xl container breakpoint", () => {
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder(),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    const aside = screen.getByText("Resumen de costos").closest("aside");
+    const grid = aside!.parentElement!;
+    expect(grid.className).toContain("@container");
+    expect(grid.className).toContain("@4xl:grid-cols-3");
+    expect(grid.className).not.toContain("lg:grid-cols-3");
+    expect(grid.firstElementChild!.className).toContain("@4xl:col-span-2");
+    expect(grid.firstElementChild!.className).not.toContain("lg:col-span-2");
   });
 });

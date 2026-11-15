@@ -87,6 +87,51 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
   }
 
   const members = org.users ?? [];
+  type OrgMember = (typeof members)[number];
+
+  const renderRole = (ou: OrgMember) => (
+    <BentoSelect
+      value={ou.role}
+      options={roleOptions}
+      onChange={(value) =>
+        updateMemberRole.mutate({
+          orgId: org.id,
+          userId: ou.user.id,
+          role: value,
+        })
+      }
+      className="w-40 [&>button]:h-8"
+    />
+  );
+
+  const renderOwner = (ou: OrgMember) =>
+    ou.isPrimaryOwner ? (
+      <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
+        Sí
+      </span>
+    ) : (
+      <span className="text-xs text-muted-foreground">—</span>
+    );
+
+  const renderMemberActions = (ou: OrgMember) => (
+    <RowActions
+      label={`Acciones de ${ou.user.name}`}
+      items={[
+        {
+          label: "Quitar",
+          icon: <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />,
+          destructive: true,
+          disabled: ou.isPrimaryOwner,
+          hint: ou.isPrimaryOwner
+            ? "El propietario no se puede quitar"
+            : undefined,
+          onSelect: () =>
+            removeMember.mutate({ orgId: org.id, userId: ou.user.id }),
+        },
+      ]}
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -194,78 +239,67 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="@container p-0">
           {members.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table className="min-w-[680px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableCell as="th">Usuario</TableCell>
-                    <TableCell as="th">Rol</TableCell>
-                    <TableCell as="th">Propietario</TableCell>
-                    <TableCell as="th" className="text-right">
-                      Acciones
-                    </TableCell>
-                  </TableRow>
-                </TableHeader>
-                <tbody>
-                  {members.map((ou) => (
-                    <TableRow key={ou.id}>
-                      <TableCell>
-                        <p className="text-xs font-medium text-foreground">{ou.user.name}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                          {ou.user.email}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <BentoSelect
-                          value={ou.role}
-                          options={roleOptions}
-                          onChange={(value) =>
-                            updateMemberRole.mutate({
-                              orgId: org.id,
-                              userId: ou.user.id,
-                              role: value,
-                            })
-                          }
-                          className="w-40 [&>button]:h-8"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {ou.isPrimaryOwner ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
-                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
-                            Sí
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end">
-                          <RowActions
-                            label={`Acciones de ${ou.user.name}`}
-                            items={[
-                              {
-                                label: "Quitar",
-                                icon: <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />,
-                                destructive: true,
-                                disabled: ou.isPrimaryOwner,
-                                hint: ou.isPrimaryOwner
-                                  ? "El propietario no se puede quitar"
-                                  : undefined,
-                                onSelect: () =>
-                                  removeMember.mutate({ orgId: org.id, userId: ou.user.id }),
-                              },
-                            ]}
-                          />
-                        </div>
+            <>
+              <div className="hidden @3xl:block overflow-x-auto">
+                <Table className="min-w-[680px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell as="th">Usuario</TableCell>
+                      <TableCell as="th">Rol</TableCell>
+                      <TableCell as="th">Propietario</TableCell>
+                      <TableCell as="th" className="text-right">
+                        Acciones
                       </TableCell>
                     </TableRow>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <tbody>
+                    {members.map((ou) => (
+                      <TableRow key={ou.id}>
+                        <TableCell>
+                          <p className="text-xs font-medium text-foreground">{ou.user.name}</p>
+                          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                            {ou.user.email}
+                          </p>
+                        </TableCell>
+                        <TableCell>{renderRole(ou)}</TableCell>
+                        <TableCell>{renderOwner(ou)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end">{renderMemberActions(ou)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+
+              <div data-testid="org-member-list" className="@3xl:hidden divide-y divide-border/60">
+                {members.map((ou) => (
+                  <div key={ou.id} data-testid="org-member-row" className="px-4 py-3 space-y-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-foreground break-words">{ou.user.name}</p>
+                        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground break-all">
+                          {ou.user.email}
+                        </p>
+                      </div>
+                      <div className="shrink-0">{renderMemberActions(ou)}</div>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="space-y-1">
+                        <dt className="text-muted-foreground">Rol</dt>
+                        <dd>{renderRole(ou)}</dd>
+                      </div>
+                      <div className="space-y-1">
+                        <dt className="text-muted-foreground">Propietario</dt>
+                        <dd>{renderOwner(ou)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            </>
           ) : (
             <EmptyState
               icon={<Users className="h-4 w-4" />}
