@@ -198,7 +198,9 @@ describe("DashboardLayout route gating for /expenses", () => {
     );
 
     const mainElement = container.querySelector("main");
-    expect(mainElement?.className).toContain("pt-[calc(5rem+var(--safe-top))]");
+    expect(mainElement?.className).toContain(
+      "pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))]"
+    );
     expect(mainElement?.className).toContain(
       "pb-[calc(1.5rem+var(--safe-bottom))]"
     );

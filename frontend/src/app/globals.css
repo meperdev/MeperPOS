@@ -378,4 +378,14 @@ h4 {
     --safe-right: env(safe-area-inset-right, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
+
+    /*
+     * The height of the fixed mobile header. Every surface that has to clear it
+     * derives from this one value: the header itself, the drawer that starts
+     * below it and the content column that starts further down. Hand-copying the
+     * number is how those three drift apart without a test noticing.
+     */
+    --mobile-header: 3.5rem;
+    /* Gap between that header and the first content row. */
+    --mobile-header-gap: 1.5rem;
 }

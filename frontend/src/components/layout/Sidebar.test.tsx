@@ -492,8 +492,12 @@ describe("Sidebar", () => {
     const drawer = container.querySelector("[data-sidebar-root]");
 
     expect(header?.className).toContain("pt-[var(--safe-top)]");
-    expect(header?.className).toContain("h-[calc(3.5rem+var(--safe-top))]");
-    expect(drawer?.className).toContain("top-[calc(3.5rem+var(--safe-top))]");
+    expect(header?.className).toContain(
+      "h-[calc(var(--mobile-header)+var(--safe-top))]"
+    );
+    expect(drawer?.className).toContain(
+      "top-[calc(var(--mobile-header)+var(--safe-top))]"
+    );
   });
 
   it("renders the Lucky square icon and hides wordmark text when collapsed", async () => {

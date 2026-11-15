@@ -412,7 +412,7 @@ export function Sidebar() {
         data-testid="sidebar-nav"
         ref={navRef}
         className={cn(
-          "flex-1 overflow-y-auto overscroll-contain pb-[calc(5rem+var(--safe-bottom))] lg:pb-3 scrollbar-app",
+          "flex-1 overflow-y-auto overscroll-contain pb-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-bottom))] lg:pb-3 scrollbar-app",
           isCollapsed ? "px-2 py-3" : "px-3 py-3"
         )}
       >
@@ -622,7 +622,7 @@ export function Sidebar() {
         className={cn(
           "lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between",
           "bg-card border-b border-border",
-          "h-[calc(3.5rem+var(--safe-top))] pt-[var(--safe-top)]",
+          "h-[calc(var(--mobile-header)+var(--safe-top))] pt-[var(--safe-top)]",
           "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]"
         )}
       >
@@ -667,7 +667,7 @@ export function Sidebar() {
         data-sidebar-root
         className={cn(
           "fixed bottom-0 left-0 lg:top-0 lg:bottom-auto lg:h-screen flex flex-col z-50",
-          "top-[calc(3.5rem+var(--safe-top))]",
+          "top-[calc(var(--mobile-header)+var(--safe-top))]",
           "pl-[var(--safe-left)] pr-[var(--safe-right)]",
           "bg-card border-r border-border/80 shadow-2xl lg:shadow-none",
           "transition-[width,transform] duration-300 ease-in-out",
