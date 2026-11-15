@@ -565,9 +565,9 @@ export default function TasksPage() {
         />
 
         {/* Main Content: Split Master-Detail */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
+        <div className="@container grid grid-cols-1 @5xl:grid-cols-12 gap-4 lg:gap-5 items-start">
           {/* Left Column: Task List (7 cols) */}
-          <div className="lg:col-span-7 space-y-4">
+          <div className="@5xl:col-span-7 space-y-4">
             <Card className="overflow-hidden border-border/70 bg-card shadow-2xs">
               <div className="border-b border-border/60 px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -723,9 +723,9 @@ export default function TasksPage() {
           </div>
 
           {/* Right Column: Selected Task Inspector & Timeline (5 cols) */}
-          <div className="lg:col-span-5 lg:sticky lg:top-4">
+          <div className="@5xl:col-span-5 @5xl:sticky @5xl:top-4">
             {selectedTask ? (
-              <Card className="@container border-border/70 bg-card overflow-hidden shadow-2xs flex flex-col lg:max-h-[calc(100vh-6.5rem)]">
+              <Card className="@container border-border/70 bg-card overflow-hidden shadow-2xs flex flex-col @5xl:max-h-[calc(100vh-6.5rem)]">
                 {/* Header & Quick Action Buttons */}
                 <div className="border-b border-border/60 p-4 shrink-0">
                   <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
@@ -945,16 +945,18 @@ export default function TasksPage() {
                         >
                           <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
                           <div className="min-w-0 flex-1 space-y-0.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="min-w-0 break-words font-semibold text-foreground text-xs">
-                                {getTaskEventLabel(event.type)}
+                            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                              <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5">
+                                <span className="whitespace-nowrap break-words font-semibold text-foreground text-xs">
+                                  {getTaskEventLabel(event.type)}
+                                </span>
                                 {event.fromStatus && event.fromStatus !== event.toStatus && (
-                                  <span className="ml-1.5 font-normal text-muted-foreground">
+                                  <span className="min-w-0 break-words font-normal text-xs text-muted-foreground">
                                     ({getTaskStatusLabel(event.fromStatus)} → {getTaskStatusLabel(event.toStatus)})
                                   </span>
                                 )}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground tabular-nums">
+                              </div>
+                              <span className="whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
                                 {formatDateTime(event.createdAt)}
                               </span>
                             </div>

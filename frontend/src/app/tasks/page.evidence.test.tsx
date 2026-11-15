@@ -282,4 +282,61 @@ describe("Tasks module evidence", () => {
     expect(header.className).toContain("@md:justify-between");
     expect(header.className).not.toContain("sm:flex-row");
   });
+
+  it("puts the list and detail side by side only from the @5xl container breakpoint", () => {
+    useTasksMock.mockReturnValue({
+      data: { tasks: [makeTask()], source: "remote" },
+      isLoading: false,
+    });
+
+    render(<TasksPage />);
+
+    const grid = screen.getByText("Lista de tareas").closest(".grid")!;
+    expect(grid.className).toContain("@container");
+    expect(grid.className).toContain("@5xl:grid-cols-12");
+    expect(grid.className).not.toContain("lg:grid-cols-12");
+
+    const list = screen.getByText("Lista de tareas").closest(".grid > div")!;
+    expect(list.className).toContain("@5xl:col-span-7");
+    expect(list.className).not.toContain("lg:col-span-7");
+
+    const detail = screen.getByText("Historial").closest(".grid > div")!;
+    expect(detail.className).toContain("@5xl:col-span-5");
+    expect(detail.className).toContain("@5xl:sticky");
+    expect(detail.className).not.toContain("lg:sticky");
+  });
+
+  it("keeps event labels on one line and lets the date wrap below them when narrow", () => {
+    useTasksMock.mockReturnValue({
+      data: { tasks: [makeTask()], source: "remote" },
+      isLoading: false,
+    });
+    useTaskTimelineMock.mockReturnValue({
+      data: [
+        {
+          id: "event-1",
+          taskId: "task-1",
+          type: "STATUS_CHANGED",
+          fromStatus: "PENDING",
+          toStatus: "IN_PROGRESS",
+          note: null,
+          createdById: "user-1",
+          createdAt: "2026-01-10T13:00:00.000Z",
+          createdBy: { id: "user-1", name: "Ana Admin" },
+        },
+      ],
+      isLoading: false,
+    });
+
+    render(<TasksPage />);
+
+    const label = screen.getByText("Cambio de estado");
+    expect(label.className).toContain("whitespace-nowrap");
+
+    const transition = screen.getByText(/Pendiente\s*(->|→)\s*En curso/i);
+    expect(transition.className).not.toContain("whitespace-nowrap");
+
+    const header = label.closest(".justify-between")!;
+    expect(header.className).toContain("flex-wrap");
+  });
 });
