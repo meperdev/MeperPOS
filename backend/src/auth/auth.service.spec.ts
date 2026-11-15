@@ -213,7 +213,11 @@ describe('AuthService', () => {
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
       mockPrisma.organizationUser.findFirst.mockResolvedValue(mockOrgUser);
       mockPrisma.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        plan: PlanType.BASIC,
         status: 'ACTIVE',
+        trialEndsAt: null,
+        billingStatus: 'PAID',
       });
       mockPrisma.refreshToken.create.mockResolvedValue({ id: 'rt-1' });
 
@@ -230,6 +234,13 @@ describe('AuthService', () => {
         name: 'Test User',
         organizationId: 'org-1',
         role: OrgRole.ADMIN,
+        organization: {
+          id: 'org-1',
+          plan: PlanType.BASIC,
+          status: 'ACTIVE',
+          trialEndsAt: null,
+          billingStatus: 'PAID',
+        },
       });
 
       expect(mockJwtService.sign).toHaveBeenCalledWith(
