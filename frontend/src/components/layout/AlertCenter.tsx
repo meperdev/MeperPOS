@@ -19,6 +19,10 @@ import {
   Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  computeAlertPanelGeometry,
+  type AlertPanelGeometry,
+} from "@/components/layout/alert-panel-geometry";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts, type AlertCategory, type AppAlert } from "@/hooks/useAlerts";
 
@@ -73,9 +77,12 @@ const emptySubscribe = () => () => {};
 
 export function AlertCenter({
   className,
+  buttonClassName,
   collapsed = false,
 }: {
   className?: string;
+  /** Trigger surface; the rail styles it as a tile instead of a bare glyph. */
+  buttonClassName?: string;
   collapsed?: boolean;
 }) {
   const { user, organization } = useAuth();
@@ -98,7 +105,7 @@ export function AlertCenter({
   // Snapshot of what was unread when the panel opened: the badge clears on open,
   // but the rows keep their "new" dot for that visit.
   const [openedUnread, setOpenedUnread] = useState<string[]>([]);
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const [coords, setCoords] = useState<AlertPanelGeometry | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -137,11 +144,15 @@ export function AlertCenter({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    // The geometry is measured once; a viewport change would leave it stale.
+    const onResize = () => setOpen(false);
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
@@ -152,14 +163,19 @@ export function AlertCenter({
     }
     const element = buttonRef.current;
     if (element && window.innerWidth >= 1024) {
-      // Snug to the sidebar's right edge, never overlapping the rail itself.
       const rect = element.getBoundingClientRect();
       const sidebar = element.closest("[data-sidebar-root]");
-      const railRight = sidebar ? sidebar.getBoundingClientRect().right : rect.right;
-      setCoords({
-        top: Math.max(8, rect.top - 4),
-        left: Math.min(railRight + 10, window.innerWidth - 364),
-      });
+      const railRight = sidebar
+        ? sidebar.getBoundingClientRect().right
+        : rect.right;
+      setCoords(
+        computeAlertPanelGeometry({
+          anchor: rect,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          railRight,
+        }),
+      );
     } else {
       setCoords(null);
     }
@@ -192,6 +208,7 @@ export function AlertCenter({
         className={cn(
           "relative flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8",
           collapsed && "mx-auto",
+          buttonClassName,
         )}
       >
         <Bell className="h-4 w-4" aria-hidden="true" />
@@ -216,11 +233,13 @@ export function AlertCenter({
             aria-label="Alertas"
             style={coords ?? undefined}
             className={cn(
-              "fixed z-[95] overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl animate-toast-in",
-              coords ? "w-[22rem] max-w-[calc(100vw-2rem)]" : "inset-x-3 top-16",
+              "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl animate-toast-in",
+              coords
+                ? "w-[22rem]"
+                : "inset-x-3 top-16 max-h-[calc(100dvh-5rem)]",
             )}
           >
-            <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5">
               <div className="flex items-center gap-2">
                 <Bell className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <h2 className="text-xs font-semibold text-foreground">Alertas</h2>
@@ -241,7 +260,7 @@ export function AlertCenter({
                 </p>
               </div>
             ) : (
-              <ul className="max-h-[min(60vh,26rem)] divide-y divide-border/50 overflow-y-auto scrollbar-app">
+              <ul className="min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto scrollbar-app">
                 {alerts.map((alert) => (
                   <li key={alert.id}>
                     <AlertRow
