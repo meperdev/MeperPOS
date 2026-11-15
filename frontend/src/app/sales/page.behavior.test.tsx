@@ -150,6 +150,18 @@ describe("Sales page deep-link behavior (#24)", () => {
     expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
   });
 
+  it("offers no filter-bar Limpiar: the Todas period option already resets the dates", async () => {
+    currentSearchParams = new URLSearchParams();
+
+    render(<SalesPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    expect(screen.queryByRole("button", { name: "Limpiar" })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Todas" }));
+    expect(screen.getByRole("button", { name: "Todas" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("clears the customer deep-link filter back to /sales", async () => {
     currentSearchParams = new URLSearchParams([
       ["customerId", "customer-1"],

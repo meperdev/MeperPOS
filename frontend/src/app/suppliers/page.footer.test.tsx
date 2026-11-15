@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -75,6 +76,27 @@ describe("Suppliers card footer", () => {
     expect(copy.className).not.toContain("bg-muted/40");
     expect(copy.className).not.toContain("border-border/60");
     expect(copy.className).toContain("focus-visible:ring-primary/40");
+  });
+
+  it("makes the clickable supplier card a keyboard edit target named Editar <name>", async () => {
+    render(<SuppliersPage />);
+
+    const card = screen.getByRole("button", { name: `Editar ${SUPPLIER_NAME}` });
+    expect(card.tagName).toBe("DIV");
+    expect(card.tabIndex).toBe(0);
+
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByText("Editar proveedor")).toBeInTheDocument();
+  });
+
+  it("lists Todos first in the status filter and keeps the default selection", () => {
+    render(<SuppliersPage />);
+
+    const track = screen.getByText("Estado").parentElement!.querySelector<HTMLElement>('[role="group"]')!;
+    const labels = Array.from(track.querySelectorAll("button")).map((b) => b.textContent);
+    expect(labels).toEqual(["Todos", "Activos", "Inactivos"]);
+    expect(screen.getByRole("button", { name: "Activos" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("lays the supplier cards out on the shared intrinsic collection grid", () => {

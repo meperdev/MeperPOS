@@ -123,16 +123,6 @@ export default function OrganizationsPage() {
 
   const pageData = useMemo(() => paginate(sorted, page), [sorted, page]);
 
-  const hasFilters =
-    search.trim() !== "" || statusFilter !== "ALL" || planFilter !== "ALL";
-
-  const clearFilters = () => {
-    setSearch("");
-    setStatusFilter("ALL");
-    setPlanFilter("ALL");
-    setPage(1);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormErrors({});
@@ -297,14 +287,6 @@ export default function OrganizationsPage() {
                 }}
               />
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearFilters}
-              disabled={!hasFilters}
-            >
-              Limpiar
-            </Button>
           </>
         }
       />

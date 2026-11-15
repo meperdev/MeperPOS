@@ -260,7 +260,7 @@ export default function ExpensesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 lg:min-h-[calc(100vh-4rem)] lg:space-y-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         <PageHeader
           title="Salidas"
           subtitle="Registra los gastos y pagos de tu negocio"
@@ -765,16 +765,14 @@ export default function ExpensesPage() {
             )}
 
             {meta && (
-              <div className="sticky bottom-0 z-10 -mx-1 border-t border-border/60 bg-card px-1 py-[max(0.375rem,var(--safe-bottom))]">
-                <Pagination
-                  currentPage={page}
-                  totalPages={meta.totalPages}
-                  onPageChange={setPage}
-                  totalItems={meta.total}
-                  pageSize={viewMode === "grid" ? 9 : 10}
-                  itemLabel="salida"
-                />
-              </div>
+              <Pagination
+                currentPage={page}
+                totalPages={meta.totalPages}
+                onPageChange={setPage}
+                totalItems={meta.total}
+                pageSize={viewMode === "grid" ? 9 : 10}
+                itemLabel="salida"
+              />
             )}
           </>
         )}

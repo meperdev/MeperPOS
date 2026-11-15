@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
@@ -70,6 +71,19 @@ describe("Categories card layout", () => {
     const card = screen.getByRole("heading", { name: CATEGORY_NAME }).closest<HTMLElement>("div.group");
     expect(card!.parentElement!.className).toContain("grid-cols-[repeat(auto-fill,minmax(16rem,1fr))]");
     expect(card!.parentElement!.className).not.toMatch(/(^|\s)(sm|md|lg|xl):grid-cols/);
+  });
+
+  it("drops the pencil: the card itself is the keyboard-reachable edit target", async () => {
+    render(<CategoriesPage />);
+
+    const card = screen.getByRole("button", { name: `Editar ${CATEGORY_NAME}` });
+    expect(card.tabIndex).toBe(0);
+    const nestedLabels = Array.from(card.querySelectorAll("button")).map((b) => b.getAttribute("aria-label"));
+    expect(nestedLabels).toEqual([`Eliminar ${CATEGORY_NAME}`, `Ver productos de ${CATEGORY_NAME}`]);
+
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByText("Editar categoría")).toBeInTheDocument();
   });
 
   it("lets the card shrink and keeps the count and tax chips from wrapping inside the footer", () => {

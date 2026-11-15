@@ -175,7 +175,7 @@ export default function PayrollPage() {
   return (
     <DashboardLayout>
       {allowed ? (
-        <div className="min-h-[calc(100vh-4rem)] space-y-4 lg:space-y-5">
+        <div className="flex flex-1 flex-col gap-4 lg:gap-5">
           <PageHeader
             title="Nómina"
             subtitle="Pagos y abonos de empleados"

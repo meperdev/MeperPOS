@@ -115,6 +115,22 @@ describe("Customers page modal — customer-supplier-info-fields (T18)", () => {
     cleanup();
   });
 
+  it("drops the pencil: the clickable customer card is the keyboard edit target", async () => {
+    const user = userEvent.setup();
+    render(<CustomersPage />);
+
+    // One "Editar" target per customer: the card itself, not a nested pencil.
+    const targets = screen.getAllByRole("button", { name: "Editar Ana Perez" });
+    expect(targets).toHaveLength(1);
+    const card = targets[0];
+    expect(card.tagName).toBe("DIV");
+    expect(card.tabIndex).toBe(0);
+
+    card.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("heading", { name: "Editar cliente" })).toBeTruthy();
+  });
+
   it("hides the motorcycle plate when the vehicles module is disabled", async () => {
     moduleState.enabled = false;
     const user = userEvent.setup();

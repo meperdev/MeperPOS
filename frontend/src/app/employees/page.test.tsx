@@ -41,8 +41,7 @@ it("creates and edits profiles, explicitly clearing nullable fields", async () =
   await user.type(screen.getByLabelText(/Nombre/), "Luis");
   await user.click(screen.getByRole("button", { name: "Guardar" }));
   await waitFor(() => expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ name: "Luis", email: null, referenceAmount: null })));
-  await openRowMenu(user, "Ana");
-  await user.click(screen.getByRole("menuitem", { name: "Editar" }));
+  await user.click(screen.getByRole("button", { name: "Editar Ana" }));
   await user.clear(screen.getByLabelText("Correo electrónico"));
   await user.clear(screen.getByLabelText("Fecha de ingreso"));
   await user.click(screen.getByRole("button", { name: "Guardar" }));
@@ -77,11 +76,17 @@ it("names the dialog, contains keyboard focus, and restores it after Escape", as
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(opener).toHaveFocus();
 });
+it("edits from the card itself: no Editar menu item and no separate row button", async () => {
+  const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
+  expect(screen.getByRole("button", { name: "Editar Ana" }).tagName).toBe("DIV");
+  await openRowMenu(user, "Ana");
+  expect(screen.queryByRole("menuitem", { name: "Editar" })).not.toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: /Desactivar|Activar/ })).toBeInTheDocument();
+});
 it("returns escaped programmatic focus and restores the edit opener on close", async () => {
   const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
-  const opener = screen.getByRole("button", { name: "Acciones de Ana" });
+  const opener = screen.getByRole("button", { name: "Editar Ana" });
   await user.click(opener);
-  await user.click(screen.getByRole("menuitem", { name: "Editar" }));
   expect(screen.getByRole("dialog", { name: "Editar empleado" })).toBeInTheDocument();
   screen.getByRole("button", { name: "Nuevo empleado" }).focus();
   expect(screen.getByLabelText(/Nombre/)).toHaveFocus();

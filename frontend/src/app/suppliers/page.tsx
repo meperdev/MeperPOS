@@ -31,6 +31,7 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/Table";
+import { activateOnKey } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
@@ -231,7 +232,7 @@ export default function SuppliersPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         {/* Page Header */}
 <PageHeader
           title="Proveedores"
@@ -262,9 +263,9 @@ export default function SuppliersPage() {
             <>
               <FilterGroup label="Estado">
                 {[
+                  { value: "all" as const, label: "Todos" },
                   { value: "active" as const, label: "Activos" },
                   { value: "inactive" as const, label: "Inactivos" },
-                  { value: "all" as const, label: "Todos" },
                 ].map(({ value, label }) => (
                   <FilterOptionButton
                     key={value}
@@ -328,6 +329,9 @@ export default function SuppliersPage() {
                   return (
                     <div
                       key={supplier.id}
+                      role={canManage ? "button" : undefined}
+                      tabIndex={canManage ? 0 : undefined}
+                      aria-label={canManage ? `Editar ${supplier.name}` : undefined}
                       className={cn(
                         "group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border",
                         canManage && "cursor-pointer",
@@ -335,6 +339,9 @@ export default function SuppliersPage() {
                       )}
                       onClick={
                         canManage ? () => handleEdit(supplier) : undefined
+                      }
+                      onKeyDown={
+                        canManage ? activateOnKey(() => handleEdit(supplier)) : undefined
                       }
                     >
                       <div>
@@ -528,12 +535,16 @@ export default function SuppliersPage() {
                     return (
                       <TableRow
                         key={supplier.id}
+                        tabIndex={canManage ? 0 : undefined}
                         className={cn(
                           canManage && "cursor-pointer",
                           !supplier.active && "opacity-70",
                         )}
                         onClick={
                           canManage ? () => handleEdit(supplier) : undefined
+                        }
+                        onKeyDown={
+                          canManage ? activateOnKey(() => handleEdit(supplier)) : undefined
                         }
                       >
                         <TableCell>

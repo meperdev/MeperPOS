@@ -146,6 +146,23 @@ describe("OrganizationsPage", () => {
     expect(screen.queryByText("Tienda Norte")).not.toBeInTheDocument();
   });
 
+  it("resets the filters with the search clear and the Todos options, not a Limpiar button", async () => {
+    const user = userEvent.setup();
+    setupMocks([
+      org(),
+      org({ id: "org-2", name: "Tienda Norte", slug: "tienda-norte" }),
+    ]);
+    renderPage();
+
+    expect(screen.queryByRole("button", { name: "Limpiar" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole("searchbox"), "cafeteria");
+    expect(screen.queryByText("Tienda Norte")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
+
+    expect(screen.getByText("Tienda Norte")).toBeInTheDocument();
+  });
+
   it("starts filtered from the status query parameter", () => {
     searchParamsRef.current = new URLSearchParams("status=SUSPENDED");
     setupMocks([

@@ -65,7 +65,7 @@ export default function AlertHistoryPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         <PageHeader
           title="Historial de notificaciones"
           subtitle="Cada episodio de stock bajo y el resultado de su aviso por WhatsApp."

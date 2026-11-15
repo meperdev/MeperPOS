@@ -94,14 +94,6 @@ export default function ModuleDetailPage({
 
   const pageData = useMemo(() => paginate(filtered, page), [filtered, page]);
 
-  const hasFilters = search.trim() !== "" || stateFilter !== "ALL";
-
-  const clearFilters = () => {
-    setSearch("");
-    setStateFilter("ALL");
-    setPage(1);
-  };
-
   const toggleModule = async (organization: Organization) => {
     if (!moduleDefinition) {
       return;
@@ -241,14 +233,6 @@ export default function ModuleDetailPage({
                   }}
                 />
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                disabled={!hasFilters}
-              >
-                Limpiar
-              </Button>
             </>
           }
         />
@@ -266,7 +250,7 @@ export default function ModuleDetailPage({
             <EmptyState
               icon={<Building2 className="h-4 w-4" />}
               title="Ninguna organización coincide con los filtros"
-              subtitle="La búsqueda y el filtro siguen activos. Usa Limpiar para ver todas."
+              subtitle="La búsqueda y el filtro siguen activos. Quita la búsqueda o cambia el estado para ver todas."
             />
           ) : (
             <div className="overflow-x-auto">

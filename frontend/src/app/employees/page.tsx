@@ -25,6 +25,7 @@ import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
+import { activateOnKey } from "@/lib/keyboard";
 import { cn, formatCurrency, formatDate, toFiniteNumber } from "@/lib/utils";
 import {
   useEmployees,
@@ -88,11 +89,9 @@ function Meta({
 function cardActions(
   employee: Employee,
   pending: boolean,
-  onEdit: () => void,
   onToggle: () => void,
 ): RowActionItem[] {
   return [
-    { label: "Editar", onSelect: onEdit },
     {
       label: employee.active ? "Desactivar" : "Activar",
       icon: employee.active ? (
@@ -122,7 +121,14 @@ function EmployeeCard({
   const contact = [employee.phone, employee.email].filter(Boolean).join(" · ");
 
   return (
-    <Card className="flex flex-col" onClick={onEdit}>
+    <Card
+      className="flex flex-col"
+      role="button"
+      tabIndex={0}
+      aria-label={`Editar ${employee.name}`}
+      onClick={onEdit}
+      onKeyDown={activateOnKey(onEdit)}
+    >
       <div className="flex items-start gap-3 p-4 pb-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-xs font-semibold text-primary-text">
           {initials(employee.name)}
@@ -192,7 +198,7 @@ function EmployeeCard({
         </Button>
         <RowActions
           label={`Acciones de ${employee.name}`}
-          items={cardActions(employee, pending, onEdit, onToggle)}
+          items={cardActions(employee, pending, onToggle)}
         />
       </div>
     </Card>
@@ -288,7 +294,7 @@ export default function EmployeesPage() {
 
   return (
     <DashboardLayout>
-      <div className="min-h-[calc(100vh-4rem)] space-y-4 lg:space-y-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         <PageHeader
           title="Empleados"
           subtitle="Datos, jornadas y estado del equipo"
@@ -381,7 +387,9 @@ export default function EmployeesPage() {
                           <TableRow
                             key={employee.id}
                             className="cursor-pointer"
+                            tabIndex={0}
                             onClick={() => setDialog({ mode: "edit", employee })}
+                            onKeyDown={activateOnKey(() => setDialog({ mode: "edit", employee }))}
                           >
                             <TableCell>
                               <div className="flex items-center gap-2.5">
@@ -425,20 +433,11 @@ export default function EmployeesPage() {
                                 className="flex items-center justify-end gap-1"
                                 onClick={(event) => event.stopPropagation()}
                               >
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  aria-label={`Editar ${employee.name}`}
-                                  onClick={() => setDialog({ mode: "edit", employee })}
-                                >
-                                  Editar
-                                </Button>
                                 <RowActions
                                   label={`Acciones de ${employee.name}`}
                                   items={cardActions(
                                     employee,
                                     changingId === employee.id,
-                                    () => setDialog({ mode: "edit", employee }),
                                     () => requestToggle(employee),
                                   )}
                                 />

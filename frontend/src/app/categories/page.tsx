@@ -37,10 +37,10 @@ import {
   Plus,
   Trash2,
   FolderTree,
-  Pencil,
   Package,
   Percent,
 } from "lucide-react";
+import { activateOnKey } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
@@ -173,7 +173,7 @@ export default function CategoriesPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         {/* Page Header */}
 <PageHeader
           title="Categorías"
@@ -244,8 +244,12 @@ export default function CategoriesPage() {
                   return (
                     <div
                       key={category.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Editar ${category.name}`}
                       className="group relative flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs cursor-pointer transition-colors hover:border-border"
                       onClick={() => handleEdit(category)}
+                      onKeyDown={activateOnKey(() => handleEdit(category))}
                     >
                       <div>
                         {/* Card Header */}
@@ -261,17 +265,6 @@ export default function CategoriesPage() {
 
                           {/* Actions */}
                           <div className="flex items-center gap-1 shrink-0 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEdit(category);
-                              }}
-                              className="flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:border-border/70 hover:bg-muted/60 transition-colors"
-                              aria-label={`Editar ${category.name}`}
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -366,7 +359,9 @@ export default function CategoriesPage() {
                           <TableRow
                             key={category.id}
                             className="cursor-pointer"
+                            tabIndex={0}
                             onClick={() => handleEdit(category)}
+                            onKeyDown={activateOnKey(() => handleEdit(category))}
                           >
                             <TableCell>
                               <div className="flex items-center gap-2">
@@ -427,14 +422,6 @@ export default function CategoriesPage() {
                             className="inline-flex items-center justify-end gap-1"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <button
-                              type="button"
-                              onClick={() => handleEdit(category)}
-                              className="flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:border-border/70 hover:bg-muted/60 transition-colors"
-                              aria-label={`Editar ${category.name}`}
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
                             <button
                               type="button"
                               onClick={() => handleDelete(category.id)}

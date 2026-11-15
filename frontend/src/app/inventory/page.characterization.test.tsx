@@ -208,6 +208,20 @@ describe("Inventory page — characterization (current behavior)", () => {
     expect(screen.getByText("3 productos")).toBeInTheDocument();
   });
 
+  it("makes a product table row keyboard-reachable so Enter opens its edit form", async () => {
+    window.localStorage.setItem("meperpos:view-mode:inventory", "table");
+    setResponse([buildProduct({ name: "Panela" })]);
+
+    render(<InventoryPage />);
+
+    const row = screen.getByText("Panela").closest("tr")!;
+    expect(row.tabIndex).toBe(0);
+    fireEvent.keyDown(row, { key: "Enter" });
+    // The Modal is mocked to render only its children, so the open form is the observable effect.
+    expect(await screen.findByDisplayValue("Panela")).toBeInTheDocument();
+    window.localStorage.removeItem("meperpos:view-mode:inventory");
+  });
+
   it("forwards the search term to the products query", () => {
     render(<InventoryPage />);
 

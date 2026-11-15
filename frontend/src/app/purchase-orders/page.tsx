@@ -83,7 +83,7 @@ export default function PurchaseOrdersPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         {/* Page Header */}
 <PageHeader
           title="Órdenes de compra"

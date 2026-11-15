@@ -53,6 +53,7 @@ import type { Product } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
+import { isActivationKey } from "@/lib/keyboard";
 import { cn, formatCurrency, resolveTaxFields, toFiniteNumber } from "@/lib/utils";
 import { isService, tracksStock } from "@/lib/product-type";
 import { hasAnyRole } from "@/lib/auth";
@@ -471,7 +472,7 @@ function InventoryContent() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         {/* Page Header */}
 <PageHeader
           title="Inventario"
@@ -695,8 +696,16 @@ function InventoryContent() {
                         return (
                           <TableRow
                             key={product.id}
+                            tabIndex={canManageInventory ? 0 : undefined}
                             onClick={
                               canManageInventory ? () => handleEdit(product) : undefined
+                            }
+                            onKeyDown={
+                              canManageInventory
+                                ? (event) => {
+                                    if (isActivationKey(event)) handleEdit(product);
+                                  }
+                                : undefined
                             }
                             className={cn(
                               canManageInventory && "cursor-pointer",

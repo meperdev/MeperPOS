@@ -27,6 +27,7 @@ import {
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { activateOnKey } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import {
   Plus,
@@ -35,7 +36,6 @@ import {
   Mail,
   MapPin,
   Users,
-  Pencil,
   ShoppingBag,
   Bookmark,
   Bike,
@@ -166,7 +166,7 @@ export default function CustomersPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
 
         {/* Page Header */}
 <PageHeader
@@ -250,12 +250,16 @@ export default function CustomersPage() {
                   return (
                     <div
                       key={customer.id}
+                      role={canEdit ? "button" : undefined}
+                      tabIndex={canEdit ? 0 : undefined}
+                      aria-label={canEdit ? `Editar ${customer.name}` : undefined}
                       className={cn(
                         "group flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150",
                         "hover:border-border",
                         canEdit && "cursor-pointer",
                       )}
                       onClick={canEdit ? () => handleEdit(customer) : undefined}
+                      onKeyDown={canEdit ? activateOnKey(() => handleEdit(customer)) : undefined}
                     >
                       <div>
                         {/* Header */}
@@ -352,15 +356,6 @@ export default function CustomersPage() {
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => handleEdit(customer)}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground"
-                              aria-label={`Editar ${customer.name}`}
-                              title="Editar cliente"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
                               onClick={() => handleDelete(customer.id)}
                               className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-danger/30 hover:bg-danger/10 hover:text-danger-text"
                               aria-label={`Eliminar ${customer.name}`}
@@ -407,7 +402,9 @@ export default function CustomersPage() {
                         return (
                           <TableRow
                             key={customer.id}
+                            tabIndex={canEdit ? 0 : undefined}
                             onClick={canEdit ? () => handleEdit(customer) : undefined}
+                            onKeyDown={canEdit ? activateOnKey(() => handleEdit(customer)) : undefined}
                             className={cn(canEdit && "cursor-pointer")}
                           >
                             <TableCell>
@@ -489,15 +486,6 @@ export default function CustomersPage() {
                                 </Button>
                                 {canEdit && (
                                   <>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleEdit(customer)}
-                                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground"
-                                      aria-label={`Editar ${customer.name}`}
-                                      title="Editar cliente"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => handleDelete(customer.id)}
