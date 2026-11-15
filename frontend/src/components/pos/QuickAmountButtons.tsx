@@ -21,10 +21,10 @@ export function QuickAmountButtons({ total, onAmountSelect, disabled = false }: 
             <Button
               key={amount}
               variant="secondary"
-              size="sm"
+              size="md"
               onClick={() => onAmountSelect(amount)}
               disabled={disabled}
-              className="text-sm hover:scale-105 transition-transform"
+              className="text-sm tabular-nums"
             >
               {formatCurrency(amount)}
             </Button>

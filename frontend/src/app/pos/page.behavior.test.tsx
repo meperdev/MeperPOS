@@ -974,7 +974,7 @@ describe("POS behavior evidence (#19, #18)", () => {
       expect(createSaleMutateMock).toHaveBeenCalled();
     });
 
-    expect(screen.getByText("Venta Exitosa")).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
   });
 
   it("opens the payment modal through the dynamic loading fallback (S1)", async () => {
@@ -1082,7 +1082,7 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(totalValueBefore).toBe(totalValueAfter);
 
     await userEvent.click(screen.getByRole("button", { name: /ana perez/i }));
-    await userEvent.click(screen.getByText("Cliente General"));
+    await userEvent.click(screen.getByText("Sin cliente"));
 
     await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
     await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
