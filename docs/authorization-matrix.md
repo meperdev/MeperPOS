@@ -282,7 +282,7 @@ and only receives stock, loans and tasks.
 |---|---|---|---|---|
 | /api/products | POST | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
 | /api/products | GET | any org role | org-scoped | backend/src/products/products.service.int.spec.ts |
-| /api/products/low-stock | GET | ADMIN, MEMBER, INVENTORY_USER | org-scoped | backend/src/products/products.controller.spec.ts |
+| /api/products/low-stock | GET | ADMIN, MEMBER, INVENTORY_USER | org-scoped | backend/src/products/products.low-stock-roles.spec.ts |
 | /api/products/search | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/products/products.controller.spec.ts |
 | /api/products/quick-search | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/products/products.controller.spec.ts |
 | /api/products/:id | GET | any org role | org-scoped | backend/src/products/products.service.int.spec.ts |

@@ -23,12 +23,12 @@ Test runner: `cd backend && npx jest <path>`; `cd frontend && npx vitest run <pa
 
 | ID | Spec | Route | Status | Evidence |
 | -- | ---- | ----- | ------ | -------- |
-| T1 | S1-S4 | inline | pending | `backend/src/alerts/*` + specs |
-| T2 | S5-S8 | inline | pending | schema, migration, scan service + specs |
-| T3 | S9 | inline | pending | products controller + spec |
-| T4 | S1-S2, S4 | inline | pending | frontend hook, ledger, specs |
-| T5 | S6-S8 | inline | pending | `docs/referencias/alertas.md` |
-| T6 | all | inline | pending | full suites, PR, native review |
+| T1 | S1-S4 | inline | done | `backend/src/alerts/*`, commit `285b6ba`, 45 specs |
+| T2 | S5-S8 | inline | done | schema, migration, scan service + specs, commit `3bf20cb` |
+| T3 | S9 | inline | done | commit `af7d917`, `products.low-stock-roles.spec.ts` |
+| T4 | S1-S2, S4 | inline | done | commit `779845f`, 10 specs |
+| T5 | S6-S8 | inline | done | `docs/referencias/alertas.md`, commit `3cddb9e` |
+| T6 | all | inline | pending | fix wiring, full suites, PR, native review |
 
 ## Log
 
@@ -37,3 +37,6 @@ Test runner: `cd backend && npx jest <path>`; `cd frontend && npx vitest run <pa
 - **L3** (verbatim): "saca la 3 completa en uk worktree aparte de master actualizado y dejame un Pr revisado ;)"
 - **L4** Diagnosis recorded before implementation: the bell was dead because `useAlerts` returned `[]` whenever `AuthContext.organization` was null, and `/auth/login`, `/auth/select-org` and `/auth/select-organization` never return an `organization` object (only `/auth/profile` does). The seen ledger keyed on the condition class (`stock:low`), so a new low product could never re-alert. No out-of-app notification existed.
 - **L5** Scope decision: "option 3" from the analysis is implemented as (a) a server-owned feed with revisions, (b) `ProductStockAlert` episodes, (c) WhatsApp text delivery over the existing `WHATSAPP_TEXT_SENDER` port and central session. Reason: the repo has no mail or push transport, and WhatsApp is the only real out-of-app channel already wired, configured and covered by tests.
+- **L6** Independent verifier (baseline `5e07d2e`) found one blocker: the split commits left `AlertsModule` with the feed providers only, so `StockAlertsService` and `StockAlertsScheduler` were never registered and S5-S8 were unreachable in the running app. Fixed by registering both providers and importing `WhatsAppModule`, with `alerts.module.spec.ts` as the regression test. Advisories accepted: the authorization-matrix row now cites `products.low-stock-roles.spec.ts`; the e2e config loads `test/setup-e2e.ts`, which sets `STOCK_ALERTS_ENABLED=false` so a test run never reaches the provider.
+- **L7** Evidence at fix time: `npx jest src/alerts src/products --runInBand` green (9 suites, 67 tests). Full backend suite 235/235 suites and frontend 107/107 files were green before the wiring fix and are re-run after it; the app-boot e2e run is recorded in the PR report.
+- **L8** (verbatim, new objective): "luego de terminar el goal que se esta ejecutando actualmenre correras otro para cubrir ll que hizo falta como la vista del historial de notificacion y lo que me comentaste en el ultimo /btw  :) cubrir los errored que quedaron." — deferred until this feature is closed.

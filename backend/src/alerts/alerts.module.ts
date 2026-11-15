@@ -1,17 +1,23 @@
 import { Module } from '@nestjs/common';
 import { PlanLimitsModule } from '../plan-limits/plan-limits.module';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { AlertsController } from './alerts.controller';
 import { AlertsService } from './alerts.service';
+import { StockAlertsScheduler } from './stock-alerts.scheduler';
+import { StockAlertsService } from './stock-alerts.service';
 
 /**
- * The server-owned alert feed. Read-only and tenant-scoped: the service derives
- * every category from signals the app already owns, and the controller admits
- * every organization role because visibility is decided per category inside.
+ * The alert feed and the low-stock notification pipeline.
+ *
+ * The feed is read-only and tenant-scoped. The notification side owns the
+ * `ProductStockAlert` episodes and the WhatsApp text delivery; it imports the
+ * WhatsApp module for the central session and the text port instead of opening a
+ * second provider client.
  */
 @Module({
-  imports: [PlanLimitsModule],
+  imports: [PlanLimitsModule, WhatsAppModule],
   controllers: [AlertsController],
-  providers: [AlertsService],
-  exports: [AlertsService],
+  providers: [AlertsService, StockAlertsService, StockAlertsScheduler],
+  exports: [AlertsService, StockAlertsService],
 })
 export class AlertsModule {}
