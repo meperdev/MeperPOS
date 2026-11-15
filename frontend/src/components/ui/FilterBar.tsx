@@ -28,21 +28,22 @@ export function FilterBar({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border/70 bg-card p-2 shadow-2xs overflow-visible",
+        "@container rounded-xl border border-border/70 bg-card p-2 shadow-2xs overflow-visible",
         className,
       )}
     >
       {preContent}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+      {/* Stacks by the container's width (48rem), not the viewport: the bar can sit in a narrow column. */}
+      <div className="flex flex-col gap-3 @3xl:flex-row @3xl:items-center">
         {/* Search */}
         <SearchField
           value={searchValue}
           onChange={onSearchChange}
           placeholder={searchPlaceholder}
-          className="w-full sm:min-w-0 sm:flex-1"
+          className="w-full @3xl:min-w-[14rem] @3xl:flex-1"
         />
         {controls && (
-          <div className="flex items-center gap-1.5 px-0.5 sm:px-1 flex-wrap w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full @3xl:w-auto">
             {controls}
           </div>
         )}
@@ -60,10 +61,12 @@ export function FilterGroup({
   label,
   children,
   className,
+  innerClassName,
 }: {
   label?: string;
   children: ReactNode;
   className?: string;
+  innerClassName?: string;
 }) {
   return (
     <div className={cn("inline-flex items-center gap-1.5 flex-wrap max-w-full", className)}>
@@ -85,7 +88,10 @@ export function FilterGroup({
           const step = event.key === "ArrowRight" ? 1 : -1;
           items[(index + step + items.length) % items.length]?.focus();
         }}
-        className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 max-w-full overflow-x-auto"
+        className={cn(
+          "inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 max-w-full overflow-x-auto",
+          innerClassName,
+        )}
       >
         {children}
       </div>

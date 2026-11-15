@@ -30,7 +30,7 @@ const buttonSizes = {
 };
 
 const BASE_BUTTON_CLASSES = cn(
-  "inline-flex items-center justify-center font-medium",
+  "inline-flex items-center justify-center whitespace-nowrap font-medium",
   "transition-colors duration-150",
   // Focus must stay visible: one ring system for every control (D4).
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",

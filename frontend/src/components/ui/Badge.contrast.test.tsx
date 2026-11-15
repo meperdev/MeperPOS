@@ -45,4 +45,17 @@ describe("Badge variant contrast mapping", () => {
     const palette = /\b(emerald|rose|red|amber|slate|stone|green|orange|yellow)-\d/;
     expect(container.innerHTML).not.toMatch(palette);
   });
+
+  it("keeps the chip and its dot on one line inside flex rows", () => {
+    render(
+      <Badge variant="info" dot>
+        Ahorros: 12345678901234567890
+      </Badge>,
+    );
+
+    const badge = screen.getByText(/Ahorros/);
+    expect(badge.className).toContain("whitespace-nowrap");
+    expect(badge.className).toContain("shrink-0");
+    expect(badge.querySelector("span")!.className).toContain("shrink-0");
+  });
 });

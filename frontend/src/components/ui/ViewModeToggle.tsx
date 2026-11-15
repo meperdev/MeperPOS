@@ -25,11 +25,12 @@ export function ViewModeToggle({
       aria-label="Cambiar vista"
       className={cn("ml-auto hidden sm:inline-flex", className)}
     >
-      <FilterGroup>
+      {/* 36px track = 1px border + 1px padding + 32px segments: the whole control is h-9, like a field. */}
+      <FilterGroup innerClassName="h-9 p-px overflow-visible max-w-none">
         <FilterOptionButton
           active={value === "grid"}
           onClick={() => onChange("grid")}
-          className="h-9 w-9 px-0"
+          className="h-8 w-8 px-0"
           aria-label="Vista en tarjeta"
           title="Vista en tarjeta"
         >
@@ -38,7 +39,7 @@ export function ViewModeToggle({
         <FilterOptionButton
           active={value === "table"}
           onClick={() => onChange("table")}
-          className="h-9 w-9 px-0"
+          className="h-8 w-8 px-0"
           aria-label="Vista en lista"
           title="Vista en lista"
         >
