@@ -20,7 +20,8 @@ The first polish pass is committed and green (tsc clean, vitest 1136/1136). Do N
 A second batch is now in scope, specs S11-S15 in that task file: merge Select/BentoSelect and
 CurrencyInput/MoneyField; rework the 8 dashboard metric cards; stop ImportSheetErrors from
 showing raw codes; kill CATEGORY_CHART_PALETTE hex in lib/dashboard.ts; and the design
-annotations described in S15 (confirm scope with me before touching 10 files).
+annotations described in S15 (one document under docs/design-system listing the 10 ViewModeToggle
+pages, no code changes; I supply the notes).
 
 Order: S13 (smallest, self-contained), then S14, then S11, then S12, S15 last. Work units of
 one behavior each with its tests; no behavior, routing, data-flow or API changes outside the
@@ -59,7 +60,7 @@ These are the items the first pass deliberately left out. They are now in scope 
 - **S12 — Rethink the eight dashboard metric cards.** "Las 8 tarjetas de métricas del dashboard: replantearlas sería un rediseño." Replan the hero-metric layout concept; the current 8 cards are the starting point, not a constraint. Redesign scope, so it carries its own design decision before any code.
 - **S13 — Stop showing raw import error codes.** In `components/imports/ImportSheetErrors.tsx` line 100 the `Badge` renders `error.code ?? error.errorCode` verbatim (`DUPLICATE_SKU`, `INVALID_EMAIL`, `UNKNOWN_ERROR`). Map codes to Spanish through a `CODE_LABELS` record in `components/imports/labels.ts`, next to the existing `SHEET_LABELS`/`FIELD_LABELS`, with a fallback that never leaks the raw code.
 - **S14 — Remove the category hex palette.** `lib/dashboard.ts` line 259 `CATEGORY_CHART_PALETTE` hardcodes 8 hexes (`#C25E36`, `#2563EB`, `#059669`, `#7C3AED`, `#D97706`, `#0891B2`, `#DB2777`, `#EA580C`) and line 295 assigns them per category. They violate S2 twice: palette hues and literal hex. Replace with the semantic token approach D2 requires for charts, and keep category colors stable and distinguishable across renders.
-- **S15 — Design annotations referencing a reference image.** The user wants design notes in the shape `[Image 1]` marked on every page that uses the control in the reference image (a grid/list `ViewModeToggle`, used in `app/{categories,customers,employees,expenses,inventory,loans,payroll,purchase-orders,sales,suppliers}/page.tsx`). **Scope is not confirmed**: whether these are code comments in those 10 files or one annotation document, and what each annotation must say, is still an open question (L8). Ask before touching the 10 files.
+- **S15 — Design annotations, one document.** A single annotations document (not code changes, not comments in the 10 pages) that lists every page using the control in the reference image and the design note that applies to it, referencing the screenshot as `[Image 1]`. The reference image is a grid/list `ViewModeToggle` (pill container, two segments, the active one with border), used in `app/{categories,customers,employees,expenses,inventory,loans,payroll,purchase-orders,sales,suppliers}/page.tsx`. The document belongs under `docs/design-system/`, next to `POLISH_DECISIONS_2026_11.md`, and `docs/design-system/previews/` is where the screenshot itself should be stored. The user supplies the note per page; the first version is the scaffold plus whatever notes exist, never invented design opinions.
 
 ## Tasks
 
@@ -77,7 +78,7 @@ These are the items the first pass deliberately left out. They are now in scope 
 - [ ] **T12 — S14, category chart colors.** Tokenize or derive, then verify categories stay distinguishable and stable.
 - [ ] **T13 — S11, kit pair merges.** Select/BentoSelect and CurrencyInput/MoneyField; large refactor, its own chain decision.
 - [ ] **T14 — S12, dashboard metric cards.** Design decision first (S12), then code.
-- [ ] **T15 — S15, design annotations.** Blocked on L8: confirm scope before touching 10 files.
+- [ ] **T15 — S15, design annotations document.** Scope resolved (L9): one document under `docs/design-system/`, no code changes. Create the scaffold covering the 10 pages, store the screenshot in `docs/design-system/previews/`, and fill only the notes the user actually supplies.
 
 ## Log
 
@@ -89,3 +90,4 @@ These are the items the first pass deliberately left out. They are now in scope 
 - **L6 (2026-11-15).** T9 closed: the 152 uncommitted files are now 15 area commits on `feat/ui-polish`, each with its colocated tests, after `tsc --noEmit` exit 0 and vitest 1136/1136. `frontend/AGENTS.md` stays out of the commits: `next dev` regenerates it, so whether it is tracked is a repo-policy decision, not part of this feature. Nothing pushed and no PR opened; T8 (visual check) and T10 (chain strategy) remain open.
 - **L7 (2026-11-15, verbatim).** "quiero re tomar la sesion en el claude code y añadirle un par de cosas que quieor ajustar junto con lo que el en la sesion que se me bloqueo me dijo: **Cosas que dejé afuera a propósito** — Unificar `Select` con `BentoSelect`, y `CurrencyInput` con `MoneyField`: es un refactor, no pulido. — Las 8 tarjetas de métricas del dashboard: replantearlas sería un rediseño. — Los códigos de error crudos que todavía muestra `ImportSheetErrors`. — Los colores en hex de las categorías en `lib/dashboard`. y hyacerle unas anotaciones de diseño como [Image 1] en todas las paginas que lo usa. Ayudame a dejar el contexto y un mini promtp para retomar y la ruta del worktree" → scoped as S11–S15, T11–T15.
 - **L8 (2026-11-15, open).** S15 is underdefined: `[Image 1]` points at an attached screenshot of the grid/list `ViewModeToggle` (10 pages), but the request does not say whether the annotations are code comments in those files, a single document, or something else, nor what each must say. T15 stays blocked until the user answers.
+- **L9 (2026-11-15, resolved).** Asked which shape S15 takes; the user chose a single annotations document listing the 10 pages and the note for each, referencing `[Image 1]`, with no code touched. S15 and T15 rewritten accordingly; the per-page notes are still the user's to supply, so none were invented.
