@@ -6,6 +6,14 @@ vi.mock("@/lib/api", () => ({
   api: { get: vi.fn() },
 }));
 
+const authState = vi.hoisted(() => ({
+  current: { user: { organizationId: "org-1" } } as {
+    user: { organizationId?: string | null };
+  },
+}));
+
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => authState.current }));
+
 import { api } from "@/lib/api";
 import { useAlerts, type AppAlert } from "./useAlerts";
 
@@ -19,19 +27,20 @@ const alert: AppAlert = {
   revision: "abc123",
 };
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
-
 /** A response envelope is all the hook reads from the axios instance. */
 const respond = (data: AppAlert[]) =>
   ({ data }) as unknown as Awaited<ReturnType<typeof api.get>>;
 
+let client: QueryClient;
+let wrapper: ({ children }: { children: React.ReactNode }) => React.ReactElement;
+
 describe("useAlerts", () => {
   beforeEach(() => {
+    authState.current = { user: { organizationId: "org-1" } };
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    wrapper = ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
     vi.mocked(api.get).mockReset();
   });
 
@@ -61,5 +70,23 @@ describe("useAlerts", () => {
     const { result } = renderHook(() => useAlerts(), { wrapper });
 
     await waitFor(() => expect(result.current[0]?.revision).toBe("abc123"));
+  });
+
+  it("keys the cache by organization so a switch cannot serve the previous tenant", async () => {
+    vi.mocked(api.get).mockResolvedValue(respond([alert]));
+
+    const { result, rerender } = renderHook(() => useAlerts(), { wrapper });
+    await waitFor(() => expect(result.current).toEqual([alert]));
+
+    authState.current = { user: { organizationId: "org-2" } };
+    rerender();
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    expect([...client.getQueryCache().getAll()].map((query) => query.queryKey)).toEqual(
+      expect.arrayContaining([
+        ["alerts", "org-1"],
+        ["alerts", "org-2"],
+      ]),
+    );
   });
 });

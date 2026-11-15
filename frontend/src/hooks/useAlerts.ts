@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 
 export type AlertSeverity = "critical" | "warning" | "info";
@@ -31,8 +32,15 @@ export interface AppAlert {
  * and the hook only asks again while the app is open.
  */
 export function useAlerts(): AppAlert[] {
+  const { user } = useAuth();
+
+  // The payload is tenant-scoped, so the cache key must be too: after an
+  // in-session organization switch the bell stays mounted, and a constant key
+  // would keep serving the previous organization's alerts until the next refetch.
+  const organizationId = user?.organizationId ?? "none";
+
   const { data } = useQuery({
-    queryKey: ["alerts"],
+    queryKey: ["alerts", organizationId],
     queryFn: () => api.get<AppAlert[]>("/alerts").then((res) => res.data),
     staleTime: 30_000,
     refetchInterval: 60_000,

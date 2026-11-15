@@ -34,9 +34,11 @@ La campanita ya no calcula nada. El backend arma la lista y la entrega completa:
 ### El ledger de leídos
 
 `AlertCenter` guarda en `localStorage`, por organización
-(`meperpos:alerts-seen:<organizationId>`), un mapa `id -> revision`. Una alerta
-está **sin leer** cuando su `revision` no coincide con la guardada. Al abrir el
-panel se guardan las revisiones actuales.
+(`meperpos:alerts-seen:<organizationId>`), un mapa `id -> revision`. La consulta
+del feed también está indexada por organización en la caché del cliente, así que
+cambiar de organización en la misma sesión no puede mostrar el feed de la
+anterior. Una alerta está **sin leer** cuando su `revision` no coincide con la
+guardada. Al abrir el panel se guardan las revisiones actuales.
 
 Consecuencia importante: si mañana entra un producto nuevo a stock bajo, la fila
 sigue siendo `stock:low` pero su `revision` cambia, y la campanita vuelve a sonar.
@@ -55,8 +57,10 @@ Un **episodio** por producto (`ProductStockAlert`):
 - vuelve a bajar → se abre el episodio siguiente y se notifica de nuevo.
 
 El barrido corre cada 5 minutos (`StockAlertsScheduler`) y una vez al arrancar el
-proceso, así que un reinicio no pierde un cruce. Es idempotente: repetirlo no
-duplica episodios ni mensajes.
+proceso, así que un reinicio no pierde un cruce. El barrido de arranque **no
+bloquea el listen**: se lanza en segundo plano, porque una sesión de WhatsApp
+lenta o caída no puede retrasar el arranque del servicio. Es idempotente:
+repetirlo no duplica episodios ni mensajes.
 
 ### A quién le llega
 

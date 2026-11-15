@@ -30,6 +30,22 @@ describe('StockAlertsScheduler', () => {
     expect(alerts.scanAll).toHaveBeenCalledTimes(1);
   });
 
+  it('does not block startup while the scan is still running', async () => {
+    let release!: () => void;
+    const gate = new Promise<typeof summary>((resolve) => {
+      release = () => resolve(summary);
+    });
+    const alerts = {
+      scanAll: jest.fn(() => gate),
+    } as unknown as StockAlertsService;
+    const scheduler = new StockAlertsScheduler(alerts);
+
+    await expect(scheduler.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(alerts.scanAll).toHaveBeenCalledTimes(1);
+
+    release();
+  });
+
   it('does nothing when the feature is disabled', async () => {
     process.env.STOCK_ALERTS_ENABLED = 'false';
     const alerts = service();

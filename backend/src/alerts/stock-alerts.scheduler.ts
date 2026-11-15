@@ -21,7 +21,10 @@ export class StockAlertsScheduler implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     if (!enabled()) return;
-    await this.run('bootstrap');
+    // Never gate readiness on this scan. It walks every tenant and calls the
+    // provider, so awaiting it here would block the HTTP listener on a slow or
+    // misconfigured WhatsApp session. `run` owns its own failures.
+    void this.run('bootstrap');
   }
 
   @Cron(STOCK_ALERTS_CRON)
