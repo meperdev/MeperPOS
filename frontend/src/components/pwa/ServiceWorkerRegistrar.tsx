@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { PWA_SCOPE, SW_PATH } from "@/lib/pwa";
 import {
   announceWaitingWorker,
+  confirmWaitingUpdate,
   shouldReloadOnControllerChange,
 } from "@/lib/sw-update";
 
@@ -39,7 +40,12 @@ export function ServiceWorkerRegistrar() {
     // takes over a page that had no controller. Reloading then would look like
     // a crash, so the reload is gated on an explicit swap request.
     const onControllerChange = () => {
-      if (shouldReloadOnControllerChange()) window.location.reload();
+      if (!shouldReloadOnControllerChange()) return;
+      // Confirm first: this is the event the swap request was waiting for, and
+      // leaving the watchdog armed would put an offer back over a reload that
+      // is already happening.
+      confirmWaitingUpdate();
+      window.location.reload();
     };
     container.addEventListener("controllerchange", onControllerChange);
 

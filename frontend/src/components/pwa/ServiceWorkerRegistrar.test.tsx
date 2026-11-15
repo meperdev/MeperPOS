@@ -3,7 +3,12 @@ import { act, fireEvent, render, waitFor } from "@testing-library/react";
 
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { PWA_SCOPE, SW_PATH } from "@/lib/pwa";
-import { getSwUpdateSnapshot, resetSwUpdateStore } from "@/lib/sw-update";
+import {
+  announceWaitingWorker,
+  applyWaitingUpdate,
+  getSwUpdateSnapshot,
+  resetSwUpdateStore,
+} from "@/lib/sw-update";
 
 /**
  * jsdom ships no service worker container, so the test supplies one. `waiting`
@@ -33,6 +38,49 @@ function stubServiceWorker(
     configurable: true,
   });
   return register;
+}
+
+/**
+ * The container the registrar subscribes to, with a working emitter. The stub
+ * above installs inert spies, which is why the reload path had no test at all
+ * until the review pointed it out.
+ */
+function stubControllerEvents() {
+  const handlers = new Map<string, Array<() => void>>();
+  const register = vi.fn(async () => ({
+    scope: PWA_SCOPE,
+    waiting: null,
+    addEventListener: vi.fn(),
+  }));
+
+  Object.defineProperty(navigator, "serviceWorker", {
+    value: {
+      register,
+      controller: {},
+      addEventListener: (type: string, handler: () => void) => {
+        handlers.set(type, [...(handlers.get(type) ?? []), handler]);
+      },
+      removeEventListener: vi.fn(),
+    },
+    configurable: true,
+  });
+
+  return {
+    register,
+    fireControllerChange: () => {
+      for (const handler of handlers.get("controllerchange") ?? []) handler();
+    },
+  };
+}
+
+function stubReload() {
+  const reload = vi.fn();
+  Object.defineProperty(window, "location", {
+    value: { reload },
+    configurable: true,
+    writable: true,
+  });
+  return reload;
 }
 
 function forceLoadingState() {
@@ -203,6 +251,40 @@ describe("ServiceWorkerRegistrar", () => {
     // is nothing to replace, so an offer here would be a button that reloads
     // for no reason.
     expect(getSwUpdateSnapshot()).toBe(false);
+  });
+
+  it("does not reload on a controllerchange nobody asked for", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const reload = stubReload();
+    const container = stubControllerEvents();
+
+    render(<ServiceWorkerRegistrar />);
+    await waitFor(() => expect(container.register).toHaveBeenCalledTimes(1));
+
+    // `clients.claim()` fires this on a first install too: reloading there
+    // would look like a crash on the page that just loaded.
+    act(() => container.fireControllerChange());
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads once the operator's swap lands", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const reload = stubReload();
+    const container = stubControllerEvents();
+
+    render(<ServiceWorkerRegistrar />);
+    await waitFor(() => expect(container.register).toHaveBeenCalledTimes(1));
+
+    const worker = { postMessage: vi.fn(), state: "installed" };
+    act(() => {
+      announceWaitingWorker(worker as unknown as ServiceWorker);
+      applyWaitingUpdate();
+    });
+
+    act(() => container.fireControllerChange());
+
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it("survives a rejected registration", async () => {

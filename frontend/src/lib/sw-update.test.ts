@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  SWAP_TIMEOUT_MS,
   announceWaitingWorker,
   applyWaitingUpdate,
+  confirmWaitingUpdate,
   getSwUpdateSnapshot,
   resetSwUpdateStore,
   shouldReloadOnControllerChange,
@@ -15,7 +17,12 @@ function fakeWorker() {
   };
 }
 
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   resetSwUpdateStore();
   vi.restoreAllMocks();
 });
@@ -85,5 +92,68 @@ describe("sw update store", () => {
   it("ignores a swap request with no waiting worker", () => {
     expect(applyWaitingUpdate()).toBe(false);
     expect(shouldReloadOnControllerChange()).toBe(false);
+  });
+});
+
+describe("sw update store — a swap that never lands", () => {
+  it("keeps the offer while the swap is in flight", () => {
+    announceWaitingWorker(fakeWorker());
+    applyWaitingUpdate();
+
+    // Not yet confirmed: the offer is gone from the banner, but the request is
+    // still open, so nothing has been declared finished.
+    expect(getSwUpdateSnapshot()).toBe(false);
+    expect(shouldReloadOnControllerChange()).toBe(true);
+  });
+
+  it("puts the offer back when the worker never takes control", () => {
+    const worker = fakeWorker();
+    announceWaitingWorker(worker);
+    applyWaitingUpdate();
+
+    vi.advanceTimersByTime(SWAP_TIMEOUT_MS);
+
+    // The banner vanishing with, old code still running is the failure this
+    // covers: the operator gets the offer back instead of a silent dead end.
+    expect(getSwUpdateSnapshot()).toBe(true);
+    expect(shouldReloadOnControllerChange()).toBe(false);
+  });
+
+  it("does not arm a reload after the swap timed out", () => {
+    announceWaitingWorker(fakeWorker());
+    applyWaitingUpdate();
+    vi.advanceTimersByTime(SWAP_TIMEOUT_MS);
+
+    // An armed flag that never expires would reload a page nobody asked to
+    // reload, mid-sale, on some later controllerchange.
+    expect(shouldReloadOnControllerChange()).toBe(false);
+  });
+
+  it("stops the timer once the swap is confirmed", () => {
+    announceWaitingWorker(fakeWorker());
+    applyWaitingUpdate();
+    confirmWaitingUpdate();
+
+    vi.advanceTimersByTime(SWAP_TIMEOUT_MS);
+
+    expect(getSwUpdateSnapshot()).toBe(false);
+  });
+
+  it("keeps the operator's reload armed after a confirmation", () => {
+    announceWaitingWorker(fakeWorker());
+    applyWaitingUpdate();
+    confirmWaitingUpdate();
+
+    expect(shouldReloadOnControllerChange()).toBe(true);
+  });
+
+  it("allows a second attempt after a failed swap", () => {
+    const worker = fakeWorker();
+    announceWaitingWorker(worker);
+    applyWaitingUpdate();
+    vi.advanceTimersByTime(SWAP_TIMEOUT_MS);
+
+    expect(applyWaitingUpdate()).toBe(true);
+    expect(worker.postMessage).toHaveBeenCalledTimes(2);
   });
 });
