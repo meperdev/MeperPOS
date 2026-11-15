@@ -190,7 +190,7 @@ export default function UsersPage() {
                 title="No hay usuarios registrados."
               />
             ) : (
-              <div className="divide-y divide-border/60">
+              <div className="@container divide-y divide-border/60">
                 {users.map((user) => {
                   const initials = user.name
                     .split(" ")
@@ -202,9 +202,9 @@ export default function UsersPage() {
                   return (
                     <div
                       key={user.id}
-                      className="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-3 py-3.5 @2xl:flex-row @2xl:items-center @2xl:justify-between"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="w-9 h-9 rounded-lg bg-muted/60 border border-border/70 flex items-center justify-center shrink-0">
                           <span className="text-xs font-semibold text-foreground">
                             {initials}
@@ -219,7 +219,7 @@ export default function UsersPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 @2xl:shrink-0 @2xl:justify-end">
                         <Badge variant="default">
                           <Shield className="mr-1 h-3 w-3 text-muted-foreground" />
                           {roleLabel[user.role] || user.role}

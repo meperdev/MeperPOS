@@ -22,12 +22,12 @@ export default function SettingsLayout({
           subtitle="Ajusta la configuración del sistema"
         />
 
-        <div className="flex flex-col lg:flex-row lg:gap-6">
+        <div className="@container flex flex-col @4xl:flex-row @4xl:gap-6">
           <nav
             aria-label="Secciones de configuración"
-            className="lg:w-56 lg:shrink-0"
+            className="@4xl:w-56 @4xl:shrink-0"
           >
-            <ul className="flex flex-wrap items-center gap-1.5 lg:sticky lg:top-6 lg:flex-col lg:items-stretch lg:gap-1">
+            <ul className="flex flex-wrap items-center gap-1.5 @4xl:sticky @4xl:top-6 @4xl:flex-col @4xl:items-stretch @4xl:gap-1">
               {settingsSections.map((section) => {
                 const isActive =
                   pathname === section.href ||
@@ -41,7 +41,7 @@ export default function SettingsLayout({
                       scroll={false}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "inline-flex lg:flex h-9 items-center gap-2 rounded-lg px-3 text-xs whitespace-nowrap transition-colors duration-150",
+                        "inline-flex @4xl:flex h-9 items-center gap-2 rounded-lg px-3 text-xs whitespace-nowrap transition-colors duration-150",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                         isActive
                           ? "bg-muted/70 text-foreground font-semibold border border-border/70 shadow-2xs"
@@ -63,7 +63,7 @@ export default function SettingsLayout({
             </ul>
           </nav>
 
-          <div className="flex-1 min-w-0 mt-4 lg:mt-0">{children}</div>
+          <div className="flex-1 min-w-0 mt-4 @4xl:mt-0">{children}</div>
         </div>
       </div>
     </DashboardLayout>

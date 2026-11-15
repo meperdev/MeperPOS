@@ -115,4 +115,30 @@ describe("Invoicing & Receipts settings page", () => {
 
     expect(updateReceiptPrefixMutateAsyncMock).toHaveBeenCalledWith("FAC-");
   });
+
+  it("sizes the two columns by the content container, so the form keeps its width", () => {
+    render(<InvoicingSettingsPage />);
+
+    const grid = screen
+      .getByText("Impresión de comprobantes")
+      .closest("section")!
+      .parentElement!.parentElement!;
+
+    expect(grid.parentElement!.className).toContain("@container");
+    expect(grid.className).toContain(
+      "@4xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]",
+    );
+    expect(grid.className).not.toContain("lg:grid-cols");
+    expect(grid.className).not.toContain("lg:gap-5");
+    expect(grid.className).toContain("@4xl:gap-5");
+
+    const previewWrapper = grid.children[1] as HTMLElement;
+    expect(
+      previewWrapper.contains(
+        screen.getByRole("article", { name: /vista previa del comprobante/i }),
+      ),
+    ).toBe(true);
+    expect(previewWrapper.className).toContain("@4xl:sticky");
+    expect(previewWrapper.className).not.toContain("lg:sticky");
+  });
 });

@@ -294,12 +294,12 @@ function WhatsAppSettings() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="@container space-y-4">
       <PageIntro />
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
+      <div className="grid gap-4 @4xl:grid-cols-2 @4xl:items-stretch">
         <SettingsCard
-          className="h-full"
+          className="h-full @container"
           title="Canal comercial"
         description="Estado del número con el que se atiende a los clientes"
         icon={<MessageCircle className="h-4 w-4" aria-hidden="true" />}
@@ -380,8 +380,8 @@ function WhatsAppSettings() {
           {/* The QR has its own lifecycle: a status the provider did not report
               never hides the credential an operator may need to scan. */}
           <div className="border-t border-border/60 pt-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
+            <div className="flex flex-col gap-2 @md:flex-row @md:items-start @md:justify-between">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-foreground">
                   Vinculación por código QR
                 </p>
@@ -403,7 +403,7 @@ function WhatsAppSettings() {
             </div>
 
             {qrRequested && (
-              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="mt-3 flex flex-col gap-3 @md:flex-row @md:items-start">
                 {qrQuery.isError ? (
                   <ErrorState
                     message={getApiErrorMessage(
@@ -636,14 +636,16 @@ function WhatsAppSettings() {
             </dl>
           )}
 
-          <div className="-mx-4 overflow-x-auto sm:-mx-5">
+          <div>
             {deliveriesQuery.isLoading && !deliveriesQuery.data ? (
-              <TableSkeleton
-                columns={4}
-                rows={6}
-                label="Cargando envíos…"
-                className="min-w-[420px] rounded-none border-0 bg-transparent"
-              />
+              <div className="-mx-4 overflow-x-auto sm:-mx-5">
+                <TableSkeleton
+                  columns={4}
+                  rows={6}
+                  label="Cargando envíos…"
+                  className="min-w-[420px] rounded-none border-0 bg-transparent"
+                />
+              </div>
             ) : deliveriesQuery.isError && !deliveriesQuery.data ? (
               <ErrorState
                 message={channelErrorMessage(
@@ -652,53 +654,55 @@ function WhatsAppSettings() {
                 )}
                 retryLabel="Reintentar"
                 onRetry={() => void deliveriesQuery.refetch()}
-                className="mx-4 min-h-[140px] sm:mx-5"
+                className="min-h-[140px]"
               />
             ) : deliveries.length === 0 ? (
               <EmptyState
                 icon={<Send className="h-4 w-4" />}
                 title="Sin envíos registrados"
                 subtitle="El historial aparece cuando se envía el primer reporte."
-                className="mx-4 min-h-[140px] sm:mx-5"
+                className="min-h-[140px]"
               />
             ) : (
-              <Table className="min-w-[420px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableCell as="th">Tipo</TableCell>
-                    <TableCell as="th">Fecha del reporte</TableCell>
-                    <TableCell as="th">Estado</TableCell>
-                    <TableCell as="th">Enviado el</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <tbody>
-                  {deliveries.map((delivery) => (
-                    <TableRow key={delivery.id}>
-                      <TableCell className="text-foreground">
-                        {KIND_LABELS[delivery.kind]}
-                      </TableCell>
-                      <TableCell className="tabular-nums text-foreground">
-                        {formatDate(delivery.reportDate)}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          domain="whatsapp-delivery"
-                          status={delivery.status}
-                        />
-                        {delivery.status === "FAILED" &&
-                          delivery.failureReason && (
-                            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                              {FAILURE_LABELS[delivery.failureReason]}
-                            </span>
-                          )}
-                      </TableCell>
-                      <TableCell className="tabular-nums text-muted-foreground">
-                        {delivery.sentAt ? formatDateTime(delivery.sentAt) : "—"}
-                      </TableCell>
+              <div className="-mx-4 overflow-x-auto sm:-mx-5">
+                <Table className="min-w-[420px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell as="th">Tipo</TableCell>
+                      <TableCell as="th">Fecha del reporte</TableCell>
+                      <TableCell as="th">Estado</TableCell>
+                      <TableCell as="th">Enviado el</TableCell>
                     </TableRow>
-                  ))}
-                </tbody>
-              </Table>
+                  </TableHeader>
+                  <tbody>
+                    {deliveries.map((delivery) => (
+                      <TableRow key={delivery.id}>
+                        <TableCell className="text-foreground">
+                          {KIND_LABELS[delivery.kind]}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-foreground">
+                          {formatDate(delivery.reportDate)}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            domain="whatsapp-delivery"
+                            status={delivery.status}
+                          />
+                          {delivery.status === "FAILED" &&
+                            delivery.failureReason && (
+                              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                                {FAILURE_LABELS[delivery.failureReason]}
+                              </span>
+                            )}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {delivery.sentAt ? formatDateTime(delivery.sentAt) : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
             )}
           </div>
         </div>

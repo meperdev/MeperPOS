@@ -77,4 +77,41 @@ describe("settings sub-sidebar layout", () => {
     expect(invoicingLink).not.toHaveAttribute("aria-current");
     expect(invoicingLink).toHaveAttribute("data-scroll", "false");
   });
+
+  it("switches to side-by-side by the shell's container width, not the viewport", () => {
+    render(
+      <SettingsLayout>
+        <div>Contenido</div>
+      </SettingsLayout>
+    );
+
+    const nav = screen.getByRole("navigation", {
+      name: "Secciones de configuración",
+    });
+    const shell = nav.parentElement!;
+    expect(shell.className).toContain("@container");
+    expect(shell.className).toContain("flex-col");
+    expect(shell.className).toContain("@4xl:flex-row");
+    expect(shell.className).not.toContain("lg:flex-row");
+
+    expect(nav.className).toContain("@4xl:w-56");
+    expect(nav.className).toContain("@4xl:shrink-0");
+    expect(nav.className).not.toContain("lg:w-56");
+
+    const list = nav.querySelector("ul")!;
+    expect(list.className).toContain("flex-wrap");
+    expect(list.className).toContain("@4xl:flex-col");
+    expect(list.className).toContain("@4xl:sticky");
+    expect(list.className).not.toContain("lg:flex-col");
+
+    const link = screen.getByRole("link", { name: "General" });
+    expect(link.className).toContain("inline-flex");
+    expect(link.className).toContain("@4xl:flex");
+    expect(link.className).not.toContain("lg:flex");
+
+    const content = screen.getByText("Contenido").parentElement!;
+    expect(content.className).toContain("min-w-0");
+    expect(content.className).toContain("@4xl:mt-0");
+    expect(content.className).not.toContain("lg:mt-0");
+  });
 });
