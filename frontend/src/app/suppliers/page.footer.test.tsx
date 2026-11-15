@@ -107,13 +107,14 @@ describe("Suppliers card footer", () => {
     expect(grid!.className).not.toMatch(/(^|\s)(sm|md|lg|xl):grid-cols/);
   });
 
-  it("lets the bank chip shrink and truncate instead of pushing the actions", () => {
+  it("keeps the bank name readable and lets the account number absorb the squeeze", () => {
     render(<SuppliersPage />);
 
+    // The bank is short and identifies the account; the account number is what truncates.
     const chip = screen.getByText("Bancolombia");
-    expect(chip.className).toContain("min-w-0");
+    expect(chip.className).toContain("shrink-0");
+    expect(chip.className).toContain("max-w-[9rem]");
     expect(chip.className).toContain("truncate");
-    expect(chip.className).not.toContain("shrink-0");
 
     const left = chip.parentElement!;
     expect(left.className).toContain("min-w-0");

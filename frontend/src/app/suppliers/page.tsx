@@ -429,7 +429,7 @@ export default function SuppliersPage() {
                               {supplier.bank && (
                                 <span
                                   className={cn(
-                                    "block min-w-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
+                                    "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
                                     getBankChipStyle(supplier.bank),
                                   )}
                                 >
@@ -606,7 +606,7 @@ export default function SuppliersPage() {
                               {supplier.bank && (
                                 <span
                                   className={cn(
-                                    "block min-w-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
+                                    "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
                                     getBankChipStyle(supplier.bank),
                                   )}
                                 >
