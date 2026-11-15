@@ -33,17 +33,22 @@ export function FilterBar({
       )}
     >
       {preContent}
-      {/* Stacks by the container's width (48rem), not the viewport: the bar can sit in a narrow column. */}
-      <div className="flex flex-col gap-3 @3xl:flex-row @3xl:items-center">
+      {/*
+        Intrinsic wrap, no width threshold: the controls drop to their own row only when they do
+        not fit beside a 14rem search. Search grows with weight 999, so on a shared row it takes the
+        leftover; when the controls wrap alone they grow to the full row and the view toggle
+        (ml-auto) lands on the right.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
         {/* Search */}
         <SearchField
           value={searchValue}
           onChange={onSearchChange}
           placeholder={searchPlaceholder}
-          className="w-full @3xl:min-w-[14rem] @3xl:flex-1"
+          className="min-w-[14rem] flex-[999_1_16rem]"
         />
         {controls && (
-          <div className="flex flex-wrap items-center gap-2 w-full @3xl:w-auto">
+          <div className="flex min-w-0 flex-[1_1_auto] flex-wrap items-center gap-2">
             {controls}
           </div>
         )}

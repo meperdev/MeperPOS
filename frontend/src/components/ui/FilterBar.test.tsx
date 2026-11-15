@@ -25,32 +25,31 @@ describe("FilterBar container layout", () => {
     expect(root.className).not.toMatch(/\bsm:flex-row\b/);
   });
 
-  it("stacks the search row until the container reaches 48rem (@3xl)", () => {
+  it("wraps intrinsically instead of stacking at a fixed width", () => {
     renderBar();
 
     const row = screen.getByRole("searchbox").parentElement!.parentElement!;
-    expect(row.className).toContain("flex-col");
-    expect(row.className).toContain("gap-3");
-    expect(row.className).toContain("@3xl:flex-row");
-    expect(row.className).toContain("@3xl:items-center");
+    expect(row.className).toContain("flex-wrap");
+    expect(row.className).toContain("items-center");
+    expect(row.className).not.toContain("flex-col");
+    expect(row.className).not.toMatch(/@3xl:/);
   });
 
-  it("lets the search field flex only once the row is horizontal", () => {
+  it("gives the search a 14rem floor and nearly all leftover width on a shared row", () => {
     renderBar();
 
     const searchWrapper = screen.getByRole("searchbox").parentElement!;
-    expect(searchWrapper.className).toContain("w-full");
-    expect(searchWrapper.className).toContain("@3xl:min-w-[14rem]");
-    expect(searchWrapper.className).toContain("@3xl:flex-1");
+    expect(searchWrapper.className).toContain("min-w-[14rem]");
+    expect(searchWrapper.className).toContain("flex-[999_1_16rem]");
   });
 
-  it("wraps controls in a group that only shrinks to content in the wide layout", () => {
+  it("lets the controls grow to the full row once they wrap alone", () => {
     renderBar();
 
     const controls = screen.getByText("Control").parentElement!;
     expect(controls.className).toContain("flex-wrap");
-    expect(controls.className).toContain("w-full");
-    expect(controls.className).toContain("@3xl:w-auto");
+    expect(controls.className).toContain("flex-[1_1_auto]");
+    expect(controls.className).toContain("min-w-0");
   });
 });
 
