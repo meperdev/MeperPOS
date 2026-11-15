@@ -156,9 +156,9 @@ describe("Reports economics-first evidence", () => {
     expect(screen.getByRole("heading", { name: "Economía" })).toBeTruthy();
     expect(screen.getAllByText(/100\.000/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Comparación con período anterior/)).toBeTruthy();
-    expect(screen.getByText("Productos Más Vendidos")).toBeTruthy();
-    expect(screen.getByText("Top Clientes")).toBeTruthy();
-    expect(screen.getByText("Métodos de Pago")).toBeTruthy();
+    expect(screen.getByText("Productos más vendidos")).toBeTruthy();
+    expect(screen.getByText("Mejores clientes")).toBeTruthy();
+    expect(screen.getByText("Métodos de pago")).toBeTruthy();
     expect(screen.queryByText("Rendimiento por vendedor")).toBeNull();
     expect(screen.queryByText("Importar Inventario")).toBeNull();
   });
@@ -190,7 +190,7 @@ describe("Reports economics-first evidence", () => {
   it("announces the economic loading state", () => {
     useEconomicOverviewMock.mockReturnValueOnce({ data: undefined, isLoading: true, error: null });
     render(<ReportsPage />);
-    expect(screen.getByText("Cargando economía...")).toBeTruthy();
+    expect(screen.getByText("Cargando economía…")).toBeTruthy();
     expect(document.querySelector("[aria-busy='true']")).toBeTruthy();
   });
 
@@ -219,7 +219,7 @@ describe("Reports economics-first evidence", () => {
 
     // Helpers
     expect(screen.getByText("Lo que entró por ventas")).toBeTruthy();
-    expect(screen.getByText("Lo que pagás para que funcione el negocio")).toBeTruthy();
+    expect(screen.getByText("Lo que pagas para que funcione el negocio")).toBeTruthy();
 
     // Breakdown card
     expect(screen.getByText("Desglose")).toBeTruthy();
@@ -231,7 +231,7 @@ describe("Reports economics-first evidence", () => {
     expect(screen.getByText("Plata que entró")).toBeTruthy();
     expect(screen.getByText("Plata que salió")).toBeTruthy();
     expect(screen.getByText("Lo que costó tu inventario")).toBeTruthy();
-    expect(screen.getByText("Lo que vale si vendés todo")).toBeTruthy();
+    expect(screen.getByText("Lo que vale si vendes todo")).toBeTruthy();
     expect(screen.getByText("Ganancia posible")).toBeTruthy();
   });
 
