@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import { InstallPromptProvider } from "@/contexts/InstallPromptContext";
+import { BackGestureGuard } from "@/components/pwa/BackGestureGuard";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { buildPwaMetadata, buildPwaViewport } from "@/lib/pwa";
 
@@ -58,6 +59,7 @@ export default function RootLayout({
         </QueryProvider>
         <Analytics />
         <ServiceWorkerRegistrar />
+        <BackGestureGuard />
       </body>
     </html>
   );
