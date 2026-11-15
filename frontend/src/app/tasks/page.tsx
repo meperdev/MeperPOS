@@ -725,12 +725,12 @@ export default function TasksPage() {
           {/* Right Column: Selected Task Inspector & Timeline (5 cols) */}
           <div className="lg:col-span-5 lg:sticky lg:top-4">
             {selectedTask ? (
-              <Card className="border-border/70 bg-card overflow-hidden shadow-2xs flex flex-col lg:max-h-[calc(100vh-6.5rem)]">
+              <Card className="@container border-border/70 bg-card overflow-hidden shadow-2xs flex flex-col lg:max-h-[calc(100vh-6.5rem)]">
                 {/* Header & Quick Action Buttons */}
                 <div className="border-b border-border/60 p-4 shrink-0">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
                     <div className="min-w-0">
-                      <h2 className="text-sm sm:text-base font-semibold text-foreground truncate">
+                      <h2 className="text-sm sm:text-base font-semibold text-foreground break-words">
                         {selectedTask.title}
                       </h2>
                       <p className="text-xs text-muted-foreground mt-0.5">
@@ -937,7 +937,7 @@ export default function TasksPage() {
                       Todavía no hay eventos registrados para esta tarea.
                     </div>
                   ) : (
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto overflow-x-hidden pr-1">
                       {selectedTaskTimeline.map((event) => (
                         <div
                           key={event.id}
@@ -946,7 +946,7 @@ export default function TasksPage() {
                           <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
                           <div className="min-w-0 flex-1 space-y-0.5">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-semibold text-foreground text-xs truncate">
+                              <span className="min-w-0 break-words font-semibold text-foreground text-xs">
                                 {getTaskEventLabel(event.type)}
                                 {event.fromStatus && event.fromStatus !== event.toStatus && (
                                   <span className="ml-1.5 font-normal text-muted-foreground">
@@ -954,7 +954,7 @@ export default function TasksPage() {
                                   </span>
                                 )}
                               </span>
-                              <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+                              <span className="text-[11px] text-muted-foreground tabular-nums">
                                 {formatDateTime(event.createdAt)}
                               </span>
                             </div>

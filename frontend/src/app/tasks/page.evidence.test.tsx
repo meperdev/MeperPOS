@@ -220,4 +220,66 @@ describe("Tasks module evidence", () => {
     expect(mutateAsync).toHaveBeenCalledTimes(1);
     expect(mutateAsync).toHaveBeenCalledWith("task-completed");
   });
+
+  it("keeps the history list free of sideways scroll and lets long text wrap", () => {
+    useTasksMock.mockReturnValue({
+      data: { tasks: [makeTask()], source: "remote" },
+      isLoading: false,
+    });
+    useTaskTimelineMock.mockReturnValue({
+      data: [
+        {
+          id: "event-1",
+          taskId: "task-1",
+          type: "STATUS_CHANGED",
+          fromStatus: "PENDING",
+          toStatus: "IN_PROGRESS",
+          note: null,
+          createdById: "user-1",
+          createdAt: "2026-01-10T13:00:00.000Z",
+          createdBy: { id: "user-1", name: "Ana Admin" },
+        },
+      ],
+      isLoading: false,
+    });
+
+    render(<TasksPage />);
+
+    const label = screen.getByText("Cambio de estado");
+    const list = label.closest(".max-h-40");
+    expect(list).not.toBeNull();
+    expect(list!.className).toContain("overflow-x-hidden");
+
+    const row = label.closest("div.flex.items-start")!;
+    expect(label.className).toContain("break-words");
+    expect(label.className).not.toContain("truncate");
+    expect(row.querySelector(".tabular-nums")!.className).not.toContain("shrink-0");
+  });
+
+  it("stacks the detail header by panel width so the title keeps its room beside the actions", () => {
+    useTasksMock.mockReturnValue({
+      data: { tasks: [makeTask()], source: "remote" },
+      isLoading: false,
+    });
+
+    render(<TasksPage />);
+
+    const panel = screen.getByRole("button", { name: "Editar" }).closest("[class~='@container']");
+    expect(panel).not.toBeNull();
+
+    const title = panel!.querySelector("h2")!;
+    expect(title.textContent).toBe("Revisar vitrina");
+    expect(title.className).toContain("break-words");
+    expect(title.className).not.toContain("truncate");
+
+    const titleBlock = title.parentElement!;
+    expect(titleBlock.className).toContain("min-w-0");
+
+    const header = titleBlock.parentElement!;
+    expect(header.className).toContain("flex-col");
+    expect(header.className).toContain("@md:flex-row");
+    expect(header.className).toContain("@md:items-start");
+    expect(header.className).toContain("@md:justify-between");
+    expect(header.className).not.toContain("sm:flex-row");
+  });
 });
