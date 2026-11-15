@@ -974,9 +974,9 @@ export default function POSPage() {
   return (
     <DashboardLayout>
       <h1 className="sr-only">Punto de venta</h1>
-      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-12 lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
+      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
-        <div className="flex min-h-0 flex-col lg:col-span-7 lg:h-full">
+        <div className="flex min-h-0 flex-col lg:h-full">
           <div className="flex h-[calc(100dvh-8rem)] min-h-[580px] flex-col rounded-2xl border border-border/70 bg-card sm:min-h-[500px] lg:h-full">
             {/* Products Header */}
             <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-border/60">
@@ -993,8 +993,8 @@ export default function POSPage() {
             </div>
 
             {/* Unified search & scanner — types to filter the grid, Enter scans/adds */}
-            <div className="flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="@container flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15">
+              <div className="flex flex-col gap-2 @xl:flex-row @xl:items-center">
                 <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -1133,8 +1133,8 @@ export default function POSPage() {
         </div>
 
         {/* Cart Panel (Desktop) */}
-        <div className="hidden lg:flex min-h-0 lg:col-span-5 lg:h-full flex-col">
-          <div className="h-auto min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-card lg:h-full flex flex-col">
+        <div className="hidden lg:flex min-h-0 lg:h-full flex-col">
+          <div className="@container h-auto min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-card lg:h-full flex flex-col">
             {/* Cart Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
               <h2 className="text-sm font-semibold tracking-tight text-foreground">
@@ -1157,7 +1157,7 @@ export default function POSPage() {
                     key={item.productId}
                     className="flex items-stretch gap-3 p-3 bg-muted/20 rounded-xl border border-border/60 hover:border-border transition-colors duration-150"
                   >
-                    <div className="relative w-20 self-stretch min-h-[4.5rem] bg-muted/60 border border-border/50 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="relative w-12 self-stretch min-h-[4.5rem] bg-muted/60 border border-border/50 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
                       {item.product.imageUrl ? (
                         <Image
                           src={item.product.imageUrl}
@@ -1171,7 +1171,7 @@ export default function POSPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground line-clamp-1 mb-1">
+                      <p className="text-sm font-medium text-foreground line-clamp-2 break-words mb-1">
                         {item.product.name}
                       </p>
                       <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-muted-foreground tabular-nums mb-2">
@@ -1206,7 +1206,7 @@ export default function POSPage() {
                         <span data-testid="line-unit-price">
                           {formatCurrency(item.unitPrice)}
                         </span>{" "}
-                        × {item.quantity}
+                        <span className="whitespace-nowrap">× {item.quantity}</span>
                         {item.discountAmount > 0 && (
                           <span
                             data-testid="line-discount"
@@ -1220,7 +1220,7 @@ export default function POSPage() {
                           </span>
                         )}
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Stepper
                           value={item.quantity}
                           min={1}
@@ -1255,7 +1255,7 @@ export default function POSPage() {
                         </button>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end justify-center">
+                    <div className="flex shrink-0 flex-col items-end justify-center text-right">
                       <span className="stat-number text-base font-semibold text-foreground tabular-nums">
                         {formatCurrency(
                           item.quantity * item.unitPrice - item.discountAmount,

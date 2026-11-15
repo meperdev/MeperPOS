@@ -706,6 +706,47 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(176px, calc((100% - 48px) / 5))), 1fr))");
   });
 
+  it("splits the desktop page into a fluid products column and a fixed 18-22rem cart column", () => {
+    useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
+    const { container } = render(<POSPage />);
+    const split = container.querySelector<HTMLElement>(".lg\\:grid-cols-\\[minmax\\(0\\,1fr\\)_minmax\\(18rem\\,22rem\\)\\]");
+    expect(split).not.toBeNull();
+    expect(split!.className).not.toContain("lg:grid-cols-12");
+    expect(container.querySelector(".lg\\:col-span-7, .lg\\:col-span-5")).toBeNull();
+  });
+
+  it("lets a cart line name wrap to two lines and keeps quantity and total from shrinking", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Arroz Integral Premium Paquete 5 kg")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Arroz Integral Premium Paquete 5 kg" }));
+
+    const row = screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").closest<HTMLElement>("div.items-stretch");
+    expect(row).not.toBeNull();
+    const name = row!.querySelector("p");
+    expect(name!.className).toContain("line-clamp-2");
+    expect(name!.className).not.toContain("line-clamp-1");
+    expect(name!.parentElement!.className).toContain("min-w-0");
+    expect(name!.parentElement!.className).toContain("flex-1");
+    expect(screen.getByText("× 1").className).toContain("whitespace-nowrap");
+    expect(row!.querySelector("span.stat-number")!.parentElement!.className).toContain("shrink-0");
+  });
+
+  it("gives the products search its own full row below the @xl container width", () => {
+    useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
+    render(<POSPage />);
+    const input = screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código...");
+    const searchHeader = input.closest<HTMLElement>("div.p-4");
+    expect(searchHeader!.className).toContain("@container");
+    const row = input.closest<HTMLElement>("div.relative")!.parentElement!;
+    expect(row.className).toContain("@xl:flex-row");
+    expect(row.className).not.toContain("sm:flex-row");
+    expect(input.closest<HTMLElement>("div.relative")!.className).toContain("min-w-0");
+  });
+
   it("pages the complete server-filtered service fixture, not the merchandise page", async () => {
     const merchandise = Array.from({ length: 20 }, (_, i) => makeProduct(`p${i}`, `Mercancia ${i}`));
     const services = Array.from({ length: 7 }, (_, i) => ({ ...makeProduct(`s${i}`, `Servicio ${i}`), type: "SERVICE" as const, stock: 0 }));

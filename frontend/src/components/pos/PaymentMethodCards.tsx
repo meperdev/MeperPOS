@@ -22,7 +22,7 @@ export function PaymentMethodCard({
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        "relative flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors duration-150 ease-out",
+        "relative flex flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2.5 cursor-pointer transition-colors duration-150 ease-out",
         selected
           ? "border-success/30 bg-success/10 text-foreground font-semibold"
           : "border-border/80 bg-muted/20 dark:bg-background/50 text-muted-foreground hover:border-foreground/25 hover:bg-muted/50 hover:text-foreground"
@@ -36,13 +36,13 @@ export function PaymentMethodCard({
       >
         {icon}
       </span>
-      <span className="text-[13px] tracking-tight truncate">
+      <span className="text-[13px] tracking-tight whitespace-nowrap">
         {label}
       </span>
       {selected && (
         <span
           aria-hidden="true"
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-success ml-0.5"
+          className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success"
         />
       )}
     </button>
@@ -74,7 +74,7 @@ export function PaymentMethodCards({ selectedMethod, onMethodChange }: PaymentMe
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-2">
       {methods.map((method) => (
         <PaymentMethodCard
           key={method.type}
