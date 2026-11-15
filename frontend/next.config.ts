@@ -1,5 +1,11 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { apiProxyRewrites, assertProxyConfigured } from "./src/lib/api-proxy";
+
+assertProxyConfigured({
+  apiUrl: process.env.NEXT_PUBLIC_API_URL,
+  backendOrigin: process.env.BACKEND_ORIGIN,
+});
 
 /**
  * Content-Security-Policy parts (spec S3, "sanitize without nonce", phase 1).
@@ -206,6 +212,11 @@ const nextConfig: NextConfig = {
         hostname: "res.cloudinary.com",
       },
     ],
+  },
+  // Preview-only: restored from `feat/api-same-origin-proxy` so a Vercel
+  // preview can be exercised without touching backend CORS.
+  async rewrites() {
+    return apiProxyRewrites(process.env.BACKEND_ORIGIN);
   },
   // The same-origin /api proxy lives on `feat/api-same-origin-proxy`, not here:
   // it is the one piece of PWA work that changes production routing, so it is
