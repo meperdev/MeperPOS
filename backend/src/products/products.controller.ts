@@ -113,7 +113,9 @@ export class ProductsController {
   }
 
   @Get('low-stock')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  // Inventory staff reads the low-stock list on their own screen; the feed and
+  // the bell already enable stock alerts for that role, so the API must agree.
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.INVENTORY_USER)
   @ApiOperation({ summary: 'Get products with low stock' })
   getLowStock(@CurrentUser() user: RequestUser) {
     return this.productsService.getLowStockProducts(user.organizationId);
