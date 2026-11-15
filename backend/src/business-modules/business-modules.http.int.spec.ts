@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../app.module';
-import { configureApp } from '../app-configuration';
+import { configureApp, configureErrorHandling } from '../app-configuration';
 
 describe('Organization modules (HTTP integration)', () => {
   let app: INestApplication;
@@ -25,6 +25,7 @@ describe('Organization modules (HTTP integration)', () => {
     }).compile();
     app = testModule.createNestApplication({ logger: false });
     configureApp(app);
+    configureErrorHandling(app);
     await app.init();
     prisma = new PrismaClient();
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -156,5 +157,36 @@ describe('Organization modules (HTTP integration)', () => {
       .set('Authorization', auth(adminToken))
       .expect(200);
     expect(restored.body.placaMoto).toBe('OLD123');
+  });
+
+  it('lists the module catalog for an organization and for its members', async () => {
+    const auth = (token: string) => `Bearer ${token}`;
+    await request(app.getHttpServer())
+      .get(`/api/admin/organizations/${orgA}/modules`)
+      .set('Authorization', auth(adminToken))
+      .expect(403);
+
+    const asSuperAdmin = await request(app.getHttpServer())
+      .get(`/api/admin/organizations/${orgA}/modules`)
+      .set('Authorization', auth(superToken))
+      .expect(200);
+    expect(asSuperAdmin.body).toHaveLength(1);
+    expect(asSuperAdmin.body[0]).toEqual(
+      expect.objectContaining({ id: 'vehicles', name: 'Vehículos' }),
+    );
+    expect(typeof asSuperAdmin.body[0].enabled).toBe('boolean');
+
+    const asMember = await request(app.getHttpServer())
+      .get('/api/business-modules')
+      .set('Authorization', auth(secondToken))
+      .expect(200);
+    expect(asMember.body).toHaveLength(1);
+    expect(typeof asMember.body[0].enabled).toBe('boolean');
+
+    await request(app.getHttpServer())
+      .patch(`/api/admin/organizations/${orgA}/modules/unknown-module`)
+      .set('Authorization', auth(superToken))
+      .send({ enabled: false })
+      .expect(400);
   });
 });
