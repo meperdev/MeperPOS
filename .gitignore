@@ -34,3 +34,4 @@ generated/
 
 # Local Pi runtime state
 .atl/
+.vercel
