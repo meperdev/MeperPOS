@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { useReceivePurchaseOrder } from "@/hooks/usePurchaseOrders";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -74,7 +75,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
     <Modal isOpen={isOpen} onClose={onClose} title="Recibir productos" size="lg">
       {pendingItems.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No hay items pendientes por recibir.
+          No hay productos pendientes por recibir.
         </p>
       ) : (
         <div className="space-y-4">
@@ -118,18 +119,19 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                         {it.product?.sku}
                       </p>
                     </td>
-                    <td className="py-2 px-3 text-right text-xs text-foreground font-mono tabular-nums">
+                    <td className="py-2 px-3 text-right text-xs text-foreground tabular-nums">
                       {it.qtyOrdered}
                     </td>
-                    <td className="py-2 px-3 text-right text-xs text-muted-foreground font-mono tabular-nums">
+                    <td className="py-2 px-3 text-right text-xs text-muted-foreground tabular-nums">
                       {it.qtyReceived}
                     </td>
-                    <td className="py-2 px-3 text-right text-xs font-semibold text-amber-600 dark:text-amber-400 font-mono tabular-nums">
+                    <td className="py-2 px-3 text-right text-xs font-semibold text-warning-text tabular-nums">
                       {it.pending}
                     </td>
                     <td className="py-2 px-4">
-                      <input
+                      <Input
                         type="number"
+                        aria-label={`Cantidad a recibir de ${it.product?.name ?? "producto"}`}
                         min={0}
                         max={it.pending}
                         step={1}
@@ -146,7 +148,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                             ),
                           }))
                         }
-                        className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
+                        className="text-right"
                       />
                     </td>
                   </tr>

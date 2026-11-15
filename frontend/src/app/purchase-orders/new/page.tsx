@@ -10,11 +10,14 @@ import {
   useCreatePurchaseOrder,
   type CreatePurchaseOrderItemPayload,
 } from "@/hooks/usePurchaseOrders";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { SearchField } from "@/components/ui/SearchField";
+import { Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ArrowLeft, Plus, Trash2, ClipboardList } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
@@ -132,21 +135,17 @@ export default function NewPurchaseOrderPage() {
   return (
     <DashboardLayout>
       <div className="space-y-4 lg:space-y-5">
-        <div className="flex items-center gap-3">
+        <div className="space-y-3">
           <Link
             href="/purchase-orders"
-            className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border hover:bg-muted hover:text-foreground"
+            className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Volver
           </Link>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-              Nueva orden de compra
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Crea un borrador de compra para confirmar y recibir stock más tarde
-            </p>
-          </div>
+          <PageHeader
+            title="Nueva orden de compra"
+            subtitle="Crea un borrador de compra para confirmar y recibir stock más tarde"
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
@@ -166,18 +165,14 @@ export default function NewPurchaseOrderPage() {
                 ]}
               />
 
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Notas u observaciones (opcional)
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                  placeholder="Instrucciones de entrega, número de cotización o detalles del pedido..."
-                  className="w-full rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border focus:bg-background transition-colors resize-none"
-                />
-              </div>
+              <Input
+                textarea
+                rows={3}
+                label="Notas u observaciones (opcional)"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Instrucciones de entrega, número de cotización o detalles del pedido…"
+              />
             </div>
 
             <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
@@ -189,7 +184,6 @@ export default function NewPurchaseOrderPage() {
                   type="button"
                   size="sm"
                   onClick={() => setShowPicker((s) => !s)}
-                  className="h-7 text-xs"
                 >
                   <Plus className="w-3.5 h-3.5 mr-1" /> Agregar producto
                 </Button>
@@ -201,7 +195,7 @@ export default function NewPurchaseOrderPage() {
                     autoFocus
                     value={productSearch}
                     onChange={setProductSearch}
-                    placeholder="Buscar producto por nombre o SKU..."
+                    placeholder="Buscar producto por nombre o SKU…"
                     inputClassName="border border-border/70 bg-background text-sm"
                   />
                   <div className="max-h-60 overflow-y-auto rounded-lg border border-border/70 bg-card divide-y divide-border/60">
@@ -215,13 +209,13 @@ export default function NewPurchaseOrderPage() {
                           key={p.id}
                           type="button"
                           onClick={() => addProduct(p)}
-                          className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/50 transition-colors"
+                          className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-foreground truncate">
                               {p.name}
                             </p>
-                            <p className="text-[11px] text-muted-foreground font-mono tabular-nums">
+                            <p className="text-[11px] text-muted-foreground tabular-nums">
                               {p.sku} · Costo {formatCurrency(p.costPrice)}
                             </p>
                           </div>
@@ -234,17 +228,11 @@ export default function NewPurchaseOrderPage() {
               )}
 
               {items.length === 0 ? (
-                <div className="px-5 py-10 text-center">
-                  <div className="w-9 h-9 mx-auto rounded-lg bg-muted/40 border border-border/60 flex items-center justify-center mb-2.5 text-muted-foreground">
-                    <ClipboardList className="w-4 h-4" />
-                  </div>
-                  <p className="text-sm font-medium text-foreground">
-                    No hay productos agregados
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Haz clic en &ldquo;Agregar producto&rdquo; para incorporar artículos a la orden
-                  </p>
-                </div>
+                <EmptyState
+                  icon={<ClipboardList className="w-5 h-5" />}
+                  title="No hay productos agregados"
+                  subtitle="Haz clic en “Agregar producto” para incorporar productos a la orden"
+                />
               ) : (
                 <div className="overflow-x-auto"><Table className="min-w-[560px]">
                   <TableHeader>
@@ -281,16 +269,17 @@ export default function NewPurchaseOrderPage() {
                             </p>
                           </TableCell>
                           <TableCell className="text-right">
-                            <input
+                            <Input
                               type="number"
                               min={1}
+                              aria-label={`Cantidad de ${it.productName ?? "producto"}`}
                               value={it.qtyOrdered}
                               onChange={(e) =>
                                 updateItem(it.tempId, {
                                   qtyOrdered: Number(e.target.value) || 0,
                                 })
                               }
-                              className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
+                              className="text-right"
                             />
                           </TableCell>
                           <TableCell className="text-right">
@@ -303,29 +292,30 @@ export default function NewPurchaseOrderPage() {
                             />
                           </TableCell>
                           <TableCell className="text-right">
-                            <input
+                            <Input
                               type="number"
                               min={0}
                               max={100}
                               step="0.1"
+                              aria-label={`IVA de ${it.productName ?? "producto"}`}
                               value={it.taxRate}
                               onChange={(e) =>
                                 updateItem(it.tempId, {
                                   taxRate: Number(e.target.value) || 0,
                                 })
                               }
-                              className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
+                              className="text-right"
                             />
                           </TableCell>
-                          <TableCell className="text-right text-xs font-mono font-semibold text-foreground tabular-nums whitespace-nowrap">
+                          <TableCell className="text-right text-xs font-semibold text-foreground tabular-nums whitespace-nowrap">
                             {formatCurrency(lineSubtotal)}
                           </TableCell>
                           <TableCell className="text-right pr-2">
                             <button
                               type="button"
                               onClick={() => removeItem(it.tempId)}
-                              className="p-1 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-                              aria-label="Quitar producto"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                              aria-label={`Quitar ${it.productName ?? "producto"}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -347,13 +337,13 @@ export default function NewPurchaseOrderPage() {
               <div className="space-y-2 pt-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-mono text-foreground tabular-nums">
+                  <span className="text-foreground tabular-nums">
                     {formatCurrency(totals.subtotal)}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Impuestos</span>
-                  <span className="font-mono text-foreground tabular-nums">
+                  <span className="text-foreground tabular-nums">
                     {formatCurrency(totals.taxAmount)}
                   </span>
                 </div>
@@ -361,7 +351,7 @@ export default function NewPurchaseOrderPage() {
                   <span className="text-xs font-semibold text-foreground">
                     Total
                   </span>
-                  <span className="font-mono text-base font-semibold text-foreground tabular-nums">
+                  <span className="text-base font-semibold text-foreground tabular-nums">
                     {formatCurrency(totals.total)}
                   </span>
                 </div>
@@ -377,20 +367,21 @@ export default function NewPurchaseOrderPage() {
                 >
                   Guardar borrador
                 </Button>
-                <Link href="/purchase-orders" className="w-full">
-                  <Button type="button" variant="secondary" className="w-full">
-                    Cancelar
-                  </Button>
+                <Link
+                  href="/purchase-orders"
+                  className={buttonClassName({ variant: "secondary", className: "w-full" })}
+                >
+                  Cancelar
                 </Link>
               </div>
 
               {!supplierId && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                <p className="text-[11px] text-warning-text">
                   Selecciona un proveedor
                 </p>
               )}
               {supplierId && items.length === 0 && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                <p className="text-[11px] text-warning-text">
                   Agrega al menos un producto a la orden
                 </p>
               )}

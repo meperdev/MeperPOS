@@ -12,7 +12,7 @@ describe("ImportUpload", () => {
   it("renders the dropzone instructions and supports .xlsx only", () => {
     render(<ImportUpload selectedFile={null} onFileSelected={vi.fn()} onClear={vi.fn()} />);
 
-    expect(screen.getByText(/Arrastra un archivo o haz click para subir/i)).toBeInTheDocument();
+    expect(screen.getByText(/Arrastra un archivo o haz clic para subir/i)).toBeInTheDocument();
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input).toBeInTheDocument();
     expect(input.accept).toBe(".xlsx");
@@ -34,7 +34,7 @@ describe("ImportUpload", () => {
     const onFileSelected = vi.fn();
     render(<ImportUpload selectedFile={null} onFileSelected={onFileSelected} onClear={vi.fn()} />);
 
-    const dropzone = screen.getByText(/Arrastra un archivo o haz click para subir/i).closest("label")!;
+    const dropzone = screen.getByText(/Arrastra un archivo o haz clic para subir/i).closest("label")!;
     const file = makeXlsx();
     fireEvent.drop(dropzone, { dataTransfer: { files: [file] } });
 

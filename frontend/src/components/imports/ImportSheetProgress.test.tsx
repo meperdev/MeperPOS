@@ -30,9 +30,9 @@ describe("ImportSheetProgress", () => {
     );
 
     expect(screen.getByText("Clientes")).toBeInTheDocument();
-    expect(screen.getByText("COMPLETED")).toBeInTheDocument();
+    expect(screen.getByText("Completada")).toBeInTheDocument();
     expect(screen.getByText("Usuarios")).toBeInTheDocument();
-    expect(screen.getByText("REJECTED")).toBeInTheDocument();
+    expect(screen.getByText("Rechazada")).toBeInTheDocument();
   });
 
   it("renders per-sheet counters", () => {

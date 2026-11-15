@@ -24,13 +24,13 @@ export function PlanLimitBanner({ className }: PlanLimitBannerProps) {
   if (!isPastDue && !isSuspended) return null;
 
   return (
-    <div className={cn("mb-4 animate-fade-in", className)}>
+    <div className={cn("mb-4", className)}>
       <div
         className={cn(
-          "flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm",
+          "flex items-start gap-2 rounded-xl border px-4 py-3 text-sm",
           isSuspended
-            ? "border-rose-500/30 bg-rose-500/10 text-rose-800 dark:text-rose-200"
-            : "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200",
+            ? "border-danger/30 bg-danger/10 text-danger-text"
+            : "border-warning/30 bg-warning/10 text-warning-text",
         )}
       >
         {isSuspended ? (

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { SearchField } from "@/components/ui/SearchField";
@@ -144,22 +145,18 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
               label: s.name,
             }))}
           />
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Notas
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              className="w-full rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors resize-none"
-            />
-          </div>
+          <Input
+            textarea
+            rows={2}
+            label="Notas"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
         </div>
 
         <div className="rounded-xl border border-border/60 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/60 bg-muted/30">
-            <span className="text-xs font-semibold text-foreground">Items</span>
+            <span className="text-xs font-semibold text-foreground">Productos</span>
             <Button
               size="sm"
               type="button"
@@ -174,7 +171,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                 autoFocus
                 value={productSearch}
                 onChange={setProductSearch}
-                placeholder="Buscar producto..."
+                placeholder="Buscar producto…"
                 inputClassName="border border-border/70 bg-card text-sm"
               />
               <div className="max-h-44 overflow-y-auto rounded-lg border border-border/60 bg-card divide-y divide-border/60">
@@ -188,7 +185,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                       key={p.id}
                       type="button"
                       onClick={() => addProduct(p)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-primary/5"
+                      className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                     >
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{p.name}</p>
@@ -219,7 +216,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                   <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
                     IVA %
                   </th>
-                  <th scope="col" className="w-8" />
+                  <th scope="col" className="w-10"><span className="sr-only">Acciones</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -244,9 +241,10 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                         </p>
                       </td>
                       <td className="py-2 px-2">
-                        <input
+                        <Input
                           type="number"
                           min={1}
+                          aria-label={`Cantidad de ${r.productName}`}
                           value={r.qtyOrdered}
                           onChange={(e) =>
                             setRows((prev) =>
@@ -257,7 +255,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                               ),
                             )
                           }
-                          className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
+                          className="text-right"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -276,11 +274,12 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                         />
                       </td>
                       <td className="py-2 px-2">
-                        <input
+                        <Input
                           type="number"
                           min={0}
                           max={100}
                           step="0.1"
+                          aria-label={`IVA de ${r.productName}`}
                           value={r.taxRate}
                           onChange={(e) =>
                             setRows((prev) =>
@@ -291,7 +290,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                               ),
                             )
                           }
-                          className="w-full h-8 rounded-lg border border-border/70 bg-muted/30 px-2 text-right text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
+                          className="text-right"
                         />
                       </td>
                       <td className="py-2 pr-2">
@@ -300,7 +299,8 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                           onClick={() =>
                             setRows((prev) => prev.filter((x) => x.tempId !== r.tempId))
                           }
-                          className="p-1 rounded text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
+                          aria-label={`Eliminar ${r.productName}`}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -316,7 +316,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
         <div className="flex items-center justify-between pt-3 border-t border-border/60">
           <div className="text-xs text-muted-foreground">
             Total estimado:{" "}
-            <span className="text-sm font-mono font-semibold text-foreground tabular-nums">
+            <span className="text-sm font-semibold text-foreground tabular-nums">
               {formatCurrency(totals.total)}
             </span>
           </div>
