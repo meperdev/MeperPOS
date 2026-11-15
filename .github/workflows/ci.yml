@@ -105,6 +105,17 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # Served-route PWA check (plan-08, Fase 2): boots the built app with
+      # `next start` and asserts what a real response carries — the manifest
+      # fields and icon sizes, the worker delivered as JavaScript with its
+      # SKIP_WAITING handshake, both capability tags on a served page, and the
+      # offline route. Config-level unit tests cannot see any of these: Next can
+      # drop a metadata tag or fail to ship the worker while every source
+      # assertion stays green.
+      - name: Verify the PWA surface on a served route
+        working-directory: frontend
+        run: npm run check:pwa
+
       # Served-route security-header check (issue #48, spec 2.R3): boots the
       # built app with `next start` and asserts the six header families from
       # next.config.ts headers() on a real response, guarding against
