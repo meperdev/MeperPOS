@@ -1,164 +1,65 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-type AuthSnapshot = {
-  user: { role: string };
-  organization: {
-    id: string;
-    status: string;
-    trialEndsAt: string | null;
-  };
+vi.mock("@/lib/api", () => ({
+  api: { get: vi.fn() },
+}));
+
+import { api } from "@/lib/api";
+import { useAlerts, type AppAlert } from "./useAlerts";
+
+const alert: AppAlert = {
+  id: "stock:low",
+  category: "stock",
+  severity: "warning",
+  title: "Stock bajo",
+  detail: "2 productos por debajo del mínimo.",
+  href: "/inventory?filter=lowStock",
+  revision: "abc123",
 };
 
-type LimitsSnapshot = {
-  limits: Array<{
-    type: string;
-    current: number;
-    limit: number;
-    exceeded: boolean;
-    warningAt: number;
-  }>;
-};
+function wrapper({ children }: { children: React.ReactNode }) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
 
-const authState = vi.hoisted(() => ({
-  current: { user: { role: "ADMIN" }, organization: { id: "org-1", status: "ACTIVE", trialEndsAt: null } } as AuthSnapshot,
-}));
-const planState = vi.hoisted(() => ({ current: undefined as LimitsSnapshot | undefined }));
-const stockState = vi.hoisted(() => ({ current: undefined as Array<{ stock: number }> | undefined }));
-const loanState = vi.hoisted(() => ({
-  current: undefined as { data: Array<{ status: string; dueAt: string | null }> } | undefined,
-}));
-const taskState = vi.hoisted(() => ({
-  current: undefined as { tasks: Array<{ status: string; dueDate: string | null }> } | undefined,
-}));
-
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => authState.current }));
-vi.mock("@/hooks/usePlanLimits", () => ({ usePlanLimits: () => ({ data: planState.current }) }));
-vi.mock("@/hooks/useProducts", () => ({ useLowStockProducts: () => ({ data: stockState.current }) }));
-vi.mock("@/hooks/useLoans", () => ({ useLoans: () => ({ data: loanState.current }) }));
-vi.mock("@/hooks/useTasks", () => ({ useTasks: () => ({ data: taskState.current }) }));
-
-import { useAlerts } from "./useAlerts";
-
-const past = "2020-01-01T00:00:00.000Z";
+/** A response envelope is all the hook reads from the axios instance. */
+const respond = (data: AppAlert[]) =>
+  ({ data }) as unknown as Awaited<ReturnType<typeof api.get>>;
 
 describe("useAlerts", () => {
   beforeEach(() => {
-    authState.current = {
-      user: { role: "ADMIN" },
-      organization: { id: "org-1", status: "ACTIVE", trialEndsAt: null },
-    };
-    planState.current = undefined;
-    stockState.current = undefined;
-    loanState.current = undefined;
-    taskState.current = undefined;
+    vi.mocked(api.get).mockReset();
   });
 
-  it("derives the five alert sources, sorted by severity", () => {
-    authState.current.organization.status = "PAST_DUE";
-    planState.current = {
-      limits: [
-        { type: "products", current: 12, limit: 10, exceeded: true, warningAt: 8 },
-      ],
-    };
-    stockState.current = [{ stock: 0 }, { stock: 2 }];
-    loanState.current = { data: [{ status: "OPEN", dueAt: past }] };
-    taskState.current = { tasks: [{ status: "PENDING", dueDate: past }] };
+  afterEach(() => cleanup());
 
-    const { result } = renderHook(() => useAlerts());
+  it("asks the backend for the organization feed", async () => {
+    vi.mocked(api.get).mockResolvedValue(respond([alert]));
 
-    expect(result.current.map((alert) => alert.id)).toEqual([
-      "billing:past-due",
-      "limits:products:exceeded",
-      "stock:depleted",
-      "loans:overdue",
-      "tasks:overdue",
-    ]);
+    const { result } = renderHook(() => useAlerts(), { wrapper });
+
+    await waitFor(() => expect(result.current).toEqual([alert]));
+    expect(api.get).toHaveBeenCalledWith("/alerts");
   });
 
-  it("keeps billing, limits and stock away from a cashier", () => {
-    authState.current = {
-      user: { role: "CASHIER" },
-      organization: { id: "org-1", status: "PAST_DUE", trialEndsAt: null },
-    };
-    planState.current = {
-      limits: [
-        { type: "products", current: 12, limit: 10, exceeded: true, warningAt: 8 },
-      ],
-    };
-    stockState.current = [{ stock: 0 }];
-    loanState.current = { data: [{ status: "OPEN", dueAt: past }] };
-    taskState.current = { tasks: [{ status: "PENDING", dueDate: past }] };
+  it("returns an empty list instead of throwing when the feed fails", async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error("network"));
 
-    const { result } = renderHook(() => useAlerts());
+    const { result } = renderHook(() => useAlerts(), { wrapper });
 
-    expect(result.current.map((alert) => alert.id)).toEqual([
-      "loans:overdue",
-      "tasks:overdue",
-    ]);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    expect(result.current).toEqual([]);
   });
 
-  it("treats reaching a limit as no capacity left, not a violation", () => {
-    planState.current = {
-      limits: [
-        { type: "users", current: 3, limit: 3, exceeded: true, warningAt: 2 },
-      ],
-    };
+  it("returns each alert with its revision", async () => {
+    vi.mocked(api.get).mockResolvedValue(respond([alert]));
 
-    const { result } = renderHook(() => useAlerts());
+    const { result } = renderHook(() => useAlerts(), { wrapper });
 
-    expect(result.current).toEqual([
-      expect.objectContaining({
-        id: "limits:users:at-limit",
-        severity: "warning",
-        title: "Alcanzaste el límite de usuarios",
-      }),
-    ]);
-  });
-
-  it("escalates to a critical alert once the limit is actually surpassed", () => {
-    planState.current = {
-      limits: [
-        { type: "users", current: 4, limit: 3, exceeded: true, warningAt: 2 },
-      ],
-    };
-
-    const { result } = renderHook(() => useAlerts());
-
-    expect(result.current[0]).toMatchObject({
-      id: "limits:users:exceeded",
-      severity: "critical",
-      title: "Límite de usuarios excedido",
-    });
-  });
-
-  it("reports the remaining trial days with the matching severity", () => {
-    authState.current.organization.status = "TRIAL";
-    // The shared clock ticks per minute, so pin the target just inside the day.
-    authState.current.organization.trialEndsAt = new Date(
-      Date.now() + 5 * 86_400_000 - 60_000,
-    ).toISOString();
-
-    const { result } = renderHook(() => useAlerts());
-
-    expect(result.current[0]).toMatchObject({
-      id: "billing:trial",
-      severity: "info",
-      title: "Tu prueba termina en 5 días",
-    });
-  });
-
-  it("escalates the trial warning inside the last three days", () => {
-    authState.current.organization.status = "TRIAL";
-    authState.current.organization.trialEndsAt = new Date(
-      Date.now() + 2 * 86_400_000 - 60_000,
-    ).toISOString();
-
-    const { result } = renderHook(() => useAlerts());
-
-    expect(result.current[0]).toMatchObject({
-      id: "billing:trial",
-      severity: "warning",
-    });
+    await waitFor(() => expect(result.current[0]?.revision).toBe("abc123"));
   });
 });

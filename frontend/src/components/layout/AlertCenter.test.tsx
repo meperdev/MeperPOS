@@ -8,6 +8,7 @@ type AlertFixture = {
   title: string;
   detail: string;
   href: string;
+  revision: string;
 };
 
 const alertsState = vi.hoisted(() => ({ current: [] as AlertFixture[] }));
@@ -30,6 +31,7 @@ const twoAlerts: AlertFixture[] = [
     title: "Suscripción vencida",
     detail: "Regulariza el pago.",
     href: "/settings/billing",
+    revision: "rev-billing",
   },
   {
     id: "tasks:overdue",
@@ -38,8 +40,12 @@ const twoAlerts: AlertFixture[] = [
     title: "2 tareas vencidas",
     detail: "Tienen fecha límite pasada.",
     href: "/tasks",
+    revision: "rev-tasks",
   },
 ];
+
+const ledger = () =>
+  JSON.parse(localStorage.getItem("meperpos:alerts-seen:org-1") ?? "{}");
 
 describe("AlertCenter", () => {
   beforeEach(() => {
@@ -47,7 +53,7 @@ describe("AlertCenter", () => {
     alertsState.current = twoAlerts;
   });
 
-  afterEach(cleanup);
+  afterEach(() => cleanup());
 
   it("announces the unread count and lists the alerts", () => {
     render(<AlertCenter />);
@@ -59,7 +65,7 @@ describe("AlertCenter", () => {
     expect(screen.getByText("2 tareas vencidas")).toBeInTheDocument();
   });
 
-  it("clears the badge and persists the ledger as soon as the panel opens", () => {
+  it("clears the badge and persists the acknowledged revisions", () => {
     render(<AlertCenter />);
     expect(screen.getByTestId("alert-badge")).toBeInTheDocument();
 
@@ -67,10 +73,46 @@ describe("AlertCenter", () => {
 
     expect(screen.getByRole("button", { name: "Alertas" })).toBeInTheDocument();
     expect(screen.queryByTestId("alert-badge")).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("meperpos:alerts-seen:org-1") ?? "[]")).toEqual([
-      "billing:past-due",
-      "tasks:overdue",
-    ]);
+    expect(ledger()).toEqual({
+      "billing:past-due": "rev-billing",
+      "tasks:overdue": "rev-tasks",
+    });
+  });
+
+  it("rings again when the facts behind a seen alert change", () => {
+    render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+    cleanup();
+
+    // Same alert ids; a new low-stock product changed the stock revision.
+    alertsState.current = [
+      { ...twoAlerts[0] },
+      {
+        id: "stock:low",
+        category: "stock",
+        severity: "warning",
+        title: "Stock bajo",
+        detail: "3 productos por debajo del mínimo.",
+        href: "/inventory?filter=lowStock",
+        revision: "rev-stock-2",
+      },
+    ];
+
+    render(<AlertCenter />);
+
+    expect(
+      screen.getByRole("button", { name: "Alertas, 1 sin leer" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not ring again for an unchanged alert", () => {
+    render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+    cleanup();
+
+    render(<AlertCenter />);
+
+    expect(screen.getByRole("button", { name: "Alertas" })).toBeInTheDocument();
   });
 
   it("keeps the new dots for the visit that revealed them", () => {
@@ -86,10 +128,10 @@ describe("AlertCenter", () => {
     fireEvent.click(screen.getByRole("link", { name: /Suscripción vencida/ }));
 
     expect(screen.queryByRole("dialog", { name: "Alertas" })).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("meperpos:alerts-seen:org-1") ?? "[]")).toEqual([
-      "billing:past-due",
-      "tasks:overdue",
-    ]);
+    expect(ledger()).toEqual({
+      "billing:past-due": "rev-billing",
+      "tasks:overdue": "rev-tasks",
+    });
   });
 
   it("shows the quiet empty state when nothing is pending", () => {
