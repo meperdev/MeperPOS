@@ -28,11 +28,12 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PlanLimitGuard } from '../plan-limits/plan-limits.guard';
 import { PlanLimit } from '../plan-limits/plan-limits.decorator';
+import { CustomerPlateInterceptor } from './customer-plate.interceptor';
 
 @ApiTags('Customers')
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard, OrganizationRequiredGuard, PlanLimitGuard)
-@UseInterceptors(AdminOrganizationInterceptor)
+@UseInterceptors(AdminOrganizationInterceptor, CustomerPlateInterceptor)
 @ApiBearerAuth()
 export class CustomersController {
   constructor(private customersService: CustomersService) {}

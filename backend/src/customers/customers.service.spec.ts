@@ -4,6 +4,8 @@ describe('CustomersService', () => {
   let service: CustomersService;
   const orgId = 'org-1';
   const prismaMock = {
+    $transaction: jest.fn(),
+    customerVehicle: { upsert: jest.fn(), updateMany: jest.fn() },
     customer: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -20,6 +22,10 @@ describe('CustomersService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof prismaMock) => unknown) =>
+        callback(prismaMock),
+    );
     service = new CustomersService(
       prismaMock as never,
       planLimitServiceMock as never,
