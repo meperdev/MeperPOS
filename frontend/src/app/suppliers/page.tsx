@@ -31,7 +31,6 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/Table";
-import { activateOnKey } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
@@ -329,21 +328,21 @@ export default function SuppliersPage() {
                   return (
                     <div
                       key={supplier.id}
-                      role={canManage ? "button" : undefined}
-                      tabIndex={canManage ? 0 : undefined}
-                      aria-label={canManage ? `Editar ${supplier.name}` : undefined}
                       className={cn(
-                        "group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border",
+                        "group relative flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border",
                         canManage && "cursor-pointer",
                         !supplier.active && "opacity-70",
                       )}
-                      onClick={
-                        canManage ? () => handleEdit(supplier) : undefined
-                      }
-                      onKeyDown={
-                        canManage ? activateOnKey(() => handleEdit(supplier)) : undefined
-                      }
                     >
+                      {/* The card's edit target: a real button stretched over the card; its action controls sit above it. */}
+                      {canManage && (
+                        <button
+                          type="button"
+                          aria-label={`Editar ${supplier.name}`}
+                          onClick={() => handleEdit(supplier)}
+                          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                        />
+                      )}
                       <div>
                         {/* Card Header: Avatar + Name + NIT + Status */}
                         <div className="flex items-start justify-between gap-2">
@@ -452,7 +451,7 @@ export default function SuppliersPage() {
                                   onClick={(e) =>
                                     handleCopyAccount(e, supplier)
                                   }
-                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                                  className="relative z-10 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                                   title="Copiar número de cuenta"
                                   aria-label={`Copiar cuenta de ${supplier.name}`}
                                 >
@@ -472,7 +471,7 @@ export default function SuppliersPage() {
                         </div>
 
                         {canManage && (
-                          <div className="flex shrink-0 items-center gap-1">
+                          <div className="relative z-10 flex shrink-0 items-center gap-1">
                             {supplier.active ? (
                               <button
                                 type="button"
@@ -535,7 +534,6 @@ export default function SuppliersPage() {
                     return (
                       <TableRow
                         key={supplier.id}
-                        tabIndex={canManage ? 0 : undefined}
                         className={cn(
                           canManage && "cursor-pointer",
                           !supplier.active && "opacity-70",
@@ -543,16 +541,27 @@ export default function SuppliersPage() {
                         onClick={
                           canManage ? () => handleEdit(supplier) : undefined
                         }
-                        onKeyDown={
-                          canManage ? activateOnKey(() => handleEdit(supplier)) : undefined
-                        }
                       >
                         <TableCell>
                           <div className="flex items-center gap-2 min-w-0">
                             <SupplierAvatar name={supplier.name} />
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-foreground truncate">
-                                {supplier.name}
+                                {canManage ? (
+                                  <button
+                                    type="button"
+                                    aria-label={`Editar ${supplier.name}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEdit(supplier);
+                                    }}
+                                    className="max-w-full truncate text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                                  >
+                                    {supplier.name}
+                                  </button>
+                                ) : (
+                                  supplier.name
+                                )}
                               </p>
                               <p className="font-mono text-xs text-muted-foreground tabular-nums">
                                 NIT · {supplier.documentNumber}
@@ -629,7 +638,7 @@ export default function SuppliersPage() {
                                   onClick={(e) =>
                                     handleCopyAccount(e, supplier)
                                   }
-                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                                  className="relative z-10 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                                   title="Copiar número de cuenta"
                                   aria-label={`Copiar cuenta de ${supplier.name}`}
                                 >

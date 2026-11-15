@@ -47,6 +47,31 @@ it("creates and edits profiles, explicitly clearing nullable fields", async () =
   await user.click(screen.getByRole("button", { name: "Guardar" }));
   await waitFor(() => expect(state.update).toHaveBeenCalledWith(expect.objectContaining({ id: "1", data: expect.objectContaining({ email: null, startDate: null, referenceAmount: 1000 }) })));
 });
+it("makes the card's edit target a real button, apart from its shift and menu controls", () => {
+  state.list.data = [employee]; render(<EmployeesPage />);
+  const edit = screen.getByRole("button", { name: "Editar Ana" });
+  expect(edit.tagName).toBe("BUTTON");
+  expect(edit.parentElement!.getAttribute("role")).toBeNull();
+  expect(edit.parentElement!.className).toContain("relative");
+  expect(edit.className).toContain("absolute");
+  expect(edit.className).toContain("inset-0");
+  const shifts = screen.getByRole("button", { name: "Jornadas Ana" });
+  expect(shifts.parentElement!.className).toContain("relative");
+  expect(shifts.parentElement!.className).toContain("z-10");
+});
+it("gives the table row no tab stop and opens the edit form from its name button", async () => {
+  window.localStorage.setItem("meperpos:view-mode:employees", "table");
+  try {
+    const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
+    // Table mode also keeps the mobile cards in the DOM, so scope to the table.
+    const row = within(screen.getByRole("table")).getByRole("button", { name: "Editar Ana" }).closest("tr")!;
+    expect(row).not.toHaveAttribute("tabindex");
+    await user.click(within(row).getByRole("button", { name: "Editar Ana" }));
+    expect(screen.getByLabelText("Correo electrónico")).toHaveValue("ana@example.com");
+  } finally {
+    window.localStorage.removeItem("meperpos:view-mode:employees");
+  }
+});
 it("explains whitespace-only names and accepts a corrected name", async () => {
   const user = userEvent.setup(); render(<EmployeesPage />);
   await user.click(screen.getByRole("button", { name: "Nuevo empleado" }));
@@ -78,7 +103,7 @@ it("names the dialog, contains keyboard focus, and restores it after Escape", as
 });
 it("edits from the card itself: no Editar menu item and no separate row button", async () => {
   const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
-  expect(screen.getByRole("button", { name: "Editar Ana" }).tagName).toBe("DIV");
+  expect(screen.getByRole("button", { name: "Editar Ana" }).tagName).toBe("BUTTON");
   await openRowMenu(user, "Ana");
   expect(screen.queryByRole("menuitem", { name: "Editar" })).not.toBeInTheDocument();
   expect(screen.getByRole("menuitem", { name: /Desactivar|Activar/ })).toBeInTheDocument();

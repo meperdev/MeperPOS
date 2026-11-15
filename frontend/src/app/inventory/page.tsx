@@ -53,7 +53,6 @@ import type { Product } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { isActivationKey } from "@/lib/keyboard";
 import { cn, formatCurrency, resolveTaxFields, toFiniteNumber } from "@/lib/utils";
 import { isService, tracksStock } from "@/lib/product-type";
 import { hasAnyRole } from "@/lib/auth";
@@ -696,16 +695,8 @@ function InventoryContent() {
                         return (
                           <TableRow
                             key={product.id}
-                            tabIndex={canManageInventory ? 0 : undefined}
                             onClick={
                               canManageInventory ? () => handleEdit(product) : undefined
-                            }
-                            onKeyDown={
-                              canManageInventory
-                                ? (event) => {
-                                    if (isActivationKey(event)) handleEdit(product);
-                                  }
-                                : undefined
                             }
                             className={cn(
                               canManageInventory && "cursor-pointer",
@@ -713,9 +704,23 @@ function InventoryContent() {
                             )}
                           >
                             <TableCell>
-                              <span className="font-medium text-foreground">
-                                {product.name}
-                              </span>
+                              {canManageInventory ? (
+                                <button
+                                  type="button"
+                                  aria-label={`Editar ${product.name}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleEdit(product);
+                                  }}
+                                  className="text-left font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                                >
+                                  {product.name}
+                                </button>
+                              ) : (
+                                <span className="font-medium text-foreground">
+                                  {product.name}
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">
                               {product.sku}

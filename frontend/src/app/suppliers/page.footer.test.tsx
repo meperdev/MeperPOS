@@ -1,6 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 const useSuppliersMock = vi.fn();
@@ -78,16 +78,33 @@ describe("Suppliers card footer", () => {
     expect(copy.className).toContain("focus-visible:ring-primary/40");
   });
 
-  it("makes the clickable supplier card a keyboard edit target named Editar <name>", async () => {
+  it("makes the supplier card's edit target a real button named Editar <name>, above its copy control", async () => {
     render(<SuppliersPage />);
 
-    const card = screen.getByRole("button", { name: `Editar ${SUPPLIER_NAME}` });
-    expect(card.tagName).toBe("DIV");
-    expect(card.tabIndex).toBe(0);
+    const edit = screen.getByRole("button", { name: `Editar ${SUPPLIER_NAME}` });
+    expect(edit.tagName).toBe("BUTTON");
+    expect(edit.parentElement!.getAttribute("role")).toBeNull();
+    expect(edit.parentElement!.className).toContain("relative");
 
-    card.focus();
+    const copy = screen.getByRole("button", { name: `Copiar cuenta de ${SUPPLIER_NAME}` });
+    expect(copy.className).toContain("relative");
+    expect(copy.className).toContain("z-10");
+
+    edit.focus();
     await userEvent.keyboard("{Enter}");
     expect(screen.getByText("Editar proveedor")).toBeInTheDocument();
+  });
+
+  it("gives the supplier table row no tab stop and opens the edit form from its name button", async () => {
+    window.localStorage.setItem("meperpos:view-mode:suppliers", "table");
+    render(<SuppliersPage />);
+
+    const row = screen.getByRole("button", { name: `Editar ${SUPPLIER_NAME}` }).closest("tr")!;
+    expect(row).not.toHaveAttribute("tabindex");
+
+    await userEvent.click(within(row).getByRole("button", { name: `Editar ${SUPPLIER_NAME}` }));
+    expect(screen.getByText("Editar proveedor")).toBeInTheDocument();
+    window.localStorage.removeItem("meperpos:view-mode:suppliers");
   });
 
   it("lists Todos first in the status filter and keeps the default selection", () => {

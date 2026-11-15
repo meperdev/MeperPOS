@@ -168,8 +168,8 @@ describe("Suppliers page modal — customer-supplier-info-fields (T19)", () => {
     const user = userEvent.setup();
     render(<SuppliersPage />);
 
-    // Clicking the card (an ADMIN can manage) triggers handleEdit.
-    await user.click(screen.getByText("Distribuidora Central"));
+    // The card's edit target is its overlay button named Editar <name> (an ADMIN can manage).
+    await user.click(screen.getByRole("button", { name: "Editar Distribuidora Central" }));
 
     const accountNumberInput = await screen.findByLabelText(/Número de cuenta/i);
     expect(accountNumberInput).toHaveValue("0111111111");

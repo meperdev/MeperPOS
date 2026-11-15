@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 /**
@@ -208,15 +208,17 @@ describe("Inventory page — characterization (current behavior)", () => {
     expect(screen.getByText("3 productos")).toBeInTheDocument();
   });
 
-  it("makes a product table row keyboard-reachable so Enter opens its edit form", async () => {
+  it("keeps the product row free of tab stops and opens its edit form from a real name button", async () => {
     window.localStorage.setItem("meperpos:view-mode:inventory", "table");
     setResponse([buildProduct({ name: "Panela" })]);
 
     render(<InventoryPage />);
 
     const row = screen.getByText("Panela").closest("tr")!;
-    expect(row.tabIndex).toBe(0);
-    fireEvent.keyDown(row, { key: "Enter" });
+    expect(row).not.toHaveAttribute("tabindex");
+    const edit = within(row).getByRole("button", { name: "Editar Panela" });
+    expect(edit.tagName).toBe("BUTTON");
+    fireEvent.click(edit);
     // The Modal is mocked to render only its children, so the open form is the observable effect.
     expect(await screen.findByDisplayValue("Panela")).toBeInTheDocument();
     window.localStorage.removeItem("meperpos:view-mode:inventory");

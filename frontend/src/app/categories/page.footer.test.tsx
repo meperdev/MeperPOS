@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 const useCategoriesMock = vi.fn();
@@ -73,17 +73,38 @@ describe("Categories card layout", () => {
     expect(card!.parentElement!.className).not.toMatch(/(^|\s)(sm|md|lg|xl):grid-cols/);
   });
 
-  it("drops the pencil: the card itself is the keyboard-reachable edit target", async () => {
+  it("drops the pencil: the card's edit target is a real button, above its nested delete and count controls", async () => {
     render(<CategoriesPage />);
 
-    const card = screen.getByRole("button", { name: `Editar ${CATEGORY_NAME}` });
-    expect(card.tabIndex).toBe(0);
+    const edit = screen.getByRole("button", { name: `Editar ${CATEGORY_NAME}` });
+    expect(edit.tagName).toBe("BUTTON");
+    const card = edit.parentElement!;
+    expect(card.getAttribute("role")).toBeNull();
     const nestedLabels = Array.from(card.querySelectorAll("button")).map((b) => b.getAttribute("aria-label"));
-    expect(nestedLabels).toEqual([`Eliminar ${CATEGORY_NAME}`, `Ver productos de ${CATEGORY_NAME}`]);
+    expect(nestedLabels).toEqual([
+      `Editar ${CATEGORY_NAME}`,
+      `Eliminar ${CATEGORY_NAME}`,
+      `Ver productos de ${CATEGORY_NAME}`,
+    ]);
+    for (const control of [`Eliminar ${CATEGORY_NAME}`, `Ver productos de ${CATEGORY_NAME}`]) {
+      expect(screen.getByRole("button", { name: control }).className).toContain("z-10");
+    }
 
-    card.focus();
+    edit.focus();
     await userEvent.keyboard("{Enter}");
     expect(screen.getByText("Editar categoría")).toBeInTheDocument();
+  });
+
+  it("gives the category table row no tab stop and opens the edit form from its name button", async () => {
+    window.localStorage.setItem("meperpos:view-mode:categories", "table");
+    render(<CategoriesPage />);
+
+    const row = screen.getByRole("button", { name: `Editar ${CATEGORY_NAME}` }).closest("tr")!;
+    expect(row).not.toHaveAttribute("tabindex");
+
+    await userEvent.click(within(row).getByRole("button", { name: `Editar ${CATEGORY_NAME}` }));
+    expect(screen.getByText("Editar categoría")).toBeInTheDocument();
+    window.localStorage.removeItem("meperpos:view-mode:categories");
   });
 
   it("lets the card shrink and keeps the count and tax chips from wrapping inside the footer", () => {

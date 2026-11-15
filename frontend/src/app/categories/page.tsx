@@ -40,7 +40,6 @@ import {
   Package,
   Percent,
 } from "lucide-react";
-import { activateOnKey } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
@@ -244,13 +243,15 @@ export default function CategoriesPage() {
                   return (
                     <div
                       key={category.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Editar ${category.name}`}
                       className="group relative flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs cursor-pointer transition-colors hover:border-border"
-                      onClick={() => handleEdit(category)}
-                      onKeyDown={activateOnKey(() => handleEdit(category))}
                     >
+                      {/* The card's edit target: a real button stretched over the card; controls below sit above it. */}
+                      <button
+                        type="button"
+                        aria-label={`Editar ${category.name}`}
+                        onClick={() => handleEdit(category)}
+                        className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                      />
                       <div>
                         {/* Card Header */}
                         <div className="flex items-start justify-between gap-2 mb-2">
@@ -271,7 +272,7 @@ export default function CategoriesPage() {
                                 e.stopPropagation();
                                 handleDelete(category.id);
                               }}
-                              className="flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-danger-text hover:border-danger/30 hover:bg-danger/10 transition-colors"
+                              className="relative z-10 flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-danger-text hover:border-danger/30 hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                               aria-label={`Eliminar ${category.name}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -299,7 +300,7 @@ export default function CategoriesPage() {
                             e.stopPropagation();
                             setProductsCategory(category);
                           }}
-                          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border/70 bg-muted/35 px-2.5 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                          className="relative z-10 inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border/70 bg-muted/35 px-2.5 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                           aria-label={`Ver productos de ${category.name}`}
                         >
                           <Package className="w-3.5 h-3.5 shrink-0 opacity-75" />
@@ -359,18 +360,24 @@ export default function CategoriesPage() {
                           <TableRow
                             key={category.id}
                             className="cursor-pointer"
-                            tabIndex={0}
                             onClick={() => handleEdit(category)}
-                            onKeyDown={activateOnKey(() => handleEdit(category))}
                           >
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border", CATEGORY_ICON_TONES[i % CATEGORY_ICON_TONES.length])}>
                                   <FolderTree className="w-3.5 h-3.5" />
                                 </div>
-                                <span className="text-xs font-semibold text-foreground">
+                                <button
+                                  type="button"
+                                  aria-label={`Editar ${category.name}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(category);
+                                  }}
+                                  className="text-left text-xs font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                                >
                                   {category.name}
-                                </span>
+                                </button>
                               </div>
                         </TableCell>
                         <TableCell className="max-w-md">

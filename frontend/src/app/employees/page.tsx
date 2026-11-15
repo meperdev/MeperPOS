@@ -25,7 +25,6 @@ import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { activateOnKey } from "@/lib/keyboard";
 import { cn, formatCurrency, formatDate, toFiniteNumber } from "@/lib/utils";
 import {
   useEmployees,
@@ -121,14 +120,14 @@ function EmployeeCard({
   const contact = [employee.phone, employee.email].filter(Boolean).join(" · ");
 
   return (
-    <Card
-      className="flex flex-col"
-      role="button"
-      tabIndex={0}
-      aria-label={`Editar ${employee.name}`}
-      onClick={onEdit}
-      onKeyDown={activateOnKey(onEdit)}
-    >
+    <Card className="relative flex cursor-pointer flex-col hover:border-border hover:bg-muted/20">
+      {/* The card's edit target: a real button stretched over the card; controls below sit above it. */}
+      <button
+        type="button"
+        aria-label={`Editar ${employee.name}`}
+        onClick={onEdit}
+        className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+      />
       <div className="flex items-start gap-3 p-4 pb-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-xs font-semibold text-primary-text">
           {initials(employee.name)}
@@ -180,10 +179,7 @@ function EmployeeCard({
         </div>
       </dl>
 
-      <div
-        className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2.5"
-        onClick={(event) => event.stopPropagation()}
-      >
+      <div className="relative z-10 mt-auto flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2.5">
         <Button
           size="sm"
           variant="secondary"
@@ -387,9 +383,7 @@ export default function EmployeesPage() {
                           <TableRow
                             key={employee.id}
                             className="cursor-pointer"
-                            tabIndex={0}
                             onClick={() => setDialog({ mode: "edit", employee })}
-                            onKeyDown={activateOnKey(() => setDialog({ mode: "edit", employee }))}
                           >
                             <TableCell>
                               <div className="flex items-center gap-2.5">
@@ -398,7 +392,17 @@ export default function EmployeesPage() {
                                 </span>
                                 <div className="min-w-0">
                                   <p className="truncate text-xs font-semibold text-foreground">
-                                    {employee.name}
+                                    <button
+                                      type="button"
+                                      aria-label={`Editar ${employee.name}`}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setDialog({ mode: "edit", employee });
+                                      }}
+                                      className="max-w-full truncate text-left font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                                    >
+                                      {employee.name}
+                                    </button>
                                   </p>
                                   <p className="truncate text-[11px] text-muted-foreground">
                                     {employee.jobTitle ?? "Sin cargo"}

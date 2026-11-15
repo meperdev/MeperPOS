@@ -27,7 +27,6 @@ import {
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
-import { activateOnKey } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import {
   Plus,
@@ -250,17 +249,21 @@ export default function CustomersPage() {
                   return (
                     <div
                       key={customer.id}
-                      role={canEdit ? "button" : undefined}
-                      tabIndex={canEdit ? 0 : undefined}
-                      aria-label={canEdit ? `Editar ${customer.name}` : undefined}
                       className={cn(
-                        "group flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150",
+                        "group relative flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150",
                         "hover:border-border",
                         canEdit && "cursor-pointer",
                       )}
-                      onClick={canEdit ? () => handleEdit(customer) : undefined}
-                      onKeyDown={canEdit ? activateOnKey(() => handleEdit(customer)) : undefined}
                     >
+                      {/* The card's edit target: a real button stretched over the card; the footer controls sit above it. */}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          aria-label={`Editar ${customer.name}`}
+                          onClick={() => handleEdit(customer)}
+                          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                        />
+                      )}
                       <div>
                         {/* Header */}
                         <div className="flex items-start justify-between gap-2">
@@ -337,7 +340,7 @@ export default function CustomersPage() {
 
                       {/* Footer Actions */}
                       <div
-                        className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2.5"
+                        className="relative z-10 mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Button
@@ -402,9 +405,7 @@ export default function CustomersPage() {
                         return (
                           <TableRow
                             key={customer.id}
-                            tabIndex={canEdit ? 0 : undefined}
                             onClick={canEdit ? () => handleEdit(customer) : undefined}
-                            onKeyDown={canEdit ? activateOnKey(() => handleEdit(customer)) : undefined}
                             className={cn(canEdit && "cursor-pointer")}
                           >
                             <TableCell>
@@ -412,7 +413,21 @@ export default function CustomersPage() {
                                 <CustomerAvatar name={customer.name} />
                                 <div className="min-w-0">
                                   <p className="text-xs font-semibold text-foreground truncate max-w-[180px]">
-                                    {customer.name}
+                                    {canEdit ? (
+                                      <button
+                                        type="button"
+                                        aria-label={`Editar ${customer.name}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEdit(customer);
+                                        }}
+                                        className="max-w-full truncate text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                                      >
+                                        {customer.name}
+                                      </button>
+                                    ) : (
+                                      customer.name
+                                    )}
                                   </p>
                                   {customer.address && (
                                     <p className="text-[11px] text-muted-foreground truncate max-w-[180px]">
