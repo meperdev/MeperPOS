@@ -241,16 +241,16 @@ describe('StockAlertsService', () => {
     ]);
   });
 
-  it('keeps a delivered episode SENT when the history write fails', async () => {
+  it('keeps a delivered episode SENT and continues when the history write fails', async () => {
     const { service, prisma, alerts, sender } = build({
       products: [product()],
       failHistoryFor: 'NOTIFIED',
     });
     recipient(prisma);
 
-    await expect(service.scanOrganization('org-1')).rejects.toThrow(
-      'history unavailable',
-    );
+    const summary = await service.scanOrganization('org-1');
+
+    expect(summary).toEqual({ opened: 1, resolved: 0, notified: 1, failed: 0 });
     expect(sender.sendText).toHaveBeenCalledTimes(1);
     expect(alerts[0]).toMatchObject({ notificationStatus: 'SENT' });
   });

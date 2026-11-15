@@ -28,6 +28,20 @@ export interface StockAlertHistoryPage {
  * The stock-alert notification history: one row per episode transition, newest
  * first. Read-only and tenant-scoped on the server.
  */
+/** The request path for one page of history, query string included. */
+export function historyPath(params: {
+  page: number;
+  limit: number;
+  kind?: StockAlertEventKind;
+}): string {
+  const query = new URLSearchParams({
+    page: String(params.page),
+    limit: String(params.limit),
+  });
+  if (params.kind) query.set("kind", params.kind);
+  return `/alerts/notifications?${query.toString()}`;
+}
+
 export function useAlertNotifications(params: {
   page: number;
   limit: number;
@@ -35,12 +49,11 @@ export function useAlertNotifications(params: {
 }) {
   return useQuery({
     queryKey: ["alerts", "notifications", params],
-    // `api.get(url, params)` serializes the second argument as the query string
-    // (see `ApiClient.get` in lib/api.ts), so page, limit and kind reach the
-    // endpoint as URL params rather than as an axios request config.
+    // The query string is built here, in the URL, so the filter and the page
+    // cannot depend on how any HTTP client treats a second argument.
     queryFn: () =>
       api
-        .get<StockAlertHistoryPage>("/alerts/notifications", params)
+        .get<StockAlertHistoryPage>(historyPath(params))
         .then((res) => res.data),
     placeholderData: keepPreviousData,
   });

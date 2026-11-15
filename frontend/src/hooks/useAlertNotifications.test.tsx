@@ -50,11 +50,9 @@ describe("useAlertNotifications", () => {
     );
 
     await waitFor(() => expect(result.current.data).toEqual(page));
-    expect(api.get).toHaveBeenCalledWith("/alerts/notifications", {
-      page: 2,
-      limit: 20,
-      kind: "FAILED",
-    });
+    expect(api.get).toHaveBeenCalledWith(
+      "/alerts/notifications?page=2&limit=20&kind=FAILED",
+    );
   });
 
   it("omits the kind filter when none is selected", async () => {
@@ -65,10 +63,9 @@ describe("useAlertNotifications", () => {
     });
 
     await waitFor(() =>
-      expect(api.get).toHaveBeenCalledWith("/alerts/notifications", {
-        page: 1,
-        limit: 20,
-      }),
+      expect(api.get).toHaveBeenCalledWith(
+        "/alerts/notifications?page=1&limit=20",
+      ),
     );
   });
 
@@ -84,9 +81,8 @@ describe("useAlertNotifications", () => {
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
     rerender({ page: 2 });
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
-    expect(api.get).toHaveBeenLastCalledWith("/alerts/notifications", {
-      page: 2,
-      limit: 20,
-    });
+    expect(api.get).toHaveBeenLastCalledWith(
+      "/alerts/notifications?page=2&limit=20",
+    );
   });
 });

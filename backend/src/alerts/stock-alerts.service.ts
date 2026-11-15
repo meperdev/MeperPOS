@@ -340,12 +340,21 @@ export class StockAlertsService {
       return { notified: 0, failed: claimed.length };
     }
 
-    // The provider accepted the message. Bookkeeping runs outside the send's try
-    // on purpose: an auxiliary status or history write must never turn a
-    // delivered alert into a recorded failure, because the episode is never
-    // retried. A failure here leaves the rows SENT and only the history short.
-    await this.finish(ids, NotificationStatus.SENT, null, new Date());
-    await this.recordEvents(history(EventKind.NOTIFIED));
+    // The provider accepted the message. Bookkeeping is auxiliary and runs
+    // outside the send's verdict: a failing status or history write must neither
+    // turn a delivered alert into a recorded failure nor abort the rest of the
+    // organization's episodes. A failure here leaves the rows as they were and
+    // only shortens the history.
+    try {
+      await this.finish(ids, NotificationStatus.SENT, null, new Date());
+      await this.recordEvents(history(EventKind.NOTIFIED));
+    } catch (error) {
+      this.logger.warn({
+        event: 'stock_alert',
+        outcome: 'bookkeeping_failed',
+        reason: error instanceof Error ? error.name : 'unknown',
+      });
+    }
     this.logger.log({
       event: 'stock_alert',
       outcome: 'sent',
