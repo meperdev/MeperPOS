@@ -13,7 +13,7 @@ const activeLines = globalsCss
 
 describe("slice 1: canonical token palette (ADR-1/ADR-2/ADR-4)", () => {
   it("uses canonical light/dark backgrounds and primary, and drops legacy values", () => {
-    expect(globalsCss).toContain("--background: #FAF8FF;");
+    expect(globalsCss).toContain("--background: #FAFAF9;");
     expect(globalsCss).toContain("--primary: #C25E36;");
     expect(globalsCss).toContain("--background: #111114;");
     expect(globalsCss).toContain("--card: #18181C;");
@@ -32,6 +32,38 @@ describe("slice 1: canonical token palette (ADR-1/ADR-2/ADR-4)", () => {
     expect(globalsCss).toContain("--coral: #D0453F;");
     expect(globalsCss).toContain("--coral: #E0524C;");
     expect(globalsCss).toContain("--color-coral: var(--coral);");
+  });
+});
+
+describe("polish wave 1: warm neutrals and semantic status tokens (D1/D2)", () => {
+  it("uses the warm stone neutrals in light mode", () => {
+    expect(globalsCss).toContain("--foreground: #1C1917;");
+    expect(globalsCss).toContain("--muted: #F5F5F4;");
+    expect(globalsCss).toContain("--muted-foreground: #625D58;");
+    expect(globalsCss).toContain("--border: #D6D3D1;");
+    expect(globalsCss).toContain("--border-subtle: #E7E5E4;");
+  });
+
+  it("keeps dark --border-subtle subtler than --border", () => {
+    expect(globalsCss).toContain("--border: #30303A;");
+    expect(globalsCss).toContain("--border-subtle: #26262C;");
+  });
+
+  it("defines text and info tokens for light and dark, mapped to Tailwind", () => {
+    expect(globalsCss).toContain("--success-text: #15803D;");
+    expect(globalsCss).toContain("--success-text: #4ADE80;");
+    expect(globalsCss).toContain("--warning-text: #B45309;");
+    expect(globalsCss).toContain("--warning-text: #FBBF24;");
+    expect(globalsCss).toContain("--danger-text: #B91C1C;");
+    expect(globalsCss).toContain("--danger-text: #F87171;");
+    expect(globalsCss).toContain("--info: #2563EB;");
+    expect(globalsCss).toContain("--info: #60A5FA;");
+    expect(globalsCss).toContain("--info-text: #1D4ED8;");
+    expect(globalsCss).toContain("--color-success-text: var(--success-text);");
+    expect(globalsCss).toContain("--color-warning-text: var(--warning-text);");
+    expect(globalsCss).toContain("--color-danger-text: var(--danger-text);");
+    expect(globalsCss).toContain("--color-info: var(--info);");
+    expect(globalsCss).toContain("--color-info-text: var(--info-text);");
   });
 });
 
