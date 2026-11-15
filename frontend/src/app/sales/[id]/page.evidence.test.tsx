@@ -162,7 +162,7 @@ describe("Recent-sales drill-down detail outcomes (#15)", () => {
     render(<SaleDetailPage />);
 
     expect(screen.getByText("No se pudo abrir la venta")).toBeTruthy();
-    expect(screen.getByText("No tenes permisos para ver esta venta.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Ir a Ventas" })).toBeTruthy();
+    expect(screen.getByText("No tienes permisos para ver esta venta.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Volver" })).toBeTruthy();
   });
 });

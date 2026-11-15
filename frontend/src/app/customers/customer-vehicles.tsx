@@ -45,7 +45,7 @@ export function CustomerVehicles({ customerId }: { customerId: string }) {
         <Input label="Placa" value={plate} onChange={(event) => setPlate(event.target.value)} maxLength={40} />
         <Input label="Modelo" value={model} onChange={(event) => setModel(event.target.value)} maxLength={120} />
       </div>
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger-text">{error}</p>}
       <div className="flex gap-2">
         <Button type="button" variant="secondary" onClick={addVehicle} loading={create.isPending || update.isPending}>{editingId ? "Guardar vehículo" : "Agregar vehículo"}</Button>
         {editingId && <Button type="button" variant="ghost" onClick={() => { setEditingId(null); setPlate(""); setModel(""); setError(""); }}>Cancelar edición</Button>}

@@ -120,6 +120,36 @@ describe("Sales page deep-link behavior (#24)", () => {
     expect(screen.getByRole("button", { name: /Quitar filtro/i })).toBeTruthy();
   });
 
+  it("keeps cached sales visible when a background refetch fails", () => {
+    useSalesMock.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "sale-1",
+            saleNumber: 42,
+            status: "PAID",
+            total: 100,
+            createdAt: "2026-03-24T10:00:00Z",
+            customer: { name: "Ana Perez" },
+            payments: [],
+            financed: false,
+            user: { name: "Admin" },
+          },
+        ],
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
+      },
+      isLoading: false,
+      isError: true,
+      error: new Error("network down"),
+      refetch: vi.fn(),
+    });
+
+    render(<SalesPage />);
+
+    expect(screen.getAllByText("#42").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
+  });
+
   it("clears the customer deep-link filter back to /sales", async () => {
     currentSearchParams = new URLSearchParams([
       ["customerId", "customer-1"],

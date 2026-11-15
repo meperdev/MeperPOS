@@ -7,6 +7,7 @@ import { useSales } from "@/hooks/useSales";
 import { downloadReceiptPdf, openReceiptPdf } from "@/hooks/useReceipt";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -97,7 +98,13 @@ function SalesPageContent() {
     setEndDate(today);
   };
 
-  const { data, isLoading } = useSales({
+  const {
+    data,
+    isLoading,
+    isError: salesFailed,
+    error: salesError,
+    refetch: refetchSales,
+  } = useSales({
     page,
     limit: pageSize,
     status: status || undefined,
@@ -218,10 +225,10 @@ function SalesPageContent() {
                   Hoy
                 </FilterOptionButton>
                 <FilterOptionButton active={isWeekActive} onClick={setThisWeek}>
-                  7D
+                  7 días
                 </FilterOptionButton>
                 <FilterOptionButton active={isMonthActive} onClick={setLast30Days}>
-                  30D
+                  30 días
                 </FilterOptionButton>
               </FilterGroup>
               {(startDate || endDate || status) && (
@@ -246,7 +253,13 @@ function SalesPageContent() {
         />
 
         {/* Table */}
-        {isLoading ? (
+        {salesFailed && !data ? (
+          <ErrorState
+            message={getApiErrorMessage(salesError, "No se pudieron cargar las ventas.")}
+            retryLabel="Reintentar"
+            onRetry={() => void refetchSales()}
+          />
+        ) : isLoading ? (
           <CardSkeleton count={6} label="Cargando ventas..." />
         ) : (
           <>
@@ -255,8 +268,8 @@ function SalesPageContent() {
               className={cn(
                 "flex-1",
                 viewMode === "grid"
-                  ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 stagger-children content-start"
-                  : "md:hidden space-y-2.5",
+                  ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 content-start"
+                  : "md:hidden space-y-2",
               )}
             >
               {sales.length === 0 ? (
@@ -272,7 +285,7 @@ function SalesPageContent() {
                     className="cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3 transition-colors hover:border-border"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                      <span className="text-xs font-semibold text-foreground tabular-nums">
                         #{sale.saleNumber}
                       </span>
                       <StatusBadge domain="sale" status={sale.status} dot={false} />
@@ -282,12 +295,12 @@ function SalesPageContent() {
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>Cliente</span>
                         <span className="font-medium text-foreground truncate max-w-[180px]">
-                          {sale.customer?.name || "General"}
+                          {sale.customer?.name || "Sin cliente"}
                         </span>
                       </div>
                       <div className="flex justify-between items-start gap-2 text-muted-foreground">
                         <span className="shrink-0">Fecha</span>
-                        <span className="font-mono text-right leading-tight text-[11px]">{formatDateTime(sale.createdAt)}</span>
+                        <span className="text-right leading-tight text-[11px]">{formatDateTime(sale.createdAt)}</span>
                       </div>
                       {isAdmin && sale.user?.name && (
                         <div className="flex justify-between items-center text-muted-foreground">
@@ -304,7 +317,7 @@ function SalesPageContent() {
                     <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
                       <div>
                         <p className="text-[11px] font-medium text-muted-foreground">Total</p>
-                        <p className="font-mono text-sm font-semibold text-foreground tabular-nums">
+                        <p className="text-sm font-semibold text-foreground tabular-nums">
                           {formatCurrency(sale.total)}
                         </p>
                       </div>
@@ -323,8 +336,8 @@ function SalesPageContent() {
                           size="sm"
                           variant="secondary"
                           onClick={() => handleOpenReceipt(sale.id)}
-                          className="w-7 px-0"
-                          title="Ver comprobante"
+                          className="h-9 w-9 px-0"
+                          title="Ver comprobante" aria-label={`Ver comprobante de venta ${sale.saleNumber}`}
                         >
                           <Receipt className="w-3.5 h-3.5" />
                         </Button>
@@ -332,8 +345,8 @@ function SalesPageContent() {
                           size="sm"
                           variant="secondary"
                           onClick={() => handleDownloadReceipt(sale.id)}
-                          className="w-7 px-0"
-                          title="Descargar comprobante"
+                          className="h-9 w-9 px-0"
+                          title="Descargar comprobante" aria-label={`Descargar comprobante de venta ${sale.saleNumber}`}
                         >
                           <Download className="w-3.5 h-3.5" />
                         </Button>
@@ -348,7 +361,7 @@ function SalesPageContent() {
             {viewMode === "table" && (
             <div
               ref={listRef}
-              className="hidden md:block w-full flex-1 rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden animate-fade-in"
+              className="hidden md:block w-full flex-1 rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden"
             >
               <div className="overflow-x-auto">
                 <Table variant="default" className="min-w-[680px]">
@@ -397,11 +410,11 @@ function SalesPageContent() {
                           className="cursor-pointer"
                         >
                           <TableCell>
-                            <span className="text-xs font-semibold text-foreground font-mono tabular-nums">
+                            <span className="text-xs font-semibold text-foreground tabular-nums">
                               #{sale.saleNumber}
                             </span>
                           </TableCell>
-                          <TableCell className="text-muted-foreground whitespace-nowrap font-mono tabular-nums">
+                          <TableCell className="text-muted-foreground whitespace-nowrap tabular-nums">
                             {formatDateTime(sale.createdAt)}
                           </TableCell>
                           <TableCell className="max-w-[140px] truncate">
@@ -411,7 +424,7 @@ function SalesPageContent() {
                               </span>
                             ) : (
                               <span className="text-xs text-muted-foreground">
-                                General
+                                Sin cliente
                               </span>
                             )}
                           </TableCell>
@@ -423,7 +436,7 @@ function SalesPageContent() {
                                 </span>
                               ) : (
                                 <span className="text-xs text-muted-foreground/60">
-                                  N/A
+                                  Sin asignar
                                 </span>
                               )}
                             </TableCell>
@@ -435,7 +448,7 @@ function SalesPageContent() {
                             <StatusBadge domain="sale" status={sale.status} dot={false} />
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                            <span className="text-xs font-semibold text-foreground tabular-nums">
                               {formatCurrency(sale.total)}
                             </span>
                           </TableCell>
@@ -448,8 +461,8 @@ function SalesPageContent() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleViewDetails(sale)}
-                                className="p-1.5 h-7 w-7 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
-                                title="Ver detalle"
+                                className="p-1.5 h-9 w-9 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                                title="Ver detalle" aria-label={`Ver detalle de venta ${sale.saleNumber}`}
                               >
                                 <Eye className="w-3.5 h-3.5" />
                               </Button>
@@ -457,8 +470,8 @@ function SalesPageContent() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleOpenReceipt(sale.id)}
-                                className="p-1.5 h-7 w-7 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
-                                title="Ver comprobante"
+                                className="p-1.5 h-9 w-9 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                                title="Ver comprobante" aria-label={`Ver comprobante de venta ${sale.saleNumber}`}
                               >
                                 <Receipt className="w-3.5 h-3.5" />
                               </Button>
@@ -466,8 +479,8 @@ function SalesPageContent() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleDownloadReceipt(sale.id)}
-                                className="p-1.5 h-7 w-7 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
-                                title="Descargar comprobante"
+                                className="p-1.5 h-9 w-9 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                                title="Descargar comprobante" aria-label={`Descargar comprobante de venta ${sale.saleNumber}`}
                               >
                                 <Download className="w-3.5 h-3.5" />
                               </Button>
@@ -505,15 +518,15 @@ function SalesPageContent() {
       >
         {selectedSale && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
                 {
                   label: "Cliente",
-                  value: selectedSale.customer?.name || "Cliente General",
+                  value: selectedSale.customer?.name || "Sin cliente",
                 },
                 {
                   label: "Vendedor",
-                  value: selectedSale.user?.name || "N/A",
+                  value: selectedSale.user?.name || "Sin asignar",
                 },
                 {
                   label: "Fecha",
@@ -539,7 +552,7 @@ function SalesPageContent() {
                     <p
                       className={cn(
                         "text-xs font-semibold text-foreground truncate",
-                        mono && "font-mono tabular-nums",
+                        mono && " tabular-nums",
                       )}
                     >
                       {value as string}
@@ -566,13 +579,13 @@ function SalesPageContent() {
                           }[p.method] || p.method}
                           :
                         </span>
-                        <span className="font-mono font-semibold tabular-nums">
+                        <span className="font-semibold tabular-nums">
                           {formatCurrency(p.amount)}
                         </span>
                       </span>
                     ))
                   ) : selectedSale.financed ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-600 dark:text-violet-400">
+                    <span className="inline-flex items-center gap-1.5 rounded-md border border-info/40 bg-info/10 px-2.5 py-1 text-xs font-medium text-info-text">
                       Financiado · el cobro va al préstamo asociado
                     </span>
                   ) : (
@@ -585,9 +598,9 @@ function SalesPageContent() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-foreground">
-                  Items de la venta
+                  Productos de la venta
                 </p>
-                <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                <span className="text-[11px] text-muted-foreground tabular-nums">
                   {selectedSale.items.length}{" "}
                   {selectedSale.items.length === 1 ? "producto" : "productos"}
                 </span>
@@ -602,11 +615,11 @@ function SalesPageContent() {
                       <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         {item.product?.name || "Producto eliminado"}
                       </p>
-                      <p className="text-[11px] font-mono text-muted-foreground tabular-nums mt-0.5">
+                      <p className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
                         {formatCurrency(item.unitPrice)} × {item.quantity}
                       </p>
                     </div>
-                    <span className="font-mono text-xs sm:text-sm font-semibold text-foreground tabular-nums ml-4">
+                    <span className="text-xs sm:text-sm font-semibold text-foreground tabular-nums ml-4">
                       {formatCurrency(item.total)}
                     </span>
                   </div>
@@ -638,9 +651,9 @@ function SalesPageContent() {
                   <span className="text-muted-foreground">{label}</span>
                   <span
                     className={cn(
-                      "font-mono font-medium tabular-nums",
+                      " font-medium tabular-nums",
                       accent
-                        ? "text-emerald-600 dark:text-emerald-400"
+                        ? "text-success-text"
                         : "text-foreground",
                     )}
                   >
@@ -650,14 +663,14 @@ function SalesPageContent() {
               ))}
               <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
                 <span className="text-sm font-semibold text-foreground">Total</span>
-                <span className="font-mono text-lg font-semibold text-foreground tabular-nums">
+                <span className="text-lg font-semibold text-foreground tabular-nums">
                   {formatCurrency(selectedSale.total)}
                 </span>
               </div>
               {selectedSale.amountPaid != null && selectedSale.amountPaid > 0 && (
                 <div className="flex justify-between text-xs pt-1">
                   <span className="text-muted-foreground">Recibido</span>
-                  <span className="font-mono font-medium text-foreground tabular-nums">
+                  <span className="font-medium text-foreground tabular-nums">
                     {formatCurrency(selectedSale.amountPaid)}
                   </span>
                 </div>
@@ -665,7 +678,7 @@ function SalesPageContent() {
               {selectedSale.change != null && selectedSale.change > 0 && (
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Cambio</span>
-                  <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  <span className="font-semibold text-success-text tabular-nums">
                     {formatCurrency(selectedSale.change)}
                   </span>
                 </div>
