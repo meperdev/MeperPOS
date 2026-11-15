@@ -301,7 +301,7 @@ export default function PurchaseOrderDetailPage() {
           </div>
 
           <aside>
-            <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs sticky top-4">
+            <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs sticky top-[calc(var(--mobile-header)+var(--safe-top)+1rem)] lg:top-4">
               <h3 className="text-xs font-semibold text-foreground">
                 Resumen de costos
               </h3>

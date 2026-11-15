@@ -2,7 +2,7 @@
 
 Este directorio contiene los **super planes** de las mejoras mayores del sistema de gestión de inventario. Cada plan está pensado para ser ejecutable fase por fase, con dependencias de archivos claras, decisiones arquitectónicas justificadas, riesgos identificados y criterios de aceptación verificables.
 
-**Plan 01 (Proveedores + Órdenes de Compra)** ya fue implementado y no aparece en este índice. Los planes 02 a 07 son los que quedan por construir.
+**Plan 01 (Proveedores + Órdenes de Compra)** ya fue implementado y no aparece en este índice. Los planes 02 a 08 son los que quedan por construir.
 
 ---
 
@@ -18,8 +18,9 @@ Leelos en este orden si es tu primera vez; cada uno asume contexto del anterior:
 | 05 | [Sucursales, bodegas y transferencias](./plan-05-sucursales-bodegas-transferencias.md) | 70–90 h | 6 | Alta — habilita escalamiento | Ninguna (migración destructiva) |
 | 06 | [Lotes, vencimientos y alertas](./plan-06-lotes-vencimientos-alertas.md) | 50–65 h | 6 | Media-alta — sectorial | Plan 05 (locationId) |
 | 07 | [RBAC granular + 2FA](./plan-07-rbac-granular-2fa.md) | 60–80 h | 6 | Alta — seguridad | Ninguna (migración enum→FK) |
+| 08 | [PWA, móvil y offline](./plan-08-pwa-movil-y-offline.md) | 135–255 h | 7 | Media-alta — operación móvil | Fase 5 depende del Plan 03 |
 
-**Esfuerzo total estimado: 355–460 horas** (≈ 9–12 semanas de un dev full-stack senior).
+**Esfuerzo total estimado: 490–715 horas** (≈ 12–18 semanas de un dev full-stack senior), incluyendo el Plan 08.
 
 ---
 
@@ -64,6 +65,13 @@ Leelos en este orden si es tu primera vez; cada uno asume contexto del anterior:
 **2FA:** `otplib` v12 TOTP + códigos de recuperación bcrypt, obligatorio para `ADMIN`.
 **Riesgo crítico:** usuario quedó sin permisos tras migración — resuelto con seed que replica exactamente el comportamiento actual de los 3 roles.
 
+### 08 — PWA, móvil y offline
+**Problema:** la base PWA está construida y verificada (rama `feat/pwa-support`, 19 commits), pero nadie la instaló en un dispositivo, no hay capa offline de lectura ni de escritura, y no existe verificación PWA en CI.
+**Decisión clave (Fase 0, bloqueante para estimar):** ¿"soporte iOS y Android" significa instalable desde el navegador, o publicado en tiendas? Apple no acepta PWAs en el App Store (solo envoltorio nativo, con la guideline 4.2 en contra); Android sí acepta una TWA, que es el camino barato.
+**Cross-plan:** la Fase 5 (POS offline) depende del Plan 03 (turno por dispositivo) y la Fase 4 toca numeración fiscal del Plan 04 y la política de stock del Plan 05.
+**Riesgo crítico:** vender sin conexión duplica ventas porque **no existe idempotencia en el backend** (`POST /sales` no acepta clave del cliente), y los precios offline chocan con el invariante de que el servidor es dueño de toda cifra que se convierte en plata. Resuelto con idempotencia end-to-end y una decisión de producto escrita antes de codear.
+**Nota de arranque:** las Fases 1 y 2 son de 10–25 h cada una y conviene hacerlas ya; no reemplazan ni retrasan los planes 02–07.
+
 ---
 
 ## Dependencias entre planes
@@ -85,6 +93,8 @@ Plan 07 (permissions) ───────┘ (reemplaza @Roles por @RequirePer
 4. **Plan 02** (notas crédito) — independiente, prerequisito para Plan 04.
 5. **Plan 06** (lotes) — requiere Plan 05 terminado.
 6. **Plan 04** (DIAN) — al final; requiere Plan 02 + estabilidad de ventas; lanzamiento piloto en ambiente `HABILITACION` antes de `PRODUCCION`.
+
+**Plan 08 entra al costado, no en la cola.** Sus Fases 1 y 2 (entrega probada y endurecimiento, 25–40 h) son independientes de los planes 02–07 y conviene hacerlas ya, porque son las que convierten la PWA en un artefacto verificado en vez de uno supuesto. La Fase 4 (decisiones de offline) debe sentarse **junto** al Plan 03 y al Plan 04: comparten el turno por dispositivo y la numeración fiscal. La Fase 5 (implementación de POS offline, 80–140 h) no se arranca sin la Fase 4 aprobada.
 
 ---
 

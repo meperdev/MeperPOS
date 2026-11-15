@@ -587,6 +587,28 @@ describe("Sidebar", () => {
     expect(tooltip).toHaveTextContent("Dashboard");
   });
 
+  // The mobile header and the drawer are the two fixed surfaces a notch and a
+  // home indicator actually overlap. Class assertions are the only observable
+  // in jsdom, where `env()` is 0: a regression pin, not visual proof.
+  it("keeps the fixed mobile chrome clear of the notch and the home indicator", () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    const { container } = render(<Sidebar />, { wrapper });
+
+    const header = container.querySelector("header");
+    const drawer = container.querySelector("[data-sidebar-root]");
+
+    expect(header?.className).toContain("pt-[var(--safe-top)]");
+    expect(header?.className).toContain(
+      "h-[calc(var(--mobile-header)+var(--safe-top))]"
+    );
+    expect(drawer?.className).toContain(
+      "top-[calc(var(--mobile-header)+var(--safe-top))]"
+    );
+  });
+
   it("renders the Lucky square icon and hides wordmark text when collapsed", async () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations: [organizations[0]] },

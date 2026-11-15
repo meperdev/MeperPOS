@@ -362,6 +362,90 @@ h4 {
     background: color-mix(in oklab, var(--primary) 65%, transparent);
 }
 
+/* ─── Safe areas ───────────────────────────────────────── */
+/*
+ * `viewport-fit=cover` (buildPwaViewport) makes the app draw edge to edge, so
+ * every fixed surface has to pay the inset back itself: nothing else will keep
+ * content out from under a notch, a rounded corner or the home indicator.
+ *
+ * `env()` resolves to 0px in a browser tab and on any device without an inset,
+ * so the compensation is applied unconditionally. There is deliberately no
+ * "standalone or not" branch: a single code path cannot drift from the reality
+ * of the device the way a media query or a feature test can.
+ */
+:root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+
+    /*
+     * The height of the fixed mobile header. Every surface that has to clear it
+     * derives from this one value: the header itself, the drawer that starts
+     * below it and the content column that starts further down. Hand-copying the
+     * number is how those three drift apart without a test noticing.
+     */
+    --mobile-header: 3.5rem;
+    /* Gap between that header and the first content row. */
+    --mobile-header-gap: 1.5rem;
+}
+
+/* ─── Installed app shell ──────────────────────────────── */
+/*
+ * In a browser tab most of this is invisible. In a standalone app each rule is
+ * the difference between "an app" and "a website in a window", which is what
+ * the owner asked for: that it never reads as a browser.
+ *
+ * Applied unconditionally where it is harmless: `display-mode` behaves the same
+ * in a narrow desktop window, and a media query that silently stops matching is
+ * worse than a rule that costs nothing.
+ */
+html {
+    /* No rubber-band bounce, no pull-to-refresh: the app owns its scroll. */
+    overscroll-behavior: none;
+    /* Rotation must not resize text. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    overscroll-behavior: none;
+    /* No grey flash on every tap; the app paints its own pressed states. */
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (display-mode: standalone) {
+    /* A long press is the browser's menu on a website and nothing on an app. */
+    body {
+        -webkit-touch-callout: none;
+    }
+
+    /*
+     * Selection is disabled on chrome only. Content stays selectable on purpose:
+     * an operator copying an invoice number or an error id is a real task, and
+     * blanket `user-select: none` breaks it while fixing nothing.
+     */
+    header,
+    nav,
+    aside,
+    button,
+    [role="button"] {
+        user-select: none;
+        -webkit-user-select: none;
+    }
+}
+
+/* Kills the double-tap zoom on controls; pinch-to-zoom is untouched. */
+button,
+[role="button"],
+a,
+input,
+select,
+textarea,
+label {
+    touch-action: manipulation;
+}
+
 /* The navigation rail paints no track: a 5px thumb over 9px icons reads as a
    hard seam. Scrollability is carried by the rail's own edge fades instead. */
 .sidebar-scroll {

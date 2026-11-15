@@ -92,7 +92,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen w-full flex-col bg-background selection:bg-primary/20 selection:text-primary-text">
       {/* Barra superior: ecosistema MeperSoft + tema */}
-      <header className="flex items-center justify-between px-6 pt-6 sm:px-10 sm:pt-8">
+      <header className="flex items-center justify-between pl-[max(1.5rem,var(--safe-left))] pr-[max(1.5rem,var(--safe-right))] pt-[max(1.5rem,var(--safe-top))] sm:pl-[max(2.5rem,var(--safe-left))] sm:pr-[max(2.5rem,var(--safe-right))] sm:pt-[max(2rem,var(--safe-top))]">
         <div className="flex items-center gap-2.5">
           <Image
             src="/brand/mepersoft-icon-192.png"
@@ -123,7 +123,7 @@ export default function LoginPage() {
         </button>
       </header>
 
-      <main className="flex flex-1 items-center justify-center px-6 py-10 sm:py-12">
+      <main className="flex flex-1 items-center justify-center pl-[max(1.5rem,var(--safe-left))] pr-[max(1.5rem,var(--safe-right))] py-10 sm:py-12">
         <div className="w-full max-w-[27rem]">
           {/* Lockup vertical: emblema + marca */}
           <div
@@ -247,7 +247,7 @@ export default function LoginPage() {
         </div>
       </main>
 
-      <footer className="px-6 pb-6 sm:px-10 sm:pb-8">
+      <footer className="pl-[max(1.5rem,var(--safe-left))] pr-[max(1.5rem,var(--safe-right))] pb-[max(1.5rem,var(--safe-bottom))] sm:pl-[max(2.5rem,var(--safe-left))] sm:pr-[max(2.5rem,var(--safe-right))] sm:pb-[max(2rem,var(--safe-bottom))]">
         <div className="flex flex-col items-center justify-between gap-2 border-t border-border/60 pt-4 text-center font-mono text-[11px] text-muted-foreground/70 sm:flex-row sm:text-left">
           <span>
             &copy; {new Date().getFullYear()} {APP_NAME} — Plataforma POS para negocios en Colombia.

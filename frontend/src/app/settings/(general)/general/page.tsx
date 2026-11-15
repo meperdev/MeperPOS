@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { SettingsCard } from "../../_components/SettingsCard";
+import { InstallAppCard } from "../../_components/InstallAppCard";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { Building2, Upload, Image as ImageIcon } from "lucide-react";
@@ -138,6 +139,8 @@ export default function GeneralSettingsPage() {
           </div>
         </div>
       </SettingsCard>
+
+      <InstallAppCard />
     </div>
   );
 }

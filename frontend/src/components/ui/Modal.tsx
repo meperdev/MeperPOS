@@ -151,7 +151,7 @@ export function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 md:p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-[max(0.75rem,var(--safe-top))_max(0.75rem,var(--safe-right))_max(0.75rem,var(--safe-bottom))_max(0.75rem,var(--safe-left))] sm:p-6 md:p-8">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"

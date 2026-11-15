@@ -1,5 +1,11 @@
-import path from "path";
+import path from "node:path";
 import type { NextConfig } from "next";
+import { apiProxyRewrites, assertProxyConfigured } from "./src/lib/api-proxy";
+
+assertProxyConfigured({
+  apiUrl: process.env.NEXT_PUBLIC_API_URL,
+  backendOrigin: process.env.BACKEND_ORIGIN,
+});
 
 /**
  * Content-Security-Policy parts (spec S3, "sanitize without nonce", phase 1).
@@ -222,20 +228,28 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  /**
-   * Dev-only: see `DEV_API_PROXY_TARGET`. Empty (and production-proof) by
-   * default, so the deployed app keeps calling the API origin directly.
-   */
+  // Preview-only: restored from `feat/api-same-origin-proxy` so a Vercel
+  // preview can be exercised without touching backend CORS.
+  // The same-origin /api proxy lives on `feat/api-same-origin-proxy`, not here:
+  // it is the one piece of PWA work that changes production routing, so it is
+  // reviewed and merged on its own. Merge it BEFORE this branch, otherwise an
+  // installed iOS app asks for a login on every launch.
+  //
+  // `DEV_API_PROXY_TARGET` takes precedence when set: it is the dev-only
+  // same-origin proxy, empty (and production-proof) by default.
   async rewrites() {
-    if (!DEV_API_PROXY_TARGET) return [];
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${DEV_API_PROXY_TARGET}/api/:path*`,
-      },
-    ];
+    if (DEV_API_PROXY_TARGET) {
+      return [
+        {
+          source: "/api/:path*",
+          destination: `${DEV_API_PROXY_TARGET}/api/:path*`,
+        },
+      ];
+    }
+    return apiProxyRewrites(process.env.BACKEND_ORIGIN);
   },
-  async headers() {    const globalHeaders = isReportOnlyEnabled
+  async headers() {
+    const globalHeaders = isReportOnlyEnabled
       ? [
           ...securityHeaders,
           {

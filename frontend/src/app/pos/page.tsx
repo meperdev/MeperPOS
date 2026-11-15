@@ -35,6 +35,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { DynamicFallback } from "@/components/ui/DynamicFallback";
 import { prefetchOnIdle } from "@/lib/prefetch";
+import { useCartUndo } from "@/hooks/useCartUndo";
 import dynamic from "next/dynamic";
 import { PaymentMethodCards } from "@/components/pos/PaymentMethodCards";
 import { MobileCartFloatingBar } from "@/components/pos/MobileCartFloatingBar";
@@ -456,10 +457,12 @@ export default function POSPage() {
     });
   }, []);
 
-  const removeFromCart = useCallback((productId: string) => {
-    if (cartLockedRef.current) return;
-    setCart((prev) => prev.filter((item) => item.productId !== productId));
-  }, []);
+  // Every removal is reversible for a few seconds: a stray tap on "−" or on the
+  // bin during a sale is cheap to undo and expensive to lose.
+  const cartUndo = useCartUndo(cart, setCart, {
+    isLocked: () => cartLockedRef.current,
+  });
+  const removeFromCart = cartUndo.removeLine;
 
   const updateQuantity = useCallback(
     (productId: string, quantity: number) => {
@@ -751,6 +754,8 @@ export default function POSPage() {
       });
       setLastSale(result);
       setCart([]);
+      // A finished or paused sale must not leave an undo offer pointing at it.
+      cartUndo.clearUndo();
       setDiscountAmount(0);
       setAmountPaid(undefined);
       setSelectedCustomer("");
@@ -825,6 +830,8 @@ export default function POSPage() {
         return;
       }
       setCart([]);
+      // A finished or paused sale must not leave an undo offer pointing at it.
+      cartUndo.clearUndo();
       setDiscountAmount(0);
       setSelectedCustomer("");
       setOpenedFromMobileCart(false);
@@ -877,6 +884,8 @@ export default function POSPage() {
         : "Cliente General";
       pauseSale(cart, selectedCustomer, discountAmount, customerName);
       setCart([]);
+      // A finished or paused sale must not leave an undo offer pointing at it.
+      cartUndo.clearUndo();
       setDiscountAmount(0);
       setAmountPaid(undefined);
       setSelectedCustomer("");
@@ -1213,7 +1222,7 @@ export default function POSPage() {
                       <div className="flex items-center gap-2">
                         <Stepper
                           value={item.quantity}
-                          min={0}
+                          min={1}
                           max={item.availableStock}
                           size="sm"
                           onChange={(value) =>
@@ -1236,8 +1245,9 @@ export default function POSPage() {
                         <button
                           type="button"
                           onClick={() => removeFromCart(item.productId)}
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors duration-150"
+                          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors duration-150"
                           title="Eliminar"
+                          aria-label={`Eliminar ${item.product.name}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1407,6 +1417,30 @@ export default function POSPage() {
           isFinancing={createPosLoan.isPending}
           isPending={createSale.isPending}
         />
+      )}
+
+      {/*
+        Undo bar. Sits above the mobile floating bar and inside the safe area,
+        because the whole point is that it is reachable with a thumb right after
+        the tap that removed the line by accident.
+      */}
+      {cartUndo.lastRemoval && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-x-0 bottom-[calc(var(--safe-bottom)+5.5rem)] z-[80] mx-auto flex w-[min(24rem,calc(100%-2rem))] items-center justify-between gap-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-lg animate-fade-in-up lg:bottom-[calc(var(--safe-bottom)+1.5rem)]"
+        >
+          <span className="min-w-0 truncate text-sm text-foreground">
+            {cartUndo.lastRemoval.item.product.name} eliminado
+          </span>
+          <button
+            type="button"
+            onClick={cartUndo.undoRemove}
+            className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-primary-text transition-colors hover:bg-primary-light"
+          >
+            Deshacer
+          </button>
+        </div>
       )}
 
       {/* Customer Modal */}

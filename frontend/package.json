@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "check:quarantine": "node scripts/check-quarantine.mjs"
+    "check:quarantine": "node scripts/check-quarantine.mjs",
+    "check:pwa": "node scripts/check-pwa.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

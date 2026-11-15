@@ -801,7 +801,7 @@ export default function ExpensesPage() {
             )}
 
             {meta && (
-              <div className="sticky bottom-0 z-10 -mx-1 border-t border-border/60 bg-background/95 px-1 py-1.5 backdrop-blur-sm">
+              <div className="sticky bottom-0 z-10 -mx-1 border-t border-border/60 bg-background/95 px-1 py-[max(0.375rem,var(--safe-bottom))] backdrop-blur-sm">
                 <Pagination
                   currentPage={page}
                   totalPages={meta.totalPages}

@@ -1,4 +1,5 @@
 import { safeRemoveItem } from "@/lib/utils";
+import { clearSessionPageCache } from "@/lib/pwa";
 
 /**
  * In-memory access token store.
@@ -37,9 +38,9 @@ export const SELECTED_ORGANIZATION_KEY = "selectedOrganizationId";
  * Two code paths end a session: `AuthContext.logout` when the operator signs
  * out, and the request layer's dead-session branch when the refresh fails. Both
  * must leave the same residue behind — no in-memory token, no user display
- * cache, and no organization scope for the next login to inherit and send as
- * `X-Organization-Id`. One function here means neither path can forget one of
- * them.
+ * cache, no organization scope for the next login to inherit and send as
+ * `X-Organization-Id`, and no service-worker record of which screens this
+ * session opened. One function here means neither path can forget one of them.
  *
  * The React Query cache is deliberately not cleared here. It is the other half
  * of the same boundary, but this module must not depend on React Query, so
@@ -49,4 +50,5 @@ export function clearSessionState(): void {
   clearAccessToken();
   safeRemoveItem(USER_DISPLAY_CACHE_KEY);
   safeRemoveItem(SELECTED_ORGANIZATION_KEY);
+  clearSessionPageCache();
 }

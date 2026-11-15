@@ -7,7 +7,10 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { SidebarProvider } from "@/contexts/SidebarContext";
-import { APP_NAME, APP_DESCRIPTION } from "@/lib/constants";
+import { InstallPromptProvider } from "@/contexts/InstallPromptContext";
+import { BackGestureGuard } from "@/components/pwa/BackGestureGuard";
+import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
+import { buildPwaMetadata, buildPwaViewport } from "@/lib/pwa";
 
 /**
  * Geist (sans) and JetBrains Mono (mono) are self-hosted as latin variable
@@ -29,21 +32,9 @@ const jetbrainsMono = localFont({
   weight: "100 800",
 });
 
-export const metadata: Metadata = {
-  title: APP_NAME,
-  description: `${APP_NAME} — ${APP_DESCRIPTION}`,
-};
+export const metadata: Metadata = buildPwaMetadata();
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 5,
-  viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#FAF8FF" },
-    { media: "(prefers-color-scheme: dark)", color: "#111114" },
-  ],
-};
+export const viewport: Viewport = buildPwaViewport();
 
 export default function RootLayout({
   children,
@@ -59,12 +50,16 @@ export default function RootLayout({
           <ThemeProvider>
             <ToastProvider>
               <AuthProvider>
-                <SidebarProvider>{children}</SidebarProvider>
+                <SidebarProvider>
+                  <InstallPromptProvider>{children}</InstallPromptProvider>
+                </SidebarProvider>
               </AuthProvider>
             </ToastProvider>
           </ThemeProvider>
         </QueryProvider>
         <Analytics />
+        <ServiceWorkerRegistrar />
+        <BackGestureGuard />
       </body>
     </html>
   );

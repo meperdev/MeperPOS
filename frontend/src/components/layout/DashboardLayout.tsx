@@ -6,6 +6,8 @@ import { useEffect, memo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { AppShellSkeleton } from "@/components/layout/AppShellSkeleton";
 import { PlanLimitBanner } from "@/components/billing/PlanLimitBanner";
+import { ConnectionStatus } from "@/components/pwa/ConnectionStatus";
+import { UpdateAvailableBanner } from "@/components/pwa/UpdateAvailableBanner";
 import { hasAnyRole, type AppRole } from "@/lib/auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn } from "@/lib/utils";
@@ -96,11 +98,19 @@ export const DashboardLayout = memo(function DashboardLayout({
           <Sidebar />
           <main
             className={cn(
-              "px-4 pb-6 pt-20 lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
+              // Derived, not magic: the mobile header is `--mobile-header`, the gap
+              // below it is `--mobile-header-gap`, and the notch inset is added on
+              // top. Changing the header height moves this column with it. `lg:`
+              // keeps the desktop column as it was; physical insets are zero there.
+              "pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]",
+              "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]",
+              "lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
               isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
             )}
           >
             <div className="mx-auto w-full max-w-[1600px]">
+              <UpdateAvailableBanner />
+              <ConnectionStatus />
               <PlanLimitBanner />
               {children}
             </div>

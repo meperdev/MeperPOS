@@ -10,7 +10,7 @@ export default function RegisterPage() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen w-full bg-background flex items-center justify-center p-4 sm:p-6 selection:bg-primary/20 selection:text-primary-text">
+    <div className="min-h-screen w-full bg-background flex items-center justify-center pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] pt-[max(1rem,var(--safe-top))] pb-[max(1rem,var(--safe-bottom))] sm:pl-[max(1.5rem,var(--safe-left))] sm:pr-[max(1.5rem,var(--safe-right))] sm:pt-[max(1.5rem,var(--safe-top))] sm:pb-[max(1.5rem,var(--safe-bottom))] selection:bg-primary/20 selection:text-primary-text">
       <div className="w-full max-w-md animate-fade-in-up">
         <div className="rounded-3xl p-8 sm:p-10 bg-card border border-border/80 shadow-2xl shadow-black/10 space-y-6 text-left">
           {/* Header */}
