@@ -26,6 +26,11 @@ vi.mock("@/components/billing/PlanLimitBanner", () => ({
   PlanLimitBanner: () => null,
 }));
 
+// The banner itself is covered in its own file; here only its mount matters.
+vi.mock("@/components/pwa/ConnectionStatus", () => ({
+  ConnectionStatus: () => <div data-testid="connection-status" />,
+}));
+
 function setUser(role: string) {
   useAuthMock.mockReturnValue({
     isAuthenticated: true,
@@ -203,5 +208,17 @@ describe("DashboardLayout route gating for /expenses", () => {
     expect(mainElement?.className).toContain(
       "pr-[calc(1rem+var(--safe-right))]"
     );
+  });
+
+  it("mounts the connection warning on every authenticated route", () => {
+    setUser("ADMIN");
+
+    render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    expect(screen.getByTestId("connection-status")).toBeInTheDocument();
   });
 });

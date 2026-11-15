@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, memo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { PlanLimitBanner } from "@/components/billing/PlanLimitBanner";
+import { ConnectionStatus } from "@/components/pwa/ConnectionStatus";
 import { hasAnyRole, type AppRole } from "@/lib/auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn } from "@/lib/utils";
@@ -110,6 +111,7 @@ export const DashboardLayout = memo(function DashboardLayout({
         )}
       >
         <div className="mx-auto w-full max-w-[1600px]">
+          <ConnectionStatus />
           <PlanLimitBanner />
           {children}
         </div>
