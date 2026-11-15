@@ -11,7 +11,7 @@ import {
 } from './admin-business-modules.controller';
 
 describe('AdminBusinessModulesController', () => {
-  const modules = { isEnabled: jest.fn(), setEnabled: jest.fn() };
+  const modules = { listForOrganization: jest.fn(), setEnabled: jest.fn() };
   const controller = new AdminBusinessModulesController(modules as never);
   const context = (role: string) =>
     ({
@@ -52,10 +52,20 @@ describe('AdminBusinessModulesController', () => {
     ).rejects.toThrow();
   });
 
-  it('updates the requested organization only', async () => {
+  it('lists every module of the requested organization', async () => {
+    const catalog = [
+      { id: 'vehicles', name: 'Vehículos', description: '...', enabled: true },
+    ];
+    modules.listForOrganization.mockResolvedValue(catalog);
+
+    await expect(controller.findAll('org-1')).resolves.toEqual(catalog);
+    expect(modules.listForOrganization).toHaveBeenCalledWith('org-1');
+  });
+
+  it('updates the requested organization and module only', async () => {
     modules.setEnabled.mockResolvedValue({ enabled: false });
     await expect(
-      controller.update('org-1', { enabled: false }),
+      controller.update('org-1', 'vehicles', { enabled: false }),
     ).resolves.toEqual({ enabled: false });
     expect(modules.setEnabled).toHaveBeenCalledWith('org-1', 'vehicles', false);
   });

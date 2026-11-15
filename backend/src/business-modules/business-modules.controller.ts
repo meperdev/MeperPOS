@@ -18,10 +18,11 @@ import { BusinessModulesService } from './business-modules.service';
 export class BusinessModulesController {
   constructor(private readonly modules: BusinessModulesService) {}
 
-  @Get('vehicles')
-  async find(@CurrentUser() user: RequestUser) {
-    if (!user.organizationId)
+  @Get()
+  async findAll(@CurrentUser() user: RequestUser) {
+    if (!user.organizationId) {
       throw new BadRequestException('Organization ID is required');
-    return this.modules.getForOrganization(user.organizationId, 'vehicles');
+    }
+    return this.modules.listForOrganization(user.organizationId);
   }
 }
