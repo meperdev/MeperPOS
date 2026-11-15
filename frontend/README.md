@@ -40,7 +40,7 @@ La aplicación queda disponible en `http://localhost:3000`.
 
 ### Build de producción
 
-`npm run build` compila con Webpack (`next build --webpack`); `npm run dev` sigue usando Turbopack. El build de producción evade el fallo del resolvedor de fuentes de `next/font/google` que aparece en builds fríos con Turbopack (`Can't resolve '@vercel/turbopack-next/internal/font/google/font'`). Es una omisión documentada del bundler en producción, no una corrección de la causa raíz: las fuentes, sus pesos, las variables CSS y la versión de Next no cambian.
+`npm run build` compila con Webpack (`next build --webpack`); `npm run dev` sigue usando Turbopack. Las fuentes ya se sirven self-hosted desde `src/app/fonts/` con `next/font/local`, así que el bug del resolvedor de fuentes de `next/font/google` en builds fríos de Turbopack ya no se dispara; el flag de Webpack queda como margen defensivo y puede retirarse tras validar Turbopack en producción.
 
 ## Estructura de páginas
 
@@ -72,7 +72,7 @@ El layout `DashboardLayout` envuelve todas las páginas autenticadas: renderiza 
 - **`getApiErrorMessage(error, fallback)`** para extraer mensajes de error legibles de los errores de Axios.
 - **Cliente `api`** (`lib/api.ts`): singleton de Axios con inyección automática del JWT y redirección en respuestas `401`.
 - **Contextos**: `AuthContext` (usuario + JWT), `ThemeContext` (tema claro/oscuro) y `ToastContext` (notificaciones).
-- El tema usa variables CSS definidas en `globals.css` (`--primary` teal, `--terracotta` como acento) y fuentes Manrope + JetBrains Mono vía `next/font`.
+- El tema usa variables CSS definidas en `globals.css` (`--primary` teal, `--terracotta` como acento) y fuentes Geist + JetBrains Mono self-hosted vía `next/font/local`.
 
 ## Testing
 
