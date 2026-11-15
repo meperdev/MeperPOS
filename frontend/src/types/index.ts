@@ -886,6 +886,17 @@ export interface WhatsAppQrImage {
   data: string;
 }
 
+/**
+ * GET /whatsapp/intelligence/session — the platform-owned central channel. It
+ * carries no organization: the number belongs to the deployment, not a tenant.
+ */
+export interface WhatsAppCentralSession {
+  status: WhatsAppSessionStatus;
+  accountId: string | null;
+  sessionName: string;
+  lastObservedAt: string | null;
+}
+
 /** One linked number (`WhatsAppIdentityStatus`). */
 export type WhatsAppIdentityStatus = "PENDING" | "VERIFIED" | "REVOKED";
 

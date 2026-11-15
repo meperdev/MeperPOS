@@ -42,7 +42,9 @@ exactly one organization: its name is derived from the authenticated token's org
 created, started, stopped and restarted only for the caller's own tenant. The intelligence session is
 a single central channel owned by the platform, has no organization scope, and is reachable only by a
 platform `SUPER_ADMIN`; it is deliberately guarded without `OrganizationRequiredGuard`. Neither
-controller accepts a session name from the request.
+controller accepts a session name from the request. Unlinking and re-linking are central-only as well:
+unlinking the commercial number from a distant machine would leave customers unanswered until somebody
+reaches the phone, so `logout` and `relink` are implemented against the intelligence channel only.
 
 The delivery routes supervise the daily report. Reads return the calling organization's recent
 attempts, bounded to 30 rows; a delivery row carries no organization of its own, so the tenant comes
@@ -64,6 +66,7 @@ with a 409 instead of an error.
 | /api/whatsapp/intelligence/session/stop | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/intelligence/session/restart | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/intelligence/session/logout | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/relink | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/identity | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/identity/challenge | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/identity/:id | DELETE | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
