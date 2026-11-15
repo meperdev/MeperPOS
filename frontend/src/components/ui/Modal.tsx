@@ -142,7 +142,7 @@ export function Modal({
   useEffect(() => {
     if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !e.defaultPrevented) onClose();
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
@@ -154,7 +154,7 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-[max(0.75rem,var(--safe-top))_max(0.75rem,var(--safe-right))_max(0.75rem,var(--safe-bottom))_max(0.75rem,var(--safe-left))] sm:p-6 md:p-8">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 dark:bg-black/60"
         onClick={onClose}
       />
 
@@ -167,9 +167,9 @@ export function Modal({
         aria-label={!title ? ariaLabel : undefined}
         tabIndex={-1}
         className={cn(
-          "relative w-full rounded-xl sm:rounded-2xl border border-border/80",
-          "bg-card shadow-2xl shadow-black/20",
-          "animate-fade-in-up flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-4rem)]",
+          "relative w-full rounded-xl sm:rounded-2xl border border-border",
+          "bg-card shadow-lg shadow-black/10",
+          "animate-fade-in flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-4rem)]",
           sizes[size],
           className,
         )}
@@ -177,10 +177,11 @@ export function Modal({
         {/* Header */}
         {title && (
           <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 sm:px-6 sm:py-4 shrink-0">
-            <h2 id={titleId} className={cn("text-base font-bold text-foreground pr-2", scrollContent ? "truncate" : "min-w-0 [overflow-wrap:anywhere]")}>{title}</h2>
+            <h2 id={titleId} className={cn("text-base font-semibold text-foreground pr-2", scrollContent ? "truncate" : "min-w-0 [overflow-wrap:anywhere]")}>{title}</h2>
             <button
+              type="button"
               onClick={onClose}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:h-9 sm:w-9"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background sm:h-9 sm:w-9"
               aria-label="Cerrar"
             >
               <X className="w-4 h-4" />

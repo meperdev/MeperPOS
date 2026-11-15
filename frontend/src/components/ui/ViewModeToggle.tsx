@@ -29,7 +29,7 @@ export function ViewModeToggle({
         <FilterOptionButton
           active={value === "grid"}
           onClick={() => onChange("grid")}
-          className="px-2"
+          className="h-9 w-9 px-0"
           aria-label="Vista en tarjeta"
           title="Vista en tarjeta"
         >
@@ -38,7 +38,7 @@ export function ViewModeToggle({
         <FilterOptionButton
           active={value === "table"}
           onClick={() => onChange("table")}
-          className="px-2"
+          className="h-9 w-9 px-0"
           aria-label="Vista en lista"
           title="Vista en lista"
         >

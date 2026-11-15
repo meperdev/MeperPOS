@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Modal } from "./Modal";
+import { BentoSelect } from "./BentoSelect";
 
 afterEach(cleanup);
 it("keeps scrolling enabled by default", () => {
@@ -22,4 +23,23 @@ it("renders footer outside the scrolling content area when provided", () => {
   expect(screen.getByRole("button", { name: "Guardar" })).toBeInTheDocument();
   expect(screen.getByText("Contenido").parentElement?.className).toContain("overflow-y-auto");
   expect(screen.getByRole("button", { name: "Guardar" }).parentElement?.className).toContain("border-t");
+});
+
+it("keeps the modal open when Escape only closes a BentoSelect list inside it", () => {
+  const onClose = vi.fn();
+  render(
+    <Modal isOpen onClose={onClose} title="Prueba">
+      <BentoSelect
+        value=""
+        placeholder="Elige"
+        options={[{ value: "a", label: "Opción A" }]}
+        onChange={vi.fn()}
+      />
+    </Modal>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Elige" }));
+  fireEvent.keyDown(screen.getByRole("option", { name: "Opción A" }), { key: "Escape" });
+  expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(onClose).not.toHaveBeenCalled();
 });

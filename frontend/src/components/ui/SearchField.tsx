@@ -48,8 +48,8 @@ export function SearchField({
           }
         }}
         className={cn(
-          "h-[38px] w-full rounded-lg border border-transparent bg-muted/40 pl-9 pr-9 text-base text-foreground transition-colors",
-          "placeholder:text-muted-foreground/60 focus:border-border/70 focus:bg-background focus:outline-none sm:text-xs",
+          "h-10 sm:h-9 w-full rounded-lg border border-transparent bg-muted/40 pl-9 pr-9 text-base text-foreground transition-colors",
+          "placeholder:text-muted-foreground/60 focus:border-primary/60 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 sm:text-xs",
           "[&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",
           inputClassName,
         )}
@@ -62,7 +62,7 @@ export function SearchField({
             inputRef.current?.focus();
           }}
           aria-label="Limpiar búsqueda"
-          className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>

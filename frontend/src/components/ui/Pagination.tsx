@@ -47,36 +47,36 @@ export function Pagination({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-3 font-mono text-xs",
+        "flex flex-wrap items-center justify-between gap-3 text-xs",
         className,
       )}
     >
       {hasRange ? (
-        <p className="text-muted-foreground">
-          Mostrando <span className="font-bold text-foreground">{rangeStart} - {rangeEnd}</span> de <span className="font-bold text-foreground">{totalItems}</span>
+        <p className="text-muted-foreground tabular-nums">
+          Mostrando <span className="font-semibold text-foreground">{rangeStart} - {rangeEnd}</span> de <span className="font-semibold text-foreground">{totalItems}</span>
         </p>
       ) : hasTotal ? (
-        <p className="text-muted-foreground">
-          <span className="font-bold text-foreground">{totalItems}</span> {itemLabel}
+        <p className="text-muted-foreground tabular-nums">
+          <span className="font-semibold text-foreground">{totalItems}</span> {itemLabel}
           {pluralSuffix}
         </p>
       ) : (
         <span />
       )}
 
-      <div className="flex items-center gap-1.5 font-mono">
+      <div className="flex items-center gap-1.5">
         <Button
           type="button"
           variant="secondary"
           size="sm"
           onClick={prev}
           disabled={clamped <= 1 || isDisabled}
-          className="h-7 px-2.5 py-1 rounded-md font-mono text-xs"
+          className="h-9 px-3 rounded-md text-xs"
         >
           <ChevronLeft className="h-3.5 w-3.5 mr-1" />
           Anterior
         </Button>
-        <span className="inline-flex h-7 items-center px-2.5 rounded-md bg-muted/60 border border-border/70 text-xs font-semibold tabular-nums text-foreground">
+        <span className="inline-flex h-9 items-center px-2.5 rounded-md bg-muted/60 border border-border/70 text-xs font-semibold tabular-nums text-foreground">
           {clamped} / {pageCount}
         </span>
         <Button
@@ -85,7 +85,7 @@ export function Pagination({
           size="sm"
           onClick={next}
           disabled={clamped >= pageCount || isDisabled}
-          className="h-7 px-2.5 py-1 rounded-md font-mono text-xs"
+          className="h-9 px-3 rounded-md text-xs"
         >
           Siguiente
           <ChevronRight className="h-3.5 w-3.5 ml-1" />

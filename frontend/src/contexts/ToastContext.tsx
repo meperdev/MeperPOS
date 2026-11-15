@@ -207,13 +207,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 const TONE = {
   success: {
     icon: <CheckCircle2 className="h-4 w-4" aria-hidden="true" />,
-    iconClass: "text-emerald-600 dark:text-emerald-400",
-    barClass: "bg-emerald-500/70",
+    iconClass: "text-success-text",
+    barClass: "bg-success/70",
   },
   error: {
     icon: <AlertCircle className="h-4 w-4" aria-hidden="true" />,
-    iconClass: "text-rose-600 dark:text-rose-400",
-    barClass: "bg-rose-500/70",
+    iconClass: "text-danger-text",
+    barClass: "bg-danger/70",
   },
   info: {
     icon: <Info className="h-4 w-4" aria-hidden="true" />,
@@ -244,12 +244,12 @@ function ToastCard({
       onFocus={() => onPause(toast.id)}
       onBlur={() => onResume(toast.id)}
       className={cn(
-        "group pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-lg border border-border/70 bg-card shadow-lg",
+        "group pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg shadow-black/10",
         "pl-3 pr-2.5 py-2.5",
         toast.leaving ? "animate-toast-out" : "animate-toast-in",
       )}
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2">
         <span className={cn("mt-0.5 shrink-0", tone.iconClass)}>{tone.icon}</span>
         <p className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">
           {toast.message}
@@ -258,7 +258,7 @@ function ToastCard({
           type="button"
           onClick={() => onClose(toast.id)}
           aria-label="Cerrar notificación"
-          className="-mr-0.5 -mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          className="-mr-1 -mt-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>

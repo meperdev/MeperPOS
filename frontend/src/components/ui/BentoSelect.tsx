@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronDown, Check } from "lucide-react";
 
@@ -46,6 +46,10 @@ export function BentoSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [openUpwards, setOpenUpwards] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const triggerId = useId();
+  const listboxId = useId();
 
   const selectedOption = options.find((opt) => opt.value === value);
 
@@ -65,6 +69,15 @@ export function BentoSelect({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
+  }, [isOpen]);
+
+  // Keyboard users land on the current choice when the list opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    const current =
+      listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]') ??
+      listRef.current?.querySelector<HTMLElement>('[role="option"]');
+    current?.focus();
   }, [isOpen]);
 
   const toggleOpen = () => {
@@ -89,30 +102,67 @@ export function BentoSelect({
     setIsOpen((prev) => !prev);
   };
 
+  const closeToTrigger = () => {
+    setIsOpen(false);
+    triggerRef.current?.focus();
+  };
+
   const handleSelect = (val: string) => {
     onChange(val);
-    setIsOpen(false);
+    closeToTrigger();
+  };
+
+  const handleListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeToTrigger();
+      return;
+    }
+    if (event.key === "Tab") {
+      // Focus the trigger before the option unmounts, so the default Tab
+      // continues from here and the Modal focus trap is not left behind.
+      triggerRef.current?.focus();
+      setIsOpen(false);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const items = Array.from(
+      listRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? [],
+    );
+    if (items.length === 0) return;
+    event.preventDefault();
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    items[(index + step + items.length) % items.length]?.focus();
   };
 
   return (
     <div className={cn("relative w-full", className)} ref={containerRef}>
       {label && (
-        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+        <label
+          htmlFor={triggerId}
+          className="mb-1.5 block text-xs font-medium text-muted-foreground"
+        >
           {label}
         </label>
       )}
 
       {/* Trigger Button */}
       <button
+        id={triggerId}
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={toggleOpen}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? listboxId : undefined}
         className={cn(
-          "w-full h-[38px] rounded-lg border bg-card px-3.5 py-2 text-xs font-medium text-foreground",
+          "w-full h-10 sm:h-9 rounded-lg border bg-card px-3.5 py-2 text-xs font-medium text-foreground",
           "flex items-center justify-between gap-2 shadow-2xs transition-colors duration-150",
-          "focus:outline-none focus:ring-2 focus:ring-primary/15",
+          "focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/25",
           isOpen
-            ? "border-primary/60 ring-2 ring-primary/15"
+            ? "border-primary/60 ring-2 ring-primary/25"
             : "border-border/70 hover:border-border",
           disabled && "opacity-50 cursor-not-allowed"
         )}
@@ -127,6 +177,7 @@ export function BentoSelect({
         </div>
 
         <ChevronDown
+          aria-hidden="true"
           className={cn(
             "w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200",
             isOpen && "rotate-180 text-primary-text"
@@ -134,12 +185,17 @@ export function BentoSelect({
         />
       </button>
 
-      {/* Floating Bento Popover Menu */}
+      {/* Floating Menu */}
       {isOpen && (
         <div
+          ref={listRef}
+          id={listboxId}
+          role="listbox"
+          aria-label={label ?? placeholder}
+          onKeyDown={handleListKeyDown}
           className={cn(
-            "absolute left-0 right-0 z-50 flex flex-col gap-1 rounded-xl border border-border/80 bg-card p-1.5",
-            "shadow-xl shadow-black/10 backdrop-blur-md animate-fade-in-up",
+            "absolute left-0 right-0 z-50 flex flex-col gap-1 rounded-xl border border-border bg-card p-1.5",
+            "shadow-lg shadow-black/10",
             "max-h-60 overflow-y-auto scrollbar-app",
             openUpwards ? "bottom-full mb-1.5" : "top-full mt-1.5"
           )}
@@ -147,11 +203,15 @@ export function BentoSelect({
           {options.map((option) => {
             const isSelected = option.value === value;
             return (
-              <div
+              <button
                 key={option.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
                 onClick={() => handleSelect(option.value)}
                 className={cn(
-                  "flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium cursor-pointer transition-all duration-150",
+                  "flex w-full items-center justify-between px-3 py-2 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   isSelected
                     ? "bg-primary-light text-primary-text font-bold"
                     : "text-foreground hover:bg-muted/70"
@@ -168,7 +228,7 @@ export function BentoSelect({
                   {option.badge && (
                     <span
                       className={cn(
-                        "text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md",
+                        "text-xs font-medium px-2 py-0.5 rounded-md",
                         option.badgeClass ||
                           "bg-muted text-muted-foreground"
                       )}
@@ -177,10 +237,10 @@ export function BentoSelect({
                     </span>
                   )}
                   {isSelected && (
-                    <Check className="w-3.5 h-3.5 text-primary-text stroke-[3]" />
+                    <Check aria-hidden="true" className="w-3.5 h-3.5 text-primary-text stroke-[3]" />
                   )}
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

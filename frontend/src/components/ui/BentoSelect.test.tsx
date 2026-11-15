@@ -36,6 +36,21 @@ describe("BentoSelect", () => {
     expect(screen.getByText("Categoría")).toBeInTheDocument();
   });
 
+  it("moves focus to the trigger when Tab leaves an open list, without cancelling Tab", () => {
+    render(<BentoSelect value="" options={baseOptions} onChange={vi.fn()} />);
+
+    const trigger = screen.getByRole("button");
+    fireEvent.click(trigger);
+    const option = screen.getByRole("option", { name: "Opción A" });
+    option.focus();
+
+    const notCancelled = fireEvent.keyDown(option, { key: "Tab" });
+
+    expect(notCancelled).toBe(true);
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("opens the popover and lists the options when the trigger is clicked", () => {
     const onChange = vi.fn();
     render(<BentoSelect value="" options={baseOptions} onChange={onChange} />);

@@ -107,7 +107,8 @@ export function FilterOptionButton({
       type="button"
       aria-pressed={active}
       className={cn(
-        "h-7 px-2.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+        "h-8 px-3 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         active
           ? "bg-card text-foreground shadow-2xs border border-border/60"
           : "border border-transparent text-muted-foreground hover:text-foreground",
@@ -132,7 +133,8 @@ export function FilterClearButton({
     <button
       type="button"
       className={cn(
-        "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted border border-border/70 bg-muted/40 transition-colors",
+        "inline-flex items-center gap-1 h-8 px-3 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted border border-border/70 bg-muted/40 transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         className,
       )}
       {...props}
