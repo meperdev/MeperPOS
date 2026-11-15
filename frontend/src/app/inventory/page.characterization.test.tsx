@@ -18,7 +18,13 @@ const useProductsMock = vi.fn();
 let productsResponse: {
   data: {
     data: ReturnType<typeof buildProduct>[];
-    meta: { total: number; page: number; limit: number; totalPages: number };
+    meta: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+      lowStockCount: number;
+    };
   };
   isLoading: boolean;
   isFetching: boolean;
@@ -153,7 +159,7 @@ function buildProduct(overrides: Record<string, unknown> = {}) {
 
 function setResponse(
   products: ReturnType<typeof buildProduct>[],
-  meta?: Partial<{ total: number; totalPages: number }>,
+  meta?: Partial<{ total: number; totalPages: number; lowStockCount: number }>,
 ) {
   productsResponse = {
     data: {
@@ -163,6 +169,11 @@ function setResponse(
         page: 1,
         limit: 10,
         totalPages: meta?.totalPages ?? 1,
+        // The badge reads the server's low-stock total, so a fixture that does not
+        // state it defaults to the flagged rows it contains.
+        lowStockCount:
+          meta?.lowStockCount ??
+          products.filter((product) => product.isLowStock === true).length,
       },
     },
     isLoading: false,
@@ -339,6 +350,44 @@ describe("Inventory page — characterization (current behavior)", () => {
     expect(
       screen.getByRole("button", { name: /^Stock Bajo ?1$/ }),
     ).toBeInTheDocument();
+  });
+
+  it("badges the server's low-stock total instead of the rows on this page", () => {
+    // The reported defect: page 1 held no low-stock rows, so the badge hid itself
+    // (or said 3) while the low-stock list behind the click held 10 products.
+    setResponse(
+      [
+        buildProduct({ name: "Arequipe", stock: 40, minStock: 5 }),
+        buildProduct({ name: "Bocadillo", stock: 30, minStock: 5 }),
+      ],
+      { total: 40, totalPages: 4, lowStockCount: 10 },
+    );
+
+    render(<InventoryPage />);
+
+    expect(
+      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the badge in sync with the filtered page total", () => {
+    setResponse(
+      [
+        buildProduct({ name: "Panela Baja", stock: 2, minStock: 5, isLowStock: true }),
+        buildProduct({ name: "Dulce Bajo", stock: 1, minStock: 5, isLowStock: true }),
+      ],
+      { total: 10, totalPages: 1, lowStockCount: 10 },
+    );
+
+    render(<InventoryPage />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 });
 

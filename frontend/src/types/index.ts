@@ -281,6 +281,12 @@ export interface PaginatedResponse<T> {
     page: number;
     limit: number;
     totalPages: number;
+    /**
+     * Server-computed low-stock total for the same filters, independent of pagination.
+     * Only the products list serves it today, so it stays optional for every other
+     * paginated endpoint.
+     */
+    lowStockCount?: number;
   };
 }
 

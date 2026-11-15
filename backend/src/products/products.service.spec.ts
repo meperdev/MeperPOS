@@ -1300,7 +1300,11 @@ describe('ProductsService — Opt-in tax resolution', () => {
 
     it('applies service type before paging and uses the same scoped where for count', async () => {
       setupFindAll();
-      prismaMock.product.count.mockResolvedValue(25);
+      // A service page can never intersect low stock, so its badge total is zero
+      // whatever the merchandise holds.
+      prismaMock.product.count
+        .mockResolvedValueOnce(25)
+        .mockResolvedValueOnce(0);
       const result = await Reflect.apply(service.findAll, service, [
         ORG_ID,
         2,
@@ -1334,6 +1338,7 @@ describe('ProductsService — Opt-in tax resolution', () => {
         page: 2,
         limit: 6,
         totalPages: 5,
+        lowStockCount: 0,
       });
     });
 
@@ -1382,6 +1387,77 @@ describe('ProductsService — Opt-in tax resolution', () => {
           }),
         }),
       );
+    });
+
+    it('serves a low-stock total that does not depend on the requested page', async () => {
+      setupFindAll();
+      prismaMock.product.count
+        .mockResolvedValueOnce(40)
+        .mockResolvedValueOnce(10);
+
+      // An unfiltered page: the badge needs the org-wide (and search/category
+      // scoped) low-stock total, never the handful of rows that fit in skip/take.
+      const result = await service.findAll(
+        ORG_ID,
+        2,
+        10,
+        'panela',
+        'cat-2',
+        'active',
+        false,
+        'name',
+      );
+
+      expect(result.meta).toMatchObject({ total: 40, lowStockCount: 10 });
+      expect(prismaMock.product.count).toHaveBeenCalledTimes(2);
+      expect(prismaMock.product.count).toHaveBeenLastCalledWith({
+        where: {
+          organizationId: ORG_ID,
+          active: true,
+          OR: expect.any(Array) as unknown,
+          categoryId: 'cat-2',
+          stock: { lte: MIN_STOCK_FIELD_REF },
+          type: ProductType.PRODUCT,
+          tracksStock: true,
+        },
+      });
+    });
+
+    it('reuses the filtered total as the low-stock total instead of counting twice', async () => {
+      setupFindAll();
+      prismaMock.product.count.mockResolvedValueOnce(10);
+
+      const result = await service.findAll(
+        ORG_ID,
+        1,
+        10,
+        undefined,
+        undefined,
+        'active',
+        true,
+      );
+
+      // The list already is the low-stock set, so meta.total is the count and a
+      // second identical COUNT query would buy nothing.
+      expect(prismaMock.product.count).toHaveBeenCalledTimes(1);
+      expect(result.meta).toMatchObject({ total: 10, lowStockCount: 10 });
+    });
+
+    it('keeps the low-stock total when the page itself has no low-stock rows', async () => {
+      setupFindAll();
+      prismaMock.product.count
+        .mockResolvedValueOnce(40)
+        .mockResolvedValueOnce(10);
+      prismaMock.product.findMany.mockResolvedValue([
+        buildProduct({ stock: 9, minStock: 5 }),
+      ]);
+
+      const result = await service.findAll(ORG_ID, 1, 10);
+
+      // The reported defect: the badge read this page (no low rows) and said the
+      // catalog was fine while 10 products were actually low on stock.
+      expect(result.data[0].isLowStock).toBe(false);
+      expect(result.meta.lowStockCount).toBe(10);
     });
 
     it('orders by name ascending when orderBy is "name"', async () => {

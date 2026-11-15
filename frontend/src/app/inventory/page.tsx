@@ -170,6 +170,10 @@ function InventoryContent() {
         numeric: true,
       }),
     );
+  // ...but the badge counts the whole filtered catalog, not this page's slice: the
+  // server serves that total in meta so the number always matches the list the click
+  // opens. `lowStockProducts` stays the page-level view for rendering.
+  const lowStockCount = meta?.lowStockCount ?? lowStockProducts.length;
   const displayProducts = (
     showLowStockOnly ? lowStockProducts : products
   ).toSorted((a, b) =>
@@ -521,7 +525,7 @@ function InventoryContent() {
               >
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span className="hidden sm:inline">Stock Bajo</span>
-                {lowStockProducts.length > 0 && (
+                {lowStockCount > 0 && (
                   <span
                     className={cn(
                       "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md font-mono text-[11px] font-semibold tabular-nums shrink-0",
@@ -530,7 +534,7 @@ function InventoryContent() {
                         : "bg-rose-500/15 text-rose-700 dark:text-rose-300",
                     )}
                   >
-                    {lowStockProducts.length}
+                    {lowStockCount}
                   </span>
                 )}
               </button>
