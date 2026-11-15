@@ -74,11 +74,26 @@ describe("CategoryStackedChart (Recharts stacked by category)", () => {
     );
 
     const ticks = Array.from(
-      container.querySelectorAll(".recharts-cartesian-axis-tick-value"),
+      container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value"),
     ).map((node) => node.textContent);
 
-    expect(ticks).toContain("16/8");
-    expect(ticks).toContain("22/8");
+    // First tick always carries the month; later same-month ticks are bare days.
+    expect(ticks[0]).toBe("16 ago");
+    expect(ticks).toContain("22");
+  });
+
+  it("keeps x-axis labels horizontal (no rotation)", () => {
+    const { container } = render(
+      <CategoryStackedChart startDate="2026-08-01" endDate="2026-08-30" />,
+    );
+
+    const tickTexts = Array.from(
+      container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value"),
+    );
+    expect(tickTexts.length).toBeGreaterThan(0);
+    for (const node of tickTexts) {
+      expect(node.getAttribute("transform") ?? "").not.toMatch(/rotate/);
+    }
   });
 });
 

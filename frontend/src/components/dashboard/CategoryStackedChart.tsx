@@ -11,8 +11,8 @@ import {
   buildStackedDailySeries,
   countDaysInclusive,
   formatCategoryAmountTick,
-  formatCategoryAxisTick,
   formatCategoryTooltipDate,
+  formatChartDayTick,
   type StackedDay,
 } from "@/lib/dashboard";
 
@@ -317,7 +317,6 @@ export function CategoryStackedChart({
     [series],
   );
 
-  const isDenseRange = days.length > 15;
   const barSize = days.length <= 7 ? 24 : days.length <= 15 ? 20 : 12;
   const tooltipOffset = Math.max(
     18,
@@ -454,17 +453,18 @@ export function CategoryStackedChart({
           />
           <XAxis
             dataKey="date"
-            interval={0}
-            tickFormatter={formatCategoryAxisTick}
+            interval="preserveStartEnd"
+            minTickGap={12}
+            tickFormatter={(value: string) =>
+              formatChartDayTick(value, days.indexOf(value), days)
+            }
             tickLine={{ stroke: "var(--border)", strokeOpacity: 0.45 }}
             tickSize={4}
             tickMargin={6}
-            height={isDenseRange ? 38 : 30}
-            angle={isDenseRange ? -35 : 0}
-            textAnchor={isDenseRange ? "end" : "middle"}
+            height={30}
             axisLine={{ stroke: "var(--border)", strokeOpacity: 0.5 }}
             tick={{
-              fontSize: isDenseRange ? 9.5 : 11,
+              fontSize: 11,
               fill: "var(--muted-foreground)",
             }}
           />

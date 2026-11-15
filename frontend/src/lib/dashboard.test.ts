@@ -14,8 +14,8 @@ import {
   DEFAULT_DASHBOARD_RANGE,
   filterOpenTasks,
   formatCategoryAmountTick,
-  formatCategoryAxisTick,
   formatCategoryTooltipDate,
+  formatChartDayTick,
   getDashboardRange,
   resolveDashboardRange,
   sumExpensesOnDate,
@@ -330,10 +330,42 @@ describe("dashboard range helpers", () => {
     expect(countDaysInclusive("2026-08-22", "2026-08-22")).toBe(1);
   });
 
-  it("formats compact d/m axis ticks from the real date", () => {
-    expect(formatCategoryAxisTick("2026-08-01")).toBe("1/8");
-    expect(formatCategoryAxisTick("2026-11-30")).toBe("30/11");
-    expect(formatCategoryAxisTick("nope")).toBe("nope");
+  describe("formatChartDayTick (x-axis labels)", () => {
+    const august = [
+      "2026-08-29",
+      "2026-08-30",
+      "2026-08-31",
+      "2026-09-01",
+      "2026-09-02",
+    ];
+
+    it("shows the bare day number inside a month", () => {
+      expect(formatChartDayTick("2026-08-30", 1, august)).toBe("30");
+    });
+
+    it("always shows month on the first tick", () => {
+      expect(formatChartDayTick("2026-08-29", 0, august)).toBe("29 ago");
+    });
+
+    it("shows month again when the month changes mid-series", () => {
+      expect(formatChartDayTick("2026-09-01", 3, august)).toBe("1 sep");
+      expect(formatChartDayTick("2026-09-02", 4, august)).toBe("2");
+    });
+
+    it("uses lowercase short es-CO month names without a trailing dot", () => {
+      expect(formatChartDayTick("2026-10-17", 0, ["2026-10-17"])).toBe("17 oct");
+      expect(formatChartDayTick("2026-11-01", 0, ["2026-11-01"])).toBe("1 nov");
+      expect(formatChartDayTick("2026-01-05", 0, ["2026-01-05"])).toBe("5 ene");
+    });
+
+    it("parses the ISO string without a timezone shift", () => {
+      // new Date("2026-08-01") is UTC midnight, which is Jul 31 in Bogotá.
+      expect(formatChartDayTick("2026-08-01", 0, ["2026-08-01"])).toBe("1 ago");
+    });
+
+    it("returns the input unchanged when it is not a date", () => {
+      expect(formatChartDayTick("nope", 0, ["nope"])).toBe("nope");
+    });
   });
 
   it("formats a readable tooltip date", () => {

@@ -128,14 +128,37 @@ export function formatCategoryAmountTick(value: number): string {
  * Compact `d/m` axis tick for a `YYYY-MM-DD` day. Range-driven: it prints the
  * actual date instead of a month-bound `day % 5 === 0` rule.
  */
-export function formatCategoryAxisTick(date: string): string {
-  const [, month, day] = date.split("-").map(Number);
+const CHART_SHORT_MONTHS_ES = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+] as const;
 
-  if (!month || !day) {
-    return date;
+/**
+ * X-axis label for a `YYYY-MM-DD` day in a dense series. Returns the day number
+ * ("17"), except the first tick and any day whose month differs from the
+ * previous day in `allDates` get the month too ("1 sep"). `index` is the
+ * position of `isoDate` in `allDates` (not Recharts' visible-tick index), so
+ * the month-change check always reads the full series.
+ * The string is split, not parsed with `new Date`, to avoid a UTC day shift.
+ */
+export function formatChartDayTick(
+  isoDate: string,
+  index: number,
+  allDates: readonly string[],
+): string {
+  const [, month, day] = isoDate.split("-").map(Number);
+
+  if (!month || !day || month < 1 || month > 12) {
+    return isoDate;
   }
 
-  return `${day}/${month}`;
+  const previous = index > 0 ? allDates[index - 1] : undefined;
+  const previousMonth = previous ? Number(previous.split("-")[1]) : undefined;
+  const monthChanged = index <= 0 || previousMonth !== month;
+
+  return monthChanged
+    ? `${day} ${CHART_SHORT_MONTHS_ES[month - 1]}`
+    : String(day);
 }
 
 /**
