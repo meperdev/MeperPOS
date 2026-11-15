@@ -101,12 +101,12 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
         )}
         <div className="relative">
           {icon && (
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+            <span className="absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-muted-foreground pointer-events-none">
               {icon}
             </span>
           )}
           {prefixText && (
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground tabular-nums pointer-events-none">
+            <span className="absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-xs font-medium text-muted-foreground tabular-nums pointer-events-none">
               {prefixText}
             </span>
           )}
