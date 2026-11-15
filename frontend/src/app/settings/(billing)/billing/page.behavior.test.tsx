@@ -151,7 +151,7 @@ describe("Billing settings page", () => {
     expect(
       screen.getByText("No se pudo cargar los límites del plan."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Uso y Límites")).toBeInTheDocument();
+    expect(screen.getByText("Uso y límites")).toBeInTheDocument();
     expect(screen.getByText("Profesional")).toBeInTheDocument();
     expect(screen.getByText("Pagado")).toBeInTheDocument();
     expect(screen.queryByText("Usuarios")).toBeNull();

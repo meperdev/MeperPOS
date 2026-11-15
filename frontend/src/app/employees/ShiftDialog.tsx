@@ -113,7 +113,7 @@ export function ShiftDialog({
 
           {shifts.isLoading ? (
             <div role="status" className="space-y-2">
-              <span className="sr-only">Cargando jornadas...</span>
+              <span className="sr-only">Cargando jornadas…</span>
               {[0, 1, 2].map((row) => (
                 <div
                   key={row}
@@ -146,7 +146,7 @@ export function ShiftDialog({
                       {KIND_LABELS[shift.kind as ShiftKind] ?? shift.kind}
                     </p>
                   </div>
-                  <p className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                  <p className="text-xs font-semibold text-foreground tabular-nums">
                     {formatCurrency(toFiniteNumber(shift.amount))}
                   </p>
                   {shift.observation && (

@@ -130,8 +130,8 @@ describe("inventory product modal", () => {
     expect(within(dialog).getByLabelText("SKU")).toHaveValue("");
     expect(within(dialog).getByLabelText("Código de Barras")).toHaveValue("");
     expect(within(dialog).getByLabelText("Categoría")).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Precio de Costo")).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Precio de Venta")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Precio de costo")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Precio de venta")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Impuesto (%)")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Descripción")).toBeInTheDocument();
     expect(within(dialog).getByTestId("product-image")).toBeInTheDocument();
@@ -353,7 +353,7 @@ describe("inventory product modal", () => {
     const inventory = within(dialog).getByRole("group", { name: /inventario/i });
     expect(within(inventory).getByRole("checkbox", { name: /stock|inventario/i })).toBeChecked();
     expect(within(inventory).getByLabelText("Stock")).toBeInTheDocument();
-    expect(within(inventory).getByLabelText("Stock Mín.")).toBeInTheDocument();
+    expect(within(inventory).getByLabelText("Stock mín.")).toBeInTheDocument();
   });
 
   it("creates an untracked product with zero stock while retaining its product type", async () => {
@@ -363,7 +363,7 @@ describe("inventory product modal", () => {
     fireEvent.click(within(inventory).getByRole("checkbox", { name: /stock|inventario/i }));
     expect(within(inventory).getByRole("checkbox", { name: /stock|inventario/i })).not.toBeChecked();
     expect(within(inventory).queryByLabelText("Stock")).not.toBeInTheDocument();
-    expect(within(inventory).queryByLabelText("Stock Mín.")).not.toBeInTheDocument();
+    expect(within(inventory).queryByLabelText("Stock mín.")).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText("Tipo")).toHaveValue("PRODUCT");
     fireEvent.change(within(dialog).getByLabelText("Nombre"), { target: { value: "Tarjeta regalo" } });
     fireEvent.change(within(dialog).getByLabelText("SKU"), { target: { value: "TAR-1" } });
@@ -382,7 +382,7 @@ describe("inventory product modal", () => {
     expect(within(dialog).getByLabelText("Tipo")).toHaveValue("PRODUCT");
     expect(within(inventory).getByRole("checkbox", { name: /stock|inventario/i })).not.toBeChecked();
     expect(within(inventory).queryByLabelText("Stock")).not.toBeInTheDocument();
-    expect(within(inventory).queryByLabelText("Stock Mín.")).not.toBeInTheDocument();
+    expect(within(inventory).queryByLabelText("Stock mín.")).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Actualizar" }));
     await waitFor(() => expect(update).toHaveBeenCalledWith({
       id: "p-1",
@@ -418,13 +418,13 @@ describe("inventory product modal", () => {
     render(<InventoryPage />);
     const dialog = openCreate();
     expect(within(dialog).getByLabelText("Stock")).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Stock Mín.")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Stock mín.")).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Stock"), { target: { value: "17" } });
     fireEvent.change(within(dialog).getByLabelText("Tipo"), { target: { value: "SERVICE" } });
     expect(within(dialog).queryByRole("group", { name: /inventario/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("checkbox", { name: /stock|inventario/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Stock")).not.toBeInTheDocument();
-    expect(within(dialog).queryByLabelText("Stock Mín.")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Stock mín.")).not.toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Nombre"), { target: { value: "Instalación" } });
     fireEvent.change(within(dialog).getByLabelText("SKU"), { target: { value: "SRV-1" } });
     fireEvent.change(within(dialog).getByLabelText("Categoría"), { target: { value: "cat-1" } });
@@ -440,8 +440,8 @@ describe("inventory product modal", () => {
     fireEvent.change(within(dialog).getByLabelText("Nombre"), { target: { value: "Café" } });
     fireEvent.change(within(dialog).getByLabelText("SKU"), { target: { value: "CAF-1" } });
     fireEvent.change(within(dialog).getByLabelText("Categoría"), { target: { value: "cat-1" } });
-    fireEvent.change(within(dialog).getByLabelText("Precio de Costo"), { target: { value: "1000" } });
-    fireEvent.change(within(dialog).getByLabelText("Precio de Venta"), { target: { value: "2000" } });
+    fireEvent.change(within(dialog).getByLabelText("Precio de costo"), { target: { value: "1000" } });
+    fireEvent.change(within(dialog).getByLabelText("Precio de venta"), { target: { value: "2000" } });
     fireEvent.change(within(dialog).getByLabelText("Impuesto (%)"), { target: { value: "19" } });
     fireEvent.change(within(dialog).getByLabelText("Stock"), { target: { value: "7" } });
     fireEvent.change(within(dialog).getByLabelText("Sin oferta"), { target: { value: "PERCENTAGE" } });
@@ -494,12 +494,12 @@ describe("inventory product modal", () => {
     products = [product({ stock: 1, minStock: 0 })];
     render(<InventoryPage />);
     const dialog = openEdit();
-    expect(within(dialog).getByLabelText("Stock Mín.")).toHaveValue(0);
+    expect(within(dialog).getByLabelText("Stock mín.")).toHaveValue(0);
 
     cleanup();
     render(<InventoryPage />);
     const created = openCreate();
-    expect(within(created).getByLabelText("Stock Mín.")).toHaveValue(5);
+    expect(within(created).getByLabelText("Stock mín.")).toHaveValue(5);
   });
 
   it("groups identity, prices, inventory, and promotion in a compact responsive form", () => {
@@ -510,7 +510,7 @@ describe("inventory product modal", () => {
     const inventory = within(dialog).getByRole("group", { name: /inventario/i });
     const promotion = within(dialog).getByRole("group", { name: /oferta/i });
     expect(within(identity).getByLabelText("Nombre")).toBeInTheDocument();
-    expect(within(prices).getByLabelText("Precio de Venta")).toBeInTheDocument();
+    expect(within(prices).getByLabelText("Precio de venta")).toBeInTheDocument();
     expect(within(inventory).getByLabelText("Stock")).toBeInTheDocument();
     expect(within(promotion).getByText("Sin oferta")).toBeInTheDocument();
     const media = within(identity).getByTestId("product-image");

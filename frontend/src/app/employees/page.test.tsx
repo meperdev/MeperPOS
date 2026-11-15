@@ -4,6 +4,14 @@ import userEvent from "@testing-library/user-event";
 import EmployeesPage from "./page";
 import { formatDate } from "@/lib/utils";
 
+/** The kit Select labels its visible trigger; the hidden native select keeps the value semantics. */
+function nativeSelectFor(scope: HTMLElement, label: string): HTMLSelectElement {
+  const trigger = within(scope).getByRole("button", { name: label });
+  const select = trigger.parentElement?.querySelector("select");
+  if (!select) throw new Error(`No native select behind "${label}"`);
+  return select;
+}
+
 const state = vi.hoisted(() => ({ role: "ADMIN", list: { data: [] as object[], isLoading: false, isError: false, refetch: vi.fn() }, create: vi.fn(), update: vi.fn(), active: vi.fn(), shiftCreate: vi.fn(), shifts: { data: [] as { id: string; date: string; kind: string; amount: string; observation: string | null }[], isLoading: false, isError: false, refetch: vi.fn() } }));
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: {children: React.ReactNode}) => <>{children}</> }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { role: state.role } }) }));
@@ -23,9 +31,9 @@ async function openRowMenu(user: ReturnType<typeof userEvent.setup>, name: strin
   await user.click(screen.getByRole("button", { name: `Acciones de ${name}` }));
 }
 it("shows loading, error and empty states", () => {
-  state.list.isLoading = true; const view = render(<EmployeesPage />); expect(screen.getByText("Cargando empleados...")).toBeInTheDocument();
-  state.list.isLoading = false; state.list.isError = true; view.rerender(<EmployeesPage />); expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar los empleados");
-  state.list.isError = false; view.rerender(<EmployeesPage />); expect(screen.getByText("No hay empleados")).toBeInTheDocument();
+  state.list.isLoading = true; const view = render(<EmployeesPage />); expect(screen.getByText("Cargando empleados…")).toBeInTheDocument();
+  state.list.isLoading = false; state.list.isError = true; state.list.data = undefined as unknown as object[]; view.rerender(<EmployeesPage />); expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar los empleados");
+  state.list.isError = false; state.list.data = []; view.rerender(<EmployeesPage />); expect(screen.getByText("No hay empleados")).toBeInTheDocument();
 });
 it("creates and edits profiles, explicitly clearing nullable fields", async () => {
   const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
@@ -33,12 +41,36 @@ it("creates and edits profiles, explicitly clearing nullable fields", async () =
   await user.type(screen.getByLabelText(/Nombre/), "Luis");
   await user.click(screen.getByRole("button", { name: "Guardar" }));
   await waitFor(() => expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ name: "Luis", email: null, referenceAmount: null })));
-  await openRowMenu(user, "Ana");
-  await user.click(screen.getByRole("menuitem", { name: "Editar" }));
+  await user.click(screen.getByRole("button", { name: "Editar Ana" }));
   await user.clear(screen.getByLabelText("Correo electrónico"));
   await user.clear(screen.getByLabelText("Fecha de ingreso"));
   await user.click(screen.getByRole("button", { name: "Guardar" }));
   await waitFor(() => expect(state.update).toHaveBeenCalledWith(expect.objectContaining({ id: "1", data: expect.objectContaining({ email: null, startDate: null, referenceAmount: 1000 }) })));
+});
+it("makes the card's edit target a real button, apart from its shift and menu controls", () => {
+  state.list.data = [employee]; render(<EmployeesPage />);
+  const edit = screen.getByRole("button", { name: "Editar Ana" });
+  expect(edit.tagName).toBe("BUTTON");
+  expect(edit.parentElement!.getAttribute("role")).toBeNull();
+  expect(edit.parentElement!.className).toContain("relative");
+  expect(edit.className).toContain("absolute");
+  expect(edit.className).toContain("inset-0");
+  const shifts = screen.getByRole("button", { name: "Jornadas Ana" });
+  expect(shifts.parentElement!.className).toContain("relative");
+  expect(shifts.parentElement!.className).toContain("z-10");
+});
+it("gives the table row no tab stop and opens the edit form from its name button", async () => {
+  window.localStorage.setItem("meperpos:view-mode:employees", "table");
+  try {
+    const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
+    // Table mode also keeps the mobile cards in the DOM, so scope to the table.
+    const row = within(screen.getByRole("table")).getByRole("button", { name: "Editar Ana" }).closest("tr")!;
+    expect(row).not.toHaveAttribute("tabindex");
+    await user.click(within(row).getByRole("button", { name: "Editar Ana" }));
+    expect(screen.getByLabelText("Correo electrónico")).toHaveValue("ana@example.com");
+  } finally {
+    window.localStorage.removeItem("meperpos:view-mode:employees");
+  }
 });
 it("explains whitespace-only names and accepts a corrected name", async () => {
   const user = userEvent.setup(); render(<EmployeesPage />);
@@ -69,11 +101,17 @@ it("names the dialog, contains keyboard focus, and restores it after Escape", as
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(opener).toHaveFocus();
 });
+it("edits from the card itself: no Editar menu item and no separate row button", async () => {
+  const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
+  expect(screen.getByRole("button", { name: "Editar Ana" }).tagName).toBe("BUTTON");
+  await openRowMenu(user, "Ana");
+  expect(screen.queryByRole("menuitem", { name: "Editar" })).not.toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: /Desactivar|Activar/ })).toBeInTheDocument();
+});
 it("returns escaped programmatic focus and restores the edit opener on close", async () => {
   const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
-  const opener = screen.getByRole("button", { name: "Acciones de Ana" });
+  const opener = screen.getByRole("button", { name: "Editar Ana" });
   await user.click(opener);
-  await user.click(screen.getByRole("menuitem", { name: "Editar" }));
   expect(screen.getByRole("dialog", { name: "Editar empleado" })).toBeInTheDocument();
   screen.getByRole("button", { name: "Nuevo empleado" }).focus();
   expect(screen.getByLabelText(/Nombre/)).toHaveFocus();
@@ -112,8 +150,8 @@ it("lists shifts and creates a partial day with a date-only payload", async () =
   expect(screen.getAllByText("Día completo").length).toBeGreaterThan(0);
   expect(screen.getByText("Nota anterior")).toBeInTheDocument();
   await user.type(screen.getByLabelText(/Fecha/), "2025-01-03");
-  await user.selectOptions(screen.getByLabelText("Tipo de jornada"), "PARTIAL_DAY");
-  await user.type(screen.getByLabelText(/Valor/), "10.25");
+  await user.selectOptions(nativeSelectFor(document.body, "Tipo de jornada"), "PARTIAL_DAY");
+  await user.type(screen.getByRole("spinbutton", { name: /Valor/ }), "10.25");
   await user.type(screen.getByLabelText("Observación (opcional)"), "Turno corto");
   await user.click(screen.getByRole("button", { name: "Registrar jornada" }));
   await waitFor(() => expect(state.shiftCreate).toHaveBeenCalledWith({ employeeId: "1", date: "2025-01-03", kind: "PARTIAL_DAY", amount: 10.25, observation: "Turno corto" }));
@@ -124,11 +162,12 @@ it("prevents changes to shift fields while a save is pending", async () => {
   render(<EmployeesPage />);
   await user.click(screen.getByRole("button", { name: "Jornadas Ana" }));
   await user.type(screen.getByLabelText(/Fecha/), "2025-01-03");
-  await user.type(screen.getByLabelText(/Valor/), "10");
+  await user.type(screen.getByRole("spinbutton", { name: /Valor/ }), "10");
   await user.click(screen.getByRole("button", { name: "Registrar jornada" }));
-  for (const label of [/Fecha/, "Tipo de jornada", /Valor/, "Observación (opcional)"]) {
+  for (const label of [/Fecha/, "Tipo de jornada", "Observación (opcional)"]) {
     expect(screen.getByLabelText(label)).toBeDisabled();
   }
+  expect(screen.getByRole("spinbutton", { name: /Valor/ })).toBeDisabled();
   screen.getByRole("button", { name: "Nuevo empleado" }).focus();
   const shiftDialog = screen.getByRole("dialog", { name: "Jornadas de Ana" });
   const focused = document.activeElement as HTMLElement;
@@ -142,12 +181,12 @@ it("retains shift values and permits retry after a failed save", async () => {
   render(<EmployeesPage />);
   await user.click(screen.getByRole("button", { name: "Jornadas Ana" }));
   await user.type(screen.getByLabelText(/Fecha/), "2025-01-03");
-  await user.type(screen.getByLabelText(/Valor/), "10");
+  await user.type(screen.getByRole("spinbutton", { name: /Valor/ }), "10");
   await user.type(screen.getByLabelText("Observación (opcional)"), "Turno");
   await user.click(screen.getByRole("button", { name: "Registrar jornada" }));
-  await waitFor(() => expect(screen.getByLabelText(/Valor/)).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("spinbutton", { name: /Valor/ })).toBeEnabled());
   expect(screen.getByLabelText(/Fecha/)).toHaveValue("2025-01-03");
-  expect(screen.getByLabelText(/Valor/)).toHaveValue(10);
+  expect(screen.getByRole("spinbutton", { name: /Valor/ })).toHaveValue(10);
   expect(screen.getByLabelText("Observación (opcional)")).toHaveValue("Turno");
   await user.click(screen.getByRole("button", { name: "Registrar jornada" }));
   await waitFor(() => expect(state.shiftCreate).toHaveBeenCalledTimes(2));
@@ -156,7 +195,7 @@ it("retains shift values and permits retry after a failed save", async () => {
 it("rejects zero amount through the form constraints", async () => {
   const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
   await user.click(screen.getByRole("button", { name: "Jornadas Ana" }));
-  await user.type(screen.getByLabelText(/Fecha/), "2025-01-03"); await user.type(screen.getByLabelText(/Valor/), "0");
+  await user.type(screen.getByLabelText(/Fecha/), "2025-01-03"); await user.type(screen.getByRole("spinbutton", { name: /Valor/ }), "0");
   await user.click(screen.getByRole("button", { name: "Registrar jornada" }));
   expect(state.shiftCreate).not.toHaveBeenCalled();
 });
@@ -169,7 +208,7 @@ it("offers retry when shift history fails", async () => {
 it("submits a full day without an optional observation", async () => {
   const user = userEvent.setup(); state.list.data = [employee]; render(<EmployeesPage />);
   await user.click(screen.getByRole("button", { name: "Jornadas Ana" }));
-  await user.type(screen.getByLabelText(/Fecha/), "2025-01-03"); await user.type(screen.getByLabelText(/Valor/), "1");
+  await user.type(screen.getByLabelText(/Fecha/), "2025-01-03"); await user.type(screen.getByRole("spinbutton", { name: /Valor/ }), "1");
   await user.click(screen.getByRole("button", { name: "Registrar jornada" }));
   await waitFor(() => expect(state.shiftCreate).toHaveBeenCalledWith({ employeeId: "1", date: "2025-01-03", kind: "FULL_DAY", amount: 1 }));
 });

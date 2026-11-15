@@ -28,7 +28,7 @@ export function ErrorState({
         className,
       )}
     >
-      <div className="w-10 h-10 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-600 dark:text-rose-400">
+      <div className="w-10 h-10 rounded-lg bg-danger/10 border border-danger/30 flex items-center justify-center text-danger-text">
         {icon}
       </div>
       {title && <p className="text-sm font-semibold text-foreground mt-3">{title}</p>}

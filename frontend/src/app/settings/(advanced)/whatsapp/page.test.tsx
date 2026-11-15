@@ -67,7 +67,6 @@ import WhatsAppSettingsPage from "./page";
  */
 function expectSharedStatusBadge(label: string) {
   const badge = screen.getByText(label);
-  expect(badge.className).toContain("font-mono");
   expect(badge.firstElementChild).not.toBeNull();
 }
 
@@ -157,7 +156,7 @@ describe("WhatsApp settings page", () => {
     render(<WhatsAppSettingsPage />);
 
     const skeleton = screen.getByRole("status");
-    expect(screen.getByText("Cargando envíos...")).toBeInTheDocument();
+    expect(screen.getByText("Cargando envíos…")).toBeInTheDocument();
     // Four bars in the header band: the table it stands in for has four columns.
     expect(skeleton.querySelector("div")?.children).toHaveLength(4);
     expect(screen.queryByRole("table")).toBeNull();
@@ -341,6 +340,58 @@ describe("WhatsApp settings page", () => {
       screen.getByRole("button", { name: "Ocultar código de vinculación" }),
     );
     expect(screen.queryByTestId("whatsapp-link-code")).toBeNull();
+  });
+
+  it("places the channel cards side by side by container width, not viewport", () => {
+    render(<WhatsAppSettingsPage />);
+
+    const grid = screen
+      .getByRole("heading", { name: "Canal comercial" })
+      .closest("section")!.parentElement!;
+
+    expect(grid.parentElement!.className).toContain("@container");
+    expect(grid.className).toContain("@4xl:grid-cols-2");
+    expect(grid.className).not.toContain("lg:grid-cols-2");
+  });
+
+  it("stacks the QR row until its card is wide enough, with the text block taking the free width", () => {
+    render(<WhatsAppSettingsPage />);
+
+    const label = screen.getByText("Vinculación por código QR");
+    const row = label.closest(".flex")!;
+    expect(row.className).toContain("@md:flex-row");
+    expect(row.className).not.toContain("sm:flex-row");
+    expect(row.closest("[class~='@container']")).not.toBeNull();
+
+    const textBlock = label.parentElement!;
+    expect(textBlock.className).toContain("min-w-0");
+    expect(textBlock.className).toContain("flex-1");
+  });
+
+  it("offers a horizontal scroll area only when the deliveries table is rendered", () => {
+    const { unmount } = render(<WhatsAppSettingsPage />);
+    expect(
+      screen.getByText("Sin envíos registrados").closest(".overflow-x-auto"),
+    ).toBeNull();
+    unmount();
+
+    mocks.deliveries.mockReturnValue(
+      emptyQuery([
+        {
+          id: "delivery-1",
+          kind: "SCHEDULED",
+          reportDate: "2026-02-10T00:00:00.000Z",
+          status: "SENT",
+          failureReason: null,
+          sentAt: "2026-02-10T12:30:00.000Z",
+          attempts: 1,
+        },
+      ]),
+    );
+    render(<WhatsAppSettingsPage />);
+    expect(
+      screen.getByRole("table").closest(".overflow-x-auto"),
+    ).not.toBeNull();
   });
 
   it("clears an expired code without requiring a reload", async () => {

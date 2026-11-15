@@ -5,6 +5,7 @@ import { useDashboard } from "@/hooks/useReports";
 import { LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { TodayStats } from "@/components/dashboard/TodayStats";
 import { AlertPanels } from "@/components/dashboard/AlertPanels";
 import { RevenueSection } from "@/components/dashboard/RevenueSection";
@@ -19,7 +20,7 @@ export default function DashboardPage() {
       <DashboardLayout>
         <LoadingState
           icon={<LayoutDashboard className="w-5 h-5 text-primary/50" />}
-          message="Cargando dashboard..."
+          message="Cargando panel…"
         />
       </DashboardLayout>
     );
@@ -28,12 +29,8 @@ export default function DashboardPage() {
   return (
     <DashboardLayout>
       <div className="space-y-4 overflow-x-hidden">
-        {/* Page Header */}
-        <div className="animate-fade-in-up">
-          <h1 className="text-xl lg:text-2xl font-semibold tracking-tight text-foreground">
-            Bienvenido, {user?.name?.split(" ")[0]}
-          </h1>
-        </div>
+        {/* Page header */}
+        <PageHeader title={`Bienvenido, ${user?.name?.split(" ")[0] ?? ""}`} />
 
         {/* 8 KPI cards — two rows of four (day KPIs + accumulated totals) */}
         <TodayStats />

@@ -7,8 +7,8 @@
 /* ─── Color Tokens ─────────────────────────────────────── */
 :root {
     color-scheme: light;
-    --background: #FAF8FF;
-    --foreground: #131B2E;
+    --background: #FAFAF9;
+    --foreground: #1C1917;
     --primary: #B0522E;
     --primary-dark: #96421F;
     --primary-light: #FAECE5;
@@ -19,20 +19,35 @@
     --terracotta: #C25E36;
     /* --accent: #7BA08B; es una segunda opción de reemplazo al terracota */
     --card: #FFFFFF;
-    --card-foreground: #131B2E;
-    --border: #C7C4D7;
-    --border-subtle: #E2E8F0;
-    --muted: #F2F3FF;
-    --muted-foreground: #6B6A76;
+    --card-foreground: #1C1917;
+    --border: #D6D3D1;
+    --border-subtle: #E7E5E4;
+    --muted: #F5F5F4;
+    --muted-foreground: #625D58;
     --success: #16A34A;
+    --success-text: #15803D;
     --warning: #D97706;
+    --warning-text: #B45309;
     --danger: #D0453F;
+    --danger-text: #B91C1C;
+    --info: #2563EB;
+    --info-text: #1D4ED8;
     --coral: #D0453F;
 
+    /* Categorical scale for chart series. Categories, not states: never reuse the status tokens. */
+    --chart-1: var(--primary);
+    --chart-2: #2F6B8A;
+    --chart-3: #4D7C4A;
+    --chart-4: #B7811B;
+    --chart-5: #6B5B95;
+    --chart-6: #2E8C86;
+    --chart-7: #A8456B;
+    --chart-8: #78716C;
+
     --sidebar-bg: #FFFFFF;
-    --sidebar-border: #C7C4D7;
-    --sidebar-title: #131B2E;
-    --sidebar-fg: #464554;
+    --sidebar-border: #D6D3D1;
+    --sidebar-title: #1C1917;
+    --sidebar-fg: #44403C;
     --sidebar-hover-bg: #FAECE5;
     --sidebar-hover-fg: #C25E36;
     --sidebar-active-bg: #FAECE5;
@@ -54,13 +69,27 @@
     --card: #18181C;
     --card-foreground: #F2F2F5;
     --border: #30303A;
-    --border-subtle: #3D3D4A;
+    --border-subtle: #26262C;
     --muted: #222228;
     --muted-foreground: #9494A3;
     --success: #22C55E;
+    --success-text: #4ADE80;
     --warning: #F59E0B;
+    --warning-text: #FBBF24;
     --danger: #EF4444;
+    --danger-text: #F87171;
+    --info: #60A5FA;
+    --info-text: #60A5FA;
     --coral: #E0524C;
+
+    --chart-1: var(--primary);
+    --chart-2: #5B9CC0;
+    --chart-3: #7FB07A;
+    --chart-4: #E0AE4A;
+    --chart-5: #9C8BC7;
+    --chart-6: #4FB8B0;
+    --chart-7: #D27499;
+    --chart-8: #A8A29E;
 
     --sidebar-bg: #18181C;
     --sidebar-border: #30303A;
@@ -90,9 +119,22 @@
     --color-muted: var(--muted);
     --color-muted-foreground: var(--muted-foreground);
     --color-success: var(--success);
+    --color-success-text: var(--success-text);
     --color-warning: var(--warning);
+    --color-warning-text: var(--warning-text);
     --color-danger: var(--danger);
+    --color-danger-text: var(--danger-text);
+    --color-info: var(--info);
+    --color-info-text: var(--info-text);
     --color-coral: var(--coral);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-chart-6: var(--chart-6);
+    --color-chart-7: var(--chart-7);
+    --color-chart-8: var(--chart-8);
     --font-sans: var(--font-geist);
     --font-mono: var(--font-jetbrains-mono);
 }
@@ -107,9 +149,15 @@
     box-sizing: border-box;
 }
 
+::selection {
+    background: color-mix(in oklab, var(--primary) 22%, transparent);
+    color: inherit;
+}
+
 body {
     background-color: var(--background);
     color: var(--foreground);
+    caret-color: var(--primary);
     font-family: var(--font-geist), system-ui, sans-serif;
     transition:
         background-color 0.25s ease,
@@ -132,25 +180,6 @@ h4 {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     letter-spacing: -0.02em;
-}
-
-.card-top-rail {
-    display: block;
-    width: 100%;
-    height: 0.5rem;
-    border-bottom: 1px solid color-mix(in oklab, var(--foreground) 20%, transparent);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.35),
-        inset 0 -1px 0 color-mix(in oklab, var(--foreground) 15%, transparent),
-        0 6px 10px -9px color-mix(in oklab, var(--foreground) 35%, transparent);
-}
-
-.card-top-rail--primary {
-    background-color: var(--primary);
-}
-
-.card-top-rail--accent {
-    background-color: var(--accent);
 }
 
 /* ─── Animations ───────────────────────────────────────── */
@@ -221,29 +250,6 @@ h4 {
     animation: slide-in-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.stagger-children > * {
-    opacity: 0;
-    animation: fade-in-up 0.45s ease-out forwards;
-}
-
-.stagger-children > *:nth-child(1) {
-    animation-delay: 0ms;
-}
-.stagger-children > *:nth-child(2) {
-    animation-delay: 80ms;
-}
-.stagger-children > *:nth-child(3) {
-    animation-delay: 160ms;
-}
-.stagger-children > *:nth-child(4) {
-    animation-delay: 240ms;
-}
-.stagger-children > *:nth-child(5) {
-    animation-delay: 320ms;
-}
-.stagger-children > *:nth-child(6) {
-    animation-delay: 400ms;
-}
 
 /* Notifications: drop from the top edge, leave the same way. */
 @keyframes toast-in {
@@ -294,8 +300,7 @@ h4 {
     .animate-fade-in-up,
     .animate-fade-in,
     .animate-slide-in-left,
-    .animate-slide-in-bottom,
-    .stagger-children > * {
+    .animate-slide-in-bottom {
         animation: none;
         opacity: 1;
         transform: none;
@@ -343,7 +348,7 @@ h4 {
 
 .scrollbar-app {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklab, var(--primary) 40%, transparent)
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent)
         transparent;
 }
 
@@ -356,10 +361,10 @@ h4 {
 }
 .scrollbar-app::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background: color-mix(in oklab, var(--primary) 40%, transparent);
+    background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
 }
 .scrollbar-app::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklab, var(--primary) 65%, transparent);
+    background: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
 }
 
 /* ─── Safe areas ───────────────────────────────────────── */

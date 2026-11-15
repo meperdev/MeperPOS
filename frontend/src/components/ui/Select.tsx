@@ -26,6 +26,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     const id = useId();
     const selectRef = useRef<HTMLSelectElement | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const [isOpen, setIsOpen] = useState(false);
     const [openUpwards, setOpenUpwards] = useState(false);
 
@@ -71,6 +72,18 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       setIsOpen((prev) => !prev);
     };
 
+    const closeToTrigger = () => {
+      setIsOpen(false);
+      if (document.activeElement !== triggerRef.current) triggerRef.current?.focus();
+    };
+
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Escape" || !isOpen) return;
+      // Handled here, so an enclosing Modal does not also close on this Escape.
+      event.preventDefault();
+      closeToTrigger();
+    };
+
     const handleSelectOption = (nextValue: string) => {
       if (selectRef.current) {
         selectRef.current.value = nextValue;
@@ -86,7 +99,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     };
 
     return (
-      <div className="relative w-full" ref={containerRef}>
+      <div className="relative w-full" ref={containerRef} onKeyDown={handleKeyDown}>
+        {/* The label names the visible trigger: that is the control users operate. */}
         {label && (
           <label
             htmlFor={id}
@@ -96,18 +110,18 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           </label>
         )}
 
-        {/* Hidden native select preserves label association and form/testing semantics */}
+        {/* Hidden native select keeps form submission and value semantics; AT and focus use the trigger. */}
         <select
           ref={(node) => {
             selectRef.current = node;
             if (typeof ref === "function") ref(node);
             else if (ref) ref.current = node;
           }}
-          id={id}
           value={value}
           onChange={onChange}
           disabled={disabled}
           tabIndex={-1}
+          aria-hidden="true"
           className="sr-only"
           {...props}
         >
@@ -118,17 +132,20 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
 
         {/* Custom Trigger matching BentoSelect */}
         <button
+          ref={triggerRef}
+          id={id}
           type="button"
           disabled={disabled}
           onClick={toggleOpen}
+          aria-expanded={isOpen}
           className={cn(
-            "w-full h-[38px] rounded-lg border bg-card px-3.5 py-2 text-xs font-medium text-foreground",
+            "w-full h-10 sm:h-9 rounded-lg border bg-card px-3.5 py-2 text-xs font-medium text-foreground",
             "flex items-center justify-between gap-2 shadow-2xs transition-colors duration-150",
-            "focus:outline-none focus:ring-2 focus:ring-primary/15",
+            "focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/25",
             error
-              ? "border-red-500/70 focus:ring-red-500/15"
+              ? "border-danger focus:border-danger focus:ring-danger/25"
               : isOpen
-                ? "border-primary/60 ring-2 ring-primary/15"
+                ? "border-primary/60 ring-2 ring-primary/25"
                 : "border-border/70 hover:border-border",
             disabled && "cursor-not-allowed opacity-50",
             className,
@@ -146,7 +163,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         {isOpen && (
           <div
             className={cn(
-              "absolute z-50 w-full rounded-xl border border-border/80 bg-card shadow-lg p-1 overflow-hidden",
+              "absolute z-50 w-full rounded-xl border border-border bg-card shadow-lg shadow-black/10 p-1 overflow-hidden",
               openUpwards ? "bottom-full mb-1.5" : "top-full mt-1.5",
             )}
           >
@@ -160,6 +177,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                     onClick={() => handleSelectOption(option.value)}
                     className={cn(
                       "w-full px-3 py-2 text-xs text-left rounded-lg transition-colors flex items-center justify-between gap-2",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                       isSelected
                         ? "bg-primary-light text-primary-text font-bold"
                         : "text-foreground hover:bg-muted font-medium",
@@ -177,7 +195,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         )}
 
         {error && (
-          <span className="mt-1.5 block text-xs font-medium text-red-500">
+          <span className="mt-1.5 block text-xs font-medium text-danger-text">
             {error}
           </span>
         )}

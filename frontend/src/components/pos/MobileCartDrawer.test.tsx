@@ -96,7 +96,7 @@ describe("MobileCartDrawer", () => {
       />,
     );
 
-    expect(screen.getByText("Carrito de Compras")).toBeInTheDocument();
+    expect(screen.getByText("Carrito de compras")).toBeInTheDocument();
     expect(screen.getByText("Bujía NGK Racing")).toBeInTheDocument();
     expect(screen.getByText("Juan Pérez")).toBeInTheDocument();
 

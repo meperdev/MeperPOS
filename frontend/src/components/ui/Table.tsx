@@ -15,20 +15,11 @@ const TableContext = createContext<TableContextValue>({
   isHeader: false,
 });
 
-const headerRowClasses: Record<TableVariant, string> = {
-  primary: "border-b border-border/60 bg-muted/35",
-  accent: "border-b border-border/60 bg-muted/35",
-  default: "border-b border-border/60 bg-muted/35",
-};
+// Every variant paints the same rows today; `variant` stays accepted for callers.
+const headerRowClasses = "border-b border-border/60 bg-muted/35";
 
-const bodyRowClasses: Record<TableVariant, string> = {
-  primary:
-    "border-b border-border/50 transition-colors hover:bg-muted/30 last:border-b-0",
-  accent:
-    "border-b border-border/50 transition-colors hover:bg-muted/30 last:border-b-0",
-  default:
-    "border-b border-border/50 transition-colors hover:bg-muted/30 last:border-b-0",
-};
+const bodyRowClasses =
+  "border-b border-border/50 transition-colors hover:bg-muted/30 last:border-b-0";
 
 interface TableProps {
   variant?: TableVariant;
@@ -68,10 +59,8 @@ interface TableRowProps extends React.ComponentPropsWithoutRef<"tr"> {
 }
 
 export function TableRow({ className, children, ...props }: TableRowProps) {
-  const { variant, isHeader } = useContext(TableContext);
-  const rowClasses = isHeader
-    ? headerRowClasses[variant]
-    : bodyRowClasses[variant];
+  const { isHeader } = useContext(TableContext);
+  const rowClasses = isHeader ? headerRowClasses : bodyRowClasses;
   return (
     <tr className={cn(rowClasses, className)} {...props}>
       {children}
@@ -81,12 +70,15 @@ export function TableRow({ className, children, ...props }: TableRowProps) {
 
 interface TableCellProps {
   as?: "td" | "th";
+  /** Right-aligns the cell with tabular figures: money, quantities, counts. */
+  numeric?: boolean;
   className?: string;
   children: ReactNode;
 }
 
 export function TableCell({
   as = "td",
+  numeric = false,
   className,
   children,
 }: TableCellProps) {
@@ -95,7 +87,9 @@ export function TableCell({
     <Comp
       className={cn(
         "py-3 px-5 text-xs",
-        as === "th" && "text-left font-medium text-muted-foreground",
+        as === "th" && "font-medium text-muted-foreground",
+        as === "th" && !numeric && "text-left",
+        numeric && "text-right tabular-nums",
         className,
       )}
     >

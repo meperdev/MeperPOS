@@ -108,12 +108,12 @@ describe("AlertHistoryPage", () => {
 
   it("shows the error state with a retry", async () => {
     const refetch = vi.fn();
-    historyMock.mockReturnValue(page({ isError: true, refetch }));
+    historyMock.mockReturnValue(page({ isError: true, data: undefined, refetch }));
 
     render(<AlertHistoryPage />);
 
     expect(
-      screen.getByText("No pudimos cargar el historial de notificaciones."),
+      screen.getByText("No se pudo cargar el historial de notificaciones."),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(refetch).toHaveBeenCalled();

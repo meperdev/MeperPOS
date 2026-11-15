@@ -49,8 +49,8 @@ import {
 
 const trialToneClass = {
   default: "text-muted-foreground",
-  warning: "text-amber-600 dark:text-amber-400",
-  danger: "text-rose-600 dark:text-rose-400",
+  warning: "text-warning-text",
+  danger: "text-danger-text",
 } as const;
 
 export default function OrganizationsPage() {
@@ -122,16 +122,6 @@ export default function OrganizationsPage() {
   const sorted = useMemo(() => sortOrganizations(filtered, sort), [filtered, sort]);
 
   const pageData = useMemo(() => paginate(sorted, page), [sorted, page]);
-
-  const hasFilters =
-    search.trim() !== "" || statusFilter !== "ALL" || planFilter !== "ALL";
-
-  const clearFilters = () => {
-    setSearch("");
-    setStatusFilter("ALL");
-    setPlanFilter("ALL");
-    setPage(1);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -236,7 +226,7 @@ export default function OrganizationsPage() {
     return (
       <div className="space-y-4">
         {header}
-        <TableSkeleton rows={6} columns={6} label="Cargando organizaciones..." />
+        <TableSkeleton rows={6} columns={6} label="Cargando organizaciones…" />
       </div>
     );
   }
@@ -297,14 +287,6 @@ export default function OrganizationsPage() {
                 }}
               />
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearFilters}
-              disabled={!hasFilters}
-            >
-              Limpiar
-            </Button>
           </>
         }
       />
@@ -366,7 +348,7 @@ export default function OrganizationsPage() {
                           <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
                             <span
                               aria-hidden="true"
-                              className={statusDot[org.status] ?? "bg-slate-400"}
+                              className={statusDot[org.status] ?? "bg-muted-foreground"}
                               style={{ height: 6, width: 6, borderRadius: 9999 }}
                             />
                             {statusLabel(org.status)}
@@ -386,18 +368,18 @@ export default function OrganizationsPage() {
                               aria-hidden="true"
                               className={
                                 org.billingStatus
-                                  ? billingDots[org.billingStatus] ?? "bg-slate-400"
-                                  : "bg-slate-300"
+                                  ? billingDots[org.billingStatus] ?? "bg-muted-foreground"
+                                  : "bg-muted-foreground/50"
                               }
                               style={{ height: 6, width: 6, borderRadius: 9999 }}
                             />
                             {billingLabel(org.billingStatus)}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-foreground tabular-nums">
+                        <TableCell className="text-right text-foreground tabular-nums">
                           {org.userCount ?? "—"}
                         </TableCell>
-                        <TableCell className="hidden text-right font-mono text-muted-foreground tabular-nums xl:table-cell">
+                        <TableCell className="hidden text-right text-muted-foreground tabular-nums xl:table-cell">
                           {formatDate(org.createdAt)}
                         </TableCell>
                         <TableCell className="text-right">
@@ -447,6 +429,7 @@ export default function OrganizationsPage() {
           totalItems={sorted.length}
           pageSize={PAGE_SIZE}
           itemLabel="organización"
+          itemLabelPlural="organizaciones"
         />
       )}
 
@@ -565,13 +548,13 @@ export default function OrganizationsPage() {
               Cancelar
             </Button>
             <Button type="submit" loading={createOrg.isPending}>
-              {createOrg.isPending ? "Creando..." : "Crear"}
+              {createOrg.isPending ? "Creando…" : "Crear"}
             </Button>
           </div>
 
           {createOrg.isError && (
-            <p className="text-sm text-red-500">
-              Error al crear la organización. Intenta de nuevo.
+            <p className="text-sm text-danger-text">
+              No se pudo crear la organización. Intenta de nuevo.
             </p>
           )}
         </form>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCategoryColorMap,
+  CATEGORY_CHART_PALETTE,
   buildDailyMetricSeries,
   buildDateWindow,
   buildStackedDailySeries,
@@ -13,9 +14,10 @@ import {
   DEFAULT_DASHBOARD_RANGE,
   filterOpenTasks,
   formatCategoryAmountTick,
-  formatCategoryAxisTick,
   formatCategoryTooltipDate,
+  formatChartDayTicks,
   getDashboardRange,
+  pickChartDayTicks,
   resolveDashboardRange,
   sumExpensesOnDate,
 } from "./dashboard";
@@ -131,6 +133,35 @@ describe("buildCategoryColorMap (stacked chart)", () => {
   it("de-duplicates category names", () => {
     const map = buildCategoryColorMap(["A", "A", "B"]);
     expect(map.size).toBe(2);
+  });
+
+  it("exposes the palette as the eight chart CSS variables, never literal colors", () => {
+    expect(CATEGORY_CHART_PALETTE).toEqual([
+      "var(--chart-1)",
+      "var(--chart-2)",
+      "var(--chart-3)",
+      "var(--chart-4)",
+      "var(--chart-5)",
+      "var(--chart-6)",
+      "var(--chart-7)",
+      "var(--chart-8)",
+    ]);
+  });
+
+  it("assigns colors by sorted category name, independent of input order", () => {
+    const forward = buildCategoryColorMap(["Snacks", "Bebidas", "Aseo"]);
+    const reverse = buildCategoryColorMap(["Aseo", "Bebidas", "Snacks"]);
+    expect(forward.get("Aseo")).toBe("var(--chart-1)");
+    expect(forward.get("Bebidas")).toBe("var(--chart-2)");
+    expect(forward.get("Snacks")).toBe("var(--chart-3)");
+    expect([...reverse.entries()]).toEqual([...forward.entries()]);
+  });
+
+  it("wraps the palette after eight categories", () => {
+    const names = ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"];
+    const map = buildCategoryColorMap(names);
+    expect(map.get("c8")).toBe("var(--chart-8)");
+    expect(map.get("c9")).toBe("var(--chart-1)");
   });
 });
 
@@ -300,10 +331,109 @@ describe("dashboard range helpers", () => {
     expect(countDaysInclusive("2026-08-22", "2026-08-22")).toBe(1);
   });
 
-  it("formats compact d/m axis ticks from the real date", () => {
-    expect(formatCategoryAxisTick("2026-08-01")).toBe("1/8");
-    expect(formatCategoryAxisTick("2026-11-30")).toBe("30/11");
-    expect(formatCategoryAxisTick("nope")).toBe("nope");
+  describe("pickChartDayTicks (x-axis tick selection)", () => {
+    const series = (start: string, length: number): string[] => {
+      const [y, m, d] = start.split("-").map(Number);
+      return Array.from({ length }, (_, i) => {
+        const date = new Date(Date.UTC(y, m - 1, d + i, 12));
+        return date.toISOString().slice(0, 10);
+      });
+    };
+
+    it("labels every date when the window is narrow and short", () => {
+      const week = series("2026-08-16", 7);
+      expect(pickChartDayTicks(week, 350)).toEqual(week);
+    });
+
+    it("thins a 30-day window at 350px to 7 labels, first and last included", () => {
+      const month = series("2026-10-17", 30);
+      const picked = pickChartDayTicks(month, 350);
+
+      // target = floor(350 / 44) = 7 → step = ceil(30 / 7) = 5
+      expect(picked).toHaveLength(7);
+      expect(picked[0]).toBe("2026-10-17");
+      expect(picked[picked.length - 1]).toBe("2026-11-15");
+    });
+
+    it("drops the previous pick when it would crowd the last date", () => {
+      // 32 dates, step 5: the naive pick at index 30 sits one day from index 31.
+      const dates = series("2026-10-01", 32);
+      const picked = pickChartDayTicks(dates, 350);
+
+      expect(picked.at(-2)).toBe(dates[25]);
+      expect(picked.at(-1)).toBe(dates[31]);
+      expect(picked).not.toContain(dates[30]);
+    });
+
+    it("keeps the first tick of a new month even when the 1st is not picked", () => {
+      // 30 dates at 360px → step 4, so 2026-11-01 (index 15) is skipped.
+      const month = series("2026-10-17", 30);
+      const picked = pickChartDayTicks(month, 360);
+      const labels = formatChartDayTicks(picked);
+
+      expect(picked).not.toContain("2026-11-01");
+      expect(labels.get("2026-11-02")).toBe("2 nov");
+    });
+
+    it("falls back to 7 labels when the width is unknown and the window is long", () => {
+      expect(pickChartDayTicks(series("2026-10-17", 30), 0)).toHaveLength(7);
+    });
+
+    it("labels every date when the width is unknown and the window is 7 days or less", () => {
+      const week = series("2026-08-16", 7);
+      expect(pickChartDayTicks(week, 0)).toEqual(week);
+    });
+
+    it("returns an empty list for an empty window and the lone date for a single day", () => {
+      expect(pickChartDayTicks([], 500)).toEqual([]);
+      expect(pickChartDayTicks(["2026-08-16"], 500)).toEqual(["2026-08-16"]);
+    });
+  });
+
+  describe("formatChartDayTicks (x-axis labels)", () => {
+    it("shows the month on the first tick and bare days within a month", () => {
+      const labels = formatChartDayTicks(["2026-08-21", "2026-08-26"]);
+
+      expect(labels.get("2026-08-21")).toBe("21 ago");
+      expect(labels.get("2026-08-26")).toBe("26");
+    });
+
+    it("shows the month again when a picked tick changes month", () => {
+      const labels = formatChartDayTicks([
+        "2026-08-21",
+        "2026-08-26",
+        "2026-09-01",
+        "2026-09-06",
+      ]);
+
+      expect(labels.get("2026-09-01")).toBe("1 sep");
+      expect(labels.get("2026-09-06")).toBe("6");
+    });
+
+    it("compares against the previous picked tick, not the previous calendar day", () => {
+      // Picks skip Oct 31 and Nov 1; Nov 4 is the first picked tick of November.
+      const labels = formatChartDayTicks(["2026-10-29", "2026-11-04", "2026-11-08"]);
+
+      expect(labels.get("2026-11-04")).toBe("4 nov");
+      expect(labels.get("2026-11-08")).toBe("8");
+    });
+
+    it("uses lowercase short es-CO month names without a trailing dot", () => {
+      const labels = formatChartDayTicks(["2026-01-05", "2026-11-01", "2026-12-31"]);
+
+      expect(labels.get("2026-01-05")).toBe("5 ene");
+      expect(labels.get("2026-11-01")).toBe("1 nov");
+      expect(labels.get("2026-12-31")).toBe("31 dic");
+    });
+
+    it("parses the ISO string without a timezone shift", () => {
+      // new Date("2026-08-01") is UTC midnight, which is Jul 31 in Bogotá.
+      expect(formatChartDayTicks(["2026-08-01"]).get("2026-08-01")).toBe("1 ago");
+    });
+
+    it("returns the input unchanged when it is not a date", () => {
+      expect(formatChartDayTicks(["nope"]).get("nope")).toBe("nope");
+    });
   });
 
   it("formats a readable tooltip date", () => {

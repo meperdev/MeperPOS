@@ -29,7 +29,7 @@ interface MetricCardProps {
 const toneCardClasses: Record<MetricCardTone, string> = {
   primary: "border-border/70 bg-card hover:border-border transition-colors",
   accent: "border-border/70 bg-card hover:border-border transition-colors",
-  rose: "border-rose-500/25 bg-card hover:border-rose-500/40 transition-colors",
+  rose: "border-danger/30 bg-card hover:border-danger/40 transition-colors",
   green: "border-border/70 bg-card hover:border-border transition-colors",
   blue: "border-border/70 bg-card hover:border-border transition-colors",
 };
@@ -37,28 +37,29 @@ const toneCardClasses: Record<MetricCardTone, string> = {
 const toneValueClasses: Record<MetricCardTone, string> = {
   primary: "text-foreground",
   accent: "text-foreground",
-  rose: "text-rose-700 dark:text-rose-400",
+  rose: "text-danger-text",
   green: "text-foreground",
   blue: "text-foreground",
 };
 
+// Chart colours come from the status and brand tokens, never from palette hexes.
 const toneSparkColor: Record<MetricCardTone, string> = {
-  primary: "#C25E36",
-  accent: "#C25E36",
-  rose: "#F43F5E",
-  green: "#10B981",
-  blue: "#3B82F6",
+  primary: "var(--primary)",
+  accent: "var(--primary)",
+  rose: "var(--danger)",
+  green: "var(--success)",
+  blue: "var(--info)",
 };
 
 const toneActionClasses: Record<MetricCardTone, string> = {
   primary: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
   accent: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
-  rose: "border-rose-500/35 bg-rose-500/[0.06] text-rose-700 dark:text-rose-400 hover:bg-rose-500/12",
+  rose: "border-danger/30 bg-danger/10 text-danger-text hover:bg-danger/15",
   green: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
   blue: "border-border/80 bg-muted/40 text-foreground hover:bg-muted",
 };
 
-const NEUTRAL_SPARK_COLOR = "#94A3B8";
+const NEUTRAL_SPARK_COLOR = "var(--muted-foreground)";
 
 /**
  * Tiny axis-less area chart used as a KPI sparkline. It sets a percentage width
@@ -98,9 +99,8 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
 }
 
 /**
- * Shared MetricCard for reports and dashboard. Matches the canonical
- * Kinetic Bento pattern: mono uppercase label + JetBrains Mono extrabold
- * value + helper + optional delta pill, with tone alternation.
+ * Shared MetricCard for reports and dashboard: muted label, semibold tabular
+ * value, helper line and an optional delta pill, with tone alternation.
  *
  * When no `tone` is provided it renders exactly like the historical reports
  * MetricCard (neutral card surface), so refactors are behavior-preserving.
@@ -142,7 +142,7 @@ export function MetricCard({
       </p>
       <p
         className={cn(
-          "mt-1.5 truncate text-lg font-semibold font-mono text-foreground tracking-tight tabular-nums sm:text-2xl",
+          "mt-1.5 truncate text-lg font-semibold text-foreground tracking-tight tabular-nums sm:text-2xl",
           tone && toneValueClasses[tone],
         )}
         title={value}
@@ -159,12 +159,12 @@ export function MetricCard({
         {delta ? (
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums",
+              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
               !hasBaseline
                 ? "bg-muted/70 text-muted-foreground border border-border/70"
                 : positive
-                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25"
-                  : "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/25",
+                  ? "bg-success/10 text-success-text border border-success/30"
+                  : "bg-danger/10 text-danger-text border border-danger/30",
             )}
           >
             {hasBaseline && (
@@ -184,7 +184,7 @@ export function MetricCard({
           type="button"
           onClick={action.onClick}
           className={cn(
-            "mt-3 inline-flex min-h-7 items-center gap-1 self-start rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+            "mt-3 inline-flex min-h-9 items-center gap-1 self-start rounded-md border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
             tone
               ? toneActionClasses[tone]
               : "border-border/70 bg-muted/40 text-foreground hover:bg-muted",

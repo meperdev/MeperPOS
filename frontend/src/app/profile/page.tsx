@@ -7,6 +7,7 @@ import { useUpdateProfile, useChangePassword, useProfile } from "@/hooks/useProf
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { User as UserIcon, Lock, Mail, Shield } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
@@ -38,7 +39,7 @@ export default function ProfilePage() {
       await updateProfile.mutateAsync(formData);
       toast.success("Perfil actualizado correctamente");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al actualizar el perfil"));
+      toast.error(getApiErrorMessage(error, "No se pudo actualizar el perfil"));
     }
   };
 
@@ -63,7 +64,7 @@ export default function ProfilePage() {
       toast.error(
         getApiErrorMessage(
           error,
-          "Error al cambiar la contraseña. Verifica tu contraseña actual."
+          "No se pudo cambiar la contraseña. Verifica tu contraseña actual."
         )
       );
     }
@@ -74,7 +75,7 @@ export default function ProfilePage() {
       <DashboardLayout>
         <LoadingState
           icon={<UserIcon className="w-4 h-4 text-muted-foreground" />}
-          message="Cargando perfil..."
+          message="Cargando perfil…"
         />
       </DashboardLayout>
     );
@@ -101,38 +102,32 @@ export default function ProfilePage() {
     <DashboardLayout>
       <div className="space-y-4 lg:space-y-5">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-              Mi perfil
-            </h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Gestiona tu información personal y credenciales de acceso
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          title="Mi perfil"
+          subtitle="Gestiona tu información personal y credenciales de acceso"
+        />
 
         {/* Top Summary Card */}
         <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-lg bg-muted/60 border border-border/70 text-foreground flex items-center justify-center font-mono font-semibold text-sm tracking-tight shrink-0">
+            <div className="w-11 h-11 rounded-lg bg-muted/60 border border-border/70 text-foreground flex items-center justify-center font-semibold text-sm shrink-0">
               {initials}
             </div>
             <div className="min-w-0">
               <h2 className="text-sm sm:text-base font-semibold text-foreground truncate">
                 {currentUser?.name}
               </h2>
-              <p className="text-xs text-muted-foreground font-mono truncate">
+              <p className="text-xs text-muted-foreground truncate">
                 {currentUser?.email}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-muted/50 text-foreground font-mono text-[11px] font-medium border border-border/70">
-              <Shield className="w-3 h-3 text-muted-foreground" />
+            <Badge variant="default">
+              <Shield className="mr-1 w-3 h-3 text-muted-foreground" />
               {roleLabel[currentUser?.role || ""] || currentUser?.role}
-            </span>
+            </Badge>
             <Badge variant="success" dot>
               Activo
             </Badge>
@@ -156,7 +151,7 @@ export default function ProfilePage() {
                 </p>
               </div>
 
-              <form id="profile-form" onSubmit={handleProfileUpdate} className="space-y-3.5">
+              <form id="profile-form" onSubmit={handleProfileUpdate} className="space-y-3">
                 <Input
                   label="Nombre completo"
                   value={formData.name}

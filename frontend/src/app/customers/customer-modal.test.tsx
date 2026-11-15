@@ -6,7 +6,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
@@ -115,6 +115,39 @@ describe("Customers page modal — customer-supplier-info-fields (T18)", () => {
     cleanup();
   });
 
+  it("drops the pencil: the card's edit target is a real button named Editar <name>", async () => {
+    const user = userEvent.setup();
+    render(<CustomersPage />);
+
+    // One "Editar" target per customer: the card's overlay button, not a nested pencil.
+    const targets = screen.getAllByRole("button", { name: "Editar Ana Perez" });
+    expect(targets).toHaveLength(1);
+    const edit = targets[0];
+    expect(edit.tagName).toBe("BUTTON");
+    expect(edit.parentElement!.getAttribute("role")).toBeNull();
+    expect(edit.parentElement!.className).toContain("relative");
+
+    edit.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("heading", { name: "Editar cliente" })).toBeTruthy();
+  });
+
+  it("keeps the table row free of tab stops and opens the edit form from its name button", async () => {
+    window.localStorage.setItem("meperpos:view-mode:customers", "table");
+    try {
+      const user = userEvent.setup();
+      render(<CustomersPage />);
+
+      const row = within(screen.getByRole("table")).getByRole("button", { name: "Editar Ana Perez" }).closest("tr")!;
+      expect(row).not.toHaveAttribute("tabindex");
+
+      await user.click(within(row).getByRole("button", { name: "Editar Ana Perez" }));
+      expect(await screen.findByRole("heading", { name: "Editar cliente" })).toBeTruthy();
+    } finally {
+      window.localStorage.removeItem("meperpos:view-mode:customers");
+    }
+  });
+
   it("hides the motorcycle plate when the vehicles module is disabled", async () => {
     moduleState.enabled = false;
     const user = userEvent.setup();
@@ -158,8 +191,8 @@ describe("Customers page modal — customer-supplier-info-fields (T18)", () => {
     const user = userEvent.setup();
     render(<CustomersPage />);
 
-    // Clicking the card (an ADMIN can edit) triggers handleEdit.
-    await user.click(screen.getByText("Ana Perez"));
+    // The card's edit target is its overlay button named Editar <name> (an ADMIN can edit).
+    await user.click(screen.getByRole("button", { name: "Editar Ana Perez" }));
 
     const referenciaInput = await screen.findByLabelText(/Referencia/i);
     expect(referenciaInput).toHaveValue("REF-001");

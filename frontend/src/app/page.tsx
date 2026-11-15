@@ -22,7 +22,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <LoadingState icon={<Loader2 className="h-12 w-12" />} message="Cargando..." />
+      <LoadingState icon={<Loader2 aria-hidden="true" />} message="Cargando…" />
     </div>
   );
 }

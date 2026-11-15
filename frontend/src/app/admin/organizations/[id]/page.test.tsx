@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import OrganizationDetailPage from "./page";
@@ -167,10 +167,21 @@ describe("OrganizationDetailPage", () => {
     });
 
     it("renders the member list table", () => {
-      expect(screen.getByText("Juan Perez")).toBeInTheDocument();
-      expect(screen.getByText("juan@example.com")).toBeInTheDocument();
-      expect(screen.getByText("Maria Lopez")).toBeInTheDocument();
-      expect(screen.getByText("maria@example.com")).toBeInTheDocument();
+      const table = screen.getByRole("table");
+      expect(within(table).getByText("Juan Perez")).toBeInTheDocument();
+      expect(within(table).getByText("juan@example.com")).toBeInTheDocument();
+      expect(within(table).getByText("Maria Lopez")).toBeInTheDocument();
+      expect(within(table).getByText("maria@example.com")).toBeInTheDocument();
+    });
+
+    it("renders a stacked member list for narrow containers with the same people", () => {
+      const list = screen.getByTestId("org-member-list");
+      expect(list.className).toContain("@3xl:hidden");
+      expect(screen.getByRole("table").closest(".overflow-x-auto")!.className).toContain("@3xl:block");
+      const rows = within(list).getAllByTestId("org-member-row");
+      expect(rows).toHaveLength(2);
+      expect(within(rows[0]).getByText("Juan Perez")).toBeInTheDocument();
+      expect(within(rows[0]).getByText("Propietario")).toBeInTheDocument();
     });
 
     it("renders member roles in the table", () => {
@@ -182,7 +193,7 @@ describe("OrganizationDetailPage", () => {
     });
 
     it("renders primary owner indicator", () => {
-      const siBadge = screen.getByText("S\u00ed");
+      const siBadge = within(screen.getByRole("table")).getByText("S\u00ed");
       expect(siBadge).toBeInTheDocument();
     });
 
@@ -210,7 +221,7 @@ describe("OrganizationDetailPage", () => {
       const pulse = document.querySelector(".animate-pulse");
       expect(pulse).toBeInTheDocument();
       expect(
-        screen.getByText("Cargando organizaci\u00f3n...")
+        screen.getByText("Cargando organizaci\u00f3n…")
       ).toBeInTheDocument();
     });
   });
@@ -381,7 +392,7 @@ describe("OrganizationDetailPage", () => {
 
     it("renders remove button for non-owner members", () => {
       expect(
-        screen.getByRole("button", { name: "Acciones de Maria Lopez" })
+        within(screen.getByRole("table")).getByRole("button", { name: "Acciones de Maria Lopez" })
       ).toBeInTheDocument();
     });
 

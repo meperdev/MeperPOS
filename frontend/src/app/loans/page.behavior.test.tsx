@@ -15,6 +15,14 @@ vi.mock("@/components/layout/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+/** The kit Select labels its visible trigger; the hidden native select keeps the value semantics. */
+function nativeSelectFor(scope: HTMLElement, label: string): HTMLSelectElement {
+  const trigger = within(scope).getByRole("button", { name: label });
+  const select = trigger.parentElement?.querySelector("select");
+  if (!select) throw new Error(`No native select behind "${label}"`);
+  return select;
+}
+
 vi.mock("@/hooks/useLoans", () => ({
   useLoans: (...args: unknown[]) => loansMock(...args),
   useLoan: (...args: unknown[]) => loanMock(...args),
@@ -172,9 +180,10 @@ describe("Loans page", () => {
     render(<LoansPage />);
 
     expect(screen.getAllByTestId("loan-card")).toHaveLength(2);
-    expect(screen.getByTestId("loan-cards").className).toMatch(
-      /grid-cols-1.*sm:grid-cols-2.*lg:grid-cols-3.*xl:grid-cols-4/,
+    expect(screen.getByTestId("loan-cards").className).toContain(
+      "grid-cols-[repeat(auto-fill,minmax(16rem,1fr))]",
     );
+    expect(screen.getByTestId("loan-cards").className).not.toMatch(/(^|\s)(sm|md|lg|xl):grid-cols/);
     expect(screen.getByText("Distribuidora Sur")).toBeTruthy();
     expect(screen.getByText("Servicio")).toBeTruthy();
     expect(screen.getByText("Cerrado")).toBeTruthy();
@@ -384,7 +393,7 @@ describe("Loans page", () => {
     render(<LoansPage />);
     await user.click(screen.getByText("Ana Perez"));
     await user.type(screen.getByLabelText("Monto del abono"), "25");
-    await user.selectOptions(screen.getByLabelText("Método"), "CARD");
+    await user.selectOptions(nativeSelectFor(document.body, "Método"), "CARD");
     const submit = screen.getByRole("button", { name: "Registrar abono" });
 
     await user.click(submit);

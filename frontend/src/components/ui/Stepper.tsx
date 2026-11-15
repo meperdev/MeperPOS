@@ -49,17 +49,17 @@ export function Stepper({
   const sizes = {
     sm: {
       container: "p-0.5 rounded-lg text-xs",
-      btn: "w-6 h-6 rounded-md text-xs",
-      input: "w-8 text-xs",
+      btn: "w-8 h-8 rounded-md text-xs",
+      input: "w-10 text-xs",
     },
     md: {
       container: "p-1 rounded-xl text-sm",
-      btn: "w-8 h-8 rounded-lg text-sm",
+      btn: "w-10 h-10 rounded-lg text-sm",
       input: "w-12 text-sm",
     },
     lg: {
       container: "p-1.5 rounded-2xl text-base",
-      btn: "w-10 h-10 rounded-xl text-base",
+      btn: "w-11 h-11 rounded-xl text-base",
       input: "w-16 text-base font-bold",
     },
   };
@@ -82,7 +82,8 @@ export function Stepper({
         aria-label="Disminuir cantidad"
         className={cn(
           "bg-card border border-border/60 text-foreground flex items-center justify-center font-bold",
-          "hover:bg-primary-light hover:text-primary-text active:scale-90 transition-all duration-150 shadow-xs",
+          "hover:bg-primary-light hover:text-primary-text active:bg-muted transition-colors duration-150 shadow-xs",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           "disabled:opacity-40 disabled:pointer-events-none",
           currentSize.btn
         )}
@@ -93,11 +94,13 @@ export function Stepper({
       <input
         type="text"
         inputMode="numeric"
+        aria-label="Cantidad"
         value={value}
         onChange={handleInputChange}
         disabled={disabled}
         className={cn(
-          "text-center font-mono font-bold bg-transparent text-foreground focus:outline-none",
+          "rounded-md text-center font-bold tabular-nums bg-transparent text-foreground",
+          "focus:outline-none focus:ring-2 focus:ring-primary/25",
           currentSize.input
         )}
       />
@@ -109,7 +112,8 @@ export function Stepper({
         aria-label="Aumentar cantidad"
         className={cn(
           "bg-card border border-border/60 text-foreground flex items-center justify-center font-bold",
-          "hover:bg-primary-light hover:text-primary-text active:scale-90 transition-all duration-150 shadow-xs",
+          "hover:bg-primary-light hover:text-primary-text active:bg-muted transition-colors duration-150 shadow-xs",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           "disabled:opacity-40 disabled:pointer-events-none",
           currentSize.btn
         )}

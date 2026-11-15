@@ -69,9 +69,6 @@ function ReceiptPreview({
       <div className="border-b border-border/60 px-4 py-3.5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground">
-              Vista previa
-            </p>
             <h2 className="mt-0.5 text-xs sm:text-sm font-semibold tracking-tight text-foreground">
               Comprobante / recibo de muestra
             </h2>
@@ -133,7 +130,7 @@ function ReceiptPreview({
 
           <div className="my-4 border-t border-dashed border-border/70" />
 
-          <section aria-label="Productos de muestra" className="space-y-2.5">
+          <section aria-label="Productos de muestra" className="space-y-2">
             {sampleItems.map((item) => (
               <div key={item.name} className="text-xs">
                 <div className="flex items-start justify-between gap-3 font-medium text-foreground">
@@ -211,7 +208,7 @@ export default function InvoicingSettingsPage() {
     return (
       <LoadingState
         icon={<Receipt className="w-4 h-4 text-muted-foreground" />}
-        message="Cargando configuración..."
+        message="Cargando configuración…"
       />
     );
   }
@@ -222,7 +219,7 @@ export default function InvoicingSettingsPage() {
       await updateSettings.mutateAsync({ printHeader, printFooter });
       toast.success("Configuración guardada correctamente");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al guardar la configuración"));
+      toast.error(getApiErrorMessage(error, "No se pudo guardar la configuración"));
     }
   };
 
@@ -232,7 +229,7 @@ export default function InvoicingSettingsPage() {
       await updateReceiptPrefix.mutateAsync(prefix);
       toast.success("Prefijo guardado correctamente");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al guardar el prefijo"));
+      toast.error(getApiErrorMessage(error, "No se pudo guardar el prefijo"));
     }
   };
 
@@ -247,70 +244,72 @@ export default function InvoicingSettingsPage() {
         </p>
       </div>
 
-      <div className="grid items-start gap-4 lg:gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
-        <div className="space-y-4">
-          <SettingsCard
-            title="Impresión de comprobantes"
-            description="Encabezado y pie que aparecen en los recibos"
-            icon={<Receipt className="w-4 h-4" />}
-          >
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <Input
-                label="Encabezado de impresión"
-                textarea
-                rows={3}
-                value={printHeader}
-                onChange={(e) => setPrintHeader(e.target.value)}
-                placeholder="Información que aparecerá en el encabezado de los recibos"
-              />
-              <Input
-                label="Pie de página de impresión"
-                value={printFooter}
-                onChange={(e) => setPrintFooter(e.target.value)}
-                placeholder="Información que aparecerá al pie de los recibos"
-              />
+      <div className="@container">
+        <div className="grid items-start gap-4 @4xl:gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
+          <div className="space-y-4">
+            <SettingsCard
+              title="Impresión de comprobantes"
+              description="Encabezado y pie que aparecen en los recibos"
+              icon={<Receipt className="w-4 h-4" />}
+            >
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Input
+                  label="Encabezado de impresión"
+                  textarea
+                  rows={3}
+                  value={printHeader}
+                  onChange={(e) => setPrintHeader(e.target.value)}
+                  placeholder="Información que aparecerá en el encabezado de los recibos"
+                />
+                <Input
+                  label="Pie de página de impresión"
+                  value={printFooter}
+                  onChange={(e) => setPrintFooter(e.target.value)}
+                  placeholder="Información que aparecerá al pie de los recibos"
+                />
 
-              <div className="flex justify-end pt-2">
-                <Button type="submit" loading={updateSettings.isPending}>
-                  Guardar
-                </Button>
-              </div>
-            </form>
-          </SettingsCard>
+                <div className="flex justify-end pt-2">
+                  <Button type="submit" loading={updateSettings.isPending}>
+                    Guardar
+                  </Button>
+                </div>
+              </form>
+            </SettingsCard>
 
-          <SettingsCard
-            title="Prefijo de comprobante"
-            description="Prefijo que antecede al número de cada recibo"
-            icon={<Hash className="w-4 h-4" />}
-          >
-            <form onSubmit={handlePrefixSubmit} className="space-y-4">
-              <Input
-                label="Prefijo de comprobante"
-                value={prefix}
-                onChange={(e) => setPrefix(e.target.value)}
-                placeholder="Ej. REC-"
-              />
+            <SettingsCard
+              title="Prefijo de comprobante"
+              description="Prefijo que antecede al número de cada recibo"
+              icon={<Hash className="w-4 h-4" />}
+            >
+              <form onSubmit={handlePrefixSubmit} className="space-y-4">
+                <Input
+                  label="Prefijo de comprobante"
+                  value={prefix}
+                  onChange={(e) => setPrefix(e.target.value)}
+                  placeholder="Ej. REC-"
+                />
 
-              <div className="flex justify-end pt-2">
-                <Button type="submit" loading={updateReceiptPrefix.isPending}>
-                  Guardar prefijo
-                </Button>
-              </div>
-            </form>
-          </SettingsCard>
-        </div>
+                <div className="flex justify-end pt-2">
+                  <Button type="submit" loading={updateReceiptPrefix.isPending}>
+                    Guardar prefijo
+                  </Button>
+                </div>
+              </form>
+            </SettingsCard>
+          </div>
 
-        <div className={cn("lg:sticky lg:top-5")}>
-          <ReceiptPreview
-            organizationName={settings.organization.name}
-            logoUrl={settings.organization.logoUrl}
-            taxId={settings.organization.taxId}
-            phone={settings.organization.phone}
-            address={settings.organization.address}
-            printHeader={printHeader}
-            printFooter={printFooter}
-            prefix={prefix}
-          />
+          <div className={cn("@4xl:sticky @4xl:top-5")}>
+            <ReceiptPreview
+              organizationName={settings.organization.name}
+              logoUrl={settings.organization.logoUrl}
+              taxId={settings.organization.taxId}
+              phone={settings.organization.phone}
+              address={settings.organization.address}
+              printHeader={printHeader}
+              printFooter={printFooter}
+              prefix={prefix}
+            />
+          </div>
         </div>
       </div>
     </div>

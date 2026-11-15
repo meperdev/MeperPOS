@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import {
@@ -120,7 +121,7 @@ describe("Sidebar", () => {
     });
 
     expect(
-      screen.getByLabelText(/Cambiar organizacion/i)
+      screen.getByLabelText(/Cambiar organización/i)
     ).toBeInTheDocument();
   });
 
@@ -136,7 +137,7 @@ describe("Sidebar", () => {
     });
 
     expect(
-      screen.queryByLabelText(/Cambiar organizacion/i)
+      screen.queryByLabelText(/Cambiar organización/i)
     ).not.toBeInTheDocument();
   });
 
@@ -166,7 +167,7 @@ describe("Sidebar", () => {
 
     const links = screen.getAllByRole("link").map((link) => link.textContent?.trim());
     expect(links).toEqual([
-      "Dashboard",
+      "Panel",
       "POS",
       "Ventas",
       "Clientes",
@@ -327,7 +328,7 @@ describe("Sidebar", () => {
     });
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Seleccionar organizacion" })
+      await screen.findByRole("button", { name: "Seleccionar organización" })
     );
     await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
 
@@ -420,12 +421,45 @@ describe("Sidebar", () => {
 
     // One block, not two: the clock is a child of the account block.
     expect(account.contains(clock)).toBe(true);
-    expect(clock).toHaveTextContent(/\d{4}/);
+    expect(clock.tagName).toBe("TIME");
+    expect(clock).toHaveAttribute("dateTime");
     expect(clock).toHaveTextContent(/\d{1,2}:\d{2}/);
+    expect(clock).not.toHaveClass("font-mono");
     expect(account).toHaveTextContent("Ana Perez");
   });
 
-  it("uses the identity itself as the account menu trigger", async () => {
+  it("keeps the server markup free of the time and reserves its line so mounting does not shift the footer", () => {
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Sidebar />
+      </QueryClientProvider>,
+    );
+
+    // The clock depends on the viewer's clock, so it must not reach the SSR HTML.
+    expect(markup).not.toContain('data-testid="sidebar-clock"');
+    expect(markup).toMatch(/data-testid="sidebar-clock-slot" class="[^"]*\bh-4\b/);
+  });
+
+  it("shows the current minute once mounted and advances it every minute", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 10, 15, 9, 0));
+      render(<Sidebar />, { wrapper });
+
+      expect(screen.getByTestId("sidebar-clock")).toHaveTextContent("9:00");
+
+      // Fake timers move the clock with the interval, so one minute later reads 9:01.
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+
+      expect(screen.getByTestId("sidebar-clock")).toHaveTextContent("9:01");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders the identity as plain text with the role below the name, no card or chip", async () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations: [organizations[0]] },
     });
@@ -436,12 +470,72 @@ describe("Sidebar", () => {
       expect(api.get).toHaveBeenCalledWith("/auth/organizations");
     });
 
-    const trigger = screen.getByRole("button", { name: "Opciones de cuenta" });
+    const account = screen.getByTestId("sidebar-user");
+    expect(screen.getByText("Ana Perez")).toHaveClass("text-sm", "font-medium", "truncate");
+    expect(screen.getByText("Administrador")).toHaveClass("text-xs", "text-muted-foreground");
+    // Footer separator only: no bordered card, and no online presence dot.
+    expect(account).toHaveClass("border-t");
+    expect(account.querySelector(".bg-success")).toBeNull();
+    expect(account.querySelector("[data-slot='badge'], .rounded-xl")).toBeNull();
+  });
 
-    // One target for the whole identity card: avatar, name and role inside it.
-    expect(trigger).toHaveTextContent("AP");
-    expect(trigger).toHaveTextContent("Ana Perez");
-    expect(trigger).toHaveTextContent("Administrador");
+  it("puts the bell and the account menu trigger side by side in the expanded footer", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
+    });
+
+    // The mobile header renders its own bell in the DOM, so scope to the footer.
+    const footer = within(screen.getByTestId("sidebar-user"));
+    const menuTrigger = footer.getByRole("button", { name: "Opciones de cuenta" });
+    const bell = footer.getByRole("button", { name: "Alertas" });
+
+    // Bell first, then the ⋮ menu, both frameless icon buttons.
+    expect(
+      bell.compareDocumentPosition(menuTrigger) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(bell).toHaveClass("h-9", "w-9");
+    expect(menuTrigger).toHaveClass("h-9", "w-9", "border-transparent", "bg-transparent");
+  });
+
+  it("collapses the footer to the bell, the avatar menu trigger and the org button", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <SidebarProvider>
+          <Sidebar />
+        </SidebarProvider>
+      </QueryClientProvider>
+    );
+
+    // The rail starts expanded (beforeEach), so one toggle collapses it.
+    await userEvent.click(await screen.findByTestId("sidebar-collapse-toggle"));
+
+    const account = screen.getByTestId("sidebar-user");
+    // No clock in the rail: the time lives in the expanded footer only.
+    expect(screen.queryByTestId("sidebar-clock")).not.toBeInTheDocument();
+    expect(account).not.toHaveTextContent("Ana Perez");
+
+    const footer = within(screen.getByTestId("sidebar-user"));
+    const bell = footer.getByRole("button", { name: /Alertas/ });
+    const avatarTrigger = footer.getByRole("button", { name: "Opciones de cuenta" });
+    expect(avatarTrigger).toHaveTextContent("AP");
+    expect(
+      bell.compareDocumentPosition(avatarTrigger) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      footer.getByRole("button", { name: "Mostrar organizaciones (expandir barra)" })
+    ).toBeInTheDocument();
   });
 
   it("separates Cerrar sesión from the rest of the account menu", async () => {
@@ -579,12 +673,12 @@ describe("Sidebar", () => {
     const toggleBtn = await screen.findByTestId("sidebar-collapse-toggle");
     await userEvent.click(toggleBtn);
 
-    const dashboardLink = screen.getByRole("link", { name: "Dashboard" });
+    const dashboardLink = screen.getByRole("link", { name: "Panel" });
     await userEvent.hover(dashboardLink);
 
     const tooltip = await screen.findByTestId("sidebar-rail-tooltip");
     expect(tooltip).toBeInTheDocument();
-    expect(tooltip).toHaveTextContent("Dashboard");
+    expect(tooltip).toHaveTextContent("Panel");
   });
 
   // The mobile header and the drawer are the two fixed surfaces a notch and a

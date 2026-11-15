@@ -107,7 +107,7 @@ export default function AdminWhatsAppPage() {
     return (
       <LoadingState
         icon={<Loader2 className="h-8 w-8 animate-spin" />}
-        message="Consultando el canal central..."
+        message="Consultando el canal central…"
       />
     );
   }

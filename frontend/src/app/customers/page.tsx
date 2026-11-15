@@ -9,6 +9,7 @@ import { useVehiclesModule } from "@/hooks/useBusinessModules";
 import { CustomerVehicles } from "./customer-vehicles";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
@@ -17,6 +18,7 @@ import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Pagination } from "@/components/ui/Pagination";
 import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import {
   FilterBar,
   FilterGroup,
@@ -33,7 +35,6 @@ import {
   Mail,
   MapPin,
   Users,
-  Pencil,
   ShoppingBag,
   Bookmark,
   Bike,
@@ -61,7 +62,7 @@ function CustomerAvatar({ name }: { name: string }) {
     .toUpperCase();
   return (
     <div className="w-9 h-9 rounded-lg bg-muted/60 border border-border/70 flex items-center justify-center shrink-0">
-      <span className="font-mono text-xs font-semibold text-foreground tracking-tight">
+      <span className="text-xs font-semibold text-foreground tracking-tight">
         {initials}
       </span>
     </div>
@@ -86,7 +87,13 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState<CustomerPayload>({});
 
-  const { data, isLoading } = useCustomers({ page, limit: viewMode === "grid" ? 12 : 10, search: search || undefined, segment: segment || undefined });
+  const {
+    data,
+    isLoading,
+    isError: customersFailed,
+    error: customersError,
+    refetch: refetchCustomers,
+  } = useCustomers({ page, limit: viewMode === "grid" ? 12 : 10, search: search || undefined, segment: segment || undefined });
   const createCustomer = useCreateCustomer();
   const updateCustomer = useUpdateCustomer();
   const deleteCustomer = useDeleteCustomer();
@@ -158,7 +165,7 @@ export default function CustomersPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
 
         {/* Page Header */}
 <PageHeader
@@ -216,14 +223,20 @@ export default function CustomersPage() {
         />
 
         {/* Content */}
-        {isLoading ? (
+        {customersFailed && !data ? (
+          <ErrorState
+            message={getApiErrorMessage(customersError, "No se pudieron cargar los clientes.")}
+            retryLabel="Reintentar"
+            onRetry={() => void refetchCustomers()}
+          />
+        ) : isLoading ? (
           <TableSkeleton columns={5} rows={8} label="Cargando clientes..." />
         ) : customers.length === 0 ? (
           <EmptyState icon={<Users className="w-5 h-5 text-muted-foreground" />} title="No hay clientes" subtitle="Agrega tu primer cliente" />
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
+              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {customers.map((customer) => {
                   const seg = segmentConfig[customer.segment] || segmentConfig.OCCASIONAL;
                   const hasOptionalContact = Boolean(
@@ -237,22 +250,30 @@ export default function CustomersPage() {
                     <div
                       key={customer.id}
                       className={cn(
-                        "group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150",
+                        "group relative flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150",
                         "hover:border-border",
                         canEdit && "cursor-pointer",
                       )}
-                      onClick={canEdit ? () => handleEdit(customer) : undefined}
                     >
+                      {/* The card's edit target: a real button stretched over the card; the footer controls sit above it. */}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          aria-label={`Editar ${customer.name}`}
+                          onClick={() => handleEdit(customer)}
+                          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                        />
+                      )}
                       <div>
                         {/* Header */}
-                        <div className="flex items-start justify-between gap-2.5">
-                          <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
                             <CustomerAvatar name={customer.name} />
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <h3 className="text-sm font-semibold text-foreground truncate leading-tight">
                                 {customer.name}
                               </h3>
-                              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground font-mono tabular-nums">
+                              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
                                 <span>{customer.documentType}</span>
                                 <span>·</span>
                                 <span className="text-foreground/90 font-medium truncate">
@@ -279,7 +300,7 @@ export default function CustomersPage() {
                                   {customer.phone ? (
                                     <span className="inline-flex items-center gap-1.5 min-w-0">
                                       <Phone className="w-3.5 h-3.5 shrink-0" />
-                                      <span className="font-mono text-foreground/90 tabular-nums truncate">
+                                      <span className="text-foreground/90 tabular-nums truncate">
                                         {customer.phone}
                                       </span>
                                     </span>
@@ -287,7 +308,7 @@ export default function CustomersPage() {
                                     <span />
                                   )}
                                   {vehiclesEnabled && customer.placaMoto && (
-                                    <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground uppercase tracking-tight shrink-0">
+                                    <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-semibold text-foreground tracking-tight shrink-0">
                                       <Bike className="w-3 h-3 text-muted-foreground shrink-0" />
                                       {customer.placaMoto}
                                     </span>
@@ -319,7 +340,7 @@ export default function CustomersPage() {
 
                       {/* Footer Actions */}
                       <div
-                        className="mt-3 flex items-center justify-between gap-2 border-t border-border/50 pt-2.5"
+                        className="relative z-10 mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Button
@@ -338,17 +359,8 @@ export default function CustomersPage() {
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => handleEdit(customer)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground"
-                              aria-label={`Editar ${customer.name}`}
-                              title="Editar cliente"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
                               onClick={() => handleDelete(customer.id)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-danger/30 hover:bg-danger/10 hover:text-danger-text"
                               aria-label={`Eliminar ${customer.name}`}
                               title="Eliminar cliente"
                             >
@@ -362,7 +374,7 @@ export default function CustomersPage() {
                 })}
               </div>
             ) : (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden animate-fade-in flex-1">
+              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
                 <div className="overflow-x-auto">
                   <Table variant="default" className="min-w-[680px]">
                     <TableHeader>
@@ -397,11 +409,25 @@ export default function CustomersPage() {
                             className={cn(canEdit && "cursor-pointer")}
                           >
                             <TableCell>
-                              <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
                                 <CustomerAvatar name={customer.name} />
                                 <div className="min-w-0">
                                   <p className="text-xs font-semibold text-foreground truncate max-w-[180px]">
-                                    {customer.name}
+                                    {canEdit ? (
+                                      <button
+                                        type="button"
+                                        aria-label={`Editar ${customer.name}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEdit(customer);
+                                        }}
+                                        className="max-w-full truncate text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                                      >
+                                        {customer.name}
+                                      </button>
+                                    ) : (
+                                      customer.name
+                                    )}
                                   </p>
                                   {customer.address && (
                                     <p className="text-[11px] text-muted-foreground truncate max-w-[180px]">
@@ -411,7 +437,7 @@ export default function CustomersPage() {
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="whitespace-nowrap font-mono text-xs tabular-nums">
+                            <TableCell className="whitespace-nowrap text-xs tabular-nums">
                               <span className="text-muted-foreground mr-1.5">
                                 {customer.documentType}
                               </span>
@@ -422,7 +448,7 @@ export default function CustomersPage() {
                             <TableCell>
                               <div className="space-y-0.5 text-xs">
                                 {customer.phone && (
-                                  <p className="font-mono text-foreground tabular-nums">
+                                  <p className="text-foreground tabular-nums">
                                     {customer.phone}
                                   </p>
                                 )}
@@ -439,7 +465,7 @@ export default function CustomersPage() {
                             <TableCell>
                               <div className="flex flex-wrap items-center gap-1.5">
                                 {vehiclesEnabled && customer.placaMoto && (
-                                  <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground uppercase">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-semibold text-foreground">
                                     <Bike className="w-3 h-3 text-muted-foreground" />
                                     {customer.placaMoto}
                                   </span>
@@ -477,17 +503,8 @@ export default function CustomersPage() {
                                   <>
                                     <button
                                       type="button"
-                                      onClick={() => handleEdit(customer)}
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground"
-                                      aria-label={`Editar ${customer.name}`}
-                                      title="Editar cliente"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
                                       onClick={() => handleDelete(customer.id)}
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-danger/30 hover:bg-danger/10 hover:text-danger-text"
                                       aria-label={`Eliminar ${customer.name}`}
                                       title="Eliminar cliente"
                                     >
@@ -523,8 +540,8 @@ export default function CustomersPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Nombre" value={formData.name || ""} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required className="sm:col-span-2" />
-            <BentoSelect label="Tipo de Documento" value={formData.documentType || "CC"} onChange={(value) => setFormData({ ...formData, documentType: value })} options={[{ value: "CC", label: "Cédula de Ciudadanía" }, { value: "NIT", label: "NIT" }, { value: "CE", label: "Cédula de Extranjería" }, { value: "TI", label: "Tarjeta de Identidad" }]} />
-            <Input label="Número de Documento" value={formData.documentNumber || ""} onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })} required />
+            <BentoSelect label="Tipo de documento" value={formData.documentType || "CC"} onChange={(value) => setFormData({ ...formData, documentType: value })} options={[{ value: "CC", label: "Cédula de ciudadanía" }, { value: "NIT", label: "NIT" }, { value: "CE", label: "Cédula de extranjería" }, { value: "TI", label: "Tarjeta de identidad" }]} />
+            <Input label="Número de documento" value={formData.documentNumber || ""} onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })} required />
             <Input label="Teléfono" value={formData.phone || ""} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
             <Input label="Email" type="email" value={formData.email || ""} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
             <Input label="Dirección" value={formData.address || ""} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
@@ -533,7 +550,7 @@ export default function CustomersPage() {
             {vehiclesEnabled && <div><Input label="Placa de la moto" value={formData.placaMoto || ""} onChange={(e) => setFormData({ ...formData, placaMoto: e.target.value })} /><p className="mt-1 text-xs text-muted-foreground">Placa anterior; se conserva por compatibilidad.</p></div>}
           </div>
           {vehiclesEnabled && editingCustomer && <CustomerVehicles key={editingCustomer.id} customerId={editingCustomer.id} />}
-          <div className="flex flex-col sm:flex-row gap-2.5 justify-end pt-3.5 border-t border-border/60">
+          <div className="flex flex-col sm:flex-row gap-2 justify-end pt-3.5 border-t border-border/60">
             <Button type="button" variant="secondary" onClick={() => setShowModal(false)} className="w-full sm:w-auto">Cancelar</Button>
             <Button type="submit" loading={createCustomer.isPending || updateCustomer.isPending} className="w-full sm:w-auto">{editingCustomer ? "Actualizar" : "Crear"}</Button>
           </div>

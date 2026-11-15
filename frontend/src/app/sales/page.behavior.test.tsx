@@ -120,6 +120,48 @@ describe("Sales page deep-link behavior (#24)", () => {
     expect(screen.getByRole("button", { name: /Quitar filtro/i })).toBeTruthy();
   });
 
+  it("keeps cached sales visible when a background refetch fails", () => {
+    useSalesMock.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "sale-1",
+            saleNumber: 42,
+            status: "PAID",
+            total: 100,
+            createdAt: "2026-03-24T10:00:00Z",
+            customer: { name: "Ana Perez" },
+            payments: [],
+            financed: false,
+            user: { name: "Admin" },
+          },
+        ],
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
+      },
+      isLoading: false,
+      isError: true,
+      error: new Error("network down"),
+      refetch: vi.fn(),
+    });
+
+    render(<SalesPage />);
+
+    expect(screen.getAllByText("#42").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
+  });
+
+  it("offers no filter-bar Limpiar: the Todas period option already resets the dates", async () => {
+    currentSearchParams = new URLSearchParams();
+
+    render(<SalesPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    expect(screen.queryByRole("button", { name: "Limpiar" })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Todas" }));
+    expect(screen.getByRole("button", { name: "Todas" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("clears the customer deep-link filter back to /sales", async () => {
     currentSearchParams = new URLSearchParams([
       ["customerId", "customer-1"],
@@ -131,5 +173,63 @@ describe("Sales page deep-link behavior (#24)", () => {
     await userEvent.click(screen.getByRole("button", { name: /Quitar filtro/i }));
 
     expect(replaceMock).toHaveBeenCalledWith("/sales");
+  });
+});
+
+describe("Sales table width (min-w only with rows)", () => {
+  const sale = {
+    id: "sale-1",
+    saleNumber: 42,
+    status: "PAID",
+    total: 100,
+    createdAt: "2026-03-24T10:00:00Z",
+    customer: { name: "Ana Perez" },
+    payments: [],
+    financed: false,
+    user: { name: "Admin" },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentSearchParams = new URLSearchParams();
+    window.localStorage.setItem("meperpos:view-mode:sales", "table");
+    // The table view measures its list height; jsdom has no ResizeObserver.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem("meperpos:view-mode:sales");
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("enforces the 680px minimum only when the table has rows", () => {
+    useSalesMock.mockReturnValue({
+      data: { data: [sale], meta: { total: 1, page: 1, limit: 10, totalPages: 1 } },
+      isLoading: false,
+    });
+
+    render(<SalesPage />);
+
+    expect(screen.getByRole("table").className).toContain("min-w-[680px]");
+  });
+
+  it("does not force a minimum width on the empty state", () => {
+    useSalesMock.mockReturnValue({
+      data: { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } },
+      isLoading: false,
+    });
+
+    render(<SalesPage />);
+
+    expect(screen.getByRole("table").className).not.toContain("min-w-[680px]");
+    expect(screen.getAllByText("No hay ventas registradas").length).toBeGreaterThan(0);
   });
 });

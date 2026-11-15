@@ -32,7 +32,7 @@ export default function AdminLayout({
   }, [user, loading, router]);
 
   if (loading) {
-    return <LoadingState icon={<Loader2 className="h-8 w-8" />} message="Verificando acceso..." />;
+    return <LoadingState icon={<Loader2 className="h-8 w-8" />} message="Verificando acceso…" />;
   }
 
   if (!user || user.role !== "SUPER_ADMIN") {
@@ -47,7 +47,7 @@ export default function AdminLayout({
       <header className="border-b border-border/70 bg-card">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
+            <Link href="/admin" className="flex min-w-0 items-center gap-2">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/60 text-foreground">
                 <Building2 className="h-4 w-4" />
               </span>

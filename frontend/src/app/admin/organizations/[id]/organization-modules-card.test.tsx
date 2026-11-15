@@ -126,7 +126,7 @@ describe("OrganizationModulesCard", () => {
 
     renderCard();
 
-    expect(screen.getByText("Cargando módulos...")).toBeInTheDocument();
+    expect(screen.getByText("Cargando módulos…")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Vehículos/ })).toBeNull();
   });
 

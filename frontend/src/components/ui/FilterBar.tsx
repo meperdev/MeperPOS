@@ -28,21 +28,27 @@ export function FilterBar({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border/70 bg-card p-2 shadow-2xs overflow-visible",
+        "@container rounded-xl border border-border/70 bg-card p-2 shadow-2xs overflow-visible",
         className,
       )}
     >
       {preContent}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+      {/*
+        Intrinsic wrap, no width threshold: the controls drop to their own row only when they do
+        not fit beside a 14rem search. Search grows with weight 999, so on a shared row it takes the
+        leftover; when the controls wrap alone they grow to the full row and the view toggle
+        (ml-auto) lands on the right.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
         {/* Search */}
         <SearchField
           value={searchValue}
           onChange={onSearchChange}
           placeholder={searchPlaceholder}
-          className="w-full sm:min-w-0 sm:flex-1"
+          className="min-w-[14rem] flex-[999_1_16rem]"
         />
         {controls && (
-          <div className="flex items-center gap-1.5 px-0.5 sm:px-1 flex-wrap w-full sm:w-auto">
+          <div className="flex min-w-0 flex-[1_1_auto] flex-wrap items-center gap-2">
             {controls}
           </div>
         )}
@@ -60,10 +66,12 @@ export function FilterGroup({
   label,
   children,
   className,
+  innerClassName,
 }: {
   label?: string;
   children: ReactNode;
   className?: string;
+  innerClassName?: string;
 }) {
   return (
     <div className={cn("inline-flex items-center gap-1.5 flex-wrap max-w-full", className)}>
@@ -85,7 +93,11 @@ export function FilterGroup({
           const step = event.key === "ArrowRight" ? 1 : -1;
           items[(index + step + items.length) % items.length]?.focus();
         }}
-        className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 max-w-full overflow-x-auto"
+        className={cn(
+          // Track is the inset surface: muted on light, the page background on dark (darker than the card it sits on).
+          "inline-flex items-center gap-0.5 rounded-lg bg-muted dark:bg-background p-0.5 max-w-full overflow-x-auto",
+          innerClassName,
+        )}
       >
         {children}
       </div>
@@ -107,9 +119,11 @@ export function FilterOptionButton({
       type="button"
       aria-pressed={active}
       className={cn(
-        "h-7 px-2.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+        // inline-flex centring: a bare inline SVG sits on the text baseline and drifts off-centre in icon-only segments.
+        "inline-flex h-8 items-center justify-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         active
-          ? "bg-card text-foreground shadow-2xs border border-border/60"
+          ? "bg-card dark:bg-muted text-foreground shadow-2xs border border-border/60"
           : "border border-transparent text-muted-foreground hover:text-foreground",
         className,
       )}
@@ -132,7 +146,8 @@ export function FilterClearButton({
     <button
       type="button"
       className={cn(
-        "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted border border-border/70 bg-muted/40 transition-colors",
+        "inline-flex items-center gap-1 h-8 px-3 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted border border-border/70 bg-muted/40 transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         className,
       )}
       {...props}

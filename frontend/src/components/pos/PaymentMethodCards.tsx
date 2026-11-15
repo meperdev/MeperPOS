@@ -8,6 +8,7 @@ interface PaymentMethodCardProps {
   icon: React.ReactNode;
   selected: boolean;
   onClick: () => void;
+  className?: string;
 }
 
 export function PaymentMethodCard({
@@ -15,6 +16,7 @@ export function PaymentMethodCard({
   icon,
   selected,
   onClick,
+  className,
 }: PaymentMethodCardProps) {
   return (
     <button
@@ -22,27 +24,28 @@ export function PaymentMethodCard({
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        "relative flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors duration-150 ease-out",
+        "relative flex flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2.5 cursor-pointer transition-colors duration-150 ease-out",
         selected
-          ? "border-emerald-600/50 dark:border-emerald-500/50 bg-emerald-500/[0.08] dark:bg-emerald-500/[0.10] text-foreground font-semibold"
-          : "border-border/80 bg-muted/20 dark:bg-background/50 text-muted-foreground hover:border-foreground/25 hover:bg-muted/50 hover:text-foreground"
+          ? "border-success/30 bg-success/10 text-foreground font-semibold"
+          : "border-border/80 bg-muted/20 dark:bg-background/50 text-muted-foreground hover:border-foreground/25 hover:bg-muted/50 hover:text-foreground",
+        className,
       )}
     >
       <span
         className={cn(
           "shrink-0 transition-colors duration-150",
-          selected ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+          selected ? "text-success-text" : "text-muted-foreground"
         )}
       >
         {icon}
       </span>
-      <span className="text-[13px] tracking-tight truncate">
+      <span className="text-[13px] tracking-tight whitespace-nowrap">
         {label}
       </span>
       {selected && (
         <span
           aria-hidden="true"
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600 dark:bg-emerald-400 ml-0.5"
+          className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success"
         />
       )}
     </button>
@@ -74,10 +77,11 @@ export function PaymentMethodCards({ selectedMethod, onMethodChange }: PaymentMe
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-      {methods.map((method) => (
+    <div className="grid grid-cols-2 gap-2">
+      {methods.map((method, index) => (
         <PaymentMethodCard
           key={method.type}
+          className={cn(methods.length % 2 === 1 && index === methods.length - 1 && "col-span-2")}
           label={method.label}
           icon={method.icon}
           selected={selectedMethod === method.type}

@@ -78,7 +78,7 @@ export function MoneyField({
         disabled={disabled}
         inputMode="decimal"
         autoComplete="off"
-        className="font-mono tabular-nums"
+        className="tabular-nums"
         value={shown}
         onFocus={() => {
           setPreviousRaw(value);

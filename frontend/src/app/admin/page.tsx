@@ -21,7 +21,7 @@ const planLabels: Record<string, string> = {
 };
 
 const planDots: Record<string, string> = {
-  BASIC: "bg-slate-400",
+  BASIC: "bg-muted-foreground",
   PRO: "bg-primary",
 };
 
@@ -66,7 +66,7 @@ export default function AdminPage() {
         {header}
         <CardSkeleton
           count={6}
-          label="Cargando métricas..."
+          label="Cargando métricas…"
           className="sm:grid-cols-2 lg:grid-cols-3"
         />
       </div>
@@ -150,7 +150,7 @@ export default function AdminPage() {
             <Link
               key={card.label}
               href={card.href}
-              className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
             >
               <MetricCard
                 label={card.label}
@@ -173,14 +173,14 @@ export default function AdminPage() {
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-medium text-foreground">Requieren atención</h2>
-            <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+            <span className="text-[11px] text-muted-foreground tabular-nums">
               {attention.length}
             </span>
           </CardHeader>
           <CardContent className="p-0">
             {organizationsLoading ? (
               <p className="px-5 py-6 text-xs text-muted-foreground">
-                Cargando organizaciones...
+                Cargando organizaciones…
               </p>
             ) : organizationsError ? (
               <p className="px-5 py-6 text-xs text-muted-foreground">
@@ -221,7 +221,7 @@ export default function AdminPage() {
         <Card>
           <CardHeader className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-medium text-foreground">Organizaciones por plan</h2>
-            <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+            <span className="text-[11px] text-muted-foreground tabular-nums">
               {total}
             </span>
           </CardHeader>
@@ -242,7 +242,7 @@ export default function AdminPage() {
                       key={plan}
                       className="flex h-9 items-center justify-between gap-3 border-b border-border/50 px-5 text-[13px] last:border-b-0"
                     >
-                      <span className="flex items-center gap-2.5">
+                      <span className="flex items-center gap-2">
                         <span
                           aria-hidden="true"
                           className={cn(
@@ -253,10 +253,10 @@ export default function AdminPage() {
                         <span className="text-foreground">{planLabels[plan] ?? plan}</span>
                       </span>
                       <span className="flex items-center gap-3">
-                        <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                        <span className="text-[11px] text-muted-foreground tabular-nums">
                           {planShare}%
                         </span>
-                        <span className="w-8 text-right font-mono text-[13px] text-foreground tabular-nums">
+                        <span className="w-8 text-right text-[13px] text-foreground tabular-nums">
                           {count}
                         </span>
                       </span>

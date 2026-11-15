@@ -23,7 +23,7 @@ export default function LocaleSettingsPage() {
     return (
       <LoadingState
         icon={<Globe2 className="w-4 h-4 text-muted-foreground" />}
-        message="Cargando configuración..."
+        message="Cargando configuración…"
       />
     );
   }
@@ -59,7 +59,7 @@ export default function LocaleSettingsPage() {
               <dt className="text-xs font-medium text-muted-foreground">
                 {item.label}
               </dt>
-              <dd className="font-mono text-xs font-semibold text-foreground tabular-nums">
+              <dd className="text-xs font-semibold text-foreground tabular-nums">
                 {item.value}
               </dd>
             </div>

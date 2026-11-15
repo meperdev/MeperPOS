@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { Stepper } from "@/components/ui/Stepper";
 
 describe("Stepper", () => {
-  it("renders the decrement/increment buttons and the centered bold mono value", () => {
+  it("renders the decrement/increment buttons and the centered bold value with tabular numerals", () => {
     render(<Stepper value={5} onChange={vi.fn()} />);
 
     expect(
@@ -16,7 +16,9 @@ describe("Stepper", () => {
     const input = screen.getByRole("textbox");
     expect(input).toHaveValue("5");
     expect(input).toHaveAttribute("inputMode", "numeric");
-    expect(input.className).toContain("font-mono");
+    expect(input).toHaveAccessibleName("Cantidad");
+    expect(input.className).toContain("tabular-nums");
+    expect(input.className).not.toContain("font-mono");
     expect(input.className).toContain("font-bold");
   });
 

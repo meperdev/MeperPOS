@@ -32,9 +32,9 @@ export function HistoryModal({ expense, isOpen, onClose }: Props) {
       size="md"
     >
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-10 gap-2.5">
+        <div className="flex flex-col items-center justify-center py-10 gap-2">
           <History className="w-4 h-4 text-muted-foreground animate-pulse" />
-          <p className="text-xs text-muted-foreground">Cargando historial...</p>
+          <p className="text-xs text-muted-foreground">Cargando historial…</p>
         </div>
       ) : entries.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
@@ -44,11 +44,11 @@ export function HistoryModal({ expense, isOpen, onClose }: Props) {
           </p>
         </div>
       ) : (
-        <ol className="space-y-2.5 max-h-[420px] overflow-y-auto pr-0.5">
+        <ol className="space-y-2 max-h-[420px] overflow-y-auto pr-0.5">
           {entries.map((entry) => (
             <li
               key={entry.id}
-              className="flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3.5 py-2.5 hover:border-border transition-colors"
+              className="flex items-start justify-between gap-3 rounded-lg bg-muted/40 px-3.5 py-2.5"
             >
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-foreground">
@@ -58,7 +58,7 @@ export function HistoryModal({ expense, isOpen, onClose }: Props) {
                   {entry.user?.name ?? "—"}
                 </p>
               </div>
-              <span className="text-[11px] text-muted-foreground font-mono tabular-nums whitespace-nowrap">
+              <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
                 {formatDateTime(entry.createdAt)}
               </span>
             </li>

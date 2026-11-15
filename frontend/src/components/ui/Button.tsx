@@ -7,6 +7,47 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
+// Press feedback is a colour change, never a scale or a shift.
+const buttonVariants = {
+  primary:
+    "bg-primary text-white border border-primary/80 shadow-2xs hover:bg-primary-dark active:bg-primary-dark",
+  secondary:
+    "border border-border/70 bg-muted/40 text-foreground hover:border-border hover:bg-muted active:bg-muted",
+  danger:
+    "bg-danger text-white border border-danger/80 shadow-2xs hover:opacity-90 active:opacity-80",
+  ghost:
+    "border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60 active:bg-muted",
+  outline:
+    "border border-border/70 bg-card text-foreground shadow-2xs hover:border-border hover:bg-muted/50 active:bg-muted",
+  success:
+    "bg-success text-white border border-success/80 shadow-2xs hover:opacity-90 active:opacity-80",
+};
+
+const buttonSizes = {
+  sm: "h-8 px-3 py-1 text-xs font-medium gap-1.5 rounded-md",
+  md: "h-10 sm:h-9 px-3.5 py-2 text-xs font-medium gap-2 rounded-lg",
+  lg: "h-11 px-5 py-2.5 text-sm font-semibold gap-2 rounded-lg",
+};
+
+const BASE_BUTTON_CLASSES = cn(
+  "inline-flex items-center justify-center whitespace-nowrap font-medium",
+  "transition-colors duration-150",
+  // Focus must stay visible: one ring system for every control (D4).
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+);
+
+/**
+ * Classes for a button-looking control. Use it on a <Link> when navigation
+ * must stay a real link (no button nested in an anchor).
+ */
+export function buttonClassName({
+  variant = "primary",
+  size = "md",
+  className = "",
+}: Pick<ButtonProps, "variant" | "size" | "className"> = {}) {
+  return cn(BASE_BUTTON_CLASSES, buttonVariants[variant], buttonSizes[size], className);
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
@@ -20,41 +61,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
-    const variants = {
-      primary:
-        "bg-primary text-white border border-primary/80 shadow-2xs hover:bg-primary-dark",
-      secondary:
-        "border border-border/70 bg-muted/40 text-foreground hover:border-border hover:bg-muted",
-      danger:
-        "bg-danger text-white border border-danger/80 shadow-2xs hover:opacity-90",
-      ghost:
-        "border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60",
-      outline:
-        "border border-border/70 bg-card text-foreground shadow-2xs hover:border-border hover:bg-muted/50",
-      success:
-        "bg-success text-white border border-success/80 shadow-2xs hover:opacity-90",
-    };
-
-    const sizes = {
-      sm: "h-7 px-2.5 py-1 text-xs font-medium gap-1.5 rounded-md",
-      md: "h-[38px] px-3.5 py-2 text-xs font-medium gap-2 rounded-lg",
-      lg: "h-11 px-5 py-2.5 text-sm font-semibold gap-2 rounded-lg",
-    };
-
     return (
       <button
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center font-medium",
-          "transition-[background-color,border-color,color,transform,opacity] duration-150",
-          // HIG: every custom button needs a press state, and focus must stay visible.
-          "active:translate-y-px active:duration-75",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          buttonClassName({ variant, size }),
           // A loading button is busy, not unavailable: keep it legible while it spins.
           loading ? "cursor-wait" : "disabled:cursor-not-allowed disabled:opacity-50",
-          variants[variant],
-          sizes[size],
           className,
         )}
         {...props}

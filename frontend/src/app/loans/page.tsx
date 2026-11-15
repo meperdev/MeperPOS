@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { Card } from "@/components/ui/Card";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -101,7 +102,7 @@ function DetailField({
   testId?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border/60 bg-muted/30 p-3">
+    <div className="min-w-0 rounded-lg bg-muted/40 p-3">
       <dt className="text-xs font-medium text-muted-foreground">
         {label}
       </dt>
@@ -129,10 +130,8 @@ function MoneyStat({
   return (
     <div
       className={cn(
-        "min-w-0 rounded-lg border px-2.5 py-2",
-        emphasis
-          ? "border-border/80 bg-muted/50"
-          : "border-border/50 bg-muted/25",
+        "min-w-0 rounded-lg px-2.5 py-2",
+        emphasis ? "bg-muted/60" : "bg-muted/40",
       )}
     >
       <p className="text-[11px] font-medium text-muted-foreground">
@@ -140,10 +139,8 @@ function MoneyStat({
       </p>
       <p
         className={cn(
-          "mt-0.5 truncate font-mono text-xs font-semibold tabular-nums",
-          hasBalance
-            ? "text-amber-600 dark:text-amber-400"
-            : "text-foreground",
+          "mt-0.5 truncate text-xs font-semibold tabular-nums",
+          hasBalance ? "text-warning-text" : "text-foreground",
         )}
       >
         {money(value)}
@@ -238,7 +235,7 @@ export default function LoansPage() {
   const handleCollect = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedId || !amount || amount <= 0) {
-      toast.error("Ingrese un monto válido");
+      toast.error("Ingresa un monto válido");
       return;
     }
     const signature = `${selectedId}|${amount}|${method}`;
@@ -286,7 +283,7 @@ export default function LoansPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         <PageHeader
           title="Préstamos"
           subtitle="Obligaciones activas y ventas financiadas desde caja"
@@ -300,7 +297,7 @@ export default function LoansPage() {
         <FilterBar
           searchValue={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Buscar por contraparte o motivo..."
+          searchPlaceholder="Buscar por contraparte o motivo…"
           filterControls={
             <>
               <BentoSelect
@@ -348,7 +345,7 @@ export default function LoansPage() {
 
         <div className="flex flex-1 flex-col gap-4">
           {loansQuery.isLoading ? (
-            <CardSkeleton count={6} label="Cargando préstamos..." />
+            <CardSkeleton count={6} label="Cargando préstamos…" />
           ) : loansQuery.isError ? (
             <ErrorState
               message={getApiErrorMessage(
@@ -365,7 +362,7 @@ export default function LoansPage() {
               subtitle="Las obligaciones y las ventas financiadas aparecerán aquí."
             />
           ) : viewMode === "table" ? (
-            <div className="flex-1 overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs animate-fade-in">
+            <div className="flex-1 overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs">
               <div className="overflow-x-auto">
                 <Table className="min-w-[720px]">
                   <TableHeader>
@@ -373,13 +370,13 @@ export default function LoansPage() {
                       <TableCell as="th">Contraparte</TableCell>
                       <TableCell as="th">Tipo</TableCell>
                       <TableCell as="th">Estado</TableCell>
-                      <TableCell as="th" className="text-right">
+                      <TableCell as="th" numeric>
                         Monto
                       </TableCell>
-                      <TableCell as="th" className="text-right">
+                      <TableCell as="th" numeric>
                         Abonado
                       </TableCell>
-                      <TableCell as="th" className="text-right">
+                      <TableCell as="th" numeric>
                         Saldo
                       </TableCell>
                     </TableRow>
@@ -408,17 +405,17 @@ export default function LoansPage() {
                         <TableCell>
                           <StatusBadge domain="loan" status={row.status} />
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs text-foreground tabular-nums">
+                        <TableCell numeric className="text-xs text-foreground">
                           {money(row.amount)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs text-muted-foreground tabular-nums">
+                        <TableCell numeric className="text-xs text-muted-foreground">
                           {money(row.collected)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs font-semibold tabular-nums">
+                        <TableCell numeric className="text-xs font-semibold">
                           <span
                             className={
                               toFiniteNumber(row.balance) > 0
-                                ? "text-amber-600 dark:text-amber-400"
+                                ? "text-warning-text"
                                 : "text-foreground"
                             }
                           >
@@ -434,7 +431,7 @@ export default function LoansPage() {
           ) : (
             <ul
               data-testid="loan-cards"
-              className="grid flex-1 content-start grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 stagger-children"
+              className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}
             >
               {loans.map((row) => (
                 <li key={row.id} data-testid="loan-card" className="min-w-0">
@@ -528,7 +525,7 @@ export default function LoansPage() {
         {loanQuery.isLoading ? (
           <LoadingState
             icon={<HandCoins className="h-4 w-4 text-muted-foreground" />}
-            message="Cargando detalle..."
+            message="Cargando detalle…"
           />
         ) : loanQuery.isError || !loan ? (
           <ErrorState
@@ -542,7 +539,7 @@ export default function LoansPage() {
         ) : (
           <div data-testid="loan-detail" className="space-y-4">
             {/* Server-owned money triple. */}
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {(
                 [
                   ["Monto", loan.amount, false],
@@ -555,10 +552,8 @@ export default function LoansPage() {
                   <div
                     key={label}
                     className={cn(
-                      "rounded-lg border p-3.5",
-                      isBalance
-                        ? "border-border/80 bg-muted/45"
-                        : "border-border/60 bg-muted/25",
+                      "rounded-lg p-3.5",
+                      isBalance ? "bg-muted/60" : "bg-muted/40",
                     )}
                   >
                     <p className="text-xs font-medium text-muted-foreground">
@@ -566,10 +561,8 @@ export default function LoansPage() {
                     </p>
                     <p
                       className={cn(
-                        "mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums",
-                        hasBalance
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-foreground",
+                        "mt-1 text-base sm:text-lg font-semibold tabular-nums",
+                        hasBalance ? "text-warning-text" : "text-foreground",
                       )}
                     >
                       {money(value)}
@@ -580,11 +573,11 @@ export default function LoansPage() {
             </div>
 
             {/* Everything the projection knows about the loan itself. */}
-            <section className="space-y-2.5">
+            <section className="space-y-2">
               <h3 className="text-xs font-semibold text-foreground">
                 Datos del préstamo
               </h3>
-              <dl className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <DetailField
                   label="Tipo"
                   value={TYPE_LABELS[loan.type]}
@@ -623,10 +616,10 @@ export default function LoansPage() {
                 className={cn(
                   "rounded-lg border px-3 py-2.5",
                   loan.status === "CANCELLED"
-                    ? "border-rose-500/40 bg-rose-500/[0.06]"
+                    ? "border-danger/30 bg-danger/10"
                     : toFiniteNumber(loan.balance) <= 0
-                      ? "border-emerald-500/40 bg-emerald-500/[0.06]"
-                      : "border-amber-500/40 bg-amber-500/[0.06]",
+                      ? "border-success/30 bg-success/10"
+                      : "border-warning/30 bg-warning/10",
                 )}
               >
                 <div className="mb-0.5 flex items-center justify-between gap-2">
@@ -660,8 +653,8 @@ export default function LoansPage() {
                 className={cn(
                   "rounded-lg border p-3.5",
                   loan.posFinancing.finalSaleId
-                    ? "border-emerald-500/40 bg-emerald-500/[0.06]"
-                    : "border-amber-500/40 bg-amber-500/[0.06]",
+                    ? "border-success/30 bg-success/10"
+                    : "border-warning/30 bg-warning/10",
                 )}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -684,7 +677,7 @@ export default function LoansPage() {
                         Venta vinculada:{" "}
                         <span
                           data-testid="pos-financing-sale"
-                          className="inline-flex items-center rounded-md border border-border/70 bg-card px-2 py-0.5 font-mono text-xs font-semibold text-foreground"
+                          className="inline-flex items-center rounded-md border border-border/70 bg-card px-2 py-0.5 text-xs font-semibold text-foreground tabular-nums"
                         >
                           {loan.posFinancing.finalSaleNumber != null
                             ? `#${loan.posFinancing.finalSaleNumber}`
@@ -703,7 +696,7 @@ export default function LoansPage() {
                   {loan.posFinancing.finalSaleId && (
                     <Link
                       href={`/sales/${loan.posFinancing.finalSaleId}`}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-card px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                     >
                       Ver venta
                       <ArrowRight className="h-3 w-3" aria-hidden="true" />
@@ -723,7 +716,7 @@ export default function LoansPage() {
                   data-testid="loan-history-loading"
                   className="mt-2 text-xs text-muted-foreground"
                 >
-                  Cargando historial...
+                  Cargando historial…
                 </p>
               ) : historyQuery.isError ? (
                 <div
@@ -731,16 +724,17 @@ export default function LoansPage() {
                   className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
                 >
                   <span>No se pudo cargar el historial.</span>
-                  <button
+                  <Button
                     type="button"
-                    className="font-medium text-foreground underline hover:text-primary-text"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => void historyQuery.refetch()}
                   >
                     Reintentar
-                  </button>
+                  </Button>
                 </div>
               ) : (
-                <ul className="mt-2 rounded-lg border border-border/60 bg-muted/20 divide-y divide-border/50 max-h-[min(22rem,42vh)] overflow-y-auto scrollbar-app">
+                <ul className="mt-2 rounded-lg bg-muted/40 divide-y divide-border/50 max-h-[min(22rem,42vh)] overflow-y-auto scrollbar-app">
                   {history.map((event) => (
                     <li
                       key={event.id}
@@ -753,19 +747,19 @@ export default function LoansPage() {
                             {EVENT_LABELS[event.type]}
                           </p>
                           {event.method && (
-                            <span className="rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
+                            <span className="rounded-md border border-border/60 bg-card px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                               {METHOD_OPTIONS.find((m) => m.value === event.method)
                                 ?.label ?? event.method}
                             </span>
                           )}
                         </div>
-                        <p className="mt-0.5 text-[11px] font-mono text-muted-foreground tabular-nums">
+                        <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
                           <span>{formatDateTime(event.createdAt)}</span>
                           <span className="mx-1.5">·</span>
-                          <span className="font-sans">{event.createdBy.name}</span>
+                          <span>{event.createdBy.name}</span>
                         </p>
                       </div>
-                      <span className="shrink-0 font-mono font-semibold text-foreground tabular-nums">
+                      <span className="shrink-0 font-semibold text-foreground tabular-nums">
                         {event.amount ? money(event.amount) : event.reason}
                       </span>
                     </li>

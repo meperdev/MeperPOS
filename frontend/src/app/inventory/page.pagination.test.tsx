@@ -198,7 +198,7 @@ describe("Inventory page — real pagination (S2)", () => {
     );
     expect(screen.getByRole("heading", { name: "Agotado" })).toBeInTheDocument();
     expect(screen.getByText("Escaso")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Stock Bajo/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Stock bajo/ })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("synchronizes URL entry/removal at page 1 without clearing other filters or overriding manual toggles", () => {
@@ -211,11 +211,11 @@ describe("Inventory page — real pagination (S2)", () => {
     urlParams = new URLSearchParams("filter=lowStock");
     rerender(<InventoryPage />);
     expect(lastQuery()).toEqual(expect.objectContaining({ page: 1, lowStock: true, categoryId: "cat-2", search: "Panela" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Stock Bajo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stock bajo/ }));
     rerender(<InventoryPage />);
     expect(lastQuery().lowStock).toBeUndefined();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Stock Bajo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stock bajo/ }));
     fireEvent.click(screen.getByRole("button", { name: "Siguiente" }));
     urlParams = new URLSearchParams("filter=unknown");
     rerender(<InventoryPage />);
@@ -229,19 +229,19 @@ describe("Inventory page — real pagination (S2)", () => {
 
     expect(lastQuery()).toEqual(expect.objectContaining({ page: 1, limit: 10 }));
     expect(lastQuery().lowStock).toBeUndefined();
-    expect(screen.getByRole("button", { name: /^Stock Bajo/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /^Stock bajo/ })).toHaveAttribute("aria-pressed", "false");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Stock Bajo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stock bajo/ }));
     rerender(<InventoryPage />);
     expect(lastQuery().lowStock).toBe(true);
-    expect(screen.getByRole("button", { name: /^Stock Bajo/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Stock bajo/ })).toHaveAttribute("aria-pressed", "true");
 
     urlParams = new URLSearchParams("filter=lowStock");
     rerender(<InventoryPage />);
     urlParams = null;
     rerender(<InventoryPage />);
     expect(lastQuery().lowStock).toBeUndefined();
-    expect(screen.getByRole("button", { name: /^Stock Bajo/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /^Stock bajo/ })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("does not activate low stock for an unrelated URL filter", () => {
@@ -264,7 +264,7 @@ describe("Inventory page — real pagination (S2)", () => {
     expect(lastQuery().limit).not.toBe(1000);
     expect(lastQuery().categoryId).toBe("cat-2");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }));
     expect(lastQuery().limit).toBe(10);
     expect(lastQuery().limit).not.toBe(1000);
     expect(lastQuery().lowStock).toBe(true);

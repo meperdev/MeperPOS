@@ -71,7 +71,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
   const [deleteError, setDeleteError] = useState("");
 
   if (isLoading) {
-    return <LoadingState icon={<Building2 className="w-5 h-5 text-primary/50" />} message="Cargando organización..." />;
+    return <LoadingState icon={<Building2 className="w-5 h-5 text-primary/50" />} message="Cargando organización…" />;
   }
 
   if (!org) {
@@ -87,6 +87,51 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
   }
 
   const members = org.users ?? [];
+  type OrgMember = (typeof members)[number];
+
+  const renderRole = (ou: OrgMember) => (
+    <BentoSelect
+      value={ou.role}
+      options={roleOptions}
+      onChange={(value) =>
+        updateMemberRole.mutate({
+          orgId: org.id,
+          userId: ou.user.id,
+          role: value,
+        })
+      }
+      className="w-40 [&>button]:h-8"
+    />
+  );
+
+  const renderOwner = (ou: OrgMember) =>
+    ou.isPrimaryOwner ? (
+      <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
+        Sí
+      </span>
+    ) : (
+      <span className="text-xs text-muted-foreground">—</span>
+    );
+
+  const renderMemberActions = (ou: OrgMember) => (
+    <RowActions
+      label={`Acciones de ${ou.user.name}`}
+      items={[
+        {
+          label: "Quitar",
+          icon: <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />,
+          destructive: true,
+          disabled: ou.isPrimaryOwner,
+          hint: ou.isPrimaryOwner
+            ? "El propietario no se puede quitar"
+            : undefined,
+          onSelect: () =>
+            removeMember.mutate({ orgId: org.id, userId: ou.user.id }),
+        },
+      ]}
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -176,7 +221,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <h3 className="text-sm font-medium text-foreground">
                 Usuarios de la organización
               </h3>
-              <span className="rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+              <span className="rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground tabular-nums">
                 {members.length}
               </span>
             </div>
@@ -194,78 +239,67 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="@container p-0">
           {members.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table className="min-w-[680px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableCell as="th">Usuario</TableCell>
-                    <TableCell as="th">Rol</TableCell>
-                    <TableCell as="th">Propietario</TableCell>
-                    <TableCell as="th" className="text-right">
-                      Acciones
-                    </TableCell>
-                  </TableRow>
-                </TableHeader>
-                <tbody>
-                  {members.map((ou) => (
-                    <TableRow key={ou.id}>
-                      <TableCell>
-                        <p className="text-xs font-medium text-foreground">{ou.user.name}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                          {ou.user.email}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <BentoSelect
-                          value={ou.role}
-                          options={roleOptions}
-                          onChange={(value) =>
-                            updateMemberRole.mutate({
-                              orgId: org.id,
-                              userId: ou.user.id,
-                              role: value,
-                            })
-                          }
-                          className="w-40 [&>button]:h-8"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {ou.isPrimaryOwner ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
-                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            Sí
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end">
-                          <RowActions
-                            label={`Acciones de ${ou.user.name}`}
-                            items={[
-                              {
-                                label: "Quitar",
-                                icon: <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />,
-                                destructive: true,
-                                disabled: ou.isPrimaryOwner,
-                                hint: ou.isPrimaryOwner
-                                  ? "El propietario no se puede quitar"
-                                  : undefined,
-                                onSelect: () =>
-                                  removeMember.mutate({ orgId: org.id, userId: ou.user.id }),
-                              },
-                            ]}
-                          />
-                        </div>
+            <>
+              <div className="hidden @3xl:block overflow-x-auto">
+                <Table className="min-w-[680px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell as="th">Usuario</TableCell>
+                      <TableCell as="th">Rol</TableCell>
+                      <TableCell as="th">Propietario</TableCell>
+                      <TableCell as="th" className="text-right">
+                        Acciones
                       </TableCell>
                     </TableRow>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <tbody>
+                    {members.map((ou) => (
+                      <TableRow key={ou.id}>
+                        <TableCell>
+                          <p className="text-xs font-medium text-foreground">{ou.user.name}</p>
+                          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                            {ou.user.email}
+                          </p>
+                        </TableCell>
+                        <TableCell>{renderRole(ou)}</TableCell>
+                        <TableCell>{renderOwner(ou)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end">{renderMemberActions(ou)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+
+              <div data-testid="org-member-list" className="@3xl:hidden divide-y divide-border/60">
+                {members.map((ou) => (
+                  <div key={ou.id} data-testid="org-member-row" className="px-4 py-3 space-y-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-foreground break-words">{ou.user.name}</p>
+                        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground break-all">
+                          {ou.user.email}
+                        </p>
+                      </div>
+                      <div className="shrink-0">{renderMemberActions(ou)}</div>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="space-y-1">
+                        <dt className="text-muted-foreground">Rol</dt>
+                        <dd>{renderRole(ou)}</dd>
+                      </div>
+                      <div className="space-y-1">
+                        <dt className="text-muted-foreground">Propietario</dt>
+                        <dd>{renderOwner(ou)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            </>
           ) : (
             <EmptyState
               icon={<Users className="h-4 w-4" />}
@@ -300,7 +334,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             options={roleOptions}
             onChange={(value) => setNewMember((prev) => ({ ...prev, role: value }))}
           />
-          {addMemberError && <p className="text-sm text-red-500">{addMemberError}</p>}
+          {addMemberError && <p className="text-sm text-danger-text">{addMemberError}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setShowAddMember(false)}>
               Cancelar
@@ -324,7 +358,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                   {
                     onSuccess: () => setShowAddMember(false),
                     onError: (err) =>
-                      setAddMemberError(getApiErrorMessage(err, "Error al añadir miembro")),
+                      setAddMemberError(getApiErrorMessage(err, "No se pudo añadir el miembro")),
                   },
                 );
               }}
@@ -342,13 +376,13 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
         size="sm"
       >
         <div className="space-y-4">
-          <div className="flex gap-3 rounded-lg border border-rose-500/30 bg-rose-500/[0.06] p-4">
-            <ShieldAlert className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+          <div className="flex gap-3 rounded-lg border border-danger/30 bg-danger/10 p-4">
+            <ShieldAlert className="h-5 w-5 shrink-0 text-danger-text" />
             <div>
-              <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
+              <p className="text-sm font-medium text-danger-text">
                 Esta acción es irreversible
               </p>
-              <p className="mt-1 text-xs text-rose-600 dark:text-rose-300/80">
+              <p className="mt-1 text-xs text-danger-text">
                 Todos los datos de la organización serán eliminados permanentemente,
                 incluyendo productos, ventas, clientes y usuarios.
               </p>
@@ -360,12 +394,13 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </p>
 
           <Input
+            label="Nombre de la organización"
             value={deleteConfirmName}
             onChange={(e) => setDeleteConfirmName(e.target.value)}
             placeholder={org.name}
           />
 
-          {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
+          {deleteError && <p className="text-sm text-danger-text">{deleteError}</p>}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setShowDelete(false)}>
@@ -385,7 +420,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                   {
                     onSuccess: () => router.push("/admin/organizations"),
                     onError: (err) =>
-                      setDeleteError(getApiErrorMessage(err, "Error al eliminar")),
+                      setDeleteError(getApiErrorMessage(err, "No se pudo eliminar la organización")),
                   },
                 );
               }}
@@ -460,7 +495,7 @@ function OrganizationGeneralCard({
             Guardar cambios
           </Button>
           {organization.trialEndsAt && (
-            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground tabular-nums">
+            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground tabular-nums">
               Trial finaliza: {formatDate(organization.trialEndsAt)}
             </span>
           )}
@@ -470,7 +505,7 @@ function OrganizationGeneralCard({
           {metadata.map((item) => (
             <div key={item.label}>
               <dt className="text-[11px] text-muted-foreground">{item.label}</dt>
-              <dd className="mt-0.5 truncate font-mono text-[13px] text-foreground tabular-nums">
+              <dd className="mt-0.5 truncate text-[13px] text-foreground tabular-nums">
                 {item.value}
               </dd>
             </div>

@@ -80,7 +80,7 @@ export default function PurchaseOrderDetailPage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <LoadingState icon={<ClipboardList className="w-4 h-4 text-muted-foreground" />} message="Cargando orden..." />
+        <LoadingState icon={<ClipboardList className="w-4 h-4 text-muted-foreground" />} message="Cargando orden…" />
       </DashboardLayout>
     );
   }
@@ -94,7 +94,7 @@ export default function PurchaseOrderDetailPage() {
               No se pudo abrir la orden
             </h1>
             <p className="text-sm text-muted-foreground">
-              {errorMessage ?? "La orden solicitada no esta disponible."}
+              {errorMessage ?? "La orden solicitada no está disponible."}
             </p>
           </div>
 
@@ -129,8 +129,8 @@ export default function PurchaseOrderDetailPage() {
               <ArrowLeft className="w-3.5 h-3.5" /> Volver
             </Link>
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-semibold text-foreground font-mono tracking-tight tabular-nums">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight tabular-nums">
                   OC-{order.orderNumber}
                 </h1>
                 <PurchaseOrderStatusBadge status={order.status} />
@@ -171,8 +171,10 @@ export default function PurchaseOrderDetailPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
-          <div className="lg:col-span-2 space-y-4">
+        {/* @container sits on the parent: a container query never matches its own element. */}
+        <div className="@container">
+        <div className="grid grid-cols-1 @4xl:grid-cols-3 gap-4 lg:gap-5">
+          <div className="@4xl:col-span-2 space-y-4">
             <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <InfoField
@@ -194,7 +196,7 @@ export default function PurchaseOrderDetailPage() {
                 />
                 {order.confirmedAt && (
                   <InfoField
-                    icon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                    icon={<CheckCircle2 className="w-3.5 h-3.5 text-success-text" />}
                     label="Confirmada"
                     value={formatDateTime(order.confirmedAt)}
                     isDate
@@ -202,7 +204,7 @@ export default function PurchaseOrderDetailPage() {
                 )}
                 {order.receivedAt && (
                   <InfoField
-                    icon={<PackageCheck className="w-3.5 h-3.5 text-emerald-500" />}
+                    icon={<PackageCheck className="w-3.5 h-3.5 text-success-text" />}
                     label="Recibida"
                     value={formatDateTime(order.receivedAt)}
                     isDate
@@ -210,7 +212,7 @@ export default function PurchaseOrderDetailPage() {
                 )}
                 {order.cancelledAt && (
                   <InfoField
-                    icon={<XCircle className="w-3.5 h-3.5 text-rose-500" />}
+                    icon={<XCircle className="w-3.5 h-3.5 text-danger-text" />}
                     label="Cancelada"
                     value={formatDateTime(order.cancelledAt)}
                     sub={order.cancelReason ?? undefined}
@@ -220,68 +222,97 @@ export default function PurchaseOrderDetailPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
+            <div className="@container rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
               <div className="px-4 py-3 border-b border-border/60">
                 <h2 className="text-xs font-semibold text-foreground">
                   Productos en la orden
                 </h2>
               </div>
-              <div className="overflow-x-auto">
+              <div className="hidden @2xl:block overflow-x-auto">
                 <Table className="min-w-[560px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableCell as="th">Producto</TableCell>
-                    <TableCell as="th" className="text-right">
-                      Recibido / Ordenado
-                    </TableCell>
-                    <TableCell as="th" className="text-right">
-                      Costo unit.
-                    </TableCell>
-                    <TableCell as="th" className="text-right">
-                      IVA
-                    </TableCell>
-                    <TableCell as="th" className="text-right">
-                      Subtotal
-                    </TableCell>
-                  </TableRow>
-                </TableHeader>
-                <tbody>
-                  {(order.items ?? []).map((it) => (
-                    <TableRow key={it.id}>
-                      <TableCell>
-                        <p className="text-xs font-semibold text-foreground truncate max-w-[240px]">
-                          {it.product?.name ?? "Producto eliminado"}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground font-mono">
-                          {it.product?.sku}
-                        </p>
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell as="th">Producto</TableCell>
+                      <TableCell as="th" className="text-right">
+                        Recibido / Ordenado
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs tabular-nums">
-                        <span
-                          className={
-                            it.qtyReceived >= it.qtyOrdered
-                              ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                              : it.qtyReceived > 0
-                                ? "text-amber-600 dark:text-amber-400 font-semibold"
-                                : "text-muted-foreground"
-                          }
-                        >
-                          {it.qtyReceived} / {it.qtyOrdered}
-                        </span>
+                      <TableCell as="th" className="text-right">
+                        Costo unit.
                       </TableCell>
-                      <TableCell className="text-right text-xs text-foreground font-mono tabular-nums">
-                        {formatCurrency(it.unitCost)}
+                      <TableCell as="th" className="text-right">
+                        IVA
                       </TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground font-mono tabular-nums">
-                        {it.taxRate}%
-                      </TableCell>
-                      <TableCell className="text-right text-xs font-mono font-semibold text-foreground tabular-nums whitespace-nowrap">
-                        {formatCurrency(it.subtotal + it.taxAmount)}
+                      <TableCell as="th" className="text-right">
+                        Subtotal
                       </TableCell>
                     </TableRow>
-                  ))}
-                </tbody>
+                  </TableHeader>
+                  <tbody>
+                    {(order.items ?? []).map((it) => (
+                      <TableRow key={it.id}>
+                        <TableCell>
+                          <p className="text-xs font-semibold text-foreground truncate max-w-[240px]">
+                            {it.product?.name ?? "Producto eliminado"}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground font-mono">
+                            {it.product?.sku}
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-right text-xs tabular-nums">
+                          <span className={receivedToneClass(it.qtyReceived, it.qtyOrdered)}>
+                            {it.qtyReceived} / {it.qtyOrdered}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-foreground tabular-nums">
+                          {formatCurrency(it.unitCost)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
+                          {it.taxRate}%
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-semibold text-foreground tabular-nums whitespace-nowrap">
+                          {formatCurrency(it.subtotal + it.taxAmount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </tbody>
                 </Table>
+              </div>
+
+              <div data-testid="po-item-list" className="@2xl:hidden divide-y divide-border/60">
+                {(order.items ?? []).map((it) => (
+                  <div key={it.id} data-testid="po-item-row" className="px-4 py-3 space-y-2.5">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground break-words">
+                        {it.product?.name ?? "Producto eliminado"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground font-mono">
+                        {it.product?.sku}
+                      </p>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                      <div className="space-y-0.5">
+                        <dt className="text-muted-foreground">Recibido / Ordenado</dt>
+                        <dd className={cn("tabular-nums", receivedToneClass(it.qtyReceived, it.qtyOrdered))}>
+                          {it.qtyReceived} / {it.qtyOrdered}
+                        </dd>
+                      </div>
+                      <div className="space-y-0.5">
+                        <dt className="text-muted-foreground">Costo unit.</dt>
+                        <dd className="text-foreground tabular-nums">{formatCurrency(it.unitCost)}</dd>
+                      </div>
+                      <div className="space-y-0.5">
+                        <dt className="text-muted-foreground">IVA</dt>
+                        <dd className="text-muted-foreground tabular-nums">{it.taxRate}%</dd>
+                      </div>
+                      <div className="space-y-0.5">
+                        <dt className="text-muted-foreground">Subtotal</dt>
+                        <dd className="font-semibold text-foreground tabular-nums whitespace-nowrap">
+                          {formatCurrency(it.subtotal + it.taxAmount)}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -308,13 +339,13 @@ export default function PurchaseOrderDetailPage() {
               <div className="space-y-2 pt-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-mono text-foreground tabular-nums">
+                  <span className="text-foreground tabular-nums">
                     {formatCurrency(order.subtotal)}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Impuestos</span>
-                  <span className="font-mono text-foreground tabular-nums">
+                  <span className="text-foreground tabular-nums">
                     {formatCurrency(order.taxAmount)}
                   </span>
                 </div>
@@ -322,7 +353,7 @@ export default function PurchaseOrderDetailPage() {
                   <span className="text-xs font-semibold text-foreground">
                     Total
                   </span>
-                  <span className="font-mono text-base font-semibold text-foreground tabular-nums">
+                  <span className="text-base font-semibold text-foreground tabular-nums">
                     {formatCurrency(order.total)}
                   </span>
                 </div>
@@ -335,6 +366,7 @@ export default function PurchaseOrderDetailPage() {
               )}
             </div>
           </aside>
+        </div>
         </div>
       </div>
 
@@ -364,6 +396,12 @@ export default function PurchaseOrderDetailPage() {
   );
 }
 
+function receivedToneClass(qtyReceived: number, qtyOrdered: number) {
+  if (qtyReceived >= qtyOrdered) return "text-success-text font-semibold";
+  if (qtyReceived > 0) return "text-warning-text font-semibold";
+  return "text-muted-foreground";
+}
+
 function InfoField({
   icon,
   label,
@@ -385,7 +423,7 @@ function InfoField({
       <p
         className={cn(
           "text-sm font-semibold text-foreground",
-          isDate && "font-mono tabular-nums text-xs",
+          isDate && "tabular-nums text-xs",
         )}
       >
         {value}

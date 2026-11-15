@@ -4,15 +4,15 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { APP_NAME } from "@/lib/constants";
-import { ArrowLeft, ShieldAlert, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
 
   return (
     <div className="min-h-screen w-full bg-background flex items-center justify-center pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] pt-[max(1rem,var(--safe-top))] pb-[max(1rem,var(--safe-bottom))] sm:pl-[max(1.5rem,var(--safe-left))] sm:pr-[max(1.5rem,var(--safe-right))] sm:pt-[max(1.5rem,var(--safe-top))] sm:pb-[max(1.5rem,var(--safe-bottom))] selection:bg-primary/20 selection:text-primary-text">
-      <div className="w-full max-w-md animate-fade-in-up">
-        <div className="rounded-3xl p-8 sm:p-10 bg-card border border-border/80 shadow-2xl shadow-black/10 space-y-6 text-left">
+      <div className="w-full max-w-md">
+        <div className="rounded-2xl p-8 sm:p-10 bg-card border border-border/80 space-y-6 text-left">
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-border/60">
             <div className="flex items-center">
@@ -31,18 +31,11 @@ export default function RegisterPage() {
                 className="w-36 h-auto hidden dark:block"
               />
             </div>
-            <div className="font-mono text-[11px] uppercase font-bold text-primary-text px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
-              Acceso Restringido
-            </div>
           </div>
 
           {/* Contexto y Explicación */}
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-primary-text text-xs font-mono font-bold uppercase tracking-wider">
-              <ShieldAlert className="w-4 h-4 text-terracotta" />
-              <span>Registro Institucional</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
               Creación de cuentas por invitación
             </h1>
             <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed">
@@ -53,13 +46,13 @@ export default function RegisterPage() {
           </div>
 
           {/* Callout informativo */}
-          <div className="bg-muted/40 border border-border/80 rounded-2xl p-4 text-xs text-muted-foreground space-y-1.5">
+          <div className="bg-muted/40 rounded-lg p-4 text-xs text-muted-foreground space-y-1.5">
             <p className="font-semibold text-foreground">
               ¿Requieres acceso para tu turno?
             </p>
             <p className="leading-relaxed">
               Contacta al administrador del sistema o escribe a{" "}
-              <span className="font-mono text-primary-text font-bold">
+              <span className="font-mono text-primary-text font-semibold">
                 soporte@meperpos.com
               </span>
             </p>
@@ -79,11 +72,11 @@ export default function RegisterPage() {
 
           <Button
             type="button"
-            className="w-full h-11 text-sm font-bold shadow-md flex items-center justify-center gap-2"
+            className="w-full h-11 text-sm font-semibold flex items-center justify-center gap-2"
             onClick={() => router.push("/login")}
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Volver al Inicio de Sesión</span>
+            <span>Volver al inicio de sesión</span>
           </Button>
         </div>
       </div>

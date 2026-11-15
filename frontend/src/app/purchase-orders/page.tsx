@@ -6,16 +6,19 @@ import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { usePurchaseOrders } from "@/hooks/usePurchaseOrders";
 import { useSuppliers } from "@/hooks/useSuppliers";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Input } from "@/components/ui/Input";
 import { FilterBar, FilterClearButton } from "@/components/ui/FilterBar";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import {
   Plus,
@@ -24,7 +27,7 @@ import {
   Truck,
   Calendar,
 } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { hasAnyRole } from "@/lib/auth";
 import type { PurchaseOrderStatus } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
@@ -52,7 +55,7 @@ export default function PurchaseOrdersPage() {
   const [viewMode, setViewMode] = usePersistedViewMode("purchase-orders");
 
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
-  const { data, isLoading } = usePurchaseOrders({
+  const { data, isLoading, isError, refetch } = usePurchaseOrders({
     page,
     limit: viewMode === "grid" ? 12 : 10,
     q: q.trim() || undefined,
@@ -80,7 +83,7 @@ export default function PurchaseOrdersPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-4 lg:min-h-[calc(100vh-4rem)] lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         {/* Page Header */}
 <PageHeader
           title="Órdenes de compra"
@@ -92,10 +95,11 @@ export default function PurchaseOrdersPage() {
           }
           actions={
             canManage ? (
-              <Link href="/purchase-orders/new" className="w-full sm:w-auto">
-                <Button className="w-full sm:w-auto">
-                  <Plus className="w-4 h-4" /> Nueva OC
-                </Button>
+              <Link
+                href="/purchase-orders/new"
+                className={buttonClassName({ className: "w-full sm:w-auto" })}
+              >
+                <Plus className="w-4 h-4" /> Nueva orden
               </Link>
             ) : undefined
           }
@@ -108,7 +112,7 @@ export default function PurchaseOrdersPage() {
             setPage(1);
             setQ(value);
           }}
-          searchPlaceholder="Buscar por N° OC o proveedor..."
+          searchPlaceholder="Buscar por número de orden o proveedor…"
           filterControls={
             <>
               <BentoSelect
@@ -140,25 +144,26 @@ export default function PurchaseOrdersPage() {
                   label: opt.label,
                 }))}
               />
-              <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <input
+              {/* Two equal tracks on phones so neither date can push past the card edge. */}
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:gap-1.5">
+                <Input
                   type="date"
                   value={dateFrom}
                   onChange={(e) => {
                     setPage(1);
                     setDateFrom(e.target.value);
                   }}
-                  className="h-[38px] px-2.5 rounded-lg text-xs bg-muted/40 border border-transparent focus:border-border/70 focus:bg-background text-foreground transition-colors font-mono tabular-nums flex-1 sm:flex-none"
+                  className="min-w-0 w-full sm:w-40"
                   aria-label="Fecha inicial"
                 />
-                <input
+                <Input
                   type="date"
                   value={dateTo}
                   onChange={(e) => {
                     setPage(1);
                     setDateTo(e.target.value);
                   }}
-                  className="h-[38px] px-2.5 rounded-lg text-xs bg-muted/40 border border-transparent focus:border-border/70 focus:bg-background text-foreground transition-colors font-mono tabular-nums flex-1 sm:flex-none"
+                  className="min-w-0 w-full sm:w-40"
                   aria-label="Fecha final"
                 />
               </div>
@@ -178,7 +183,13 @@ export default function PurchaseOrdersPage() {
 
         {/* Content */}
         {isLoading ? (
-          <TableSkeleton columns={6} rows={6} label="Cargando órdenes de compra..." />
+          <TableSkeleton columns={6} rows={6} label="Cargando órdenes de compra…" />
+        ) : isError && !data ? (
+          <ErrorState
+            message="No se pudieron cargar las órdenes de compra."
+            retryLabel="Reintentar"
+            onRetry={() => void refetch()}
+          />
         ) : orders.length === 0 ? (
           <EmptyState
             icon={<ClipboardList className="w-5 h-5 text-muted-foreground" />}
@@ -196,7 +207,7 @@ export default function PurchaseOrdersPage() {
         ) : (
           <>
             {viewMode === "table" ? (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden animate-fade-in flex-1">
+              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
                 <div className="overflow-x-auto">
                   <Table className="min-w-[680px]">
                     <TableHeader>
@@ -223,7 +234,7 @@ export default function PurchaseOrdersPage() {
                           }
                         >
                           <TableCell>
-                            <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                            <span className="text-xs font-semibold text-foreground tabular-nums">
                               OC-{order.orderNumber}
                             </span>
                           </TableCell>
@@ -233,7 +244,7 @@ export default function PurchaseOrdersPage() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <span className="font-mono text-xs text-muted-foreground whitespace-nowrap tabular-nums">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
                               {formatDate(order.createdAt)}
                             </span>
                           </TableCell>
@@ -241,7 +252,7 @@ export default function PurchaseOrdersPage() {
                             <PurchaseOrderStatusBadge status={order.status} />
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                            <span className="text-xs font-semibold text-foreground tabular-nums">
                               {formatCurrency(order.total)}
                             </span>
                           </TableCell>
@@ -256,7 +267,7 @@ export default function PurchaseOrdersPage() {
                                 onClick={() =>
                                   router.push(`/purchase-orders/${order.id}`)
                                 }
-                                className="h-7 px-2.5 text-xs inline-flex items-center gap-1.5"
+                                className="px-2.5 gap-1.5"
                               >
                                 <Eye className="w-3.5 h-3.5" /> Detalle
                               </Button>
@@ -269,7 +280,7 @@ export default function PurchaseOrdersPage() {
                 </div>
               </div>
             ) : (
-              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 lg:gap-4 stagger-children">
+              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {orders.map((order) => (
                   <div
                     key={order.id}
@@ -279,7 +290,7 @@ export default function PurchaseOrdersPage() {
                     <div>
                       {/* Header */}
                       <div className="flex items-center justify-between gap-2 mb-2.5">
-                        <span className="font-mono text-xs font-semibold text-foreground tracking-tight tabular-nums">
+                        <span className="text-xs font-semibold text-foreground tracking-tight tabular-nums">
                           OC-{order.orderNumber}
                         </span>
                         <PurchaseOrderStatusBadge status={order.status} />
@@ -295,7 +306,7 @@ export default function PurchaseOrdersPage() {
                         </div>
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Calendar className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-                          <span className="font-mono tabular-nums text-muted-foreground">
+                          <span className="tabular-nums text-muted-foreground">
                             {formatDate(order.createdAt)}
                           </span>
                         </div>
@@ -313,7 +324,7 @@ export default function PurchaseOrdersPage() {
                         <p className="text-[11px] font-medium text-muted-foreground">
                           Total compra
                         </p>
-                        <p className="font-mono text-sm font-semibold text-foreground tabular-nums">
+                        <p className="text-sm font-semibold text-foreground tabular-nums">
                           {formatCurrency(order.total)}
                         </p>
                       </div>
@@ -324,7 +335,7 @@ export default function PurchaseOrdersPage() {
                           e.stopPropagation();
                           router.push(`/purchase-orders/${order.id}`);
                         }}
-                        className="h-7 px-2.5 text-xs inline-flex items-center gap-1"
+                        className="px-2.5 gap-1"
                       >
                         <Eye className="w-3.5 h-3.5" /> Detalle
                       </Button>
@@ -341,6 +352,7 @@ export default function PurchaseOrdersPage() {
                 onPageChange={setPage}
                 totalItems={meta.total}
                 itemLabel="orden"
+                itemLabelPlural="órdenes"
               />
             )}
           </>

@@ -94,7 +94,7 @@ export function MobileCartDrawer({
     <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-fade-in"
+        className="fixed inset-0 bg-black/40 dark:bg-black/60 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -104,16 +104,16 @@ export function MobileCartDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="Carrito de compras"
-        className="relative z-10 flex h-[92dvh] max-h-[92dvh] w-full flex-col rounded-t-2xl border-t border-border/80 bg-card shadow-2xl overflow-hidden animate-slide-in-bottom"
+        className="relative z-10 flex h-[92dvh] max-h-[92dvh] w-full flex-col rounded-t-2xl border-t border-border/80 bg-card shadow-lg shadow-black/10 overflow-hidden animate-slide-in-bottom"
       >
         {/* Pull handle & Header (Pinned Top) */}
         <div className="flex flex-col border-b border-border/60 bg-muted/15 px-5 pt-3 pb-3 shrink-0">
           <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-muted-foreground/30" />
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <div>
                 <h2 className="text-sm font-semibold text-foreground leading-tight">
-                  Carrito de Compras
+                  Carrito de compras
                 </h2>
                 <p className="text-xs text-muted-foreground tabular-nums">
                   {cart.length === 1 ? "1 producto agregado" : `${cart.length} productos agregados`}
@@ -123,7 +123,7 @@ export function MobileCartDrawer({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               aria-label="Cerrar carrito"
             >
               <X className="h-4 w-4" />
@@ -134,7 +134,7 @@ export function MobileCartDrawer({
         {/* Unified Scrollable Body: Cart Items + Customer + Totals + Payment Methods */}
         <div className="scrollbar-app flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
           {/* Cart Items Section */}
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <ShoppingCart className="h-8 w-8 text-muted-foreground/40 mb-2" />
@@ -169,7 +169,7 @@ export function MobileCartDrawer({
                       {cartItemOffer(item) && (
                         <Badge
                           variant="danger"
-                          className="shrink-0 text-[9px] px-1.5 py-0 font-mono uppercase rounded-md"
+                          className="shrink-0 text-[11px] px-1.5 py-0 rounded-md"
                         >
                           Oferta -{cartItemOffer(item)!.percent}%
                         </Badge>
@@ -185,7 +185,7 @@ export function MobileCartDrawer({
                       </span>{" "}
                       × {item.quantity}
                       {item.discountAmount > 0 && (
-                        <span className="ml-1 text-emerald-600 dark:text-emerald-400">
+                        <span className="ml-1 text-success-text">
                           (-{formatCurrency(item.discountAmount)})
                         </span>
                       )}
@@ -200,15 +200,16 @@ export function MobileCartDrawer({
                         onChange={(value) => onUpdateQuantity(item.productId, value)}
                       />
                       {item.quantity >= item.availableStock && (
-                        <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                        <span className="text-[11px] font-medium text-warning-text">
                           máx.
                         </span>
                       )}
                       <button
                         type="button"
                         onClick={() => onOpenDiscountModal(item.productId)}
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-background/80 text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors"
+                        className="flex h-10 w-10 items-center justify-center rounded-md border border-border/60 bg-background/80 text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors active:bg-muted"
                         title="Descuento"
+                        aria-label={`Descuento para ${item.product.name}`}
                       >
                         <Percent className="h-3 w-3" />
                       </button>
@@ -229,7 +230,7 @@ export function MobileCartDrawer({
                     <button
                       type="button"
                       onClick={() => onRemoveFromCart(item.productId)}
-                      className="ml-1 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                      className="ml-1 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-danger/10 hover:text-danger-text transition-colors"
                       aria-label={`Eliminar ${item.product.name}`}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -245,11 +246,11 @@ export function MobileCartDrawer({
             <button
               type="button"
               onClick={onOpenCustomerModal}
-              className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-border/70 bg-background/80 text-sm text-foreground hover:border-foreground/25 transition-colors overflow-hidden"
+              className="flex items-center gap-2 w-full h-10 sm:h-9 px-3 rounded-lg border border-border/70 bg-background/80 text-sm text-foreground hover:border-foreground/25 transition-colors overflow-hidden"
             >
               <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <span className="truncate text-xs font-medium">
-                {selectedCustomerName || "Cliente General (opcional)"}
+                {selectedCustomerName || "Sin cliente (opcional)"}
               </span>
             </button>
           </div>
@@ -264,7 +265,7 @@ export function MobileCartDrawer({
                 ? "Selecciona un cliente para financiar"
                 : undefined
             }
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+            className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
           >
             <HandCoins className="w-3.5 h-3.5" />
             {isFinancing ? "Iniciando financiación…" : "Financiar a crédito"}
@@ -273,7 +274,7 @@ export function MobileCartDrawer({
           {/* Totals Breakdown */}
           <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
             {discountAmount > 0 && (
-              <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
+              <div className="flex justify-between text-xs text-success-text mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
                 <span>Descuento</span>
                 <span className="font-medium">-{formatCurrency(discountAmount)}</span>
               </div>
@@ -311,8 +312,8 @@ export function MobileCartDrawer({
 
           {/* Payment Method Selector */}
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
-              Método de Pago
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Método de pago
             </p>
             <PaymentMethodCards
               selectedMethod={selectedPaymentMethod}
@@ -322,9 +323,9 @@ export function MobileCartDrawer({
         </div>
 
         {/* Pinned Bottom Checkout Action Bar */}
-        <div className="border-t border-border/80 bg-card p-3.5 shrink-0 pb-[calc(0.875rem+env(safe-area-inset-bottom))] shadow-lg">
+        <div className="border-t border-border/80 bg-card p-3.5 shrink-0 pb-[calc(0.875rem+env(safe-area-inset-bottom))]">
           <Button
-            className="w-full h-11 text-base font-bold shadow-md shadow-primary/20"
+            className="w-full h-11 text-base font-semibold"
             size="lg"
             onClick={onCheckout}
             disabled={cart.length === 0}

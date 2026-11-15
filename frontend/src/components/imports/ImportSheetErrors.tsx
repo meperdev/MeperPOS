@@ -5,7 +5,7 @@ import { Pencil, RefreshCcw } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { fieldLabel, sheetLabel } from "./labels";
+import { fieldLabel, getImportErrorCodeLabel, sheetLabel } from "./labels";
 import type { ImportSheetId, ImportSheetRowError } from "@/types";
 
 type EditableValues = Record<string, string>;
@@ -73,14 +73,14 @@ export function ImportSheetErrors({
   };
 
   return (
-    <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 overflow-hidden">
-      <div className="px-3.5 py-2.5 border-b border-rose-500/20 bg-rose-500/10">
-        <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+    <div className="rounded-xl border border-danger/30 bg-danger/5 overflow-hidden">
+      <div className="px-3.5 py-2.5 border-b border-danger/20 bg-danger/10">
+        <p className="text-xs font-semibold text-danger-text">
           Errores por hoja
         </p>
       </div>
 
-      <div className="divide-y divide-rose-500/10">
+      <div className="divide-y divide-danger/10">
         {sheetOrder.map((sheetId) => (
           <div key={sheetId} className="p-3.5 space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">
@@ -92,14 +92,14 @@ export function ImportSheetErrors({
                 <div
                   key={`${error.sheetId}-${error.row ?? error.rowIndex}-${error.code ?? error.errorCode}`}
                   data-testid={`import-error-row-${error.row ?? error.rowIndex}`}
-                  className="rounded-lg border border-rose-500/20 bg-card/80 p-3 space-y-2"
+                  className="rounded-lg border border-danger/20 bg-card/80 p-3 space-y-2"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Badge variant={mapErrorVariant(error.code ?? error.errorCode ?? "UNKNOWN_ERROR")}>
-                        {error.code ?? error.errorCode}
+                        {getImportErrorCodeLabel(error.code ?? error.errorCode)}
                       </Badge>
-                      <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                      <span className="text-xs text-muted-foreground tabular-nums">
                         Fila {error.row ?? error.rowIndex}
                       </span>
                     </div>

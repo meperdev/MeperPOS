@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 /**
@@ -208,6 +208,22 @@ describe("Inventory page — characterization (current behavior)", () => {
     expect(screen.getByText("3 productos")).toBeInTheDocument();
   });
 
+  it("keeps the product row free of tab stops and opens its edit form from a real name button", async () => {
+    window.localStorage.setItem("meperpos:view-mode:inventory", "table");
+    setResponse([buildProduct({ name: "Panela" })]);
+
+    render(<InventoryPage />);
+
+    const row = screen.getByText("Panela").closest("tr")!;
+    expect(row).not.toHaveAttribute("tabindex");
+    const edit = within(row).getByRole("button", { name: "Editar Panela" });
+    expect(edit.tagName).toBe("BUTTON");
+    fireEvent.click(edit);
+    // The Modal is mocked to render only its children, so the open form is the observable effect.
+    expect(await screen.findByDisplayValue("Panela")).toBeInTheDocument();
+    window.localStorage.removeItem("meperpos:view-mode:inventory");
+  });
+
   it("forwards the search term to the products query", () => {
     render(<InventoryPage />);
 
@@ -250,7 +266,7 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }),
+      screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }),
     );
 
     expect(screen.getByText("Panela Baja")).toBeInTheDocument();
@@ -291,7 +307,7 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }),
+      screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }),
     );
 
     expect(screen.getByText("Panela Baja")).toBeInTheDocument();
@@ -319,7 +335,7 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }),
+      screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }),
     );
 
     expect(screen.getByText("Panela Baja")).toBeInTheDocument();
@@ -341,14 +357,14 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo( ?\d+)?$/ }),
+      screen.getByRole("button", { name: /^Stock bajo( ?\d+)?$/ }),
     );
 
     expect(screen.getByText("Panela Baja")).toBeInTheDocument();
     expect(screen.queryByText("Papel sin conteo")).not.toBeInTheDocument();
     // The low-stock badge counts only what the server flagged: 1, not 2.
     expect(
-      screen.getByRole("button", { name: /^Stock Bajo ?1$/ }),
+      screen.getByRole("button", { name: /^Stock bajo ?1$/ }),
     ).toBeInTheDocument();
   });
 
@@ -366,7 +382,7 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     expect(
-      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+      screen.getByRole("button", { name: /^Stock bajo ?10$/ }),
     ).toBeInTheDocument();
   });
 
@@ -382,11 +398,11 @@ describe("Inventory page — characterization (current behavior)", () => {
     render(<InventoryPage />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+      screen.getByRole("button", { name: /^Stock bajo ?10$/ }),
     );
 
     expect(
-      screen.getByRole("button", { name: /^Stock Bajo ?10$/ }),
+      screen.getByRole("button", { name: /^Stock bajo ?10$/ }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 });

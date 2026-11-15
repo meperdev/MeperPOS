@@ -1,6 +1,7 @@
 "use client";
 
 import { useTopSellingProducts } from "@/hooks/useReports";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 /** The endpoint caps at five; the card never asks for more than it renders. */
 const TOP_PRODUCTS_LIMIT = 5;
@@ -17,7 +18,11 @@ export function TopProductsCard({
   startDate: string;
   endDate: string;
 }) {
-  const { data } = useTopSellingProducts(startDate, endDate, TOP_PRODUCTS_LIMIT);
+  const { data, isLoading, isError, refetch } = useTopSellingProducts(
+    startDate,
+    endDate,
+    TOP_PRODUCTS_LIMIT,
+  );
   const products = (data?.data ?? []).slice(0, TOP_PRODUCTS_LIMIT);
 
   return (
@@ -26,10 +31,23 @@ export function TopProductsCard({
       className="flex h-full min-h-0 flex-col"
     >
       <p className="text-sm font-semibold tracking-tight text-foreground">
-        Top productos
+        Productos más vendidos
       </p>
 
-      {products.length === 0 ? (
+      {isLoading ? (
+        <div className="mt-3 space-y-1.5" aria-busy="true" data-testid="top-products-skeleton">
+          {[0, 1, 2, 3, 4].map((row) => (
+            <div key={row} className="h-6 animate-pulse rounded-md bg-muted" />
+          ))}
+        </div>
+      ) : isError ? (
+        <ErrorState
+          className="mt-3 min-h-0 py-4 shadow-none"
+          message="No pudimos cargar los productos más vendidos."
+          retryLabel="Reintentar"
+          onRetry={() => refetch()}
+        />
+      ) : products.length === 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">
           Sin ventas en el período
         </p>
@@ -39,7 +57,7 @@ export function TopProductsCard({
             <li
               key={product.productId}
               data-testid="top-product-row"
-              className="flex items-center gap-2.5 text-xs"
+              className="flex items-center gap-2 text-xs"
             >
               <span
                 data-testid="top-product-rank"
@@ -53,7 +71,7 @@ export function TopProductsCard({
               <span className="shrink-0 font-mono text-[11px] font-semibold text-foreground tabular-nums">
                 <span data-testid="top-product-quantity">{product.quantity}</span>
                 <span className="ml-1 font-sans font-normal text-muted-foreground">
-                  u
+                  und.
                 </span>
               </span>
             </li>

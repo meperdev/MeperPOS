@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Lock, Plus, Wallet } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -168,14 +168,14 @@ export default function PayrollPage() {
   );
 
   const count =
-    obligations.isLoading || obligations.isError
+    obligations.isLoading || (obligations.isError && !obligations.data)
       ? undefined
       : `${visible.length} ${visible.length === 1 ? "pago" : "pagos"}`;
 
   return (
     <DashboardLayout>
       {allowed ? (
-        <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-4">
+        <div className="flex flex-1 flex-col gap-4 lg:gap-5">
           <PageHeader
             title="Nómina"
             subtitle="Pagos y abonos de empleados"
@@ -193,9 +193,8 @@ export default function PayrollPage() {
           />
 
           {!obligations.isLoading &&
-            !obligations.isError &&
             all.length > 0 && (
-              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <MetricCard
                   label="Saldo pendiente"
                   value={pendingTotal}
@@ -220,7 +219,7 @@ export default function PayrollPage() {
               setSearch(value);
               setPage(1);
             }}
-            searchPlaceholder="Buscar por empleado..."
+            searchPlaceholder="Buscar por empleado…"
             filterControls={
               <>
                 <FilterGroup label="Estado">
@@ -249,8 +248,8 @@ export default function PayrollPage() {
           />
 
           {obligations.isLoading ? (
-            <CardSkeleton count={4} label="Cargando pagos de nómina..." />
-          ) : obligations.isError ? (
+            <CardSkeleton count={4} label="Cargando pagos de nómina…" />
+          ) : obligations.isError && !obligations.data ? (
             <ErrorState
               message="No se pudieron cargar los pagos"
               retryLabel="Reintentar"
@@ -311,12 +310,12 @@ export default function PayrollPage() {
                                 <TableCell className="max-w-[260px] truncate text-xs text-muted-foreground">
                                   {periodLabel(obligation)}
                                 </TableCell>
-                                <TableCell className="text-right font-mono text-xs tabular-nums">
+                                <TableCell numeric className="text-xs">
                                   {payrollMoney(obligation.summary.total)}
                                 </TableCell>
                                 <TableCell
                                   className={cn(
-                                    "text-right font-mono text-xs tabular-nums",
+                                    "text-right text-xs tabular-nums",
                                     balance > 0
                                       ? "text-foreground"
                                       : "text-muted-foreground",
@@ -346,7 +345,7 @@ export default function PayrollPage() {
                       </Table>
                     </div>
                   </div>
-                  <ul className="stagger-children grid grid-cols-1 gap-3.5 sm:hidden">
+                  <ul className="grid grid-cols-1 gap-3 sm:hidden">
                     {paged.map((obligation) => (
                       <li key={obligation.id} className="min-w-0">
                         <ObligationCard
@@ -362,7 +361,7 @@ export default function PayrollPage() {
                   </ul>
                 </>
               ) : (
-                <ul className="stagger-children grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+                <ul className={COLLECTION_GRID_CLASSES}>
                   {paged.map((obligation) => (
                     <li key={obligation.id} className="min-w-0">
                       <ObligationCard
@@ -390,19 +389,13 @@ export default function PayrollPage() {
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="space-y-4 lg:space-y-5">
           <PageHeader title="Nómina" subtitle="Pagos y abonos de empleados" />
-          <Card className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground">
-              <Lock className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <p className="text-sm font-medium text-foreground">
-              No tienes acceso a la nómina
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Esta sección es solo para propietarios y administradores.
-            </p>
-          </Card>
+          <EmptyState
+            icon={<Lock className="h-5 w-5 text-muted-foreground" />}
+            title="No tienes acceso a la nómina"
+            subtitle="Esta sección es solo para propietarios y administradores."
+          />
         </div>
       )}
 

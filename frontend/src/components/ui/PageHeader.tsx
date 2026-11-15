@@ -29,12 +29,12 @@ export function PageHeader({
       )}
     >
       <div className="min-w-0">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <h1 className="truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             {title}
           </h1>
           {count !== undefined && count !== null && count !== "" && (
-            <span className="hidden shrink-0 items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums sm:inline-flex">
+            <span className="hidden shrink-0 items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums sm:inline-flex">
               {count}
             </span>
           )}

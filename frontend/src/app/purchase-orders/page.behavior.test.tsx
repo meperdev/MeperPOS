@@ -61,35 +61,56 @@ describe("Purchase orders list page — create action is gated by the role hiera
     cleanup();
   });
 
-  it("shows Nueva OC for OWNER", () => {
+  it("shows Nueva orden for OWNER", () => {
     authState.role = "OWNER";
 
     render(<PurchaseOrdersPage />);
 
-    expect(screen.getByRole("link", { name: /nueva oc/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /nueva orden/i }).getAttribute("href")).toBe("/purchase-orders/new");
   });
 
-  it("shows Nueva OC for SUPER_ADMIN", () => {
+  it("shows Nueva orden for SUPER_ADMIN", () => {
     authState.role = "SUPER_ADMIN";
 
     render(<PurchaseOrdersPage />);
 
-    expect(screen.getByRole("link", { name: /nueva oc/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /nueva orden/i })).toBeTruthy();
   });
 
-  it("hides Nueva OC for MEMBER", () => {
+  it("hides Nueva orden for MEMBER", () => {
     authState.role = "MEMBER";
 
     render(<PurchaseOrdersPage />);
 
-    expect(screen.queryByRole("link", { name: /nueva oc/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /nueva orden/i })).toBeNull();
   });
 
-  it("hides Nueva OC for CASHIER", () => {
+  it("hides Nueva orden for CASHIER", () => {
     authState.role = "CASHIER";
 
     render(<PurchaseOrdersPage />);
 
-    expect(screen.queryByRole("link", { name: /nueva oc/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /nueva orden/i })).toBeNull();
+  });
+});
+
+describe("Purchase orders date filters on narrow screens", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("puts the two date inputs in a two-column grid that cannot overflow the filter card", () => {
+    render(<PurchaseOrdersPage />);
+    const from = screen.getByLabelText("Fecha inicial");
+    const to = screen.getByLabelText("Fecha final");
+    // Input wraps its <input> in its own block, so the shared grid is the nearest ancestor.
+    const wrapper = from.closest<HTMLElement>(".grid")!;
+
+    expect(wrapper).toContainElement(to);
+    expect(wrapper).toHaveClass("grid", "grid-cols-2", "gap-2");
+    expect(wrapper).toHaveClass("sm:flex", "sm:w-auto");
+    for (const input of [from, to]) {
+      expect(input).toHaveClass("min-w-0", "w-full");
+    }
   });
 });

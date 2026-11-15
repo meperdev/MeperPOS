@@ -558,6 +558,14 @@ describe("POS behavior evidence (#19, #18)", () => {
     cleanup();
   });
 
+  it("paints the search icon above the scanner input and out of its pointer path", () => {
+    render(<POSPage />);
+    const input = screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código...");
+    const icon = input.closest<HTMLElement>(".min-w-\\[14rem\\]")!.querySelector("svg.lucide-search");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveClass("absolute", "z-10", "pointer-events-none");
+  });
+
   it("reaches saved favorites beyond the first adaptive page with a multi-page pager", async () => {
     const list = Array.from({ length: 25 }, (_, i) => makeProduct(`00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, `Favorito ${i}`));
     const ids = list.slice(10).map((p) => p.id);
@@ -703,7 +711,79 @@ describe("POS behavior evidence (#19, #18)", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
     const grid = screen.getByTestId("pos-capacity-area").firstElementChild as HTMLElement;
-    expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(176px, calc((100% - 48px) / 5))), 1fr))");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(152px, calc((100% - 48px) / 5))), 1fr))");
+  });
+
+  it("gives products the fluid column and the cart 18rem, widening to 22rem only from xl", () => {
+    useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
+    const { container } = render(<POSPage />);
+    // A minmax(18rem,22rem) track always takes its 22rem max before the 1fr column, starving the products.
+    const split = container.querySelector<HTMLElement>(".lg\\:grid-cols-\\[minmax\\(0\\,1fr\\)_18rem\\]");
+    expect(split).not.toBeNull();
+    expect(split!.className).toContain("xl:grid-cols-[minmax(0,1fr)_22rem]");
+    expect(split!.className).not.toContain("lg:grid-cols-12");
+    expect(container.querySelector(".lg\\:col-span-7, .lg\\:col-span-5")).toBeNull();
+  });
+
+  it("lets a cart line name wrap to two lines and keeps quantity and total from shrinking", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Arroz Integral Premium Paquete 5 kg")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Arroz Integral Premium Paquete 5 kg" }));
+
+    const card = screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").closest<HTMLElement>("div.rounded-lg");
+    expect(card).not.toBeNull();
+    expect(card!.className).toContain("flex-col");
+
+    // Row 1: fixed square thumbnail, flexible text block, total on the right.
+    const header = card!.firstElementChild as HTMLElement;
+    expect(header.className).toContain("items-start");
+    const thumb = header.firstElementChild as HTMLElement;
+    expect(thumb.className).toContain("h-10");
+    expect(thumb.className).toContain("w-10");
+    expect(thumb.className).toContain("shrink-0");
+    expect(thumb.className).not.toContain("self-stretch");
+    const textBlock = thumb.nextElementSibling as HTMLElement;
+    expect(textBlock.className).toContain("min-w-0");
+    expect(textBlock.className).toContain("flex-1");
+    const name = textBlock.querySelector("p")!;
+    expect(name.className).toContain("line-clamp-2");
+    expect(name.className).not.toContain("line-clamp-1");
+    expect(screen.getByText("× 1").className).toContain("whitespace-nowrap");
+    expect(screen.getByText("× 1").parentElement!.className).toContain("tabular-nums");
+
+    const totalColumn = header.lastElementChild as HTMLElement;
+    expect(totalColumn.className).toContain("shrink-0");
+    const total = totalColumn.firstElementChild as HTMLElement;
+    expect(total.className).toContain("font-semibold");
+    expect(total.className).toContain("tabular-nums");
+    expect(total.className).toContain("whitespace-nowrap");
+    expect(total.className).not.toContain("stat-number");
+
+    // Row 2: stepper on the left; discount and delete on the right, 40px touch targets.
+    const actions = screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").parentElement!;
+    expect(actions.parentElement!.className).toContain("justify-between");
+    expect(screen.getByLabelText("Descuento para Arroz Integral Premium Paquete 5 kg").className).toContain("h-10 w-10");
+    expect(screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").className).toContain("h-10 w-10");
+  });
+
+
+  it("wraps the products header intrinsically so Favoritos and categories share a row when narrow", () => {
+    useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
+    render(<POSPage />);
+    const input = screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código...");
+    const searchHeader = input.closest<HTMLElement>("div.p-4");
+    expect(searchHeader!.className).toContain("@container");
+    const search = input.closest<HTMLElement>("div.relative")!;
+    const row = search.parentElement!;
+    expect(row.className).toContain("flex-wrap");
+    expect(row.className).not.toContain("flex-col");
+    expect(row.className).not.toContain("sm:flex-row");
+    expect(search.className).toContain("min-w-[14rem]");
+    expect(search.className).toContain("flex-[999_1_16rem]");
   });
 
   it("pages the complete server-filtered service fixture, not the merchandise page", async () => {
@@ -755,7 +835,8 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
     const area = screen.getByTestId("pos-capacity-area");
     expect(area.contains(screen.getByTestId("pos-pager"))).toBe(false);
-    expect(area.className).not.toMatch(/overflow-y-auto/);
+    // Desktop measures a fixed area and never scrolls it; phones scroll it, so the lg override must hold.
+    expect(area.className).toContain("lg:overflow-visible");
     height = 300;
     act(() => resize());
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 3, page: 1 }));
@@ -974,7 +1055,7 @@ describe("POS behavior evidence (#19, #18)", () => {
       expect(createSaleMutateMock).toHaveBeenCalled();
     });
 
-    expect(screen.getByText("Venta Exitosa")).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
   });
 
   it("opens the payment modal through the dynamic loading fallback (S1)", async () => {
@@ -1082,7 +1163,7 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(totalValueBefore).toBe(totalValueAfter);
 
     await userEvent.click(screen.getByRole("button", { name: /ana perez/i }));
-    await userEvent.click(screen.getByText("Cliente General"));
+    await userEvent.click(screen.getByText("Sin cliente"));
 
     await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
     await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
@@ -1323,6 +1404,22 @@ describe("POS item price override (pos-edit-item-price)", () => {
     const discount = screen.getByTestId("line-discount");
     expect(discount.textContent).toContain(formatCurrency(5000));
     expect(discount.textContent).not.toContain("%");
+  });
+
+  it("strikes through the pre-discount line subtotal under the total of a discounted line", async () => {
+    renderWithSingleProduct("Producto Descontado", 50000);
+    await userEvent.click(screen.getByRole("button", { name: "Producto Descontado" }));
+    await openDiscountModal();
+    await userEvent.type(screen.getByPlaceholderText("0.00"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+
+    const card = screen.getByLabelText("Eliminar Producto Descontado").closest<HTMLElement>("div.rounded-lg")!;
+    const struck = card.querySelector<HTMLElement>("s");
+    expect(struck).not.toBeNull();
+    expect(struck!.textContent).toBe(formatCurrency(50000));
+    expect(struck!.className).toContain("line-through");
+    expect(struck!.className).toContain("text-xs");
+    expect(struck!.parentElement!.className).toContain("shrink-0");
   });
 
   it("clamps a fixed discount so the line total never goes negative", async () => {

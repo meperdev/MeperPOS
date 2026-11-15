@@ -80,7 +80,7 @@ describe("PaymentConfirmationModal currency output", () => {
     expect(screen.getByText(fmtText("48.550"))).toBeInTheDocument(); // Faltante
     expect(
       screen.getByRole("button", {
-        name: `Completar con Efectivo ($${NBSP}48.550)`,
+        name: `Completar con efectivo ($${NBSP}48.550)`,
       }),
     ).toBeInTheDocument();
     expect(screen.getByText(fmtText("30.000"))).toBeInTheDocument(); // Cart line total (2 x 15.000)

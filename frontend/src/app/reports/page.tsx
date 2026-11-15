@@ -22,6 +22,8 @@ import {
 } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { Button } from "@/components/ui/Button";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
@@ -30,6 +32,7 @@ import {
   FilterOptionButton,
 } from "@/components/ui/FilterBar";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import {
   BarChart3,
@@ -59,17 +62,6 @@ function rangeLabel(range?: AppliedRange) {
   const start = format(range.startDate);
   const end = format(range.endDate);
   return start && end ? `${start} - ${end}` : start ? `Desde ${start}` : `Hasta ${end}`;
-}
-
-function ErrorState({ message }: { message: string }) {
-  return (
-    <p
-      role="alert"
-      className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs font-medium text-rose-700 dark:text-rose-300"
-    >
-      {message}
-    </p>
-  );
 }
 
 function SectionShell({
@@ -106,19 +98,19 @@ function NarrativeSummary({ report }: { report: FinancialReport }) {
     message = "No hubo ventas ni gastos registrados en este período.";
   } else if (totalSold === 0) {
     message = `No hubo ventas en este período. Tuviste ${formatReportMoney(expenses)} en gastos.`;
-    dotClass = "bg-amber-500";
+    dotClass = "bg-warning";
   } else if (realProfit > 0) {
     message = `En este período vendiste ${formatReportMoney(totalSold)}. Te quedaron ${formatReportMoney(realProfit)} de ganancia después de ${formatReportMoney(expenses)} en gastos.`;
-    dotClass = "bg-emerald-500";
+    dotClass = "bg-success";
   } else if (realProfit === 0) {
     message = `En este período vendiste ${formatReportMoney(totalSold)}. Quedaste en punto de equilibrio después de ${formatReportMoney(expenses)} en gastos.`;
   } else {
     message = `En este período vendiste ${formatReportMoney(totalSold)}. Estás con un balance negativo de ${formatReportMoney(Math.abs(realProfit))} después de ${formatReportMoney(expenses)} en gastos.`;
-    dotClass = "bg-rose-500";
+    dotClass = "bg-danger";
   }
 
   return (
-    <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5">
+    <div className="mb-4 flex items-center gap-2 rounded-lg bg-muted/40 px-3.5 py-2.5">
       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} />
       <p className="text-xs font-medium text-foreground leading-relaxed tabular-nums">
         {message}
@@ -135,7 +127,7 @@ function BreakdownCard({ report }: { report: FinancialReport }) {
   const realProfit = safeDecimalNumber(report.netProfit);
 
   return (
-    <div className="flex h-full flex-col justify-between rounded-xl border border-border/60 bg-muted/20 p-4">
+    <div className="flex h-full flex-col justify-between rounded-lg bg-muted/40 p-4">
       <div>
         <p className="text-xs sm:text-sm font-semibold text-foreground">Desglose</p>
         <p className="mt-0.5 text-xs text-muted-foreground">El camino de tu plata</p>
@@ -144,14 +136,14 @@ function BreakdownCard({ report }: { report: FinancialReport }) {
       <div className="mt-4 space-y-2 text-xs">
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Total vendido</span>
-          <span className="font-mono font-semibold text-foreground tabular-nums">
+          <span className="font-semibold text-foreground tabular-nums">
             {formatReportMoney(totalSold)}
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-rose-600 dark:text-rose-400">
+        <div className="flex items-center justify-between text-danger-text">
           <span>(-) Costo de productos</span>
-          <span className="font-mono font-semibold tabular-nums">
+          <span className="font-semibold tabular-nums">
             -{formatReportMoney(productCost)}
           </span>
         </div>
@@ -160,14 +152,14 @@ function BreakdownCard({ report }: { report: FinancialReport }) {
 
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Ganancia antes de gastos</span>
-          <span className="font-mono font-semibold text-foreground tabular-nums">
+          <span className="font-semibold text-foreground tabular-nums">
             {formatReportMoney(grossProfit)}
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-rose-600 dark:text-rose-400">
+        <div className="flex items-center justify-between text-danger-text">
           <span>(-) Gastos</span>
-          <span className="font-mono font-semibold tabular-nums">
+          <span className="font-semibold tabular-nums">
             -{formatReportMoney(expenses)}
           </span>
         </div>
@@ -178,10 +170,8 @@ function BreakdownCard({ report }: { report: FinancialReport }) {
           <span className="font-semibold text-foreground">Ganancia real</span>
           <span
             className={cn(
-              "font-mono text-sm font-semibold tabular-nums",
-              realProfit >= 0
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-rose-600 dark:text-rose-400",
+              "text-sm font-semibold tabular-nums",
+              realProfit >= 0 ? "text-success-text" : "text-danger-text",
             )}
           >
             {formatReportMoney(realProfit)}
@@ -243,27 +233,27 @@ function ComparisonChart({
               Comparando el total vendido entre ambos períodos
             </p>
           </div>
-          <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
+          <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
             Granularidad: {granularity === "day" ? "día" : "mes"}
           </span>
         </div>
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {metrics.map((item) => (
             <div key={item.label} className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium text-foreground">
                   {item.label}{" "}
-                  <span className="font-mono text-[11px] font-normal text-muted-foreground tabular-nums">
+                  <span className="text-[11px] font-normal text-muted-foreground tabular-nums">
                     ({item.sublabel})
                   </span>
                 </span>
-                <span className="font-mono font-semibold text-foreground tabular-nums">
+                <span className="font-semibold text-foreground tabular-nums">
                   {formatReportMoney(item.value)}
                 </span>
               </div>
-              <div className="h-2 overflow-hidden rounded-[3px] bg-muted/60">
+              <div className="h-2 overflow-hidden rounded-sm bg-muted/60">
                 <div
-                  className={cn("h-full rounded-[3px]", item.color)}
+                  className={cn("h-full rounded-sm", item.color)}
                   style={{
                     width: `${Math.max(2, (Math.abs(item.value) / scale) * 100)}%`,
                   }}
@@ -274,26 +264,26 @@ function ComparisonChart({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 border-t border-border/60 pt-3 text-xs">
-        <div className="rounded-lg border border-border/50 bg-background/50 px-3 py-2">
+      <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
+        <div className="rounded-lg bg-muted/40 px-3 py-2">
           <span className="text-[11px] text-muted-foreground block">
             Ganancia anterior
           </span>
-          <span className="mt-0.5 font-mono text-xs font-semibold text-foreground tabular-nums block">
+          <span className="mt-0.5 text-xs font-semibold text-foreground tabular-nums block">
             {formatReportMoney(previousProfit)}
           </span>
-          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-[11px] text-muted-foreground tabular-nums">
             Actual: {formatReportMoney(currentProfit)}
           </span>
         </div>
-        <div className="rounded-lg border border-border/50 bg-background/50 px-3 py-2">
+        <div className="rounded-lg bg-muted/40 px-3 py-2">
           <span className="text-[11px] text-muted-foreground block">
             Gastos anteriores
           </span>
-          <span className="mt-0.5 font-mono text-xs font-semibold text-foreground tabular-nums block">
+          <span className="mt-0.5 text-xs font-semibold text-foreground tabular-nums block">
             {formatReportMoney(previousExpenses)}
           </span>
-          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-[11px] text-muted-foreground tabular-nums">
             Actual: {formatReportMoney(currentExpenses)}
           </span>
         </div>
@@ -391,36 +381,28 @@ export default function ReportsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-4 lg:space-y-5">
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-                Reportes
-              </h1>
-              <span className="hidden sm:inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
-                {rangeLabel(economic.data?.appliedRange)}
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Así va tu negocio
-            </p>
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowExportSection((current) => !current)}
-            className="shrink-0"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
-            {showExportSection ? "Ocultar exportación" : "Exportar"}
-          </Button>
-        </header>
+        <PageHeader
+          title="Reportes"
+          count={rangeLabel(economic.data?.appliedRange)}
+          subtitle="Así va tu negocio"
+          actions={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowExportSection((current) => !current)}
+              className="shrink-0"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              {showExportSection ? "Ocultar exportación" : "Exportar"}
+            </Button>
+          }
+        />
 
         {showExportSection && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border/70 bg-card p-3.5 shadow-2xs">
             <div className="flex-1 text-xs text-muted-foreground">
               Genera el paquete económico del período{" "}
-              <span className="font-mono font-semibold text-foreground tabular-nums">
+              <span className="font-semibold text-foreground tabular-nums">
                 ({startDate} → {endDate})
               </span>
               .
@@ -444,7 +426,7 @@ export default function ReportsPage() {
                 Hoy
               </FilterOptionButton>
               <FilterOptionButton active={isWeekActive} onClick={setLast7Days}>
-                7D
+                7 días
               </FilterOptionButton>
               <FilterOptionButton active={isLast30Active} onClick={setLast30Days}>
                 Últimos 30 días
@@ -458,12 +440,12 @@ export default function ReportsPage() {
               >
                 Desde
               </label>
-              <input
+              <Input
                 id="reports-start"
                 type="date"
                 value={startDate}
                 onChange={(event) => setStartDate(event.target.value)}
-                className="h-8 rounded-lg border border-border/70 bg-muted/30 px-2.5 font-mono text-xs text-foreground tabular-nums focus:border-border focus:bg-background focus:outline-none transition-colors"
+                className="w-auto min-w-[10.5rem]"
               />
               <label
                 className="text-xs font-medium text-muted-foreground"
@@ -471,12 +453,12 @@ export default function ReportsPage() {
               >
                 Hasta
               </label>
-              <input
+              <Input
                 id="reports-end"
                 type="date"
                 value={endDate}
                 onChange={(event) => setEndDate(event.target.value)}
-                className="h-8 rounded-lg border border-border/70 bg-muted/30 px-2.5 font-mono text-xs text-foreground tabular-nums focus:border-border focus:bg-background focus:outline-none transition-colors"
+                className="w-auto min-w-[10.5rem]"
               />
             </div>
 
@@ -489,7 +471,7 @@ export default function ReportsPage() {
               />
             )}
 
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground tabular-nums">
               <Calendar className="h-3 w-3 shrink-0" aria-hidden="true" />
               {rangeLabel(economic.data?.appliedRange)}
             </span>
@@ -501,7 +483,7 @@ export default function ReportsPage() {
             <div aria-busy="true">
               <LoadingState
                 icon={<CircleDollarSign className="h-4 w-4 text-muted-foreground" />}
-                message="Cargando economía..."
+                message="Cargando economía…"
               />
             </div>
           ) : economic.error ? (
@@ -510,13 +492,16 @@ export default function ReportsPage() {
                 economic.error,
                 "No se pudo cargar el resumen económico",
               )}
+              onRetry={() => economic.refetch()}
+              retryLabel="Reintentar"
+              className="min-h-[140px]"
             />
           ) : !current ? (
             <OperationalEmpty label="economía" />
           ) : (
             <>
               <NarrativeSummary report={current} />
-              <div className="grid gap-3.5 lg:gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 lg:gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <MetricCard
                   label="Total vendido"
                   value={formatReportMoney(current.netIncome)}
@@ -538,17 +523,17 @@ export default function ReportsPage() {
                 <MetricCard
                   label="Gastos"
                   value={formatReportMoney(current.operatingExpenses)}
-                  helper="Lo que pagás para que funcione el negocio"
+                  helper="Lo que pagas para que funcione el negocio"
                   delta={overview!.deltas.operatingExpenses}
                 />
               </div>
               {current.dataQuality.excludedItems > 0 && (
-                <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5">
+                <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3.5 py-2.5">
                   <Info
-                    className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400"
+                    className="h-4 w-4 shrink-0 mt-0.5 text-warning-text"
                     aria-hidden="true"
                   />
-                  <p role="status" className="text-xs text-amber-700 dark:text-amber-300 tabular-nums">
+                  <p role="status" className="text-xs text-warning-text tabular-nums">
                     <span className="font-semibold">
                       {current.dataQuality.snapshotBackedItems} registros con costo exacto
                     </span>
@@ -563,7 +548,7 @@ export default function ReportsPage() {
                 </div>
               )}
               <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                <div>
                   <ComparisonChart
                     current={current}
                     previous={overview!.previous}
@@ -583,51 +568,54 @@ export default function ReportsPage() {
               <div aria-busy="true">
                 <LoadingState
                   icon={<Receipt className="h-4 w-4 text-muted-foreground" />}
-                  message="Cargando caja..."
+                  message="Cargando caja…"
                 />
               </div>
             ) : cash.error ? (
               <ErrorState
                 message={getApiErrorMessage(cash.error, "No se pudo cargar caja")}
+                onRetry={() => cash.refetch()}
+                retryLabel="Reintentar"
+                className="min-h-[140px]"
               />
             ) : cash.data ? (
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border border-border/60 bg-muted/25 p-3.5">
+                  <div className="rounded-lg bg-muted/40 p-3.5">
                     <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-success shrink-0" />
                       <p className="text-xs font-medium text-muted-foreground">
                         Plata que entró
                       </p>
                     </div>
-                    <p className="mt-1.5 font-mono text-lg sm:text-xl font-semibold tracking-tight text-foreground tabular-nums">
+                    <p className="mt-1.5 text-lg sm:text-xl font-semibold tracking-tight text-foreground tabular-nums">
                       {formatReportMoney(cash.data.collections.total)}
                     </p>
                   </div>
-                  <div className="rounded-lg border border-border/60 bg-muted/25 p-3.5">
+                  <div className="rounded-lg bg-muted/40 p-3.5">
                     <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-warning shrink-0" />
                       <p className="text-xs font-medium text-muted-foreground">
                         Plata que salió
                       </p>
                     </div>
-                    <p className="mt-1.5 font-mono text-lg sm:text-xl font-semibold tracking-tight text-foreground tabular-nums">
+                    <p className="mt-1.5 text-lg sm:text-xl font-semibold tracking-tight text-foreground tabular-nums">
                       {formatReportMoney(cash.data.expensePayments.total)}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/15 px-3.5 py-2.5 text-xs">
+                <div className="flex items-center justify-between rounded-lg bg-muted/40 px-3.5 py-2.5 text-xs">
                   <span className="font-medium text-muted-foreground">
                     Flujo neto de caja
                   </span>
                   <span
                     className={cn(
-                      "font-mono font-semibold tabular-nums",
+                      "font-semibold tabular-nums",
                       safeDecimalNumber(cash.data.collections.total) -
                         safeDecimalNumber(cash.data.expensePayments.total) >=
                         0
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-rose-600 dark:text-rose-400",
+                        ? "text-success-text"
+                        : "text-danger-text",
                     )}
                   >
                     {formatReportMoney(
@@ -647,7 +635,7 @@ export default function ReportsPage() {
               <div aria-busy="true">
                 <LoadingState
                   icon={<Package className="h-4 w-4 text-muted-foreground" />}
-                  message="Cargando inventario..."
+                  message="Cargando inventario…"
                 />
               </div>
             ) : inventory.error ? (
@@ -656,38 +644,41 @@ export default function ReportsPage() {
                   inventory.error,
                   "No se pudo cargar inventario",
                 )}
+                onRetry={() => inventory.refetch()}
+                retryLabel="Reintentar"
+                className="min-h-[140px]"
               />
             ) : inventory.data ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-border/60 bg-muted/25 p-3">
+                <div className="rounded-lg bg-muted/40 p-3">
                   <p className="text-xs font-medium text-muted-foreground">
                     Lo que costó tu inventario
                   </p>
-                  <p className="mt-1 font-mono text-sm sm:text-base font-semibold text-foreground tabular-nums">
+                  <p className="mt-1 text-sm sm:text-base font-semibold text-foreground tabular-nums">
                     {formatReportMoney(inventory.data.current.stockValue)}
                   </p>
                 </div>
-                <div className="rounded-lg border border-border/60 bg-muted/25 p-3">
+                <div className="rounded-lg bg-muted/40 p-3">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Lo que vale si vendés todo
+                    Lo que vale si vendes todo
                   </p>
-                  <p className="mt-1 font-mono text-sm sm:text-base font-semibold text-foreground tabular-nums">
+                  <p className="mt-1 text-sm sm:text-base font-semibold text-foreground tabular-nums">
                     {formatReportMoney(inventory.data.current.retailValue)}
                   </p>
                 </div>
-                <div className="rounded-lg border border-border/60 bg-muted/25 p-3">
+                <div className="rounded-lg bg-muted/40 p-3">
                   <p className="text-xs font-medium text-muted-foreground">
                     Ganancia posible
                   </p>
-                  <p className="mt-1 font-mono text-sm sm:text-base font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  <p className="mt-1 text-sm sm:text-base font-semibold text-success-text tabular-nums">
                     {formatReportMoney(inventory.data.current.potentialProfit)}
                   </p>
                 </div>
-                <div className="rounded-lg border border-border/60 bg-muted/25 p-3">
+                <div className="rounded-lg bg-muted/40 p-3">
                   <p className="text-xs font-medium text-muted-foreground">
                     Unidades en stock
                   </p>
-                  <p className="mt-1 font-mono text-sm sm:text-base font-semibold text-foreground tabular-nums">
+                  <p className="mt-1 text-sm sm:text-base font-semibold text-foreground tabular-nums">
                     {inventory.data.current.stockQuantity.toLocaleString("es-CO")}
                   </p>
                 </div>
@@ -703,12 +694,12 @@ export default function ReportsPage() {
             Análisis operativo
           </h2>
           <div className="grid gap-4 lg:gap-5 xl:grid-cols-2">
-            <SectionShell title="Productos Más Vendidos" icon={TrendingUp}>
+            <SectionShell title="Productos más vendidos" icon={TrendingUp}>
               {topProducts.isLoading ? (
                 <div aria-busy="true">
                   <LoadingState
                     icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
-                    message="Cargando productos..."
+                    message="Cargando productos…"
                   />
                 </div>
               ) : topProducts.error ? (
@@ -717,6 +708,9 @@ export default function ReportsPage() {
                     topProducts.error,
                     "No se pudieron cargar productos",
                   )}
+                  onRetry={() => topProducts.refetch()}
+                  retryLabel="Reintentar"
+                  className="min-h-[140px]"
                 />
               ) : operationalProducts.length === 0 ? (
                 <OperationalEmpty label="productos" />
@@ -730,29 +724,29 @@ export default function ReportsPage() {
                     return operationalProducts.map((product, index) => (
                       <div
                         key={product.productId}
-                        className="space-y-1.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 transition-colors hover:border-border"
+                        className="space-y-1.5 rounded-lg bg-muted/40 px-3 py-2.5"
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground tabular-nums">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-[11px] font-semibold text-muted-foreground tabular-nums">
                               {index + 1}
                             </span>
                             <span className="truncate text-xs sm:text-sm font-medium text-foreground">
                               {product.productName}
                             </span>
                           </div>
-                          <div className="flex shrink-0 items-center gap-2.5">
-                            <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className="text-[11px] text-muted-foreground tabular-nums">
                               {product.quantity} vendidos
                             </span>
-                            <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                            <span className="text-xs font-semibold text-foreground tabular-nums">
                               {formatCurrency(product.total)}
                             </span>
                           </div>
                         </div>
-                        <div className="h-1 overflow-hidden rounded-[2px] bg-muted/60">
+                        <div className="h-1 overflow-hidden rounded-sm bg-muted">
                           <div
-                            className="h-full rounded-[2px] bg-foreground/70"
+                            className="h-full rounded-sm bg-foreground/70"
                             style={{
                               width: `${Math.max(3, ((product.total || 0) / maxProductTotal) * 100)}%`,
                             }}
@@ -770,7 +764,7 @@ export default function ReportsPage() {
                 <div aria-busy="true">
                   <LoadingState
                     icon={<BarChart3 className="h-4 w-4 text-muted-foreground" />}
-                    message="Cargando categorías..."
+                    message="Cargando categorías…"
                   />
                 </div>
               ) : categories.error ? (
@@ -779,6 +773,9 @@ export default function ReportsPage() {
                     categories.error,
                     "No se pudieron cargar categorías",
                   )}
+                  onRetry={() => categories.refetch()}
+                  retryLabel="Reintentar"
+                  className="min-h-[140px]"
                 />
               ) : operationalCategories.length === 0 ? (
                 <OperationalEmpty label="categorías" />
@@ -794,7 +791,7 @@ export default function ReportsPage() {
                       return (
                         <div
                           key={category.category}
-                          className="space-y-1.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 transition-colors hover:border-border"
+                          className="space-y-1.5 rounded-lg bg-muted/40 px-3 py-2.5"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex min-w-0 items-center gap-2">
@@ -804,20 +801,20 @@ export default function ReportsPage() {
                               </span>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
-                              <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                              <span className="text-[11px] text-muted-foreground tabular-nums">
                                 {category.quantity}{" "}
-                                <span className="font-sans font-normal text-muted-foreground">
+                                <span className="text-muted-foreground">
                                   unidades
                                 </span>
                               </span>
-                              <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                              <span className="text-xs font-semibold text-foreground tabular-nums">
                                 {formatCurrency(category.total)}
                               </span>
                             </div>
                           </div>
-                          <div className="h-1 overflow-hidden rounded-[2px] bg-muted/60">
+                          <div className="h-1 overflow-hidden rounded-sm bg-muted">
                             <div
-                              className="h-full rounded-[2px] bg-foreground/65"
+                              className="h-full rounded-sm bg-foreground/65"
                               style={{ width: `${Math.max(3, share)}%` }}
                             />
                           </div>
@@ -829,12 +826,12 @@ export default function ReportsPage() {
               )}
             </SectionShell>
 
-            <SectionShell title="Top Clientes" icon={Users}>
+            <SectionShell title="Mejores clientes" icon={Users}>
               {customers.isLoading ? (
                 <div aria-busy="true">
                   <LoadingState
                     icon={<Users className="h-4 w-4 text-muted-foreground" />}
-                    message="Cargando clientes..."
+                    message="Cargando clientes…"
                   />
                 </div>
               ) : customers.error ? (
@@ -843,6 +840,9 @@ export default function ReportsPage() {
                     customers.error,
                     "No se pudieron cargar clientes",
                   )}
+                  onRetry={() => customers.refetch()}
+                  retryLabel="Reintentar"
+                  className="min-h-[140px]"
                 />
               ) : operationalCustomers.length === 0 ? (
                 <OperationalEmpty label="clientes" />
@@ -853,10 +853,10 @@ export default function ReportsPage() {
                       <TableHeader>
                         <TableRow>
                           <TableCell as="th">Cliente</TableCell>
-                          <TableCell as="th" className="text-right">
+                          <TableCell as="th" numeric>
                             Compras
                           </TableCell>
-                          <TableCell as="th" className="text-right">
+                          <TableCell as="th" numeric>
                             Total
                           </TableCell>
                         </TableRow>
@@ -865,8 +865,8 @@ export default function ReportsPage() {
                         {operationalCustomers.map((customer) => (
                           <TableRow key={customer.customerId}>
                             <TableCell>
-                              <div className="flex items-center gap-2.5">
-                                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/50 font-mono text-[11px] font-semibold text-foreground">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/50 text-[11px] font-semibold text-foreground">
                                   {customer.customerName.charAt(0).toUpperCase()}
                                 </span>
                                 <span className="text-xs font-medium text-foreground truncate">
@@ -874,10 +874,10 @@ export default function ReportsPage() {
                                 </span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-right font-mono text-xs text-muted-foreground tabular-nums">
+                            <TableCell numeric className="text-xs text-muted-foreground">
                               {customer.totalSales}
                             </TableCell>
-                            <TableCell className="text-right font-mono text-xs font-semibold text-foreground tabular-nums">
+                            <TableCell numeric className="text-xs font-semibold text-foreground">
                               {formatCurrency(customer.totalRevenue)}
                             </TableCell>
                           </TableRow>
@@ -889,12 +889,12 @@ export default function ReportsPage() {
               )}
             </SectionShell>
 
-            <SectionShell title="Métodos de Pago" icon={Receipt}>
+            <SectionShell title="Métodos de pago" icon={Receipt}>
               {paymentMethods.isLoading ? (
                 <div aria-busy="true">
                   <LoadingState
                     icon={<Receipt className="h-4 w-4 text-muted-foreground" />}
-                    message="Cargando pagos..."
+                    message="Cargando pagos…"
                   />
                 </div>
               ) : paymentMethods.error ? (
@@ -903,6 +903,9 @@ export default function ReportsPage() {
                     paymentMethods.error,
                     "No se pudieron cargar pagos",
                   )}
+                  onRetry={() => paymentMethods.refetch()}
+                  retryLabel="Reintentar"
+                  className="min-h-[140px]"
                 />
               ) : operationalPaymentMethods.length === 0 ? (
                 <OperationalEmpty label="métodos de pago" />
@@ -918,7 +921,7 @@ export default function ReportsPage() {
                       return (
                         <div
                           key={method.paymentMethod}
-                          className="space-y-1.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 transition-colors hover:border-border"
+                          className="space-y-1.5 rounded-lg bg-muted/40 px-3 py-2.5"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
@@ -926,24 +929,24 @@ export default function ReportsPage() {
                               <span className="text-xs sm:text-sm font-medium text-foreground">
                                 {formatPaymentMethod(method.paymentMethod)}
                               </span>
-                              <span className="rounded border border-border/60 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
+                              <span className="rounded-sm border border-border/60 bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
                                 {share}%
                               </span>
                             </div>
-                            <div className="flex items-center gap-2.5">
+                            <div className="flex items-center gap-2">
                               {method.count != null && (
-                                <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                                <span className="text-[11px] text-muted-foreground tabular-nums">
                                   {method.count} {method.count === 1 ? "pago" : "pagos"}
                                 </span>
                               )}
-                              <span className="font-mono text-xs font-semibold text-foreground tabular-nums">
+                              <span className="text-xs font-semibold text-foreground tabular-nums">
                                 {formatCurrency(method.total)}
                               </span>
                             </div>
                           </div>
-                          <div className="h-1 overflow-hidden rounded-[2px] bg-muted/60">
+                          <div className="h-1 overflow-hidden rounded-sm bg-muted">
                             <div
-                              className="h-full rounded-[2px] bg-foreground/65"
+                              className="h-full rounded-sm bg-foreground/65"
                               style={{ width: `${Math.max(3, share)}%` }}
                             />
                           </div>

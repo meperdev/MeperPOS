@@ -5,6 +5,7 @@ import { CalendarClock, UserCheck, UserPlus, UserX, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { Card } from "@/components/ui/Card";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -75,7 +76,7 @@ function Meta({
         className={cn(
           "truncate text-xs",
           EMPTY_LABELS.has(value) ? "text-muted-foreground" : "text-foreground",
-          mono && "font-mono tabular-nums",
+          mono && "tabular-nums",
         )}
       >
         {value}
@@ -87,11 +88,9 @@ function Meta({
 function cardActions(
   employee: Employee,
   pending: boolean,
-  onEdit: () => void,
   onToggle: () => void,
 ): RowActionItem[] {
   return [
-    { label: "Editar", onSelect: onEdit },
     {
       label: employee.active ? "Desactivar" : "Activar",
       icon: employee.active ? (
@@ -121,9 +120,16 @@ function EmployeeCard({
   const contact = [employee.phone, employee.email].filter(Boolean).join(" · ");
 
   return (
-    <Card className="flex flex-col" onClick={onEdit}>
+    <Card className="relative flex cursor-pointer flex-col hover:border-border hover:bg-muted/20">
+      {/* The card's edit target: a real button stretched over the card; controls below sit above it. */}
+      <button
+        type="button"
+        aria-label={`Editar ${employee.name}`}
+        onClick={onEdit}
+        className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+      />
       <div className="flex items-start gap-3 p-4 pb-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 font-mono text-xs font-semibold text-primary-text">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-xs font-semibold text-primary-text">
           {initials(employee.name)}
         </div>
         <div className="min-w-0 flex-1">
@@ -141,7 +147,7 @@ function EmployeeCard({
         </div>
       </div>
 
-      <dl className="grid flex-1 grid-cols-2 gap-x-3 gap-y-2.5 px-4 pb-4">
+      <dl className="grid flex-1 grid-cols-2 gap-x-3 gap-y-2 px-4 pb-4">
         <Meta
           label="Identificación"
           value={employee.identification ?? "Sin registrar"}
@@ -173,10 +179,7 @@ function EmployeeCard({
         </div>
       </dl>
 
-      <div
-        className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2.5"
-        onClick={(event) => event.stopPropagation()}
-      >
+      <div className="relative z-10 mt-auto flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2.5">
         <Button
           size="sm"
           variant="secondary"
@@ -191,7 +194,7 @@ function EmployeeCard({
         </Button>
         <RowActions
           label={`Acciones de ${employee.name}`}
-          items={cardActions(employee, pending, onEdit, onToggle)}
+          items={cardActions(employee, pending, onToggle)}
         />
       </div>
     </Card>
@@ -287,7 +290,7 @@ export default function EmployeesPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-4 lg:gap-5">
+      <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         <PageHeader
           title="Empleados"
           subtitle="Datos, jornadas y estado del equipo"
@@ -306,7 +309,7 @@ export default function EmployeesPage() {
             setQuery(value);
             setPage(1);
           }}
-          searchPlaceholder="Buscar por nombre, cargo o documento..."
+          searchPlaceholder="Buscar por nombre, cargo o documento…"
           filterControls={
             <>
               <FilterGroup label="Estado">
@@ -335,8 +338,8 @@ export default function EmployeesPage() {
         />
 
         {employees.isLoading ? (
-          <CardSkeleton count={6} label="Cargando empleados..." />
-        ) : employees.isError ? (
+          <CardSkeleton count={6} label="Cargando empleados…" />
+        ) : employees.isError && !employees.data ? (
           <ErrorState
             message="No se pudieron cargar los empleados"
             retryLabel="Reintentar"
@@ -384,12 +387,22 @@ export default function EmployeesPage() {
                           >
                             <TableCell>
                               <div className="flex items-center gap-2.5">
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/10 font-mono text-[10px] font-semibold text-primary-text">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/10 text-[11px] font-semibold text-primary-text">
                                   {initials(employee.name)}
                                 </span>
                                 <div className="min-w-0">
                                   <p className="truncate text-xs font-semibold text-foreground">
-                                    {employee.name}
+                                    <button
+                                      type="button"
+                                      aria-label={`Editar ${employee.name}`}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setDialog({ mode: "edit", employee });
+                                      }}
+                                      className="max-w-full truncate text-left font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                                    >
+                                      {employee.name}
+                                    </button>
                                   </p>
                                   <p className="truncate text-[11px] text-muted-foreground">
                                     {employee.jobTitle ?? "Sin cargo"}
@@ -409,7 +422,7 @@ export default function EmployeesPage() {
                                   : "Sin definir"}
                               </span>
                             </TableCell>
-                            <TableCell className="text-right font-mono text-xs tabular-nums">
+                            <TableCell className="text-right text-xs tabular-nums">
                               {employee.referenceAmount !== null
                                 ? formatCurrency(toFiniteNumber(employee.referenceAmount))
                                 : "—"}
@@ -424,20 +437,11 @@ export default function EmployeesPage() {
                                 className="flex items-center justify-end gap-1"
                                 onClick={(event) => event.stopPropagation()}
                               >
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  aria-label={`Editar ${employee.name}`}
-                                  onClick={() => setDialog({ mode: "edit", employee })}
-                                >
-                                  Editar
-                                </Button>
                                 <RowActions
                                   label={`Acciones de ${employee.name}`}
                                   items={cardActions(
                                     employee,
                                     changingId === employee.id,
-                                    () => setDialog({ mode: "edit", employee }),
                                     () => requestToggle(employee),
                                   )}
                                 />
@@ -449,7 +453,7 @@ export default function EmployeesPage() {
                     </Table>
                   </div>
                 </div>
-                <div className="stagger-children grid grid-cols-1 gap-3.5 sm:hidden">
+                <div className="grid grid-cols-1 gap-3 sm:hidden">
                   {paged.map((employee) => (
                     <EmployeeCard
                       key={employee.id}
@@ -463,7 +467,7 @@ export default function EmployeesPage() {
                 </div>
               </>
             ) : (
-              <div className="stagger-children grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+              <div className={COLLECTION_GRID_CLASSES}>
                 {paged.map((employee) => (
                   <EmployeeCard
                     key={employee.id}

@@ -234,7 +234,7 @@ describe("ModuleDetailPage", () => {
 
     await renderPage();
 
-    expect(screen.getByRole("status")).toHaveTextContent("Cargando módulo...");
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando módulo…");
   });
 
   it("shows an organization loading state once the module is known", async () => {
@@ -246,7 +246,7 @@ describe("ModuleDetailPage", () => {
       screen.getByRole("heading", { name: "Vehículos" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Cargando organizaciones...",
+      "Cargando organizaciones…",
     );
   });
 
@@ -346,7 +346,7 @@ describe("ModuleDetailPage", () => {
     expect(screen.getByText("1 de 3")).toBeInTheDocument();
   });
 
-  it("retains the query on no results and restores the list with the clear control", async () => {
+  it("retains the query on no results and restores the list with the search clear control", async () => {
     const user = userEvent.setup();
     setupOrganizations([
       org({ id: "org-1", name: "Cafetería Demo" }),
@@ -363,13 +363,12 @@ describe("ModuleDetailPage", () => {
     expect(search).toHaveValue("zzz");
     expect(screen.getByText("0 de 2")).toBeInTheDocument();
 
-    const clear = screen.getByRole("button", { name: "Limpiar" });
-    expect(clear).toBeEnabled();
-    await user.click(clear);
+    // "Todos" already restores the state filter, so the only reset is the search's own clear.
+    expect(screen.queryByRole("button", { name: "Limpiar" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
     expect(search).toHaveValue("");
     expect(screen.getByText("Cafetería Demo")).toBeInTheDocument();
     expect(screen.getByText("Tienda Norte")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Limpiar" })).toBeDisabled();
   });
 
   it("paginates with the shared page size and resets when a filter narrows the list", async () => {

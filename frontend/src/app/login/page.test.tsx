@@ -47,10 +47,10 @@ describe("LoginPage Redesign", () => {
   it("renders the centred access form with the MeperSoft lockup", () => {
     render(<LoginPage />);
 
-    expect(screen.getByText("Acceso al sistema")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Iniciar sesión" })
+      screen.getByRole("heading", { level: 1, name: "Iniciar sesión" })
     ).toBeInTheDocument();
+    expect(screen.queryByText("Acceso al sistema")).not.toBeInTheDocument();
     expect(screen.getByTestId("login-form-emblem")).toBeInTheDocument();
     expect(
       screen.getByAltText(/MeperPOS emblema oficial Lucky/i)
@@ -146,7 +146,7 @@ describe("LoginPage Redesign", () => {
     await userEvent.click(helpBtn);
 
     expect(
-      await screen.findByRole("heading", { name: "Ayuda y Soporte de Acceso" })
+      await screen.findByRole("heading", { name: "Ayuda y soporte de acceso" })
     ).toBeInTheDocument();
     expect(
       screen.getByText("Acceso restringido por organización")
@@ -160,7 +160,7 @@ describe("LoginPage Redesign", () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByRole("heading", { name: "Ayuda y Soporte de Acceso" })
+        screen.queryByRole("heading", { name: "Ayuda y soporte de acceso" })
       ).not.toBeInTheDocument();
     });
   });

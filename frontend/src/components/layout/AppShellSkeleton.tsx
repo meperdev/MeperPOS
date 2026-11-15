@@ -39,7 +39,7 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
                 : "px-5 py-5 flex items-center justify-between gap-3"
             )}
           >
-            <div className="flex items-center gap-3.5 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
               <div
                 className={cn(
                   "rounded-xl bg-muted",
@@ -69,7 +69,7 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
                 className={cn(
                   "flex items-center rounded-md",
                   pulse,
-                  isCollapsed ? "h-9 w-9 mx-auto" : "h-9 gap-2.5 px-2"
+                  isCollapsed ? "h-9 w-9 mx-auto" : "h-9 gap-2 px-2"
                 )}
                 style={{ animationDelay: `${row * 60}ms` }}
               >
@@ -110,7 +110,7 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
                 </div>
                 <div
                   className={cn(
-                    "mt-3 flex items-center gap-2.5 border-t border-border/60 pt-2.5",
+                    "mt-3 flex items-center gap-3 border-t border-border/60 pt-2.5",
                     pulse
                   )}
                 >

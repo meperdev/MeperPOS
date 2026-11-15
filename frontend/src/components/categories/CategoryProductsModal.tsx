@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useProducts } from "@/hooks/useProducts";
 import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -27,14 +28,14 @@ function StockBadge({ product }: { product: Product }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2.5 py-1 rounded-md font-mono text-[11px] font-semibold border tabular-nums shrink-0",
+        "inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border tabular-nums shrink-0",
         service
           ? "bg-muted/60 text-muted-foreground border-border/60"
           : isOutOfStock
-            ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+            ? "bg-danger/10 text-danger-text border-danger/20"
             : isLowStock
-              ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
-              : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+              ? "bg-warning/10 text-warning-text border-warning/20"
+              : "bg-success/10 text-success-text border-success/20",
       )}
     >
       {service ? "Servicio" : `${product.stock} uds.`}
@@ -75,11 +76,11 @@ function ProductRow({ product }: { product: Product }) {
           {product.name}
         </p>
         <div className="flex flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
-          <span className="font-mono text-[11px] font-medium text-muted-foreground">
+          <span className="text-[11px] font-medium text-muted-foreground">
             {product.sku}
           </span>
           {isInactive && (
-            <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+            <span className="text-[11px] font-semibold text-muted-foreground">
               · Inactivo
             </span>
           )}
@@ -87,8 +88,8 @@ function ProductRow({ product }: { product: Product }) {
       </div>
 
       {/* Price + stock */}
-      <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-border/50 [overflow-wrap:anywhere]">
-        <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
+      <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50 [overflow-wrap:anywhere]">
+        <span className="text-[13px] font-semibold text-foreground tabular-nums">
           {formatCurrency(product.salePrice)}
         </span>
         <StockBadge product={product} />
@@ -174,7 +175,7 @@ function CategoryPage({ category, onClose }: { category: Category; onClose: () =
   return (
     <Modal isOpen onClose={onClose} title={`Productos · ${category.name}`} size="lg" scrollContent={false}>
       <div ref={bodyRef} className="flex min-w-0 flex-col gap-3">
-        <div ref={countRef} className="inline-flex w-fit items-center rounded-md border border-border/60 bg-muted/50 px-2.5 py-0.5 font-mono text-xs font-medium text-muted-foreground tabular-nums" aria-live="polite">
+        <div ref={countRef} className="inline-flex w-fit items-center rounded-md border border-border/60 bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums" aria-live="polite">
           {current && !clamping ? `${total} ${total === 1 ? "producto" : "productos"}` : "Productos"}
         </div>
         {pending ? (
@@ -184,18 +185,18 @@ function CategoryPage({ category, onClose }: { category: Category; onClose: () =
         ) : products.length === 0 ? (
           <EmptyState className="min-h-0 py-2" icon={<PackageX className="w-5 h-5 text-muted-foreground" />} title="No hay productos en esta categoría" subtitle={total === 0 ? "Aún no se han asignado productos" : undefined} />
         ) : (
-          <ul ref={listRef} className={cn("grid items-start gap-2.5", geometry.width >= 640 ? "grid-cols-2" : "grid-cols-1")}>
+          <ul ref={listRef} className={cn("grid items-start gap-2", geometry.width >= 640 ? "grid-cols-2" : "grid-cols-1")}>
             {products.map(product => <ProductRow key={product.id} product={product} />)}
           </ul>
         )}
-        <nav ref={pagerRef} aria-label="Paginación de productos" className="flex flex-wrap items-center justify-between gap-2.5 border-t border-border/60 pt-3 text-xs">
-          <span aria-live="polite" className="mr-auto font-mono text-[11px] text-muted-foreground tabular-nums">
+        <nav ref={pagerRef} aria-label="Paginación de productos" className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs">
+          <span aria-live="polite" className="mr-auto text-[11px] text-muted-foreground tabular-nums">
             {current && !clamping ? `Mostrando ${start}–${end} de ${total}` : "Esperando productos"}
           </span>
           <div className="flex items-center gap-2">
-            <button type="button" aria-label="Página anterior" disabled={pending || isError || page === 1} onClick={() => setPaging({ limit, page: page - 1 })} className="rounded-lg border border-border/70 bg-muted/30 px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:pointer-events-none">Anterior</button>
-            <span aria-live="polite" className="px-1 font-mono text-xs font-medium text-muted-foreground tabular-nums">Página {page}{current && !clamping ? ` de ${totalPages}` : ""}</span>
-            <button type="button" aria-label="Página siguiente" disabled={pending || isError || !current || page >= totalPages} onClick={() => setPaging({ limit, page: page + 1 })} className="rounded-lg border border-border/70 bg-muted/30 px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:pointer-events-none">Siguiente</button>
+            <Button type="button" variant="secondary" size="sm" aria-label="Página anterior" disabled={pending || isError || page === 1} onClick={() => setPaging({ limit, page: page - 1 })}>Anterior</Button>
+            <span aria-live="polite" className="px-1 text-xs font-medium text-muted-foreground tabular-nums">Página {page}{current && !clamping ? ` de ${totalPages}` : ""}</span>
+            <Button type="button" variant="secondary" size="sm" aria-label="Página siguiente" disabled={pending || isError || !current || page >= totalPages} onClick={() => setPaging({ limit, page: page + 1 })}>Siguiente</Button>
           </div>
         </nav>
       </div>

@@ -90,6 +90,23 @@ describe("RecentSalesCard (compact recent sales)", () => {
     render(<RecentSalesCard />);
 
     expect(screen.getAllByTestId("recent-sale-row")).toHaveLength(5);
+    expect(screen.getAllByTestId("recent-sale-item")).toHaveLength(5);
+  });
+
+  it("renders the same sale data as a stacked list for narrow cards", () => {
+    useSalesMock.mockReturnValue({ data: { data: [sale(1)] } });
+
+    render(<RecentSalesCard />);
+
+    const item = within(within(screen.getByTestId("recent-sales-list")).getByTestId("recent-sale-item"));
+    expect(item.getByText("101")).toBeTruthy();
+    expect(item.getByText("Cliente 1")).toBeTruthy();
+    expect(item.getByText("Hora")).toBeTruthy();
+    expect(item.getByText("Pago")).toBeTruthy();
+    expect(item.getByText("Total")).toBeTruthy();
+    expect(item.getByText("Efectivo")).toBeTruthy();
+    expect(item.getByText(/\$\s119\.000/)).toBeTruthy();
+    expect(item.getByText("Completada")).toBeTruthy();
   });
 
   it("renders the minimum columns with real sale data", () => {
@@ -105,14 +122,14 @@ describe("RecentSalesCard (compact recent sales)", () => {
     expect(row.getByText("Completada")).toBeTruthy();
   });
 
-  it("falls back to 'Cliente general' when the sale has no customer", () => {
+  it("falls back to 'Sin cliente' when the sale has no customer", () => {
     useSalesMock.mockReturnValue({
       data: { data: [sale(1, { customer: undefined, customerId: null })] },
     });
 
     render(<RecentSalesCard />);
 
-    expect(screen.getByText("Cliente general")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("Sin cliente")).toBeTruthy();
   });
 
   it("derives the payment label: none, single and mixed", () => {
@@ -175,6 +192,19 @@ describe("RecentSalesCard (compact recent sales)", () => {
     const { container } = render(<RecentSalesCard />);
 
     expect(container.querySelector(".overflow-y-auto")).toBeNull();
+  });
+
+  it("sets money in the tabular sans, not the mono face, in both layouts", () => {
+    useSalesMock.mockReturnValue({ data: { data: [sale(1)] } });
+
+    render(<RecentSalesCard />);
+
+    const rowTotal = within(screen.getByTestId("recent-sale-row")).getByText(/\$\s119\.000/);
+    const stackedTotal = within(screen.getByTestId("recent-sale-item")).getByText(/\$\s119\.000/);
+    for (const total of [rowTotal, stackedTotal]) {
+      expect(total).not.toHaveClass("font-mono");
+      expect(total).toHaveClass("tabular-nums");
+    }
   });
 
   it("links 'Ver todas' to the sales page", () => {

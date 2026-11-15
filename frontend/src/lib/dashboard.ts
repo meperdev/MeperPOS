@@ -125,17 +125,77 @@ export function formatCategoryAmountTick(value: number): string {
 
 
 /**
- * Compact `d/m` axis tick for a `YYYY-MM-DD` day. Range-driven: it prints the
- * actual date instead of a month-bound `day % 5 === 0` rule.
+ * Picks which dates of a dense x-axis get a label, so Recharts never has to
+ * hide a month change to fit. Targets `floor(chartWidth / minLabelWidth)` labels
+ * and steps through the series by `ceil(n / target)`. The first and last dates
+ * are always kept; the pick before the last is dropped when it sits closer than
+ * half a step to it, so the end of the axis never crowds.
+ * With no measured width, a series of 7 days or fewer is labelled in full and a
+ * longer one targets 7 labels.
  */
-export function formatCategoryAxisTick(date: string): string {
-  const [, month, day] = date.split("-").map(Number);
+export function pickChartDayTicks(
+  dates: string[],
+  chartWidth: number,
+  minLabelWidth = 44,
+): string[] {
+  const count = dates.length;
+  if (count === 0) return [];
 
-  if (!month || !day) {
-    return date;
+  if (chartWidth <= 0 && count <= 7) return [...dates];
+
+  const target =
+    chartWidth > 0 ? Math.max(2, Math.floor(chartWidth / minLabelWidth)) : 7;
+  const step = Math.max(1, Math.ceil(count / target));
+  const last = count - 1;
+
+  const indices: number[] = [];
+  for (let i = 0; i < last; i += step) {
+    indices.push(i);
   }
 
-  return `${day}/${month}`;
+  const previous = indices[indices.length - 1];
+  if (indices.length > 1 && last - previous < step / 2) {
+    indices.pop();
+  }
+  indices.push(last);
+
+  return indices.map((index) => dates[index]);
+}
+
+const CHART_SHORT_MONTHS_ES = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+] as const;
+
+/**
+ * X-axis labels for the picked ticks of a `YYYY-MM-DD` series, keyed by the
+ * tick value. The first tick and any tick whose month differs from the previous
+ * picked tick read "D mmm" ("1 nov"); the rest read the bare day ("8").
+ * The string is split, not parsed with `new Date`, to avoid a UTC day shift.
+ * A value that is not a date maps to itself.
+ */
+export function formatChartDayTicks(ticks: readonly string[]): Map<string, string> {
+  const labels = new Map<string, string>();
+  let previousMonth: number | undefined;
+
+  for (const isoDate of ticks) {
+    const [, month, day] = isoDate.split("-").map(Number);
+
+    if (!month || !day || month < 1 || month > 12) {
+      labels.set(isoDate, isoDate);
+      continue;
+    }
+
+    labels.set(
+      isoDate,
+      month !== previousMonth
+        ? `${day} ${CHART_SHORT_MONTHS_ES[month - 1]}`
+        : String(day),
+    );
+    previousMonth = month;
+  }
+
+  return labels;
 }
 
 /**
@@ -257,14 +317,14 @@ export type { Task };
 // ─── Category stacked chart helpers ───────────────────────────────────────────
 
 export const CATEGORY_CHART_PALETTE = [
-  "#C25E36", // terracotta (brand primary)
-  "#2563EB", // royal blue
-  "#059669", // emerald green
-  "#7C3AED", // deep violet
-  "#D97706", // warm amber
-  "#0891B2", // deep cyan
-  "#DB2777", // rose pink
-  "#EA580C", // rust orange
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--chart-6)",
+  "var(--chart-7)",
+  "var(--chart-8)",
 ] as const;
 
 export interface CategoryDailySegment {

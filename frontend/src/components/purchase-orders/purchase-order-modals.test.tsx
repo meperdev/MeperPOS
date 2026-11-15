@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import type { Product, PurchaseOrder, Supplier } from "@/types";
@@ -204,7 +204,7 @@ describe("Purchase order modals", () => {
       />,
     );
 
-    const input = screen.getByRole("spinbutton") as HTMLInputElement;
+    const input = within(screen.getByRole("table")).getByRole("spinbutton") as HTMLInputElement;
     expect(input.value).toBe("3");
 
     await user.clear(input);
@@ -217,14 +217,110 @@ describe("Purchase order modals", () => {
     });
   });
 
+  it("renders receive rows as a stacked list with the same quantities", () => {
+    render(
+      <ReceiveItemsModal
+        order={makeOrder({ status: "PARTIAL_RECEIVED" })}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    );
+
+    const list = within(screen.getByTestId("receive-item-list"));
+    const input = list.getByLabelText("Cantidad a recibir de Producto Uno") as HTMLInputElement;
+    expect(input.value).toBe("3");
+    expect(list.getByText("Producto Uno")).toBeTruthy();
+    expect(list.getByText("SKU-1")).toBeTruthy();
+    expect(list.getByText("Ordenado")).toBeTruthy();
+    expect(list.getByText("Ya recibido")).toBeTruthy();
+    expect(list.getByText("Pendiente")).toBeTruthy();
+  });
+
+  it("shares receive quantities between the list and the table", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ReceiveItemsModal
+        order={makeOrder({ status: "PARTIAL_RECEIVED" })}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    );
+
+    const listInput = within(screen.getByTestId("receive-item-list")).getByLabelText(
+      "Cantidad a recibir de Producto Uno",
+    ) as HTMLInputElement;
+    await user.clear(listInput);
+    await user.type(listInput, "2");
+
+    const tableInput = within(screen.getByRole("table")).getByLabelText(
+      "Cantidad a recibir de Producto Uno",
+    ) as HTMLInputElement;
+    expect(tableInput.value).toBe("2");
+
+    await user.click(screen.getByRole("button", { name: /Confirmar recepción/i }));
+    expect(receiveMutateAsyncMock).toHaveBeenCalledWith({
+      id: "po-1",
+      items: [{ itemId: "poi-1", qtyReceivedNow: 2 }],
+    });
+  });
+
+  it("edits draft quantities from the stacked list and submits them", async () => {
+    const user = userEvent.setup();
+
+    render(<EditDraftModal order={makeOrder()} isOpen onClose={vi.fn()} />);
+
+    const list = within(screen.getByTestId("draft-item-list"));
+    expect(list.getByText("Producto Uno")).toBeTruthy();
+    expect(list.getByText("SKU-1")).toBeTruthy();
+
+    const qty = list.getByLabelText("Cantidad de Producto Uno") as HTMLInputElement;
+    expect(qty.value).toBe("5");
+    await user.clear(qty);
+    await user.type(qty, "7");
+
+    const tableQty = within(screen.getByRole("table")).getByLabelText(
+      "Cantidad de Producto Uno",
+    ) as HTMLInputElement;
+    expect(tableQty.value).toBe("7");
+
+    await user.click(screen.getByRole("button", { name: /Guardar cambios/i }));
+    expect(updateMutateAsyncMock).toHaveBeenCalledWith({
+      id: "po-1",
+      data: expect.objectContaining({
+        items: [{ productId: "prod-1", qtyOrdered: 7, unitCost: 100, taxRate: 19 }],
+      }),
+    });
+  });
+
+  it("removes a product from the stacked list and shows the empty state there", async () => {
+    const user = userEvent.setup();
+
+    render(<EditDraftModal order={makeOrder()} isOpen onClose={vi.fn()} />);
+
+    await user.click(
+      within(screen.getByTestId("draft-item-list")).getByRole("button", {
+        name: "Eliminar Producto Uno",
+      }),
+    );
+
+    expect(
+      within(screen.getByTestId("draft-item-list")).getByText("Agrega productos"),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: /Guardar cambios/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
   it("boots draft editing state from the order snapshot on mount", async () => {
     const user = userEvent.setup();
 
     render(<EditDraftModal order={makeOrder()} isOpen onClose={vi.fn()} />);
 
+    const table = within(screen.getByRole("table"));
     expect(screen.getByDisplayValue("Urgente")).toBeTruthy();
-    expect(screen.getByDisplayValue("5")).toBeTruthy();
-    expect(screen.getByText("Producto Uno")).toBeTruthy();
+    expect(table.getByDisplayValue("5")).toBeTruthy();
+    expect(table.getByText("Producto Uno")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /Guardar cambios/i }));
 

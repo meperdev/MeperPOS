@@ -74,11 +74,41 @@ describe("CategoryStackedChart (Recharts stacked by category)", () => {
     );
 
     const ticks = Array.from(
-      container.querySelectorAll(".recharts-cartesian-axis-tick-value"),
+      container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value"),
     ).map((node) => node.textContent);
 
-    expect(ticks).toContain("16/8");
-    expect(ticks).toContain("22/8");
+    // First tick always carries the month; later same-month ticks are bare days.
+    expect(ticks[0]).toBe("16 ago");
+    expect(ticks).toContain("22");
+  });
+
+  it("thins a 30-day x-axis to a readable subset that still names the month change", () => {
+    const { container } = render(
+      <CategoryStackedChart startDate="2026-10-17" endDate="2026-11-15" />,
+    );
+
+    const ticks = Array.from(
+      container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value"),
+    ).map((node) => node.textContent);
+
+    // jsdom has no layout, so the chart keeps its 500px default width.
+    expect(ticks.length).toBeLessThanOrEqual(12);
+    expect(ticks[0]).toBe("17 oct");
+    expect(ticks).toContain("1 nov");
+  });
+
+  it("keeps x-axis labels horizontal (no rotation)", () => {
+    const { container } = render(
+      <CategoryStackedChart startDate="2026-08-01" endDate="2026-08-30" />,
+    );
+
+    const tickTexts = Array.from(
+      container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value"),
+    );
+    expect(tickTexts.length).toBeGreaterThan(0);
+    for (const node of tickTexts) {
+      expect(node.getAttribute("transform") ?? "").not.toMatch(/rotate/);
+    }
   });
 });
 
@@ -151,7 +181,7 @@ describe("CategoryDayDetailModal", () => {
     );
 
     expect(screen.getByTestId("category-day-detail-modal")).toBeTruthy();
-    expect(screen.getByText("Detalle del día")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.getByText(/\$\s150\.000/)).toBeTruthy();
     expect(screen.getByText(/6 unidades/)).toBeTruthy();
     expect(screen.getByText("Bebidas")).toBeTruthy();

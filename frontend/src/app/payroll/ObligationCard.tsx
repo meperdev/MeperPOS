@@ -52,7 +52,7 @@ function MoneyFact({
       <dd
         data-testid={testId}
         className={cn(
-          "whitespace-nowrap font-mono text-xs font-semibold tabular-nums",
+          "whitespace-nowrap text-xs font-semibold tabular-nums",
           hasValue ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -231,12 +231,12 @@ export function ObligationCard({
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-[11px] text-muted-foreground tabular-nums">
             {progress}%
           </span>
         </div>
 
-        <dl className="space-y-1 rounded-xl border border-border/60 bg-muted/25 p-2.5">
+        <dl className="space-y-1 rounded-lg bg-muted/40 p-2.5">
           <MoneyFact
             label="Total"
             value={payrollMoney(obligation.summary.total)}
@@ -260,13 +260,13 @@ export function ObligationCard({
             Abonos
           </h3>
           {obligation.installments.length ? (
-            <ul className="divide-y divide-border/50 overflow-hidden rounded-lg border border-border/60">
+            <ul className="divide-y divide-border/50 overflow-hidden rounded-lg bg-muted/40">
               {obligation.installments.map((installment) => (
                 <li
                   key={installment.id}
                   className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2.5 py-1.5"
                 >
-                  <span className="font-mono text-[11px] text-foreground tabular-nums">
+                  <span className="text-[11px] text-foreground tabular-nums">
                     {payrollDate(installment.outflow.date)} ·{" "}
                     {PAYMENT_METHODS[installment.outflow.method]} ·{" "}
                     {payrollMoney(installment.outflow.amount)}
@@ -275,7 +275,7 @@ export function ObligationCard({
                       day and method the money came back by; it never offers a
                       second return. */}
                   {installment.cashReturn && (
-                    <span className="text-[10px] font-medium text-muted-foreground">
+                    <span className="text-[11px] font-medium text-muted-foreground">
                       Devuelto el {payrollDate(installment.cashReturn.returnDate)}{" "}
                       · {PAYMENT_METHODS[installment.cashReturn.returnMethod]}
                     </span>

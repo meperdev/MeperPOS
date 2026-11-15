@@ -119,8 +119,8 @@ describe("Users page centralized admin behavior (#27)", () => {
     await user.type(nameInput, "Caja Central");
     await user.clear(emailInput);
     await user.type(emailInput, "central@example.com");
-    // BentoSelect renders the role as a trigger <button>; open it and pick the option label.
-    await user.click(screen.getByRole("button", { name: /Cajero/i }));
+    // BentoSelect renders the role as a trigger <button> named by its "Rol" label; open it and pick the option.
+    await user.click(screen.getByRole("button", { name: /Rol/i }));
     await user.click(screen.getByText("Inventario"));
     await user.click(screen.getByRole("button", { name: /Guardar cambios/i }));
 

@@ -32,19 +32,19 @@ import {
   Wallet,
   Banknote,
   Building2,
-  PanelLeftClose,
-  PanelLeftOpen,
+  ChevronsLeft,
+  ChevronsRight,
   HandCoins,
   MoreVertical,
 } from "lucide-react";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
-import { Badge } from "@/components/ui/Badge";
+import { formatSidebarClock } from "@/components/layout/sidebar-clock";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn, safeGetItem, safeSetItem } from "@/lib/utils";
 import { APP_NAME, RAIL_FLYOUT_GAP } from "@/lib/constants";
 import { hasAnyRole, type AppRole } from "@/lib/auth";
-import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
 /** Rail scroll offset, kept across the session shell remounting around it. */
 export const SIDEBAR_SCROLL_KEY = "meper_sidebar_scroll_top";
@@ -60,7 +60,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    label: "Dashboard",
+    label: "Panel",
     href: "/dashboard",
     icon: <LayoutDashboard className="w-4 h-4" />,
     roles: ["ADMIN", "INVENTORY_USER"],
@@ -177,6 +177,28 @@ const roleLabels: Record<string, string> = {
   INVENTORY_USER: "Inventario",
 };
 
+// Footer actions are frameless icon buttons: the bell and the ⋮ menu are the
+// only chrome the account area keeps, so they share one treatment.
+// The footer clock is a store of the current minute. The server snapshot is null,
+// so SSR and hydration render no time; the client fills it in after hydration.
+const CLOCK_TICK_MS = 60_000;
+function subscribeToClock(onTick: () => void) {
+  const intervalId = window.setInterval(onTick, CLOCK_TICK_MS);
+  return () => window.clearInterval(intervalId);
+}
+function getClockMinute() {
+  return Math.floor(Date.now() / CLOCK_TICK_MS);
+}
+function getServerClockMinute(): null {
+  return null;
+}
+
+const footerIconButtonClass =
+  "h-9 w-9 lg:h-9 lg:w-9 rounded-lg border-transparent bg-transparent text-muted-foreground transition-colors hover:border-transparent hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
+const avatarCircleClass =
+  "grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary";
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -192,7 +214,6 @@ export function Sidebar() {
     label: string;
     top: number;
   } | null>(null);
-  const [now, setNow] = useState(() => new Date());
   const navRef = useRef<HTMLElement>(null);
   const hasRestoredScrollRef = useRef(false);
   const restoredScrollTopRef = useRef(0);
@@ -233,10 +254,6 @@ export function Sidebar() {
     };
   }, [isMobileMenuOpen]);
 
-  useEffect(() => {
-    const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(intervalId);
-  }, []);
 
   // The rail paints no scrollbar, so the edge fades are its only affordance:
   // they follow the real overflow instead of the content length.
@@ -378,25 +395,10 @@ export function Sidebar() {
     },
   ];
 
-  const formattedDate = new Intl.DateTimeFormat("es-CO", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(now);
-  // es-CO lowercases the weekday; the rail reads better with it capitalized.
-  const dateLabel = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
-
-  const formattedTime = new Intl.DateTimeFormat("es-CO", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(now);
-
-  const timeMatch = formattedTime.match(/^(\d{1,2}:\d{2})\s*(.*)$/);
-  const timeDigits = timeMatch ? timeMatch[1] : formattedTime;
-  const timePeriod = timeMatch && timeMatch[2]
-    ? timeMatch[2].replace(/[\.\s]/g, "").toUpperCase()
-    : "";
+  const clockMinute = useSyncExternalStore(subscribeToClock, getClockMinute, getServerClockMinute);
+  const now = clockMinute === null ? null : new Date(clockMinute * CLOCK_TICK_MS);
+  const clockLabel = now ? formatSidebarClock(now) : null;
+  const clockIso = now?.toISOString();
 
   const sidebarContent = (
     <>
@@ -423,7 +425,7 @@ export function Sidebar() {
           />
           <p
             className={cn(
-              "text-[30px] font-black text-foreground truncate leading-none tracking-tight",
+              "text-[30px] font-bold text-foreground truncate leading-none tracking-tight",
               isCollapsed ? "sr-only" : "min-w-0"
             )}
           >
@@ -437,14 +439,14 @@ export function Sidebar() {
           type="button"
           onClick={toggleCollapse}
           data-testid="sidebar-collapse-toggle"
-          className="hidden lg:flex items-center justify-center p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+          className="hidden lg:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           aria-label={isCollapsed ? "Expandir barra lateral" : "Colapsar barra lateral"}
           title={isCollapsed ? "Expandir barra lateral (Ctrl+B)" : "Colapsar barra lateral (Ctrl+B)"}
         >
           {isCollapsed ? (
-            <PanelLeftOpen className="w-4 h-4" />
+            <ChevronsRight className="w-4 h-4" />
           ) : (
-            <PanelLeftClose className="w-4 h-4" />
+            <ChevronsLeft className="w-4 h-4" />
           )}
         </button>
       </div>
@@ -465,7 +467,7 @@ export function Sidebar() {
               className={groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined}
             >
               {!isCollapsed && (
-                <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground/70">
+                <p className="mb-1.5 px-2 text-xs font-medium text-muted-foreground">
                   {group.label}
                 </p>
               )}
@@ -503,7 +505,7 @@ export function Sidebar() {
                         "sidebar-item flex items-center rounded-md text-[13px] font-medium select-none transition-colors duration-150",
                         isCollapsed
                           ? "mx-auto h-9 w-9 justify-center"
-                          : "h-11 w-full gap-2.5 px-2 lg:h-9",
+                          : "h-11 w-full gap-2 px-2 lg:h-9",
                         isActive
                           ? "active bg-muted/70 text-foreground"
                           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -563,124 +565,87 @@ export function Sidebar() {
           )}
         >
           {isCollapsed ? (
-            <div className="flex flex-col items-center gap-1.5">
-              <div
-                data-testid="sidebar-clock"
-                className="flex flex-col items-center leading-none"
-                title={`${formattedDate}, ${formattedTime}`}
-              >
-                <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
-                  {timeDigits}
-                </span>
-                {timePeriod && (
-                  <span className="mt-0.5 font-mono text-[8px] leading-none text-muted-foreground">
-                    {timePeriod}
+            <div className="flex flex-col items-center gap-1">
+              <AlertCenter
+                collapsed
+                className="inline-flex"
+                buttonClassName={footerIconButtonClass}
+              />
+
+              <RowActions
+                label="Opciones de cuenta"
+                menuOffset={RAIL_FLYOUT_GAP}
+                preferSide="right"
+                items={accountItems}
+                triggerClassName={cn(footerIconButtonClass, "rounded-full")}
+                triggerContent={
+                  <span aria-hidden="true" className={avatarCircleClass}>
+                    {initials}
                   </span>
-                )}
-                <span className="sr-only">, {formattedDate}</span>
-              </div>
+                }
+              />
 
-              <div className="mt-0.5 flex w-full flex-col items-center gap-1.5 border-t border-border/60 pt-1.5">
-                <RowActions
-                  label="Opciones de cuenta"
-                  menuOffset={24}
-                  items={accountItems}
-                  triggerClassName="h-10 w-10 rounded-lg border-0 bg-transparent p-0 hover:border-transparent hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:h-9 lg:w-9"
-                  triggerContent={
-                    <span className="grid h-full w-full place-items-center rounded-lg bg-gradient-to-br from-primary to-primary-dark font-mono text-[11px] font-semibold text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
-                      {initials}
-                    </span>
-                  }
-                />
-
-                <button
-                  type="button"
-                  onClick={toggleCollapse}
-                  className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground lg:h-8 lg:w-8"
-                  aria-label="Mostrar organizaciones (expandir barra)"
-                  title="Mostrar organizaciones (expandir barra)"
-                >
-                  <Building2 className="h-4 w-4" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={toggleCollapse}
+                className={cn(footerIconButtonClass, "flex items-center justify-center")}
+                aria-label="Mostrar organizaciones (expandir barra)"
+                title="Mostrar organizaciones (expandir barra)"
+              >
+                <Building2 className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
           ) : (
-            <div className="flex flex-col">
-              {/* The clock leads the block: the time is the biggest number in
-                  the rail, so it reads at a glance and anchors the footer. */}
-              <div
-                data-testid="sidebar-clock"
-                className="flex items-center justify-between gap-2"
-              >
-                <div
-                  className="min-w-0"
-                  title={`${dateLabel}, ${formattedTime}`}
-                >
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-mono text-[30px] font-semibold leading-none tracking-tight text-foreground tabular-nums">
-                      {timeDigits}
+            <div className="flex flex-col gap-2">
+              {/* The time leads the footer as one quiet line; the identity row
+                  and its two actions sit under it. */}
+              {/* The slot holds its line before mount, so the clock appearing does not shift the footer. */}
+              <div data-testid="sidebar-clock-slot" className="flex h-4 min-w-0 items-center">
+                {now && (
+                  <time
+                    data-testid="sidebar-clock"
+                    dateTime={clockIso}
+                    className="truncate text-xs tabular-nums text-muted-foreground"
+                  >
+                    {clockLabel}
+                  </time>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <span aria-hidden="true" className={avatarCircleClass}>
+                    {initials}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">
+                      {user.name}
                     </span>
-                    {timePeriod && (
-                      <span className="font-mono text-[10px] font-semibold uppercase leading-none text-muted-foreground">
-                        {timePeriod}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1.5 truncate text-[11px] tracking-wide text-muted-foreground">
-                    {dateLabel}
-                  </p>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {roleLabels[user.role] ?? user.role}
+                    </span>
+                  </span>
                 </div>
 
                 <AlertCenter
-                  collapsed={isCollapsed}
-                  className="hidden lg:inline-flex shrink-0"
-                  buttonClassName="h-9 w-9 rounded-lg hover:bg-muted/60"
+                  className="shrink-0"
+                  buttonClassName={footerIconButtonClass}
                 />
-              </div>
 
-              {/* Hairline that fades at both ends: a full-bleed rule would read
-                  as a section break instead of a seam. */}
-              <div
-                aria-hidden="true"
-                className="mt-3 h-px bg-gradient-to-r from-transparent via-border to-transparent"
-              />
-
-              <div className="mt-2.5">
                 <RowActions
                   label="Opciones de cuenta"
                   menuOffset={RAIL_FLYOUT_GAP}
                   preferSide="right"
                   items={accountItems}
-                  triggerClassName="group h-auto w-full justify-start gap-0 rounded-xl border-border/70 bg-gradient-to-br from-muted/40 to-muted/15 px-2 py-2 shadow-xs transition-all duration-200 hover:border-border hover:from-muted/60 hover:to-muted/25 hover:shadow-sm active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  triggerClassName={footerIconButtonClass}
                   triggerContent={
-                    <span className="flex w-full items-center gap-2.5">
-                      <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary-dark font-mono text-[11px] font-semibold text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
-                        {initials}
-                        <span
-                          aria-hidden="true"
-                          className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-500"
-                        />
-                      </span>
-                      <span className="min-w-0 flex-1 text-left">
-                        <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">
-                          {user.name}
-                        </span>
-                        <Badge variant="secondary" className="mt-1 max-w-full truncate">
-                          {roleLabels[user.role] ?? user.role}
-                        </Badge>
-                      </span>
-                      <MoreVertical
-                        className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
-                        aria-hidden="true"
-                      />
-                    </span>
+                    <MoreVertical className="h-4 w-4" aria-hidden="true" />
                   }
                 />
               </div>
 
               {user.isSuperAdmin ? (
                 <OrganizationSwitcher
-                  className="mt-2"
                   placement="up"
                   currentOrganizationId={selectedOrgId}
                   onSwitch={async (orgId) => {
@@ -695,7 +660,6 @@ export function Sidebar() {
                 />
               ) : (
                 <OrganizationSwitcher
-                  className="mt-2"
                   placement="up"
                   currentOrganizationId={user.organizationId ?? undefined}
                   onSwitch={switchOrganization}
@@ -739,7 +703,7 @@ export function Sidebar() {
           <button
             onClick={toggleMobileMenu}
             className="-ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={isMobileMenuOpen ? "Cerrar menu" : "Abrir menu"}
+            aria-label={isMobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
             aria-expanded={isMobileMenuOpen}
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -751,7 +715,7 @@ export function Sidebar() {
             height={192}
             className="w-9 h-9 shrink-0 object-contain drop-shadow-xs"
           />
-          <span className="truncate text-lg font-black tracking-tight text-foreground">
+          <span className="truncate text-lg font-bold tracking-tight text-foreground">
             Meper
             <span className="text-[#B45309] underline decoration-[#B45309] decoration-2 underline-offset-4 dark:text-[#FF9933] dark:decoration-[#FF9933]">
               POS
@@ -766,7 +730,7 @@ export function Sidebar() {
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
+          className="lg:hidden fixed inset-0 bg-black/40 dark:bg-black/60 z-40"
           onClick={closeMobileMenu}
         />
       )}
@@ -778,7 +742,7 @@ export function Sidebar() {
           "fixed bottom-0 left-0 lg:top-0 lg:bottom-auto lg:h-screen flex flex-col z-50",
           "top-[calc(var(--mobile-header)+var(--safe-top))]",
           "pl-[var(--safe-left)] pr-[var(--safe-right)]",
-          "bg-card border-r border-border/80 shadow-2xl lg:shadow-none",
+          "bg-card border-r border-border/80 shadow-lg shadow-black/10 lg:shadow-none",
           "transition-[width,transform] duration-300 ease-in-out",
           "lg:translate-x-0",
           isCollapsed ? "lg:w-[72px]" : "lg:w-[320px]",

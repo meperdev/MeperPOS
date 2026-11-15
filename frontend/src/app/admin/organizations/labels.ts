@@ -26,10 +26,10 @@ export const statusTone: Record<string, "warning" | "success" | "danger" | "defa
 };
 
 export const statusDot: Record<string, string> = {
-  TRIAL: "bg-amber-500",
-  ACTIVE: "bg-emerald-500",
-  PAST_DUE: "bg-rose-500",
-  SUSPENDED: "bg-rose-500",
+  TRIAL: "bg-warning",
+  ACTIVE: "bg-success",
+  PAST_DUE: "bg-danger",
+  SUSPENDED: "bg-danger",
 };
 
 export const planOptions = [
@@ -51,9 +51,9 @@ export const billingLabels: Record<string, string> = {
 };
 
 export const billingDots: Record<string, string> = {
-  PENDING: "bg-amber-500",
-  PAID: "bg-emerald-500",
-  OVERDUE: "bg-rose-500",
+  PENDING: "bg-warning",
+  PAID: "bg-success",
+  OVERDUE: "bg-danger",
 };
 
 export const billingLabel = (status?: string | null) =>

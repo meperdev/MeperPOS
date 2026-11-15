@@ -64,7 +64,7 @@ export function PaymentConfirmationModal({
   paymentMethods,
   onPaymentMethodChange,
   loading = false,
-  customerName = "Cliente General",
+  customerName = "Sin cliente",
   saleNumber,
 }: PaymentConfirmationModalProps) {
   const methods = useMemo(() => {
@@ -156,7 +156,7 @@ export function PaymentConfirmationModal({
         <div className="space-y-4">
           <div>
             <h3 className="text-lg font-semibold text-foreground mb-3">
-              Resumen de Compra
+              Resumen de compra
             </h3>
             <div className="scrollbar-app space-y-2 max-h-[300px] overflow-y-auto pr-1">
               {cart.map((item) => (
@@ -182,7 +182,7 @@ export function PaymentConfirmationModal({
                       {item.product.name}
                     </h4>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground tabular-nums">
                         {formatCurrency(item.unitPrice)} x {item.quantity}
                       </span>
                       {item.discountAmount > 0 && (
@@ -194,7 +194,7 @@ export function PaymentConfirmationModal({
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-foreground text-sm">
+                    <p className="font-semibold text-foreground text-sm tabular-nums">
                       {formatCurrency(
                         item.quantity * item.unitPrice - item.discountAmount,
                       )}
@@ -221,7 +221,7 @@ export function PaymentConfirmationModal({
         <div className="space-y-4">
           <div>
             <h3 className="text-lg font-semibold text-foreground mb-3">
-              Metodos de Pago
+              Métodos de pago
             </h3>
             <div className="space-y-2">
               {methods.map((method, index) => (
@@ -239,10 +239,11 @@ export function PaymentConfirmationModal({
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="h-8 w-8 p-0"
+                        className="h-9 w-9 p-0"
                         onClick={() => removeMethod(index)}
+                        aria-label={`Quitar ${getPaymentMethodLabel(method.type)}`}
                       >
-                        <Trash2 className="h-4 w-4 text-red-600" />
+                        <Trash2 className="h-4 w-4 text-danger-text" />
                       </Button>
                     )}
                   </div>
@@ -287,8 +288,8 @@ export function PaymentConfirmationModal({
 
             {selectedMethod !== "CASH" && methods.length === 1 && (
               <p className="mt-3 rounded-lg border border-border bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-                Se infirio pago exacto para {getPaymentMethodLabel(selectedMethod)}.
-                Si deseas pago mixto, agrega otro metodo y ajusta montos.
+                Se infirió pago exacto para {getPaymentMethodLabel(selectedMethod)}.
+                Si deseas pago mixto, agrega otro método y ajusta montos.
               </p>
             )}
           </div>
@@ -296,17 +297,17 @@ export function PaymentConfirmationModal({
           {methods.some((method) => method.type === "CASH") && (
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-3">
-                Atajos de Efectivo
+                Atajos de efectivo
               </h3>
               <Button
                 variant="primary"
                 size="lg"
                 onClick={applyExactToCash}
-                className="mb-3 w-full font-bold"
+                className="mb-3 w-full font-semibold"
                 disabled={remaining <= 0}
               >
                 <DollarSign className="mr-2 h-5 w-5" />
-                Completar con Efectivo ({formatCurrency(remaining)})
+                Completar con efectivo ({formatCurrency(remaining)})
               </Button>
 
               <div className="grid grid-cols-4 gap-2">
@@ -334,45 +335,45 @@ export function PaymentConfirmationModal({
           <div className="space-y-2 pt-4 border-t border-border bg-background rounded-lg p-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-medium text-foreground">
+              <span className="font-medium text-foreground tabular-nums">
                 {formatCurrency(subtotal)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Impuestos</span>
-              <span className="font-medium text-foreground">
+              <span className="font-medium text-foreground tabular-nums">
                 {formatCurrency(taxAmount)}
               </span>
             </div>
-            <div className="flex justify-between text-sm text-green-600">
+            <div className="flex justify-between text-sm text-success-text">
               <span>Descuentos</span>
-              <span className="font-medium">
+              <span className="font-medium tabular-nums">
                 -
                 {formatCurrency(
                   cart.reduce((sum, item) => sum + item.discountAmount, 0),
                 )}
               </span>
             </div>
-            <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
+            <div className="flex justify-between text-lg font-semibold pt-2 border-t border-border">
               <span className="text-foreground">Total</span>
-              <span className="text-primary-text">{formatCurrency(total)}</span>
+              <span className="text-primary-text tabular-nums">{formatCurrency(total)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Pagado</span>
-              <span className="font-medium text-foreground">
+              <span className="font-medium text-foreground tabular-nums">
                 {formatCurrency(totalPaid)}
               </span>
             </div>
             {remaining > 0 && (
-              <div className="flex justify-between text-sm text-orange-600">
+              <div className="flex justify-between text-sm text-warning-text">
                 <span>Faltante</span>
-                <span className="font-medium">{formatCurrency(remaining)}</span>
+                <span className="font-medium tabular-nums">{formatCurrency(remaining)}</span>
               </div>
             )}
             {change > 0 && (
-              <div className="flex justify-between text-lg font-bold text-green-600 pt-2 border-t border-border">
+              <div className="flex justify-between text-lg font-semibold text-success-text pt-2 border-t border-border">
                 <span>Cambio</span>
-                <span>{formatCurrency(change)}</span>
+                <span className="tabular-nums">{formatCurrency(change)}</span>
               </div>
             )}
           </div>

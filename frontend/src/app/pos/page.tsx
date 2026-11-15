@@ -63,7 +63,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { hasAnyRole } from "@/lib/auth";
 import { api, getApiErrorMessage } from "@/lib/api";
 
-import { observePOSGrid, POS_GRID_TEMPLATE_COLUMNS } from "./pos-layout";
+import { observePOSGrid, POS_GRID_ROW_CLASSES, POS_GRID_TEMPLATE_COLUMNS } from "./pos-layout";
 
 // S1 code splitting (#98): the payment modal and mobile cart drawer are the
 // heaviest POS-only components; they load as separate chunks on first open
@@ -881,7 +881,7 @@ export default function POSPage() {
     try {
       const customerName = selectedCustomer
         ? customers.find((c) => c.id === selectedCustomer)?.name
-        : "Cliente General";
+        : "Sin cliente";
       pauseSale(cart, selectedCustomer, discountAmount, customerName);
       setCart([]);
       // A finished or paused sale must not leave an undo offer pointing at it.
@@ -973,9 +973,10 @@ export default function POSPage() {
 
   return (
     <DashboardLayout>
-      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-12 lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
+      <h1 className="sr-only">Punto de venta</h1>
+      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_22rem] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
-        <div className="flex min-h-0 flex-col lg:col-span-7 lg:h-full">
+        <div className="flex min-h-0 flex-col lg:h-full">
           <div className="flex h-[calc(100dvh-8rem)] min-h-[580px] flex-col rounded-2xl border border-border/70 bg-card sm:min-h-[500px] lg:h-full">
             {/* Products Header */}
             <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-border/60">
@@ -984,7 +985,7 @@ export default function POSPage() {
               </h2>
               <div className="flex items-center gap-2">
                 {cart.length > 0 && (
-                  <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {cart.length} en carrito
                   </span>
                 )}
@@ -992,10 +993,11 @@ export default function POSPage() {
             </div>
 
             {/* Unified search & scanner — types to filter the grid, Enter scans/adds */}
-            <div className="flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <div className="relative flex-1 min-w-0">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <div className="@container flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15">
+              {/* Intrinsic wrap, like FilterBar: Favoritos and the category select share a row under the search when narrow. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[14rem] flex-[999_1_16rem]">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     ref={scannerInputRef}
                     placeholder="Escanear o buscar por nombre, SKU o código..."
@@ -1008,7 +1010,7 @@ export default function POSPage() {
                     }}
                     onKeyDown={handleScannerKeyDown}
                     disabled={isScannerBlocked || quickSearchProduct.isPending}
-                    className="pl-9 h-[38px] rounded-lg text-sm"
+                    className="pl-9 h-10 sm:h-9 rounded-lg text-sm"
                   />
                 </div>
                 <Button
@@ -1023,13 +1025,13 @@ export default function POSPage() {
                   className={cn(
                     "shrink-0 rounded-lg",
                     showFavoritesOnly &&
-                      "border-emerald-600/50 dark:border-emerald-500/50 bg-emerald-500/[0.08] dark:bg-emerald-500/[0.10] text-foreground hover:border-emerald-600/60 dark:hover:border-emerald-500/60 hover:bg-emerald-500/[0.12] hover:text-foreground",
+                      "border-success/30 bg-success/10 text-foreground hover:border-success/40 hover:bg-success/15 hover:text-foreground",
                   )}
                 >
                   <Star
                     className={cn(
                       "w-3.5 h-3.5",
-                      showFavoritesOnly && "fill-amber-500 text-amber-500 dark:fill-amber-400 dark:text-amber-400",
+                      showFavoritesOnly && "fill-warning text-warning-text",
                     )}
                   />
                   Favoritos
@@ -1040,7 +1042,7 @@ export default function POSPage() {
                     setSelectedFilter(value);
                     setCurrentPage(1);
                   }}
-                  className="w-full sm:w-48 shrink-0"
+                  className="min-w-0 flex-[1_1_10rem]"
                   placeholder="Todas las categorías"
                   options={filterOptions}
                 />
@@ -1052,9 +1054,9 @@ export default function POSPage() {
                     "text-xs font-medium",
                     {
                       idle: "text-muted-foreground",
-                      success: "text-emerald-600 dark:text-emerald-400",
-                      warning: "text-amber-600 dark:text-amber-400",
-                      error: "text-red-600 dark:text-red-400",
+                      success: "text-success-text",
+                      warning: "text-warning-text",
+                      error: "text-danger-text",
                     }[scanFeedback.tone],
                   )}
                 >
@@ -1064,12 +1066,15 @@ export default function POSPage() {
             </div>
 
             {/* Product Grid */}
-            <div ref={capacityAreaRef} data-testid="pos-capacity-area" className="min-h-[280px] flex-1 p-4">
+            {/* Below lg the panel is a fixed dvh height, so this area scrolls and the pager stays put. */}
+            <div ref={capacityAreaRef} data-testid="pos-capacity-area" className="min-h-[280px] flex-1 overflow-y-auto p-4 lg:overflow-visible">
               <div
                 ref={productGridRef}
                 style={{ gridTemplateColumns: POS_GRID_TEMPLATE_COLUMNS }}
                 className={cn(
-                  "grid h-full auto-rows-[248px] grid-rows-[repeat(auto-fill,minmax(248px,1fr))] gap-3 transition-opacity duration-150 [&>div]:aspect-auto [&>div]:h-full [&>div]:min-h-0 [&>div]:max-h-none",
+                  "grid",
+                  POS_GRID_ROW_CLASSES,
+                  "transition-opacity duration-150",
                   isFetching && !searching ? "opacity-60" : "opacity-100",
                 )}
               >
@@ -1102,7 +1107,7 @@ export default function POSPage() {
                         : debouncedSearch
                           ? "No se encontraron productos"
                           : totalProducts > 0
-                            ? "No hay productos en esta pagina"
+                            ? "No hay productos en esta página"
                             : "No hay productos disponibles"
                     }
                   />
@@ -1116,6 +1121,7 @@ export default function POSPage() {
               {totalPages > 1 && (
                 <div className="w-full">
                   <Pagination
+                    pinned={false}
                     className="[&>div]:flex-wrap [&>div]:justify-center"
                     currentPage={visibleCurrentPage}
                     totalPages={totalPages}
@@ -1132,52 +1138,53 @@ export default function POSPage() {
         </div>
 
         {/* Cart Panel (Desktop) */}
-        <div className="hidden lg:flex min-h-0 lg:col-span-5 lg:h-full flex-col">
-          <div className="h-auto min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-card lg:h-full flex flex-col">
+        <div className="hidden lg:flex min-h-0 lg:h-full flex-col">
+          <div className="@container h-auto min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-card lg:h-full flex flex-col">
             {/* Cart Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
               <h2 className="text-sm font-semibold tracking-tight text-foreground">
                 Carrito
               </h2>
               {cart.length > 0 && (
-                <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                <span className="text-xs text-muted-foreground tabular-nums">
                   {cart.length}
                 </span>
               )}
             </div>
 
             {/* Cart Items */}
-            <div className="scrollbar-app max-h-[55vh] overflow-y-auto p-4 space-y-2.5 lg:flex-1 lg:min-h-0 lg:max-h-none">
+            <div className="scrollbar-app max-h-[55vh] overflow-y-auto p-4 space-y-2 lg:flex-1 lg:min-h-0 lg:max-h-none">
               {cart.length === 0 ? (
                 <EmptyState icon={<ShoppingCart className="w-6 h-6 text-muted-foreground/30" />} title="Carrito vacío" subtitle="Agrega productos para comenzar" />
               ) : (
                 cart.map((item) => (
                   <div
                     key={item.productId}
-                    className="flex items-stretch gap-3.5 p-3 bg-muted/20 rounded-xl border border-border/60 hover:border-border transition-colors duration-150"
+                    className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 transition-colors duration-150"
                   >
-                    <div className="relative w-20 self-stretch min-h-[4.5rem] bg-muted/60 border border-border/50 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="flex items-start gap-3">
+                    <div className="relative h-10 w-10 shrink-0 bg-muted/60 border border-border/50 rounded-md flex items-center justify-center overflow-hidden">
                       {item.product.imageUrl ? (
                         <Image
                           src={item.product.imageUrl}
                           alt={item.product.name}
                           fill
-                          sizes="80px"
+                          sizes="40px"
                           className="object-cover"
                         />
                       ) : (
-                        <Package className="w-6 h-6 text-muted-foreground/50" />
+                        <Package className="w-4 h-4 text-muted-foreground/50" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground line-clamp-1 mb-1">
+                      <p className="text-sm font-medium leading-snug text-foreground line-clamp-2 break-words">
                         {item.product.name}
                       </p>
-                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-muted-foreground tabular-nums mb-2">
+                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground tabular-nums mt-0.5">
                         {cartItemOffer(item) && (
                           <Badge
                             variant="danger"
-                            className="shrink-0 text-[11px] px-1.5 py-0.5 font-mono uppercase rounded-md"
+                            className="shrink-0 text-[11px] px-1.5 py-0.5 rounded-md"
                           >
                             Oferta -{cartItemOffer(item)!.percent}%
                           </Badge>
@@ -1186,7 +1193,7 @@ export default function POSPage() {
                           <span data-testid="price-overridden" className="shrink-0">
                             <Badge
                               variant="warning"
-                              className="text-[11px] px-1.5 py-0.5 font-mono uppercase rounded-md"
+                              className="text-[11px] px-1.5 py-0.5 rounded-md"
                             >
                               Precio ajustado
                             </Badge>
@@ -1205,11 +1212,11 @@ export default function POSPage() {
                         <span data-testid="line-unit-price">
                           {formatCurrency(item.unitPrice)}
                         </span>{" "}
-                        × {item.quantity}
+                        <span className="whitespace-nowrap">× {item.quantity}</span>
                         {item.discountAmount > 0 && (
                           <span
                             data-testid="line-discount"
-                            className="ml-1.5 text-emerald-600 dark:text-emerald-400"
+                            className="ml-1.5 text-success-text"
                           >
                             (-{formatCurrency(item.discountAmount)}
                             {item.discountPercent
@@ -1219,46 +1226,57 @@ export default function POSPage() {
                           </span>
                         )}
                       </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end text-right">
+                      <span className="text-sm font-semibold tabular-nums whitespace-nowrap text-foreground">
+                        {formatCurrency(
+                          item.quantity * item.unitPrice - item.discountAmount,
+                        )}
+                      </span>
+                      {item.discountAmount > 0 && (
+                        <s className="text-xs text-muted-foreground line-through tabular-nums whitespace-nowrap">
+                          {formatCurrency(item.quantity * item.unitPrice)}
+                        </s>
+                      )}
+                    </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Stepper
                           value={item.quantity}
                           min={1}
                           max={item.availableStock}
-                          size="sm"
+                          size="md"
                           onChange={(value) =>
                             updateQuantity(item.productId, value)
                           }
                         />
                         {item.quantity >= item.availableStock && (
-                          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                          <span className="text-xs font-medium text-warning-text">
                             máx.
                           </span>
                         )}
+                      </div>
+                      <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => openDiscountModal(item.productId)}
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors duration-150"
+                          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/70 active:bg-muted transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                           title="Descuento"
+                          aria-label={`Descuento para ${item.product.name}`}
                         >
                           <Percent className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
                           onClick={() => removeFromCart(item.productId)}
-                          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors duration-150"
+                          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                           title="Eliminar"
                           aria-label={`Eliminar ${item.product.name}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    </div>
-                    <div className="flex flex-col items-end justify-center">
-                      <span className="stat-number text-base font-semibold text-foreground tabular-nums">
-                        {formatCurrency(
-                          item.quantity * item.unitPrice - item.discountAmount,
-                        )}
-                      </span>
                     </div>
                   </div>
                 ))
@@ -1275,7 +1293,7 @@ export default function POSPage() {
                 <button
                   type="button"
                   onClick={() => setShowCustomerModal(true)}
-                  className="flex items-center gap-2.5 w-full h-9 px-3 rounded-lg border border-border/70 bg-background/60 text-sm text-foreground hover:border-border transition-colors duration-150 overflow-hidden"
+                  className="flex items-center gap-2 w-full h-10 sm:h-9 px-3 rounded-lg border border-border/70 bg-background/60 text-sm text-foreground hover:border-border transition-colors duration-150 overflow-hidden"
                 >
                   <User className="w-4 h-4 text-muted-foreground shrink-0" />
                   <span className="truncate text-[13px] font-medium">
@@ -1294,7 +1312,7 @@ export default function POSPage() {
                     ? "Selecciona un cliente para financiar"
                     : undefined
                 }
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
               >
                 <HandCoins className="w-3.5 h-3.5" />
                 Financiar a crédito
@@ -1303,7 +1321,7 @@ export default function POSPage() {
               {/* Totals Breakdown */}
               <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
                 {discountAmount > 0 && (
-                  <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
+                  <div className="flex justify-between text-xs text-success-text mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
                     <span>Descuento</span>
                     <span className="font-medium">
                       -{formatCurrency(discountAmount)}
@@ -1358,7 +1376,7 @@ export default function POSPage() {
                 loading={createSale.isPending}
               >
                 <ShoppingCart className="w-4 h-4 mr-1.5" />
-                Finalizar Venta
+                Finalizar venta
               </Button>
             </div>
           </div>
@@ -1436,7 +1454,7 @@ export default function POSPage() {
           <button
             type="button"
             onClick={cartUndo.undoRemove}
-            className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-primary-text transition-colors hover:bg-primary-light"
+            className="min-h-10 shrink-0 rounded-lg px-3 text-sm font-semibold text-primary-text transition-colors hover:bg-primary-light active:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           >
             Deshacer
           </button>
@@ -1454,7 +1472,7 @@ export default function POSPage() {
             setOpenedFromMobileCart(false);
           }
         }}
-        title="Seleccionar Cliente"
+        title="Seleccionar cliente"
         size="md"
       >
         <div className="space-y-3">
@@ -1469,7 +1487,7 @@ export default function POSPage() {
               className={cn(
                 "flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg cursor-pointer transition-colors duration-150 border",
                 selectedCustomer === ""
-                  ? "border-emerald-600/50 dark:border-emerald-500/50 bg-emerald-500/[0.08] dark:bg-emerald-500/[0.10] text-foreground"
+                  ? "border-success/30 bg-success/10 text-foreground"
                   : "border-border/70 bg-muted/20 dark:bg-background/40 hover:border-foreground/25 hover:bg-muted/50",
               )}
               onClick={() => {
@@ -1485,12 +1503,12 @@ export default function POSPage() {
             >
               <div className="flex items-center gap-2 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">
-                  Cliente General
+                  Sin cliente
                 </p>
                 {selectedCustomer === "" && (
                   <span
                     aria-hidden="true"
-                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600 dark:bg-emerald-400"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
                   />
                 )}
               </div>
@@ -1506,7 +1524,7 @@ export default function POSPage() {
                   className={cn(
                     "flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg cursor-pointer transition-colors duration-150 border",
                     isSelected
-                      ? "border-emerald-600/50 dark:border-emerald-500/50 bg-emerald-500/[0.08] dark:bg-emerald-500/[0.10] text-foreground"
+                      ? "border-success/30 bg-success/10 text-foreground"
                       : "border-border/70 bg-muted/20 dark:bg-background/40 hover:border-foreground/25 hover:bg-muted/50",
                   )}
                   onClick={() => {
@@ -1527,11 +1545,11 @@ export default function POSPage() {
                     {isSelected && (
                       <span
                         aria-hidden="true"
-                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600 dark:bg-emerald-400"
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
                       />
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground font-mono tabular-nums shrink-0">
+                  <p className="text-xs text-muted-foreground tabular-nums shrink-0">
                     {customer.documentNumber}
                   </p>
                 </div>
@@ -1557,7 +1575,7 @@ export default function POSPage() {
           customerName={
             selectedCustomer
               ? customers.find((c) => c.id === selectedCustomer)?.name
-              : "Cliente General"
+              : "Sin cliente"
           }
           saleNumber={lastSale?.saleNumber}
         />
@@ -1568,24 +1586,15 @@ export default function POSPage() {
         <Modal
           isOpen={showReceiptModal}
           onClose={() => setShowReceiptModal(false)}
-          title="¡Venta Completada!"
+          title="Venta registrada"
           size="lg"
         >
           <div className="space-y-5">
-            <div
-              className="text-center py-5 rounded-xl border"
-              style={{
-                backgroundColor: "rgba(16,185,129,0.06)",
-                borderColor: "rgba(16,185,129,0.2)",
-              }}
-            >
-              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-emerald-500 flex items-center justify-center">
+            <div className="text-center py-5 rounded-xl border border-success/30 bg-success/10">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-success flex items-center justify-center">
                 <Printer className="w-7 h-7 text-white" />
               </div>
-              <h3 className="text-xl font-bold text-foreground mb-1">
-                Venta Exitosa
-              </h3>
-              <p className="text-sm text-muted-foreground font-mono">
+              <p className="text-sm text-muted-foreground tabular-nums">
                 Comprobante #{lastSale.saleNumber}
               </p>
             </div>
@@ -1594,7 +1603,7 @@ export default function POSPage() {
               {[
                 {
                   label: "Cliente",
-                  value: lastSale.customer?.name || "Cliente General",
+                  value: lastSale.customer?.name || "Sin cliente",
                 },
                 {
                   label: "Método",
@@ -1608,44 +1617,41 @@ export default function POSPage() {
                           : "Transferencia",
                 },
                 {
-                  label: "Items",
+                  label: "Productos",
                   value: `${lastSale.items.length} producto(s)`,
                 },
               ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  className="p-3 rounded-2xl bg-background/40 border border-accent/20"
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                <div key={label} className="p-3 rounded-lg bg-muted/40">
+                  <p className="text-xs text-muted-foreground mb-1">
                     {label}
                   </p>
-                  <p className="text-sm font-semibold text-foreground">
+                  <p className="text-sm font-semibold text-foreground tabular-nums">
                     {value}
                   </p>
                 </div>
               ))}
-              <div className="p-3 rounded-2xl bg-primary/10 border border-primary/30">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              <div className="p-3 rounded-lg bg-primary/10">
+                <p className="text-xs text-muted-foreground mb-1">
                   Total
                 </p>
-                <p className="stat-number text-lg font-bold text-primary-text">
+                <p className="stat-number text-lg font-semibold tabular-nums text-primary-text">
                   {formatCurrency(lastSale.total)}
                 </p>
               </div>
             </div>
 
             {lastSale.amountPaid != null && lastSale.amountPaid > 0 ? (
-              <div className="p-3 rounded-2xl bg-background/40 border border-accent/20 space-y-1.5">
+              <div className="p-3 rounded-lg bg-muted/40 space-y-1.5">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Pagado:</span>
-                  <span className="font-medium text-foreground">
+                  <span className="font-medium text-foreground tabular-nums">
                     {formatCurrency(lastSale.amountPaid)}
                   </span>
                 </div>
                 {lastSale.change !== null ? (
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Cambio:</span>
-                    <span className="stat-number font-bold text-accent">
+                    <span className="stat-number font-semibold text-accent tabular-nums">
                       {formatCurrency(lastSale.change)}
                     </span>
                   </div>
@@ -1764,7 +1770,7 @@ export default function POSPage() {
             setOpenedFromMobileCart(false);
           }
         }}
-        title="Ventas Pausadas"
+        title="Ventas pausadas"
         size="xl"
       >
         <div className="space-y-3">
@@ -1775,7 +1781,7 @@ export default function POSPage() {
               subtitle="Pausa una venta para que aparezca aquí"
             />
           ) : (
-            <div className="scrollbar-app max-h-96 overflow-y-auto space-y-2.5">
+            <div className="scrollbar-app max-h-96 overflow-y-auto space-y-2">
               {pausedSales.map((sale) => (
                 <div
                   key={sale.id}
@@ -1784,14 +1790,14 @@ export default function POSPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">
-                        {sale.customerName || "Cliente General"}
+                        {sale.customerName || "Sin cliente"}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {sale.cart.length} producto(s) ·{" "}
                         {new Date(sale.pausedAt).toLocaleString("es-CO")}
                       </p>
                     </div>
-                    <span className="stat-number text-base font-bold text-primary-text">
+                    <span className="stat-number text-base font-semibold tabular-nums text-primary-text">
                       {formatCurrency(
                         sale.cart.reduce(
                           (sum, item) =>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getPOSCapacity, observePOSGrid } from "./pos-layout";
+import { getPOSCapacity, observePOSGrid, POS_GRID_ROW_CLASSES, POS_MOBILE_PAGE_SIZE } from "./pos-layout";
 
 describe("POS grid measurement lifecycle", () => {
   it("updates only when capacity changes and disconnects the observer", () => {
@@ -77,5 +77,44 @@ describe("POS capacity from measured grid geometry", () => {
     expect(getPOSCapacity(geometry)).toBe(4);
     expect(getPOSCapacity({ ...geometry, width: 380.1 })).toBe(4);
     expect(getPOSCapacity({ ...geometry, cardHeight: 300 })).toBe(2);
+  });
+});
+
+describe("POS grid below lg", () => {
+  it("uses a fixed generous page size and skips capacity measurement under 1024px", () => {
+    const matchMedia = vi.fn().mockReturnValue({ matches: false });
+    vi.stubGlobal("matchMedia", matchMedia);
+    vi.stubGlobal("ResizeObserver", undefined);
+    const update = vi.fn();
+    const stop = observePOSGrid(document.createElement("div"), document.createElement("div"), update);
+    expect(matchMedia).toHaveBeenCalledWith("(min-width: 1024px)");
+    expect(POS_MOBILE_PAGE_SIZE).toBe(12);
+    expect(update).toHaveBeenCalledWith(POS_MOBILE_PAGE_SIZE);
+    stop();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps measured capacity at lg and up", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    vi.stubGlobal("ResizeObserver", undefined);
+    const area = document.createElement("div");
+    const grid = document.createElement("div");
+    Object.defineProperty(area, "clientHeight", { get: () => 520 });
+    Object.defineProperty(grid, "clientWidth", { get: () => 600 });
+    const update = vi.fn();
+    const stop = observePOSGrid(area, grid, update);
+    // 3 columns from a 152px minimum track in 600px, 2 rows from 520px at 224px rows.
+    expect(update).toHaveBeenLastCalledWith(6);
+    stop();
+    vi.unstubAllGlobals();
+  });
+
+  it("stretches POS rows only at lg and up", () => {
+    const base = POS_GRID_ROW_CLASSES.split(" ").filter((token) => !token.startsWith("lg:"));
+    expect(base).not.toEqual(expect.arrayContaining([expect.stringMatching(/grid-rows-|auto-rows-\[|h-full|aspect-auto/)]));
+    expect(POS_GRID_ROW_CLASSES).toContain("lg:auto-rows-[224px]");
+    expect(POS_GRID_ROW_CLASSES).toContain("lg:grid-rows-[repeat(auto-fill,minmax(224px,1fr))]");
+    expect(POS_GRID_ROW_CLASSES).toContain("lg:h-full");
+    expect(POS_GRID_ROW_CLASSES).toContain("lg:[&>div]:aspect-auto");
   });
 });

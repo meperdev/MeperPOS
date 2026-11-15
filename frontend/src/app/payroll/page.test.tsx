@@ -26,6 +26,14 @@ const state = vi.hoisted(() => ({
   createReplacement: (() => undefined) as unknown,
 }));
 
+/** The kit Select labels its visible trigger; the hidden native select keeps the value semantics. */
+function nativeSelectFor(scope: HTMLElement, label: string): HTMLSelectElement {
+  const trigger = within(scope).getByRole("button", { name: label });
+  const select = trigger.parentElement?.querySelector("select");
+  if (!select) throw new Error(`No native select behind "${label}"`);
+  return select;
+}
+
 vi.mock("@/components/layout/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -151,14 +159,16 @@ async function settleDialogFocus() {
 it("shows loading, error and empty states", () => {
   state.obligations.isLoading = true;
   const view = render(<PayrollPage />);
-  expect(screen.getByText("Cargando pagos de nómina...")).toBeInTheDocument();
+  expect(screen.getByText("Cargando pagos de nómina…")).toBeInTheDocument();
 
   state.obligations.isLoading = false;
   state.obligations.isError = true;
+  state.obligations.data = undefined as unknown as unknown[];
   view.rerender(<PayrollPage />);
   expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar los pagos");
 
   state.obligations.isError = false;
+  state.obligations.data = [];
   view.rerender(<PayrollPage />);
   expect(screen.getByText("No hay pagos registrados")).toBeInTheDocument();
 });
@@ -192,7 +202,7 @@ it("creates a fixed-period payment carrying the per-payment expense choice", asy
 
   const dialog = screen.getByRole("dialog", { name: "Nuevo pago fijo" });
   await settleDialogFocus();
-  await user.selectOptions(within(dialog).getByLabelText("Empleado"), "emp-1");
+  await user.selectOptions(nativeSelectFor(dialog, "Empleado"), "emp-1");
   await user.type(within(dialog).getByLabelText(/Fecha inicial/), "2025-02-01");
   await user.type(within(dialog).getByLabelText(/Fecha final/), "2025-02-28");
   await user.type(within(dialog).getByLabelText(/Monto del período/), "1500000.75");
@@ -219,7 +229,7 @@ it("sends an explicit no-expense choice when the toggle stays off", async () => 
 
   const dialog = screen.getByRole("dialog", { name: "Nuevo pago fijo" });
   await settleDialogFocus();
-  await user.selectOptions(within(dialog).getByLabelText("Empleado"), "emp-2");
+  await user.selectOptions(nativeSelectFor(dialog, "Empleado"), "emp-2");
   await user.type(within(dialog).getByLabelText(/Fecha inicial/), "2025-02-01");
   await user.type(within(dialog).getByLabelText(/Fecha final/), "2025-02-28");
   await user.type(within(dialog).getByLabelText(/Monto del período/), "10");
@@ -249,7 +259,7 @@ it("groups only the shifts that are not already owned by a payment", async () =>
   await user.click(within(dialog).getByRole("button", { name: "Por jornadas" }));
   dialog = screen.getByRole("dialog", { name: "Nuevo pago por jornadas" });
   await settleDialogFocus();
-  await user.selectOptions(within(dialog).getByLabelText("Empleado"), "emp-1");
+  await user.selectOptions(nativeSelectFor(dialog, "Empleado"), "emp-1");
 
   const freeShift = within(dialog).getByRole("checkbox", { name: /6 de enero de 2025 · Día parcial/ });
   expect(freeShift).toBeInTheDocument();
@@ -278,7 +288,7 @@ it("registers an installment on the endpoint that matches the obligation kind", 
   await settleDialogFocus();
   await user.type(within(dialog).getByLabelText(/Monto del abono/), "500000.75");
   await user.type(within(dialog).getByLabelText(/Fecha del abono/), "2025-01-20");
-  await user.selectOptions(within(dialog).getByLabelText("Método de pago"), "TRANSFER");
+  await user.selectOptions(nativeSelectFor(dialog, "Método de pago"), "TRANSFER");
   await user.click(within(dialog).getByRole("button", { name: "Guardar abono" }));
 
   await waitFor(() =>
@@ -385,7 +395,7 @@ it("requires at least one shift before creating a group payment", async () => {
   await user.click(within(dialog).getByRole("button", { name: "Por jornadas" }));
   dialog = screen.getByRole("dialog", { name: "Nuevo pago por jornadas" });
   await settleDialogFocus();
-  await user.selectOptions(within(dialog).getByLabelText("Empleado"), "emp-1");
+  await user.selectOptions(nativeSelectFor(dialog, "Empleado"), "emp-1");
   await user.click(within(dialog).getByRole("button", { name: "Crear pago" }));
 
   expect(within(dialog).getByRole("alert")).toHaveTextContent("Selecciona al menos una jornada");
@@ -423,7 +433,7 @@ it("corrects a wrongly recorded installment without resending its date, method o
   expect(within(dialog).queryByLabelText(/Fecha/)).not.toBeInTheDocument();
   expect(within(dialog).queryByLabelText(/Método/)).not.toBeInTheDocument();
 
-  await user.selectOptions(within(dialog).getByLabelText("Abono a corregir"), "inst-2");
+  await user.selectOptions(nativeSelectFor(dialog, "Abono a corregir"), "inst-2");
   expect(within(dialog).getByTestId("correction-current-amount")).toHaveTextContent("$ 30.000,00");
   expect(within(dialog).getByTestId("correction-current-date")).toHaveTextContent("25 de enero de 2025");
 
@@ -668,7 +678,7 @@ it("records the real return date and method without sending the amount", async (
   expect(within(dialog).queryByRole("spinbutton")).not.toBeInTheDocument();
   expect(within(dialog).getByLabelText(/Fecha de la devolución/)).toHaveValue(bogotaToday);
 
-  await user.selectOptions(within(dialog).getByLabelText("Método de la devolución"), "CARD");
+  await user.selectOptions(nativeSelectFor(dialog, "Método de la devolución"), "CARD");
   await user.click(within(dialog).getByRole("button", { name: "Guardar devolución" }));
 
   await waitFor(() =>

@@ -38,7 +38,7 @@ export function OrganizationModulesCard({
       </CardHeader>
       <CardContent className="space-y-2">
         {modules.isLoading && (
-          <p className="text-xs text-muted-foreground">Cargando módulos...</p>
+          <p className="text-xs text-muted-foreground">Cargando módulos…</p>
         )}
 
         {modules.isError && (

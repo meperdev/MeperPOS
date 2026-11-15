@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { Input } from "@/components/ui/Input";
 import { useAddExpensePayment } from "@/hooks/useExpenses";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -67,11 +68,11 @@ export function AddPaymentModal({ expense, isOpen, onClose }: Props) {
       size="sm"
     >
       <div className="space-y-4">
-        <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 flex items-center justify-between">
+        <div className="rounded-lg bg-muted/40 px-4 py-3 flex items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground">
             Saldo pendiente
           </span>
-          <span className="text-base font-semibold font-mono text-foreground tabular-nums">
+          <span className="text-base font-semibold text-foreground tabular-nums">
             {formatCurrency(remaining)}
           </span>
         </div>
@@ -94,20 +95,17 @@ export function AddPaymentModal({ expense, isOpen, onClose }: Props) {
           options={PAYMENT_METHOD_OPTIONS}
         />
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Fecha
-          </label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full h-[38px] rounded-lg border border-border/70 bg-muted/30 px-3 text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-border focus:bg-background transition-colors"
-          />
-        </div>
+        <Input
+          id="add-payment-date"
+          type="date"
+          label="Fecha"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="tabular-nums"
+        />
 
         {error && (
-          <p className="text-xs font-medium text-rose-600 dark:text-rose-400">{error}</p>
+          <p className="text-xs font-medium text-danger-text">{error}</p>
         )}
 
         <div className="flex justify-end gap-2 pt-3 border-t border-border/60">

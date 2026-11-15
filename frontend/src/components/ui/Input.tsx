@@ -34,6 +34,8 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
     const reactId = useId();
     const inputId = id || reactId;
     const innerInputRef = useRef<HTMLInputElement | null>(null);
+    // Stepper buttons are named after the field: its visible label, else its aria-label.
+    const stepperName = typeof label === "string" && label ? label : props["aria-label"];
     const isNumber = !textarea && type === "number";
     const focusedRef = useRef(false);
     const [numericText, setNumericText] = useState<string | null>(null);
@@ -71,17 +73,19 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
 
     const commonClasses = cn(
       "w-full rounded-lg border bg-card px-3.5 py-2 text-base sm:text-xs text-foreground",
+      // Single-line fields share the 40px touch / 36px desktop control height.
+      !textarea && "h-10 sm:h-9",
       "placeholder:text-muted-foreground/60",
       "transition-colors duration-150 shadow-2xs",
-      "focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15",
+      "focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/25",
       "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-muted/40",
       icon && "pl-9",
-      prefixText && "pl-8 font-mono tabular-nums",
+      prefixText && "pl-8 tabular-nums",
       (suffixIcon || isNumber) && "pr-9",
       isNumber &&
-        "font-mono tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+        "tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
       error
-        ? "border-danger focus:border-danger focus:ring-danger/20"
+        ? "border-danger focus:border-danger focus:ring-danger/25"
         : "border-border/70 hover:border-border",
       className,
     );
@@ -94,17 +98,17 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
             className="mb-1.5 block text-xs font-medium text-muted-foreground"
           >
             {label}
-            {required && <span className="ml-0.5 text-rose-700 dark:text-rose-400">*</span>}
+            {required && <span className="ml-0.5 text-danger-text">*</span>}
           </label>
         )}
         <div className="relative">
           {icon && (
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+            <span className="absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-muted-foreground pointer-events-none">
               {icon}
             </span>
           )}
           {prefixText && (
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-xs font-medium text-muted-foreground pointer-events-none">
+            <span className="absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-xs font-medium text-muted-foreground tabular-nums pointer-events-none">
               {prefixText}
             </span>
           )}
@@ -165,29 +169,38 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
           )}
           {isNumber && !suffixIcon && (
             <div
-              aria-hidden="true"
               className={cn(
-                "absolute right-1 inset-y-1 flex flex-col w-6 rounded-md border border-border/60 bg-muted/35 overflow-hidden divide-y divide-border/60",
+                "absolute right-1 inset-y-1 flex flex-col w-7 rounded-md border border-border/60 bg-muted/35 overflow-hidden divide-y divide-border/60",
                 (disabled || readOnly) && "opacity-40 pointer-events-none",
               )}
             >
-              <span
+              {/* Pointer-only shortcuts: the field itself is the keyboard path (ArrowUp/Down). */}
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={stepperName ? `Aumentar ${stepperName}` : "Aumentar"}
+                // Keep focus in the field, as the old spans did.
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => stepNumber(1)}
-                className="flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors select-none"
+                className="flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted cursor-pointer transition-colors select-none"
               >
-                <ChevronUp className="w-3 h-3" />
-              </span>
-              <span
+                <ChevronUp className="w-3 h-3" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={stepperName ? `Disminuir ${stepperName}` : "Disminuir"}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => stepNumber(-1)}
-                className="flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors select-none"
+                className="flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted cursor-pointer transition-colors select-none"
               >
-                <ChevronDown className="w-3 h-3" />
-              </span>
+                <ChevronDown className="w-3 h-3" aria-hidden="true" />
+              </button>
             </div>
           )}
         </div>
         {error && (
-          <span className="mt-1.5 block text-xs font-medium text-danger">
+          <span className="mt-1.5 block text-xs font-medium text-danger-text">
             {error}
           </span>
         )}

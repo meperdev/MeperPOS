@@ -227,6 +227,26 @@ describe("DashboardLayout route gating for /expenses", () => {
   // `env()` to nothing, so the class name is the only observable here: this is
   // a regression pin, not visual proof. Dropping the inset has to fail a test
   // rather than reach a notched device unnoticed.
+  it("makes the main column fill the viewport so a page can pin its paginator to the bottom", () => {
+    setUser("ADMIN");
+
+    const { container } = render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    const mainElement = container.querySelector("main")!;
+    expect(mainElement.className).toMatch(/\bflex\b/);
+    expect(mainElement.className).toContain("flex-col");
+    expect(mainElement.className).toContain("min-h-screen");
+
+    const column = mainElement.firstElementChild as HTMLElement;
+    expect(column.className).toContain("flex-1");
+    expect(column.className).toContain("flex-col");
+    expect(column.querySelector("p")!.parentElement).toBe(column);
+  });
+
   it("keeps the content column clear of the notch and the home indicator", () => {
     setUser("ADMIN");
 

@@ -258,7 +258,7 @@ describe("Expenses page evidence", () => {
 
 
 async function openRowActions(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getAllByRole("button", { name: "Más acciones" })[0]);
+  await user.click(screen.getAllByRole("button", { name: /^Más acciones/ })[0]);
 }
 
   it("opens the add payment modal from the row actions", async () => {
@@ -288,7 +288,7 @@ async function openRowActions(user: ReturnType<typeof userEvent.setup>) {
 
     render(<ExpensesPage />);
 
-    await user.click(screen.getAllByRole("button", { name: "Ver detalle" })[0]);
+    await user.click(screen.getAllByRole("button", { name: /^Ver detalle/ })[0]);
 
     expect(await screen.findByText("ExpenseDetailModal")).toBeTruthy();
   });

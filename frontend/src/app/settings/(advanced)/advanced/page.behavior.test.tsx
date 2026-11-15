@@ -102,7 +102,7 @@ describe("Advanced settings page", () => {
     expect(
       screen.getByRole("button", { name: "Reintentar" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Cargando configuración...")).toBeNull();
+    expect(screen.queryByText("Cargando configuración…")).toBeNull();
     expect(screen.queryByDisplayValue("theme")).toBeNull();
 
     const user = userEvent.setup();

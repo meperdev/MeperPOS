@@ -21,11 +21,11 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
           </p>
           <Wallet className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>
-        <p className="mt-2 text-xl font-semibold font-mono text-foreground tracking-tight tabular-nums">
+        <p className="mt-2 text-xl font-semibold text-foreground tracking-tight tabular-nums">
           {formatCurrency(Number(summary?.total ?? 0))}
         </p>
-        <div className="mt-auto border-t border-border/50 pt-2 text-[11px] text-muted-foreground font-mono">
-          <p className="text-[10px] font-medium text-muted-foreground/60">Resumen</p>
+        <div className="mt-auto border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+          <p className="font-medium text-muted-foreground/80">Resumen</p>
           <div className="mt-1 flex items-center justify-between gap-2">
             <span className="truncate tabular-nums">Período: {month ?? "—"}</span>
           </div>
@@ -51,11 +51,11 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
               </p>
               <TrendingDown className="w-4 h-4 text-muted-foreground shrink-0" />
             </div>
-            <p className="mt-2 text-xl font-semibold font-mono text-foreground tracking-tight tabular-nums">
+            <p className="mt-2 text-xl font-semibold text-foreground tracking-tight tabular-nums">
               {formatCurrency(Number(group.total ?? 0))}
             </p>
-            <div className="mt-auto border-t border-border/50 pt-2 text-[11px] text-muted-foreground font-mono">
-              <p className="text-[10px] font-medium text-muted-foreground/60">
+            <div className="mt-auto border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <p className="font-medium text-muted-foreground/80">
                 Gasto acumulado
               </p>
               {[0, 1].map((slot) => {
@@ -66,7 +66,7 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
                     className="mt-1 flex min-h-[14px] items-center justify-between gap-2"
                   >
                     <span className="truncate">
-                      {label?.name ?? (slot === 0 ? "Sin etiquetas" : " ")}
+                      {label?.name ?? (slot === 0 ? "Sin etiquetas" : " ")}
                     </span>
                     {label && (
                       <span className="shrink-0 font-medium text-foreground tabular-nums">

@@ -3,7 +3,7 @@ import { chipStyles } from "@/lib/chipStyles";
 
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: "default" | "success" | "warning" | "danger" | "primary" | "secondary";
+  variant?: "default" | "success" | "warning" | "danger" | "primary" | "secondary" | "info";
   dot?: boolean;
   /** Pulses the dot: a state that is still settling, not a settled verdict. */
   pulse?: boolean;
@@ -17,22 +17,24 @@ const variants: Record<NonNullable<BadgeProps["variant"]>, string> = {
   danger: chipStyles.danger,
   primary: chipStyles.primary,
   secondary: chipStyles.secondary,
+  info: chipStyles.info,
 };
 
 const dotColors = {
-  default: "bg-slate-500",
-  success: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500",
+  default: "bg-muted-foreground",
+  success: "bg-success",
+  warning: "bg-warning",
+  danger: "bg-danger",
   primary: "bg-primary",
-  secondary: "bg-stone-500",
+  secondary: "bg-muted-foreground",
+  info: "bg-info",
 };
 
 export function Badge({ children, variant = "default", dot = false, pulse = false, className = "" }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium tracking-tight",
+        "inline-flex shrink-0 items-center whitespace-nowrap px-2 py-0.5 rounded-md text-xs font-medium",
         variants[variant],
         className,
       )}
