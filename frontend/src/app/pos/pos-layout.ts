@@ -1,9 +1,13 @@
 const MAX_POS_COLUMNS = 5;
 const POS_COLUMN_GAP = 12;
+// Two cards must fit the products column beside an 18rem cart at a 1024px viewport with the 320px sidebar.
+export const POS_MIN_CARD_WIDTH = 152;
+// Keep in sync with the auto-rows-[224px] class on the POS grid: two rows must fit a 900px-tall viewport.
+export const POS_CARD_ROW_HEIGHT = 224;
 
 // Grow the minimum track at wide widths so auto-fill cannot create a sixth
 // column, but still allow fewer readable cards on narrow panels.
-export const POS_GRID_TEMPLATE_COLUMNS = `repeat(auto-fill, minmax(min(100%, max(176px, calc((100% - ${(MAX_POS_COLUMNS - 1) * POS_COLUMN_GAP}px) / ${MAX_POS_COLUMNS}))), 1fr))`;
+export const POS_GRID_TEMPLATE_COLUMNS = `repeat(auto-fill, minmax(min(100%, max(${POS_MIN_CARD_WIDTH}px, calc((100% - ${(MAX_POS_COLUMNS - 1) * POS_COLUMN_GAP}px) / ${MAX_POS_COLUMNS}))), 1fr))`;
 
 // Observe the available area, not the content height: fetching fewer cards must
 // never change capacity. The pager is a separate, permanently reserved sibling.
@@ -17,8 +21,8 @@ export function observePOSGrid(area: HTMLElement, grid: HTMLElement, update: (ca
     const capacity = getPOSCapacity({
       width: grid.getBoundingClientRect().width || grid.clientWidth,
       height: area.clientHeight - (parseFloat(areaStyle.paddingTop) || 0) - (parseFloat(areaStyle.paddingBottom) || 0),
-      cardWidth: parseFloat(gridStyle.gridTemplateColumns) || 176,
-      cardHeight: parseFloat(gridStyle.gridAutoRows) || 248,
+      cardWidth: parseFloat(gridStyle.gridTemplateColumns) || POS_MIN_CARD_WIDTH,
+      cardHeight: parseFloat(gridStyle.gridAutoRows) || POS_CARD_ROW_HEIGHT,
       columnGap: parseFloat(gridStyle.columnGap) || 0,
       rowGap: parseFloat(gridStyle.rowGap) || 0,
     });

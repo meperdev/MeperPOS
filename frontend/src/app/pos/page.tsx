@@ -974,7 +974,7 @@ export default function POSPage() {
   return (
     <DashboardLayout>
       <h1 className="sr-only">Punto de venta</h1>
-      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
+      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_22rem] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
         <div className="flex min-h-0 flex-col lg:h-full">
           <div className="flex h-[calc(100dvh-8rem)] min-h-[580px] flex-col rounded-2xl border border-border/70 bg-card sm:min-h-[500px] lg:h-full">
@@ -994,8 +994,9 @@ export default function POSPage() {
 
             {/* Unified search & scanner — types to filter the grid, Enter scans/adds */}
             <div className="@container flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15">
-              <div className="flex flex-col gap-2 @xl:flex-row @xl:items-center">
-                <div className="relative flex-1 min-w-0">
+              {/* Intrinsic wrap, like FilterBar: Favoritos and the category select share a row under the search when narrow. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[14rem] flex-[999_1_16rem]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     ref={scannerInputRef}
@@ -1041,7 +1042,7 @@ export default function POSPage() {
                     setSelectedFilter(value);
                     setCurrentPage(1);
                   }}
-                  className="w-full sm:w-48 shrink-0"
+                  className="min-w-0 flex-[1_1_10rem]"
                   placeholder="Todas las categorías"
                   options={filterOptions}
                 />
@@ -1070,7 +1071,7 @@ export default function POSPage() {
                 ref={productGridRef}
                 style={{ gridTemplateColumns: POS_GRID_TEMPLATE_COLUMNS }}
                 className={cn(
-                  "grid h-full auto-rows-[248px] grid-rows-[repeat(auto-fill,minmax(248px,1fr))] gap-3 transition-opacity duration-150 [&>div]:aspect-auto [&>div]:h-full [&>div]:min-h-0 [&>div]:max-h-none",
+                  "grid h-full auto-rows-[224px] grid-rows-[repeat(auto-fill,minmax(224px,1fr))] gap-3 transition-opacity duration-150 [&>div]:aspect-auto [&>div]:h-full [&>div]:min-h-0 [&>div]:max-h-none",
                   isFetching && !searching ? "opacity-60" : "opacity-100",
                 )}
               >

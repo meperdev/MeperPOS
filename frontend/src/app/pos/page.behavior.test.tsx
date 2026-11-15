@@ -703,14 +703,16 @@ describe("POS behavior evidence (#19, #18)", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
     const grid = screen.getByTestId("pos-capacity-area").firstElementChild as HTMLElement;
-    expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(176px, calc((100% - 48px) / 5))), 1fr))");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(152px, calc((100% - 48px) / 5))), 1fr))");
   });
 
-  it("splits the desktop page into a fluid products column and a fixed 18-22rem cart column", () => {
+  it("gives products the fluid column and the cart 18rem, widening to 22rem only from xl", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     const { container } = render(<POSPage />);
-    const split = container.querySelector<HTMLElement>(".lg\\:grid-cols-\\[minmax\\(0\\,1fr\\)_minmax\\(18rem\\,22rem\\)\\]");
+    // A minmax(18rem,22rem) track always takes its 22rem max before the 1fr column, starving the products.
+    const split = container.querySelector<HTMLElement>(".lg\\:grid-cols-\\[minmax\\(0\\,1fr\\)_18rem\\]");
     expect(split).not.toBeNull();
+    expect(split!.className).toContain("xl:grid-cols-[minmax(0,1fr)_22rem]");
     expect(split!.className).not.toContain("lg:grid-cols-12");
     expect(container.querySelector(".lg\\:col-span-7, .lg\\:col-span-5")).toBeNull();
   });
@@ -761,16 +763,19 @@ describe("POS behavior evidence (#19, #18)", () => {
   });
 
 
-  it("gives the products search its own full row below the @xl container width", () => {
+  it("wraps the products header intrinsically so Favoritos and categories share a row when narrow", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
     const input = screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código...");
     const searchHeader = input.closest<HTMLElement>("div.p-4");
     expect(searchHeader!.className).toContain("@container");
-    const row = input.closest<HTMLElement>("div.relative")!.parentElement!;
-    expect(row.className).toContain("@xl:flex-row");
+    const search = input.closest<HTMLElement>("div.relative")!;
+    const row = search.parentElement!;
+    expect(row.className).toContain("flex-wrap");
+    expect(row.className).not.toContain("flex-col");
     expect(row.className).not.toContain("sm:flex-row");
-    expect(input.closest<HTMLElement>("div.relative")!.className).toContain("min-w-0");
+    expect(search.className).toContain("min-w-[14rem]");
+    expect(search.className).toContain("flex-[999_1_16rem]");
   });
 
   it("pages the complete server-filtered service fixture, not the merchandise page", async () => {

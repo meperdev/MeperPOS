@@ -7,13 +7,15 @@ afterEach(() => {
 });
 
 describe("PaymentMethodCards layout", () => {
-  it("wraps by container width instead of viewport breakpoints", () => {
+  it("uses two columns with the odd last method spanning the row, at any viewport", () => {
     render(<PaymentMethodCards selectedMethod="CASH" onMethodChange={vi.fn()} />);
 
     const group = screen.getByRole("button", { name: "Efectivo" }).parentElement;
     expect(group).not.toBeNull();
-    expect(group!.className).toContain("grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))]");
+    expect(group!.className).toContain("grid-cols-2");
     expect(group!.className).not.toMatch(/(^|\s)(md|sm):grid-cols/);
+    expect(screen.getByRole("button", { name: /Transferencia/ }).className).toContain("col-span-2");
+    expect(screen.getByRole("button", { name: "Efectivo" }).className).not.toContain("col-span-2");
   });
 
   it("keeps labels from truncating so they show fully in an 18rem cart", () => {
