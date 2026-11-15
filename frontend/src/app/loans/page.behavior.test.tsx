@@ -180,9 +180,10 @@ describe("Loans page", () => {
     render(<LoansPage />);
 
     expect(screen.getAllByTestId("loan-card")).toHaveLength(2);
-    expect(screen.getByTestId("loan-cards").className).toMatch(
-      /grid-cols-1.*sm:grid-cols-2.*lg:grid-cols-3.*xl:grid-cols-4/,
+    expect(screen.getByTestId("loan-cards").className).toContain(
+      "grid-cols-[repeat(auto-fill,minmax(16rem,1fr))]",
     );
+    expect(screen.getByTestId("loan-cards").className).not.toMatch(/(^|\s)(sm|md|lg|xl):grid-cols/);
     expect(screen.getByText("Distribuidora Sur")).toBeTruthy();
     expect(screen.getByText("Servicio")).toBeTruthy();
     expect(screen.getByText("Cerrado")).toBeTruthy();

@@ -15,6 +15,7 @@ import {
 import { useCategories } from "@/hooks/useCategories";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -623,7 +624,7 @@ function InventoryContent() {
             )}
             {viewMode === "grid" ? (
               <div
-                className="grid flex-1 content-start justify-items-center grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 lg:gap-4"
+                className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start justify-items-center")}
                 aria-busy={isFetching}
               >
                 {displayProducts.map((product) => (

@@ -15,6 +15,7 @@ import type {
 } from "@/hooks/useCategories";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { CategoryProductsModal } from "@/components/categories/CategoryProductsModal";
@@ -237,13 +238,13 @@ export default function CategoriesPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-4">
+              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {categories.map((category, i) => {
                   const count = category.productCount ?? 0;
                   return (
                     <div
                       key={category.id}
-                      className="group relative flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs cursor-pointer transition-colors hover:border-border"
+                      className="group relative flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs cursor-pointer transition-colors hover:border-border"
                       onClick={() => handleEdit(category)}
                     >
                       <div>
@@ -298,14 +299,14 @@ export default function CategoriesPage() {
                       </div>
 
                       {/* Footer: Product count & Tax rate */}
-                      <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-border/60">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-border/60">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setProductsCategory(category);
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/35 px-2.5 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border/70 bg-muted/35 px-2.5 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                           aria-label={`Ver productos de ${category.name}`}
                         >
                           <Package className="w-3.5 h-3.5 shrink-0 opacity-75" />
@@ -325,12 +326,12 @@ export default function CategoriesPage() {
                         </button>
 
                         {category.defaultTaxRate != null ? (
-                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted/50 text-foreground border border-border/70 tabular-nums">
+                          <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted/50 text-foreground border border-border/70 tabular-nums">
                             <Percent className="w-2.5 h-2.5" />
                             {category.defaultTaxRate}%
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] text-muted-foreground bg-muted/40 border border-border/60">
+                          <span className="inline-flex shrink-0 items-center whitespace-nowrap px-2 py-0.5 rounded-md text-[11px] text-muted-foreground bg-muted/40 border border-border/60">
                             Sin impuesto
                           </span>
                         )}

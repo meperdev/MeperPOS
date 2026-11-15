@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Lock, Plus, Wallet } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -360,7 +361,7 @@ export default function PayrollPage() {
                   </ul>
                 </>
               ) : (
-                <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <ul className={COLLECTION_GRID_CLASSES}>
                   {paged.map((obligation) => (
                     <li key={obligation.id} className="min-w-0">
                       <ObligationCard

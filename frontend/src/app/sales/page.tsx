@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Modal } from "@/components/ui/Modal";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { Pagination } from "@/components/ui/Pagination";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -268,7 +269,7 @@ function SalesPageContent() {
               className={cn(
                 "flex-1",
                 viewMode === "grid"
-                  ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 content-start"
+                  ? cn(COLLECTION_GRID_CLASSES, "content-start")
                   : "md:hidden space-y-2",
               )}
             >
@@ -364,7 +365,8 @@ function SalesPageContent() {
               className="hidden md:block w-full flex-1 rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden"
             >
               <div className="overflow-x-auto">
-                <Table variant="default" className="min-w-[680px]">
+                {/* Min width only when there are rows: an empty state must not scroll sideways. */}
+                <Table variant="default" className={sales.length > 0 ? "min-w-[680px]" : undefined}>
                   <TableHeader>
                     <TableRow>
                       <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">

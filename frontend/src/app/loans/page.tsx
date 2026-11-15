@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { Card } from "@/components/ui/Card";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -430,7 +431,7 @@ export default function LoansPage() {
           ) : (
             <ul
               data-testid="loan-cards"
-              className="grid flex-1 content-start grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}
             >
               {loans.map((row) => (
                 <li key={row.id} data-testid="loan-card" className="min-w-0">

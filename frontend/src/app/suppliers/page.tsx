@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/Table";
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import {
   Plus,
@@ -310,7 +311,7 @@ export default function SuppliersPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
+              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {suppliers.map((supplier) => {
                   const hasContactInfo = Boolean(
                     supplier.contactName ||
@@ -421,7 +422,7 @@ export default function SuppliersPage() {
                               {supplier.bank && (
                                 <span
                                   className={cn(
-                                    "inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
+                                    "block min-w-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
                                     getBankChipStyle(supplier.bank),
                                   )}
                                 >
@@ -444,7 +445,7 @@ export default function SuppliersPage() {
                                   onClick={(e) =>
                                     handleCopyAccount(e, supplier)
                                   }
-                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                                   title="Copiar número de cuenta"
                                   aria-label={`Copiar cuenta de ${supplier.name}`}
                                 >
@@ -594,7 +595,7 @@ export default function SuppliersPage() {
                               {supplier.bank && (
                                 <span
                                   className={cn(
-                                    "inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
+                                    "block min-w-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
                                     getBankChipStyle(supplier.bank),
                                   )}
                                 >
@@ -617,7 +618,7 @@ export default function SuppliersPage() {
                                   onClick={(e) =>
                                     handleCopyAccount(e, supplier)
                                   }
-                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                                   title="Copiar número de cuenta"
                                   aria-label={`Copiar cuenta de ${supplier.name}`}
                                 >

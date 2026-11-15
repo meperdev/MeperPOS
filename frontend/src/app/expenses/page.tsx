@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { cn, formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -651,7 +652,7 @@ export default function ExpensesPage() {
               </div>
             ) : (
               /* Desktop Grid View */
-              <div className="hidden md:grid flex-1 content-start md:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div className={cn(COLLECTION_GRID_CLASSES, "hidden md:grid flex-1 content-start")}>
                 {expenses.length === 0 ? (
                   <div className="col-span-full py-14">
                     <EmptyState

@@ -18,6 +18,7 @@ import { FilterBar, FilterClearButton } from "@/components/ui/FilterBar";
 import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import {
   Plus,
@@ -26,7 +27,7 @@ import {
   Truck,
   Calendar,
 } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { hasAnyRole } from "@/lib/auth";
 import type { PurchaseOrderStatus } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
@@ -278,7 +279,7 @@ export default function PurchaseOrdersPage() {
                 </div>
               </div>
             ) : (
-              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
+              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {orders.map((order) => (
                   <div
                     key={order.id}

@@ -5,6 +5,7 @@ import { CalendarClock, UserCheck, UserPlus, UserX, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { Card } from "@/components/ui/Card";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -463,7 +464,7 @@ export default function EmployeesPage() {
                 </div>
               </>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className={COLLECTION_GRID_CLASSES}>
                 {paged.map((employee) => (
                   <EmployeeCard
                     key={employee.id}

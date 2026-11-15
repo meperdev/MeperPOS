@@ -163,3 +163,61 @@ describe("Sales page deep-link behavior (#24)", () => {
     expect(replaceMock).toHaveBeenCalledWith("/sales");
   });
 });
+
+describe("Sales table width (min-w only with rows)", () => {
+  const sale = {
+    id: "sale-1",
+    saleNumber: 42,
+    status: "PAID",
+    total: 100,
+    createdAt: "2026-03-24T10:00:00Z",
+    customer: { name: "Ana Perez" },
+    payments: [],
+    financed: false,
+    user: { name: "Admin" },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentSearchParams = new URLSearchParams();
+    window.localStorage.setItem("meperpos:view-mode:sales", "table");
+    // The table view measures its list height; jsdom has no ResizeObserver.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem("meperpos:view-mode:sales");
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("enforces the 680px minimum only when the table has rows", () => {
+    useSalesMock.mockReturnValue({
+      data: { data: [sale], meta: { total: 1, page: 1, limit: 10, totalPages: 1 } },
+      isLoading: false,
+    });
+
+    render(<SalesPage />);
+
+    expect(screen.getByRole("table").className).toContain("min-w-[680px]");
+  });
+
+  it("does not force a minimum width on the empty state", () => {
+    useSalesMock.mockReturnValue({
+      data: { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } },
+      isLoading: false,
+    });
+
+    render(<SalesPage />);
+
+    expect(screen.getByRole("table").className).not.toContain("min-w-[680px]");
+    expect(screen.getAllByText("No hay ventas registradas").length).toBeGreaterThan(0);
+  });
+});

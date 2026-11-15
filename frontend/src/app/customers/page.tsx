@@ -9,6 +9,7 @@ import { useVehiclesModule } from "@/hooks/useBusinessModules";
 import { CustomerVehicles } from "./customer-vehicles";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
@@ -236,7 +237,7 @@ export default function CustomersPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div className="grid flex-1 content-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {customers.map((customer) => {
                   const seg = segmentConfig[customer.segment] || segmentConfig.OCCASIONAL;
                   const hasOptionalContact = Boolean(
@@ -250,7 +251,7 @@ export default function CustomersPage() {
                     <div
                       key={customer.id}
                       className={cn(
-                        "group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150",
+                        "group flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150",
                         "hover:border-border",
                         canEdit && "cursor-pointer",
                       )}
@@ -259,9 +260,9 @@ export default function CustomersPage() {
                       <div>
                         {/* Header */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
                             <CustomerAvatar name={customer.name} />
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <h3 className="text-sm font-semibold text-foreground truncate leading-tight">
                                 {customer.name}
                               </h3>
@@ -332,7 +333,7 @@ export default function CustomersPage() {
 
                       {/* Footer Actions */}
                       <div
-                        className="mt-3 flex items-center justify-between gap-2 border-t border-border/50 pt-2.5"
+                        className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Button
