@@ -82,6 +82,21 @@ describe("CategoryStackedChart (Recharts stacked by category)", () => {
     expect(ticks).toContain("22");
   });
 
+  it("thins a 30-day x-axis to a readable subset that still names the month change", () => {
+    const { container } = render(
+      <CategoryStackedChart startDate="2026-10-17" endDate="2026-11-15" />,
+    );
+
+    const ticks = Array.from(
+      container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value"),
+    ).map((node) => node.textContent);
+
+    // jsdom has no layout, so the chart keeps its 500px default width.
+    expect(ticks.length).toBeLessThanOrEqual(12);
+    expect(ticks[0]).toBe("17 oct");
+    expect(ticks).toContain("1 nov");
+  });
+
   it("keeps x-axis labels horizontal (no rotation)", () => {
     const { container } = render(
       <CategoryStackedChart startDate="2026-08-01" endDate="2026-08-30" />,

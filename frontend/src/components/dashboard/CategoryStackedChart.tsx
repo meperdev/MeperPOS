@@ -12,7 +12,8 @@ import {
   countDaysInclusive,
   formatCategoryAmountTick,
   formatCategoryTooltipDate,
-  formatChartDayTick,
+  formatChartDayTicks,
+  pickChartDayTicks,
   type StackedDay,
 } from "@/lib/dashboard";
 
@@ -281,6 +282,11 @@ export function CategoryStackedChart({
     () => buildDateWindow(endDate, countDaysInclusive(startDate, endDate)),
     [startDate, endDate],
   );
+  const axisTicks = useMemo(
+    () => pickChartDayTicks(days, chartWidth),
+    [days, chartWidth],
+  );
+  const axisLabels = useMemo(() => formatChartDayTicks(axisTicks), [axisTicks]);
 
   const rows = data?.data;
   const series = useMemo(() => buildStackedDailySeries(rows, days), [rows, days]);
@@ -453,11 +459,9 @@ export function CategoryStackedChart({
           />
           <XAxis
             dataKey="date"
-            interval="preserveStartEnd"
-            minTickGap={12}
-            tickFormatter={(value: string) =>
-              formatChartDayTick(value, days.indexOf(value), days)
-            }
+            ticks={axisTicks}
+            interval={0}
+            tickFormatter={(value: string) => axisLabels.get(value) ?? ""}
             tickLine={{ stroke: "var(--border)", strokeOpacity: 0.45 }}
             tickSize={4}
             tickMargin={6}
