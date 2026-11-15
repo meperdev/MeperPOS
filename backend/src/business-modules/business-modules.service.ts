@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BUSINESS_MODULE_CATALOG,
+  BusinessModuleDefinition,
   BusinessModuleId,
   findModuleDefinition,
 } from './module-catalog';
@@ -43,6 +44,15 @@ export class BusinessModulesService {
       where: { organizationId_module: { organizationId, module: moduleId } },
     });
     return setting?.enabled ?? true;
+  }
+
+  /**
+   * The catalog itself, without organization state: what the platform admin
+   * screen can offer. Enabled flags per organization come from
+   * `listForOrganization`.
+   */
+  listCatalog(): BusinessModuleDefinition[] {
+    return BUSINESS_MODULE_CATALOG.map((definition) => ({ ...definition }));
   }
 
   async listForOrganization(

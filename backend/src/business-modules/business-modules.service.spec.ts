@@ -56,6 +56,23 @@ describe('BusinessModulesService', () => {
     });
   });
 
+  describe('listCatalog', () => {
+    it('returns the catalog definitions without reading organization state', () => {
+      const modules = service.listCatalog();
+
+      expect(modules).toEqual([
+        {
+          id: 'vehicles',
+          name: 'Vehículos',
+          description:
+            'Placas, modelos y vehículos asociados a cada cliente.',
+        },
+      ]);
+      expect(prisma.organization.findUnique).not.toHaveBeenCalled();
+      expect(prisma.organizationModule.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('listForOrganization', () => {
     it('returns the whole catalog with the stored state', async () => {
       prisma.organization.findUnique.mockResolvedValue({ id: 'org-1' });
