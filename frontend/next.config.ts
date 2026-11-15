@@ -1,15 +1,5 @@
 import path from "node:path";
 import type { NextConfig } from "next";
-import { apiProxyRewrites, assertProxyConfigured } from "./src/lib/api-proxy";
-
-// A relative NEXT_PUBLIC_API_URL is only correct when this deployment also
-// proxies /api/* to the backend. Getting that pair half-configured does not
-// degrade: it ships an app that loads and then fails every request. Failing the
-// build here is the cheapest possible moment to find out.
-assertProxyConfigured({
-  apiUrl: process.env.NEXT_PUBLIC_API_URL,
-  backendOrigin: process.env.BACKEND_ORIGIN,
-});
 
 /**
  * Content-Security-Policy parts (spec S3, "sanitize without nonce", phase 1).
@@ -217,18 +207,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  /**
-   * Same-origin API proxy.
-   *
-   * WebKit blocks third-party cookies outright, so in direct mode the httpOnly
-   * refresh cookie never comes back from the API origin and an installed app
-   * asks for a login on every launch. Serving the API under this origin makes
-   * those cookies first-party. Registered only when BACKEND_ORIGIN is set, so
-   * local development and direct mode stay untouched.
-   */
-  async rewrites() {
-    return apiProxyRewrites(process.env.BACKEND_ORIGIN);
-  },
+  // The same-origin /api proxy lives on `feat/api-same-origin-proxy`, not here:
+  // it is the one piece of PWA work that changes production routing, so it is
+  // reviewed and merged on its own. Merge it BEFORE this branch, otherwise an
+  // installed iOS app asks for a login on every launch.
   async headers() {
     const globalHeaders = isReportOnlyEnabled
       ? [

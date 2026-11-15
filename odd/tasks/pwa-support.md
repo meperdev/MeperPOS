@@ -48,16 +48,52 @@ Risk tier: high. A service worker is delivery/runtime surface for every installe
 - [x] **T19** — Precache through the same redirect-refusing helper instead of `cache.add`. Fixes V3 finding 3. Commit `6bfc4c9`.
 - [x] **V4** — Independent verification of `8c16a2b` (`gentle-ai-verify`, read-only). Verdict: the three round-3 findings are **closed**, **no production defect found**, and the service worker is approvable as-is. Two remnants: one vacuous test fixture it classified as the same class as finding 4, and one inaccurate docstring.
 - [x] **T20** — Repair the vacuous precache fixture and the `remember` docstring. Commit `003967b`.
-- [x] **T6** — Same-origin `/api` proxy for WebKit cookie persistence. **Authorized by the owner** and implemented. `next.config.ts` registers `rewrites()` from `apiProxyRewrites(BACKEND_ORIGIN)`, and `assertProxyConfigured` fails the build when the client base is relative but no origin is configured. `src/lib/api-proxy.ts` + `src/lib/api-proxy.test.ts`. Commit `a6e0f56`.
+- [x] **T6** — Same-origin `/api` proxy for WebKit cookie persistence. **Authorized by the owner** and implemented. `next.config.ts` registers `rewrites()` from `apiProxyRewrites(BACKEND_ORIGIN)`, and `assertProxyConfigured` fails the build when the client base is relative but no origin is configured. `src/lib/api-proxy.ts` + `src/lib/api-proxy.test.ts`. Commit `a6e0f56`. **Moved on 2026-11-14 to `feat/api-same-origin-proxy`** (commit `3486df9`), because it is the only piece that changes production routing and it should not gate the PWA review. **Merge order: the proxy branch first, this branch second.** Without it an installed iOS app asks for a login on every launch.
 - [x] **T21** — Gitignore `.codegraph/` and `.pi/`, the two untracked tooling directories that also blocked the native assessor.
 - [x] **T22** — Safe-area compensation app-wide: `--safe-*` tokens in `globals.css`, mobile header, slide-over drawer, content column, login and register. S5. Route: parent inline. Commit `PENDING`.
 - [x] **T23** — Connection indicator: hydration-safe `useOnlineStatus`, banner in the authenticated layout, Spanish sentence-case copy that promises no sync. S6. Route: parent inline. Commit `PENDING`.
 - [x] **T24** — `npm run check:pwa`, a served-route guard over the built app (manifest fields, worker delivery, capability tags, `/offline`), wired into `.github/workflows/ci.yml`. S7. Route: parent inline. Commit `PENDING`.
 - [x] **T25** — Update flow: the worker stops skipping waiting, the registrar exposes a waiting worker, and the layout offers an explicit reload. S8. Route: parent inline, worker lifecycle. Commit `PENDING`.
-- [ ] **T26** — Document `NEXT_PUBLIC_API_URL` and `BACKEND_ORIGIN` in `frontend/.env.example`, including the relative-vs-absolute pair rule. S9.
-- [ ] **T27** — Move the `/api` proxy to `feat/api-same-origin-proxy` off `master` and remove it here, recording the merge order. S9.
+- [ ] **T26** — Document `NEXT_PUBLIC_API_URL` and `BACKEND_ORIGIN` in `frontend/.env.example`, including the relative-vs-absolute pair rule. S9. **Blocked**: a permission rule rejects any write to `.env*` and it was not worked around. The exact text to paste is in "Owner actions" below.
+- [x] **T27** — Move the `/api` proxy to `feat/api-same-origin-proxy` off `master` and remove it here, recording the merge order. S9. Owner decision, commit `PENDING`.
+
+### Owner actions
+
+**T26 content for `frontend/.env.example`.** The rules reject a write to this path, so paste this by hand:
+
+```dotenv
+# Backend API URL. Injected at BUILD TIME because of the NEXT_PUBLIC_ prefix, so
+# changing it requires a new deployment.
+#
+# Two supported shapes, and the choice is a pair with BACKEND_ORIGIN below:
+#
+#   absolute  The browser calls the backend origin directly. Needs that origin to
+#             allow this one (CORS) and to set its cookies for a cross-site
+#             request. An installed iOS app loses the refresh cookie that way,
+#             because WebKit blocks third-party cookies, so the app asks for a
+#             login on every launch.
+#
+#   relative  "/api". The browser calls THIS origin and next.config.ts proxies to
+#             BACKEND_ORIGIN, which makes the auth cookies first-party and lets an
+#             installed iOS app stay logged in.
+#
+# Either way the value must include the /api suffix.
+NEXT_PUBLIC_API_URL=https://your-backend.up.railway.app/api
+
+# Origin the /api rewrite proxies to. Read at BUILD time by next.config.ts and
+# never sent to the browser, so it is deliberately not a NEXT_PUBLIC_ value.
+#
+# Set it only together with a relative NEXT_PUBLIC_API_URL. Leave it unset in
+# local development: a relative base with no proxy does not degrade, it ships an
+# app that loads and then fails every request, so the build fails on purpose when
+# exactly one of the two is configured. That guard ships with
+# `feat/api-same-origin-proxy`, which is where the variables belong.
+# BACKEND_ORIGIN=https://your-backend.up.railway.app
+```
 
 ### Deployment variables (owner action)
+
+These belong to `feat/api-same-origin-proxy`: that branch is where the rewrite and its build-time guard live, so it is also where a half-configured pair is caught.
 
 Vercel → Project → Settings → Environment Variables, then **redeploy**: both are read at build time, so changing them without a new deployment does nothing.
 
@@ -83,6 +119,9 @@ Setting only one of the two fails the build on purpose. Local development is una
 - **L31** — T25. RED first: three worker tests failed against the old `install` (`skipWaiting` was still called unconditionally) and the two new client modules did not exist. The worker now precaches and parks in `waiting`; the only path to activation is a `SKIP_WAITING` message, and any other payload is ignored. `CACHE_VERSION` moved to `v2` in both copies (the drift test in `pwa.test.ts` is what forces them to move together): a waiting worker precaching into the active worker's cache names would let an old session serve a new deploy's manifest, and versioned names are the documented invalidation mechanism. Two design points are pinned by tests rather than comments. First, `controllerchange` also fires on a first install when `clients.claim()` takes over an uncontrolled page, so the reload is armed only by an explicit swap request; without that gate every first install would reload the page it just loaded. Second, `navigator.serviceWorker.controller` is what separates a replacement from a first install, so an install that finishes with no controller produces no offer at all. Both guards were proven non-vacuous by mutation: restoring `skipWaiting()` in `install` fails 4 worker tests, and dropping the `controller` guard fails the first-install test (1 failed, 9 passed), with the file restored after each. One harness gap was found by that mutation and is now covered: the `updatefound` → `statechange` path had no test at all, so the stub grew a registration that can actually fire both, which is the real-world path of a deploy landing under an open cart. Full suite 109 files / 1002 tests, `tsc` 0, `eslint` 0, build 0. Not verified: an actual browser installing two versions, which needs the Fase 1 preview.
 
 - **L32** — T24. The assertions live in `frontend/scripts/check-pwa.mjs` as an exported `checkPwaSurface({ fetchImpl, base })`, so the guard is tested with a fake transport instead of a running server, and the CLI half only owns the process lifecycle: it boots `next start` on 3101 (or reuses `PWA_CHECK_BASE`) and kills it in a `finally`. Thirteen tests cover a clean surface plus each failure it exists to catch: a missing manifest field, `display` no longer `standalone`, a missing 192 or maskable icon, a worker served as HTML, a worker with no fetch handler, a page that lost either capability tag or the manifest link, a 404 manifest, and an unreachable server exiting non-zero instead of clean. Two real defects were found here, both in the check rather than the app. First, the check was **vacuous**: it looked for the string `SKIP_WAITING`, which also appears in the worker's own header comment, so a worker whose handler read a different token still passed — proven by mutating the handler to `SWAP_NOW`, which the first version happily accepted. It now requires `addEventListener("message"` and the exact `event.data.type === "SKIP_WAITING"` condition, and a test pins the comment-only body as a failure. Second, a restore step silently did not take effect and the following run still failed; the file was restored from git and re-verified with `grep` rather than trusted. End-to-end proof after the fix: mutating the handler fails with `/sw.js body: the message handler does not read SKIP_WAITING`, and the restored tree reports `PWA surface intact`. Not verified: whether GitHub Actions runs the step green, which only the first push shows.
+
+- **L33** — T27. The proxy moved to `feat/api-same-origin-proxy`, cut from `master` with `git cherry-pick` of `a6e0f56` (clean, 4 files, 201 insertions), and its message was rewritten to `feat(api)` because it is no longer PWA work. Verified on the master base in its own worktree: `tsc --noEmit` 0, `api-proxy.test.ts` 11/11, `npm run build` exit 0. Here, the rewrite, the import and `assertProxyConfigured` were removed by hand rather than reverted, because `master` had rewritten 185 lines around them and a revert would have risked the new header work; the comment left in `next.config.ts` names the branch that owns it and the merge order. `src/lib/api-proxy.ts` and its test were deleted with `git rm`. Consequence, recorded rather than papered over: this branch alone ships no guard against a relative base with no proxy, because the guard travels with the feature that introduces relative mode. Verified after the split: `tsc` 0, full suite 109 files / 1004 tests, clean rebuild, `npm run check:pwa` reports the surface intact with no `BACKEND_ORIGIN` set.
+- **L34** — T26 is the one task this session could not finish. Writing `frontend/.env.example` was rejected by a permission rule and was not worked around, so the exact block to paste is recorded under "Owner actions" instead. This is the second time this path has blocked the same work; if it keeps blocking, the rule is the thing to change, not the documentation.
 
 ## Verification
 
