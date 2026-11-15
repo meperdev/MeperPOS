@@ -34,9 +34,13 @@ La aplicación queda disponible en `http://localhost:3000`.
 | Script        | Descripción                     |
 | ------------- | ------------------------------- |
 | `npm run dev` | Servidor de desarrollo          |
-| `npm run build` | Build de producción           |
+| `npm run build` | Build de producción (Webpack)  |
 | `npm run lint`  | ESLint                       |
 | `npm run test`  | Pruebas (Vitest)             |
+
+### Build de producción
+
+`npm run build` compila con Webpack (`next build --webpack`); `npm run dev` sigue usando Turbopack. El build de producción evade el fallo del resolvedor de fuentes de `next/font/google` que aparece en builds fríos con Turbopack (`Can't resolve '@vercel/turbopack-next/internal/font/google/font'`). Es una omisión documentada del bundler en producción, no una corrección de la causa raíz: las fuentes, sus pesos, las variables CSS y la versión de Next no cambian.
 
 ## Estructura de páginas
 
