@@ -1,6 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 
 export type StockAlertEventKind =
@@ -47,14 +48,28 @@ export function useAlertNotifications(params: {
   limit: number;
   kind?: StockAlertEventKind;
 }) {
+  const { user } = useAuth();
+
+  // The rows are tenant-scoped, so the cache key must be too: the page can be
+  // remounted after an in-session organization switch without a full reload.
+  // Without an organization scope there is nothing to ask for, so the query
+  // stays disabled instead of sharing one fallback key across tenants.
+  const organizationId = user?.organizationId;
+
   return useQuery({
-    queryKey: ["alerts", "notifications", params],
+    queryKey: [
+      "alerts",
+      "notifications",
+      organizationId ?? "none",
+      params,
+    ],
     // The query string is built here, in the URL, so the filter and the page
     // cannot depend on how any HTTP client treats a second argument.
     queryFn: () =>
       api
         .get<StockAlertHistoryPage>(historyPath(params))
         .then((res) => res.data),
+    enabled: Boolean(organizationId),
     placeholderData: keepPreviousData,
   });
 }

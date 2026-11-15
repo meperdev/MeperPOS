@@ -1,5 +1,5 @@
 import { PATH_METADATA } from '@nestjs/common/constants';
-import { OrgRole } from '@prisma/client';
+import { OrgRole, ProductStockAlertEventKind } from '@prisma/client';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { AlertsController } from './alerts.controller';
@@ -69,5 +69,18 @@ describe('AlertsController', () => {
 
     await expect(controller.history(user, '3', '10')).resolves.toBe(page);
     expect(alerts.history).toHaveBeenCalledWith(user, 3, 10, undefined);
+
+    await controller.history(
+      user,
+      '1',
+      '20',
+      ProductStockAlertEventKind.FAILED,
+    );
+    expect(alerts.history).toHaveBeenLastCalledWith(
+      user,
+      1,
+      20,
+      ProductStockAlertEventKind.FAILED,
+    );
   });
 });

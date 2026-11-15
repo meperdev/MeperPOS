@@ -490,6 +490,18 @@ describe("inventory product modal", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("shows the stored minimum, including zero, instead of the create fallback", () => {
+    products = [product({ stock: 1, minStock: 0 })];
+    render(<InventoryPage />);
+    const dialog = openEdit();
+    expect(within(dialog).getByLabelText("Stock Mín.")).toHaveValue(0);
+
+    cleanup();
+    render(<InventoryPage />);
+    const created = openCreate();
+    expect(within(created).getByLabelText("Stock Mín.")).toHaveValue(5);
+  });
+
   it("groups identity, prices, inventory, and promotion in a compact responsive form", () => {
     render(<InventoryPage />);
     const dialog = openCreate();

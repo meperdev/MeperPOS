@@ -234,6 +234,28 @@ describe('AlertsService', () => {
     expect(page.data).toHaveLength(1);
   });
 
+  it('filters the history by kind when one is selected', async () => {
+    const { service, prisma } = build();
+
+    await service.history(user(), 1, 20, 'FAILED');
+
+    expect(prisma.productStockAlertEvent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-1', kind: 'FAILED' },
+      }),
+    );
+  });
+
+  it('does not filter by kind when none is selected', async () => {
+    const { service, prisma } = build();
+
+    await service.history(user());
+
+    expect(prisma.productStockAlertEvent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: 'org-1' } }),
+    );
+  });
+
   it('never reads history without an organization scope', async () => {
     const { service, prisma } = build();
 
