@@ -25,7 +25,7 @@ Expected result: the organization list and the organization detail agree on the 
 | --- | --- |
 | Module catalog | Served by the backend. Today it contains `vehicles` only. |
 | Vehicles capability | Implemented: customer vehicle records, legacy plate compatibility and existing module gating. |
-| Suggested modules (employees, payroll, expenses, reports, and similar) | **Not implemented.** Do not add placeholder entries to the catalog or the UI. |
+| Suggested modules (employees, payroll, expenses, reports, and similar) | **Not implemented as switchable modules.** Existing core features are unchanged; do not add placeholder catalog entries. |
 | Per-module screen | `/admin/modules/<moduleId>`; `/admin/modules/vehicles` is the real detail page. |
 | Organization detail | Read-only linked summary, no duplicated controls. |
 
@@ -44,6 +44,8 @@ All routes are under `/api`, use the existing cookie session, and keep the exist
 | `/api/business-modules` | GET | Any authenticated user with an organization scope | The caller's own organization module state |
 
 The module detail searches the organization list already loaded for the admin section; it does not add a per-keystroke server query. The state filter uses each organization's `enabledModules`: when the server did not answer for that tenant, the organization is neither **Activado** nor **Desactivado**, so only **Todos** can show it.
+
+The `PATCH` body accepts only one JSON boolean, `{ "enabled": true }` or `{ "enabled": false }`; a string such as `"false"`, a number, `null`, an object, an array or a missing `enabled` answers the standard 400 validation error and changes nothing.
 
 ## State and data preservation
 

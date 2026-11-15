@@ -13,7 +13,7 @@ Desactivar un módulo impide acceder a sus operaciones y oculta sus datos en las
 ## Rutas
 
 - `GET /api/admin/organizations/:organizationId/modules` devuelve el catálogo completo con el estado de esa organización. Solo `SUPER_ADMIN`.
-- `PATCH /api/admin/organizations/:organizationId/modules/:moduleId` activa o desactiva un módulo del catálogo. Solo `SUPER_ADMIN`; un identificador fuera del catálogo responde 400.
+- `PATCH /api/admin/organizations/:organizationId/modules/:moduleId` activa o desactiva un módulo del catálogo. Solo `SUPER_ADMIN`; un identificador fuera del catálogo responde 400. El cuerpo acepta únicamente un booleano JSON: `{"enabled": true}` o `{"enabled": false}`. Cadenas como `"false"`, números, `null`, objetos, arreglos o un cuerpo sin `enabled` responden 400 con el error de validación y no cambian la configuración.
 - `GET /api/business-modules` devuelve el catálogo con el estado de la organización del usuario autenticado.
 
 El listado de organizaciones incluye `enabledModules` con los identificadores activos de cada una, resuelto en una sola consulta para no hacer una lectura por fila.
