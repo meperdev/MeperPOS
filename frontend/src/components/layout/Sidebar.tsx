@@ -44,7 +44,7 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { cn, safeGetItem, safeSetItem } from "@/lib/utils";
 import { APP_NAME, RAIL_FLYOUT_GAP } from "@/lib/constants";
 import { hasAnyRole, type AppRole } from "@/lib/auth";
-import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
 /** Rail scroll offset, kept across the session shell remounting around it. */
 export const SIDEBAR_SCROLL_KEY = "meper_sidebar_scroll_top";
@@ -179,6 +179,20 @@ const roleLabels: Record<string, string> = {
 
 // Footer actions are frameless icon buttons: the bell and the ⋮ menu are the
 // only chrome the account area keeps, so they share one treatment.
+// The footer clock is a store of the current minute. The server snapshot is null,
+// so SSR and hydration render no time; the client fills it in after hydration.
+const CLOCK_TICK_MS = 60_000;
+function subscribeToClock(onTick: () => void) {
+  const intervalId = window.setInterval(onTick, CLOCK_TICK_MS);
+  return () => window.clearInterval(intervalId);
+}
+function getClockMinute() {
+  return Math.floor(Date.now() / CLOCK_TICK_MS);
+}
+function getServerClockMinute(): null {
+  return null;
+}
+
 const footerIconButtonClass =
   "h-9 w-9 lg:h-9 lg:w-9 rounded-lg border-transparent bg-transparent text-muted-foreground transition-colors hover:border-transparent hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
@@ -200,7 +214,6 @@ export function Sidebar() {
     label: string;
     top: number;
   } | null>(null);
-  const [now, setNow] = useState(() => new Date());
   const navRef = useRef<HTMLElement>(null);
   const hasRestoredScrollRef = useRef(false);
   const restoredScrollTopRef = useRef(0);
@@ -241,10 +254,6 @@ export function Sidebar() {
     };
   }, [isMobileMenuOpen]);
 
-  useEffect(() => {
-    const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(intervalId);
-  }, []);
 
   // The rail paints no scrollbar, so the edge fades are its only affordance:
   // they follow the real overflow instead of the content length.
@@ -386,8 +395,10 @@ export function Sidebar() {
     },
   ];
 
-  const clockLabel = formatSidebarClock(now);
-  const clockIso = now.toISOString();
+  const clockMinute = useSyncExternalStore(subscribeToClock, getClockMinute, getServerClockMinute);
+  const now = clockMinute === null ? null : new Date(clockMinute * CLOCK_TICK_MS);
+  const clockLabel = now ? formatSidebarClock(now) : null;
+  const clockIso = now?.toISOString();
 
   const sidebarContent = (
     <>
@@ -588,13 +599,18 @@ export function Sidebar() {
             <div className="flex flex-col gap-2">
               {/* The time leads the footer as one quiet line; the identity row
                   and its two actions sit under it. */}
-              <time
-                data-testid="sidebar-clock"
-                dateTime={clockIso}
-                className="truncate text-xs tabular-nums text-muted-foreground"
-              >
-                {clockLabel}
-              </time>
+              {/* The slot holds its line before mount, so the clock appearing does not shift the footer. */}
+              <div data-testid="sidebar-clock-slot" className="flex h-4 min-w-0 items-center">
+                {now && (
+                  <time
+                    data-testid="sidebar-clock"
+                    dateTime={clockIso}
+                    className="truncate text-xs tabular-nums text-muted-foreground"
+                  >
+                    {clockLabel}
+                  </time>
+                )}
+              </div>
 
               <div className="flex items-center gap-2">
                 <div className="flex min-w-0 flex-1 items-center gap-2.5">

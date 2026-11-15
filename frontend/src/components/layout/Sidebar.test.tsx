@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import {
@@ -425,6 +426,37 @@ describe("Sidebar", () => {
     expect(clock).toHaveTextContent(/\d{1,2}:\d{2}/);
     expect(clock).not.toHaveClass("font-mono");
     expect(account).toHaveTextContent("Ana Perez");
+  });
+
+  it("keeps the server markup free of the time and reserves its line so mounting does not shift the footer", () => {
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Sidebar />
+      </QueryClientProvider>,
+    );
+
+    // The clock depends on the viewer's clock, so it must not reach the SSR HTML.
+    expect(markup).not.toContain('data-testid="sidebar-clock"');
+    expect(markup).toMatch(/data-testid="sidebar-clock-slot" class="[^"]*\bh-4\b/);
+  });
+
+  it("shows the current minute once mounted and advances it every minute", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 10, 15, 9, 0));
+      render(<Sidebar />, { wrapper });
+
+      expect(screen.getByTestId("sidebar-clock")).toHaveTextContent("9:00");
+
+      // Fake timers move the clock with the interval, so one minute later reads 9:01.
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+
+      expect(screen.getByTestId("sidebar-clock")).toHaveTextContent("9:01");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders the identity as plain text with the role below the name, no card or chip", async () => {
