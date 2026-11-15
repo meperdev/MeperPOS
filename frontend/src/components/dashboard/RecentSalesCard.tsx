@@ -57,7 +57,8 @@ export function RecentSalesCard() {
           Sin ventas recientes
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
+        <div className="@container mt-3">
+          <div className="hidden @2xl:block overflow-x-auto">
           <Table variant="default" className="min-w-[440px]">
             <TableHeader>
               <TableRow>
@@ -106,6 +107,46 @@ export function RecentSalesCard() {
               ))}
             </tbody>
           </Table>
+          </div>
+
+          <div data-testid="recent-sales-list" className="@2xl:hidden divide-y divide-border/60">
+            {sales.map((sale) => {
+              const payment = getPaymentState(sale.payments, sale.financed);
+              return (
+                <div key={sale.id} data-testid="recent-sale-item" className="py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs font-semibold tabular-nums text-foreground">
+                        {sale.saleNumber}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {sale.customer?.name ?? "Sin cliente"}
+                      </p>
+                    </div>
+                    <StatusBadge domain="sale" status={sale.status} dot={false} />
+                  </div>
+                  <dl className="grid grid-cols-3 gap-x-3 text-xs">
+                    <div className="min-w-0 space-y-0.5">
+                      <dt className="text-muted-foreground">Hora</dt>
+                      <dd className="text-muted-foreground tabular-nums">{formatDateTime(sale.createdAt)}</dd>
+                    </div>
+                    <div className="min-w-0 space-y-0.5">
+                      <dt className="text-muted-foreground">Pago</dt>
+                      <dd>
+                        <span className={payment.className}>{payment.label}</span>
+                      </dd>
+                    </div>
+                    <div className="min-w-0 space-y-0.5">
+                      <dt className="text-muted-foreground">Total</dt>
+                      <dd className="font-mono font-semibold tabular-nums text-foreground">
+                        {formatCurrency(sale.total)}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </section>

@@ -127,6 +127,63 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
     }
   };
 
+  // Shared by the table (wide) and the stacked list (narrow); both views read
+  // the same `rows` state, so an edit in one is already in the other.
+  const updateRow = (tempId: string, patch: Partial<DraftRow>) =>
+    setRows((prev) =>
+      prev.map((x) => (x.tempId === tempId ? { ...x, ...patch } : x)),
+    );
+
+  const removeRow = (tempId: string) =>
+    setRows((prev) => prev.filter((x) => x.tempId !== tempId));
+
+  const renderQtyInput = (r: DraftRow) => (
+    <Input
+      type="number"
+      min={1}
+      aria-label={`Cantidad de ${r.productName}`}
+      value={r.qtyOrdered}
+      onChange={(e) =>
+        updateRow(r.tempId, { qtyOrdered: Number(e.target.value) || 0 })
+      }
+      className="text-right"
+    />
+  );
+
+  const renderCostInput = (r: DraftRow) => (
+    <CurrencyInput
+      value={r.unitCost}
+      onChange={(value) => updateRow(r.tempId, { unitCost: value })}
+      className="text-right"
+    />
+  );
+
+  const renderTaxInput = (r: DraftRow) => (
+    <Input
+      type="number"
+      min={0}
+      max={100}
+      step="0.1"
+      aria-label={`IVA de ${r.productName}`}
+      value={r.taxRate}
+      onChange={(e) =>
+        updateRow(r.tempId, { taxRate: Number(e.target.value) || 0 })
+      }
+      className="text-right"
+    />
+  );
+
+  const renderRemoveButton = (r: DraftRow) => (
+    <button
+      type="button"
+      onClick={() => removeRow(r.tempId)}
+      aria-label={`Eliminar ${r.productName}`}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+    >
+      <Trash2 className="w-3.5 h-3.5" />
+    </button>
+  );
+
   return (
     <Modal
       isOpen={isOpen}
@@ -200,7 +257,8 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
               </div>
             </div>
           )}
-          <div className="overflow-x-auto">
+          <div className="@container">
+          <div className="hidden @2xl:block overflow-x-auto">
             <table className="w-full min-w-[560px]">
               <thead>
                 <tr className="bg-muted/35 border-b border-border/60">
@@ -240,76 +298,54 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
                           {r.productSku}
                         </p>
                       </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          aria-label={`Cantidad de ${r.productName}`}
-                          value={r.qtyOrdered}
-                          onChange={(e) =>
-                            setRows((prev) =>
-                              prev.map((x) =>
-                                x.tempId === r.tempId
-                                  ? { ...x, qtyOrdered: Number(e.target.value) || 0 }
-                                  : x,
-                              ),
-                            )
-                          }
-                          className="text-right"
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <CurrencyInput
-                          value={r.unitCost}
-                          onChange={(value) =>
-                            setRows((prev) =>
-                              prev.map((x) =>
-                                x.tempId === r.tempId
-                                  ? { ...x, unitCost: value }
-                                  : x,
-                              ),
-                            )
-                          }
-                          className="text-right"
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step="0.1"
-                          aria-label={`IVA de ${r.productName}`}
-                          value={r.taxRate}
-                          onChange={(e) =>
-                            setRows((prev) =>
-                              prev.map((x) =>
-                                x.tempId === r.tempId
-                                  ? { ...x, taxRate: Number(e.target.value) || 0 }
-                                  : x,
-                              ),
-                            )
-                          }
-                          className="text-right"
-                        />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setRows((prev) => prev.filter((x) => x.tempId !== r.tempId))
-                          }
-                          aria-label={`Eliminar ${r.productName}`}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
+                      <td className="py-2 px-2">{renderQtyInput(r)}</td>
+                      <td className="py-2 px-2">{renderCostInput(r)}</td>
+                      <td className="py-2 px-2">{renderTaxInput(r)}</td>
+                      <td className="py-2 pr-2">{renderRemoveButton(r)}</td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div data-testid="draft-item-list" className="@2xl:hidden divide-y divide-border/60">
+            {rows.length === 0 ? (
+              <p className="py-6 text-center text-xs text-muted-foreground">
+                Agrega productos
+              </p>
+            ) : (
+              rows.map((r) => (
+                <div key={r.tempId} data-testid="draft-item-row" className="px-3 py-3 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground break-words">
+                        {r.productName}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground font-mono">
+                        {r.productSku}
+                      </p>
+                    </div>
+                    {renderRemoveButton(r)}
+                  </div>
+                  <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
+                    <div className="space-y-0.5 min-w-0">
+                      <dt className="text-muted-foreground">Cant.</dt>
+                      <dd>{renderQtyInput(r)}</dd>
+                    </div>
+                    <div className="space-y-0.5 min-w-0">
+                      <dt className="text-muted-foreground">Costo</dt>
+                      <dd>{renderCostInput(r)}</dd>
+                    </div>
+                    <div className="space-y-0.5 min-w-0">
+                      <dt className="text-muted-foreground">IVA %</dt>
+                      <dd>{renderTaxInput(r)}</dd>
+                    </div>
+                  </dl>
+                </div>
+              ))
+            )}
+          </div>
           </div>
         </div>
 

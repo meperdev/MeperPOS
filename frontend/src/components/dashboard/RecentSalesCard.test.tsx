@@ -90,6 +90,23 @@ describe("RecentSalesCard (compact recent sales)", () => {
     render(<RecentSalesCard />);
 
     expect(screen.getAllByTestId("recent-sale-row")).toHaveLength(5);
+    expect(screen.getAllByTestId("recent-sale-item")).toHaveLength(5);
+  });
+
+  it("renders the same sale data as a stacked list for narrow cards", () => {
+    useSalesMock.mockReturnValue({ data: { data: [sale(1)] } });
+
+    render(<RecentSalesCard />);
+
+    const item = within(within(screen.getByTestId("recent-sales-list")).getByTestId("recent-sale-item"));
+    expect(item.getByText("101")).toBeTruthy();
+    expect(item.getByText("Cliente 1")).toBeTruthy();
+    expect(item.getByText("Hora")).toBeTruthy();
+    expect(item.getByText("Pago")).toBeTruthy();
+    expect(item.getByText("Total")).toBeTruthy();
+    expect(item.getByText("Efectivo")).toBeTruthy();
+    expect(item.getByText(/\$\s119\.000/)).toBeTruthy();
+    expect(item.getByText("Completada")).toBeTruthy();
   });
 
   it("renders the minimum columns with real sale data", () => {
@@ -112,7 +129,7 @@ describe("RecentSalesCard (compact recent sales)", () => {
 
     render(<RecentSalesCard />);
 
-    expect(screen.getByText("Sin cliente")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("Sin cliente")).toBeTruthy();
   });
 
   it("derives the payment label: none, single and mixed", () => {
