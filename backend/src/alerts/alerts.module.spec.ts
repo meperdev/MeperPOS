@@ -47,6 +47,6 @@ describe('AlertsModule low-stock scan wiring', () => {
     const scheduler = moduleRef.get(StockAlertsScheduler);
     expect(scheduler).toBeInstanceOf(StockAlertsScheduler);
 
-    moduleRef.close();
+    await moduleRef.close();
   });
 });
