@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/QueryProvider";
@@ -11,16 +11,24 @@ import { InstallPromptProvider } from "@/contexts/InstallPromptContext";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { buildPwaMetadata, buildPwaViewport } from "@/lib/pwa";
 
-const geist = Geist({
+/**
+ * Geist (sans) and JetBrains Mono (mono) are self-hosted as latin variable
+ * WOFF2 files so production builds never depend on a Google Fonts request.
+ * The `next/font/google` loader downloads fonts at build time and fails the
+ * whole build whenever that request returns an unexpected payload.
+ */
+const geist = localFont({
+  src: "./fonts/geist-latin.woff2",
   variable: "--font-geist",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+  weight: "100 900",
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const jetbrainsMono = localFont({
+  src: "./fonts/jetbrains-mono-latin.woff2",
   variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  display: "swap",
+  weight: "100 800",
 });
 
 export const metadata: Metadata = buildPwaMetadata();

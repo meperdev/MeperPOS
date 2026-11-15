@@ -46,8 +46,8 @@ describe("slice 1: green accent kept as documented commented secondary (ADR-3/D1
 });
 
 describe("slice 1: layout font swap Manrope -> Geist (ADR-1)", () => {
-  it("imports and applies the Geist variable and leaves Manrope behind", () => {
-    expect(layoutTsx).toContain("Geist");
+  it("applies the self-hosted Geist variable and leaves Manrope behind", () => {
+    expect(layoutTsx).toContain("geist-latin.woff2");
     expect(layoutTsx).toContain("--font-geist");
     expect(layoutTsx).toContain("geist.variable");
     expect(layoutTsx).not.toContain("Manrope");

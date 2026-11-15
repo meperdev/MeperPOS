@@ -39,6 +39,8 @@ vi.mock("@/hooks/useAdmin", () => ({
   useUpdateMemberRole: () => mockUseUpdateMemberRole(),
   useRemoveOrganizationMember: () => mockUseRemoveOrganizationMember(),
   useDeleteOrganization: () => mockUseDeleteOrganization(),
+  useOrganizationModules: () => ({ data: [{ id: 'vehicles', name: 'Vehículos', description: 'Placas y modelos.', enabled: true }], isLoading: false, isError: false }),
+  useUpdateOrganizationModule: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
 function wrapper({ children }: { children: React.ReactNode }) {

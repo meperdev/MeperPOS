@@ -42,7 +42,9 @@ exactly one organization: its name is derived from the authenticated token's org
 created, started, stopped and restarted only for the caller's own tenant. The intelligence session is
 a single central channel owned by the platform, has no organization scope, and is reachable only by a
 platform `SUPER_ADMIN`; it is deliberately guarded without `OrganizationRequiredGuard`. Neither
-controller accepts a session name from the request.
+controller accepts a session name from the request. Unlinking and re-linking are central-only as well:
+unlinking the commercial number from a distant machine would leave customers unanswered until somebody
+reaches the phone, so `logout` and `relink` are implemented against the intelligence channel only.
 
 The delivery routes supervise the daily report. Reads return the calling organization's recent
 attempts, bounded to 30 rows; a delivery row carries no organization of its own, so the tenant comes
@@ -64,6 +66,7 @@ with a 409 instead of an error.
 | /api/whatsapp/intelligence/session/stop | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/intelligence/session/restart | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/intelligence/session/logout | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
+| /api/whatsapp/intelligence/session/relink | POST | SUPER_ADMIN | superadmin-global | backend/src/whatsapp/whatsapp-intelligence.controller.spec.ts |
 | /api/whatsapp/identity | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/identity/challenge | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/identity/:id | DELETE | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
@@ -95,8 +98,11 @@ with a 409 instead of an error.
 | /api/admin/organizations/:id/status | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/plan | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/electronic-invoicing | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
+| /api/admin/organizations/:organizationId/modules | GET | SUPER_ADMIN | superadmin-global | backend/src/business-modules/admin-business-modules.controller.spec.ts |
+| /api/admin/organizations/:organizationId/modules/:moduleId | PATCH | SUPER_ADMIN | superadmin-global | backend/src/business-modules/admin-business-modules.controller.spec.ts |
 | /api/admin/organizations/:id/transfer-owner | POST | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/metrics | GET | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
+| /api/admin/modules | GET | SUPER_ADMIN | superadmin-global | backend/src/business-modules/admin-module-catalog.controller.spec.ts |
 | /api/admin/organizations/:id | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/members | POST | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/members/:userId/role | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
@@ -141,6 +147,15 @@ with a 409 instead of an error.
 | /api/customers/:id | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/customers/customers.service.int.spec.ts |
 | /api/customers/:id | PUT | ADMIN | org-scoped | backend/src/customers/customers.service.int.spec.ts |
 | /api/customers/:id | DELETE | ADMIN | org-scoped | backend/src/customers/customers.service.int.spec.ts |
+| /api/customers/:customerId/vehicles | GET | ADMIN, MEMBER, CASHIER | org-scoped, vehicles enabled | backend/src/customers/customer-vehicles.service.int.spec.ts |
+| /api/customers/:customerId/vehicles | POST | ADMIN, MEMBER, CASHIER | org-scoped, vehicles enabled | backend/src/customers/customer-vehicles.service.int.spec.ts |
+| /api/customers/:customerId/vehicles/:vehicleId | PATCH | ADMIN | org-scoped, vehicles enabled | backend/src/customers/customer-vehicles.service.int.spec.ts |
+
+## business-modules
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/business-modules | GET | authenticated | org-required | backend/src/business-modules/business-modules.controller.spec.ts |
 
 ## employees
 

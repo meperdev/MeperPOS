@@ -83,6 +83,10 @@ describe('AdminService', () => {
     count: jest.fn(),
   };
 
+  const businessModulesMock = {
+    enabledModulesByOrganization: jest.fn(),
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     // `clearAllMocks` keeps queued `mockResolvedValueOnce` implementations, so a
@@ -91,10 +95,16 @@ describe('AdminService', () => {
     prismaMock.organization.findUnique.mockReset();
     prismaMock.organization.update.mockReset();
     prismaMock.organization.updateMany.mockReset();
+    // Every organization list is annotated from one module lookup; the default
+    // keeps the un-moduled `findAllOrganizations` cases unchanged.
+    businessModulesMock.enabledModulesByOrganization.mockResolvedValue(
+      new Map(),
+    );
     service = new AdminService(
       prismaMock as never,
       authServiceMock as never,
       planLimitServiceMock as never,
+      businessModulesMock as never,
     );
   });
 
@@ -285,6 +295,30 @@ describe('AdminService', () => {
           userCount: 3,
         }),
       );
+    });
+
+    it('annotates every organization with its enabled modules in one lookup', async () => {
+      prismaMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', name: 'Org One', _count: { users: 1 } },
+        { id: 'org-2', name: 'Org Two', _count: { users: 2 } },
+      ]);
+      businessModulesMock.enabledModulesByOrganization.mockResolvedValue(
+        new Map([
+          ['org-1', ['vehicles']],
+          ['org-2', []],
+        ]),
+      );
+
+      const result = await service.findAllOrganizations();
+
+      expect(result[0]?.enabledModules).toEqual(['vehicles']);
+      expect(result[1]?.enabledModules).toEqual([]);
+      expect(
+        businessModulesMock.enabledModulesByOrganization,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        businessModulesMock.enabledModulesByOrganization,
+      ).toHaveBeenCalledWith(['org-1', 'org-2']);
     });
   });
 

@@ -33,6 +33,12 @@ export class WhatsAppConnectionsService {
     });
   }
 
+  findById(connectionId: string) {
+    return this.prisma.whatsAppConnection.findUnique({
+      where: { id: connectionId },
+    });
+  }
+
   getOrCreateCommercial(organizationId: string) {
     const sessionName = commercialSessionName(organizationId);
     return this.prisma.whatsAppConnection.upsert({

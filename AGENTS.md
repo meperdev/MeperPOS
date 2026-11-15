@@ -94,7 +94,7 @@ Next.js App Router under `frontend/src/`:
 
 **Styling**: TailwindCSS v4 with CSS variables for theming. Variables defined in `globals.css` under `:root` (light) and `.dark` (dark mode). Key tokens: `--primary` (teal), `--terracotta` (accent), `--card`, `--border`, `--muted`. Theme toggled via `ThemeContext` which sets a `dark` class on `<html>`.
 
-**Fonts**: Geist (sans) + JetBrains Mono (mono) via `next/font/google`, exposed as CSS variables `--font-geist` and `--font-jetbrains-mono`.
+**Fonts**: Geist (sans) + JetBrains Mono (mono) self-hosted via `next/font/local` from WOFF2 files in `frontend/src/app/fonts/`, exposed as CSS variables `--font-geist` and `--font-jetbrains-mono`. This keeps production builds independent of any Google Fonts request.
 
 **POS module**: Maintains client-side cart state with favorites (persisted to `localStorage` under `pos_favorite_product_ids`), paused sales, multi-payment splits, and invoice printing through `printReceipt` from `useReceipt`.
 
