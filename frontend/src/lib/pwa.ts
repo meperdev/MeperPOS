@@ -41,7 +41,7 @@ export const PWA_DISPLAY = "standalone";
  */
 export const SW_PATH = "/sw.js";
 
-export const SW_CACHE_VERSION = "v2";
+export const SW_CACHE_VERSION = "v3";
 
 export const SW_STATIC_CACHE = `meperpos-static-${SW_CACHE_VERSION}`;
 export const SW_PAGES_CACHE = `meperpos-pages-${SW_CACHE_VERSION}`;

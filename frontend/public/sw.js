@@ -54,7 +54,7 @@
  *   );
  */
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 
 const STATIC_CACHE = `meperpos-static-${CACHE_VERSION}`;
 const PAGES_CACHE = `meperpos-pages-${CACHE_VERSION}`;
