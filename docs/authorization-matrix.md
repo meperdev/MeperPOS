@@ -99,6 +99,7 @@ with a 409 instead of an error.
 | /api/admin/organizations/:organizationId/modules/:moduleId | PATCH | SUPER_ADMIN | superadmin-global | backend/src/business-modules/admin-business-modules.controller.spec.ts |
 | /api/admin/organizations/:id/transfer-owner | POST | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/metrics | GET | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
+| /api/admin/modules | GET | SUPER_ADMIN | superadmin-global | backend/src/business-modules/admin-module-catalog.controller.spec.ts |
 | /api/admin/organizations/:id | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/members | POST | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
 | /api/admin/organizations/:id/members/:userId/role | PATCH | SUPER_ADMIN | superadmin-global | backend/src/admin/admin.controller.spec.ts |
