@@ -49,6 +49,7 @@ vi.mock("@/hooks/useReports", () => {
     useSalesByCategory: () => pending(),
     useTopSellingProducts: () => pending(),
     useCustomerStatistics: () => pending(),
+    useUserPerformance: () => pending(),
   };
 });
 
@@ -72,13 +73,15 @@ describe("Reportes loading", () => {
       "Cargando caja…",
       "Cargando inventario…",
       "Cargando productos…",
+      "Cargando ganancia por producto…",
       "Cargando categorías…",
       "Cargando clientes…",
       "Cargando pagos…",
+      "Cargando vendedores…",
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(document.querySelectorAll('[aria-busy="true"]').length).toBe(8);
-    expect(screen.getAllByRole("status").length).toBeGreaterThanOrEqual(8);
+    expect(document.querySelectorAll('[aria-busy="true"]').length).toBe(10);
+    expect(screen.getAllByRole("status").length).toBeGreaterThanOrEqual(10);
   });
 });

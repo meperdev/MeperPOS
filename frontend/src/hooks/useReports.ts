@@ -15,6 +15,7 @@ import type {
   FinancialOverview,
   CashFlowReport,
   InventorySnapshotReport,
+  UserPerformanceReport,
 } from "@/types";
 
 type DashboardResponse = DashboardData & {
@@ -154,6 +155,26 @@ export function useCustomerStatistics(
           buildDateRangeParams(startDate, endDate),
         )
         .then((res) => res.data),
+  });
+}
+
+/**
+ * Sales per seller for the page's period. `compare=false` keeps the rows on the
+ * same window the rest of the analysis uses instead of the backend's shifted
+ * comparison period.
+ */
+export function useUserPerformance(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["reports", "users", "performance", startDate, endDate],
+    queryFn: () =>
+      api
+        .get<UserPerformanceReport>("/reports/users/performance", {
+          startDate,
+          endDate,
+          compare: "false",
+        })
+        .then((res) => res.data),
+    enabled: !!startDate && !!endDate,
   });
 }
 

@@ -168,36 +168,38 @@ export function DailyReportSection({
             </Button>
           </div>
 
-          {showSales &&
-            (salesRows.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Sin ventas registradas hoy.</p>
-            ) : (
-              <div id="daily-report-sales" className="max-h-72 overflow-y-auto">
-                <ul aria-label="Ventas de hoy" className="divide-y divide-border/50">
-                  {salesRows.map((row) => (
-                    <li
-                      key={row.id}
-                      className="flex items-baseline justify-between gap-3 py-1.5"
-                    >
-                      <div className="flex min-w-0 items-baseline gap-2">
-                        <span className="shrink-0 text-[11px] font-medium text-muted-foreground tabular-nums">
-                          #{row.saleNumber}
+          <div id="daily-report-sales">
+            {showSales &&
+              (salesRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sin ventas registradas hoy.</p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto">
+                  <ul aria-label="Ventas de hoy" className="divide-y divide-border/50">
+                    {salesRows.map((row) => (
+                      <li
+                        key={row.id}
+                        className="flex items-baseline justify-between gap-3 py-1.5"
+                      >
+                        <div className="flex min-w-0 items-baseline gap-2">
+                          <span className="shrink-0 text-[11px] font-medium text-muted-foreground tabular-nums">
+                            #{row.saleNumber}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                            {row.time}
+                          </span>
+                          <span className="truncate text-xs text-foreground">
+                            {row.customerLabel}
+                          </span>
+                        </div>
+                        <span className="shrink-0 text-xs font-semibold text-foreground tabular-nums">
+                          {formatReportMoney(row.total)}
                         </span>
-                        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                          {row.time}
-                        </span>
-                        <span className="truncate text-xs text-foreground">
-                          {row.customerLabel}
-                        </span>
-                      </div>
-                      <span className="shrink-0 text-xs font-semibold text-foreground tabular-nums">
-                        {formatReportMoney(row.total)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+          </div>
         </div>
       )}
     </SectionShell>

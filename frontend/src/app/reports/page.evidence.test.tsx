@@ -9,6 +9,7 @@ const useSalesByPaymentMethodMock = vi.fn();
 const useSalesByCategoryMock = vi.fn();
 const useTopSellingProductsMock = vi.fn();
 const useCustomerStatisticsMock = vi.fn();
+const useUserPerformanceMock = vi.fn();
 const useDailyReportMock = vi.fn();
 
 vi.mock("@/components/layout/DashboardLayout", () => ({
@@ -58,10 +59,14 @@ vi.mock("@/hooks/useReports", () => ({
     useTopSellingProductsMock(startDate, endDate, limit),
   useCustomerStatistics: (startDate?: string, endDate?: string) =>
     useCustomerStatisticsMock(startDate, endDate),
+  useUserPerformance: (startDate?: string, endDate?: string) =>
+    useUserPerformanceMock(startDate, endDate),
 }));
 
 import ReportsPage from "./page";
 import { api } from "@/lib/api";
+import { getBogotaDateInputValue } from "@/lib/utils";
+import { reportPeriodPresets } from "@/lib/reportPresentation";
 
 const range = {
   startDate: "2026-01-10",
@@ -96,6 +101,7 @@ describe("Reports economics-first evidence", () => {
       data: {
         current: {
           netIncome: "100000.25",
+          attributableRevenue: "95000.25",
           tax: "19000.05",
           cogs: "40000.00",
           grossProfit: "60000.25",
@@ -108,6 +114,7 @@ describe("Reports economics-first evidence", () => {
         },
         previous: {
           netIncome: "80000.00",
+          attributableRevenue: "78000.00",
           tax: "15000.00",
           cogs: "30000.00",
           grossProfit: "50000.00",
@@ -169,6 +176,23 @@ describe("Reports economics-first evidence", () => {
       isLoading: false,
     });
 
+    useUserPerformanceMock.mockReturnValue({
+      data: {
+        data: [
+          {
+            userId: "u-1",
+            userName: "Ana",
+            salesCount: 3,
+            revenue: 180000,
+            avgTicket: 60000,
+            uniqueCustomers: 2,
+          },
+        ],
+        appliedRange: range,
+      },
+      isLoading: false,
+      error: null,
+    });
   });
 
   afterEach(() => {
@@ -184,7 +208,8 @@ describe("Reports economics-first evidence", () => {
     expect(screen.getByText("Productos más vendidos")).toBeTruthy();
     expect(screen.getByText("Mejores clientes")).toBeTruthy();
     expect(screen.getByText("Métodos de pago")).toBeTruthy();
-    expect(screen.queryByText("Rendimiento por vendedor")).toBeNull();
+    expect(screen.getByText("Ventas por vendedor")).toBeTruthy();
+    expect(screen.getByText("Ganancia por producto")).toBeTruthy();
     expect(screen.queryByText("Importar Inventario")).toBeNull();
   });
 
@@ -249,7 +274,8 @@ describe("Reports economics-first evidence", () => {
     ).toBeTruthy();
 
     // Humanized KPI cards & Breakdown labels
-    expect(screen.getAllByText("Total vendido").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Total vendido").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Ventas con costo conocido")).toBeTruthy();
     expect(screen.getAllByText("Ganancia antes de gastos").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("Ganancia real").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText(/Gastos/).length).toBeGreaterThanOrEqual(2);
@@ -275,6 +301,52 @@ describe("Reports economics-first evidence", () => {
   it("renders an intentional empty state when economics has no data", () => {
     useEconomicOverviewMock.mockReturnValueOnce({ data: undefined, isLoading: false, error: null });
     render(<ReportsPage />);
-    expect(screen.getByText("Sin datos de economía")).toBeTruthy();
+    expect(screen.getByText("Sin datos de economía en el período.")).toBeTruthy();
+  });
+
+  it("sends one explicit range to every analysis endpoint and none to Hoy", () => {
+    render(<ReportsPage />);
+
+    const thisMonth = reportPeriodPresets(getBogotaDateInputValue()).find(
+      (preset) => preset.id === "thisMonth",
+    )!;
+
+    for (const hook of [
+      useEconomicOverviewMock,
+      useCashFlowMock,
+      useInventorySnapshotMock,
+      useSalesByPaymentMethodMock,
+      useSalesByCategoryMock,
+      useTopSellingProductsMock,
+      useCustomerStatisticsMock,
+      useUserPerformanceMock,
+    ]) {
+      const call = hook.mock.calls.at(-1)!;
+      expect(call[0]).toBe(thisMonth.startDate);
+      expect(call[1]).toBe(thisMonth.endDate);
+    }
+
+    // "Todo" is gone: the page never asks an endpoint for an ambiguous range.
+    expect(screen.queryByRole("button", { name: "Todo" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Este mes" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(useDailyReportMock.mock.calls.at(-1)).toEqual([]);
+  });
+
+  it("re-points every analysis endpoint when the preset changes", () => {
+    render(<ReportsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "7 días" }));
+
+    const last7 = reportPeriodPresets(getBogotaDateInputValue()).find(
+      (preset) => preset.id === "last7",
+    )!;
+    for (const hook of [useEconomicOverviewMock, useCashFlowMock, useUserPerformanceMock]) {
+      const call = hook.mock.calls.at(-1)!;
+      expect(call[0]).toBe(last7.startDate);
+      expect(call[1]).toBe(last7.endDate);
+    }
   });
 });

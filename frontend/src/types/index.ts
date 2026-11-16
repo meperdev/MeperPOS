@@ -191,6 +191,11 @@ export interface FinancialProductMargin {
 
 export interface FinancialReport {
   netIncome: string;
+  /**
+   * Revenue of the items that carry a cost snapshot. The profit lines below are
+   * computed from it, so only this revenue reconciles with `cogs`.
+   */
+  attributableRevenue: string;
   tax: string;
   cogs: string;
   grossProfit: string;
@@ -217,6 +222,11 @@ export interface FinancialOverview {
 
 export interface CashFlowReport {
   accountingBasis: string;
+  /**
+   * Collections minus expense payments, computed by the server. Optional so a
+   * response from an older deployment still renders the two totals.
+   */
+  netFlow?: string;
   collections: {
     total: string;
     byPaymentMethod: Array<{ paymentMethod: string; total: string; count: number }>;
@@ -366,6 +376,26 @@ export interface DailySale {
   subtotal: number;
   tax: number;
   count: number;
+}
+
+/** `GET /reports/users/performance` — sales per seller for one period. */
+export interface UserPerformanceRow {
+  userId: string;
+  userName: string;
+  salesCount: number;
+  revenue: number;
+  avgTicket: number;
+  uniqueCustomers: number;
+  comparison?: {
+    revenuePct: number | null;
+    salesPct: number | null;
+  };
+}
+
+export interface UserPerformanceReport {
+  data: UserPerformanceRow[];
+  appliedRange: AppliedRange;
+  comparisonRange?: AppliedRange;
 }
 
 /**

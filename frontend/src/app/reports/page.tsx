@@ -1,7 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { Download, FileDown } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { CashFlowBlock } from "@/components/reports/CashFlowBlock";
+import { CategoriesBlock } from "@/components/reports/CategoriesBlock";
+import { CustomersBlock } from "@/components/reports/CustomersBlock";
+import { DailyReportSection } from "@/components/reports/DailyReportSection";
+import { EconomySection } from "@/components/reports/EconomySection";
+import { InventoryBlock } from "@/components/reports/InventoryBlock";
+import { PaymentMethodsBlock } from "@/components/reports/PaymentMethodsBlock";
+import { PeriodFilter } from "@/components/reports/PeriodFilter";
+import { ProductProfitBlock } from "@/components/reports/ProductProfitBlock";
+import { SellerPerformanceBlock } from "@/components/reports/SellerPerformanceBlock";
+import { TopProductsBlock } from "@/components/reports/TopProductsBlock";
+import { useDailyReport } from "@/hooks/useDailyReport";
 import {
   useCashFlow,
   useCustomerStatistics,
@@ -10,47 +23,15 @@ import {
   useSalesByCategory,
   useSalesByPaymentMethod,
   useTopSellingProducts,
+  useUserPerformance,
 } from "@/hooks/useReports";
-import { useDailyReport } from "@/hooks/useDailyReport";
-import { DailyReportSection } from "@/components/reports/DailyReportSection";
-import { SectionShell } from "@/components/reports/SectionShell";
-import { api, getApiErrorMessage } from "@/lib/api";
-import { adaptiveReportGranularity, formatReportMoney, safeDecimalNumber } from "@/lib/reportPresentation";
-import {
-  cn,
-  formatCurrency,
-  formatPaymentMethod,
-  getBogotaDateInputValue,
-  shiftDateInputValue,
-} from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { Button } from "@/components/ui/Button";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { Input } from "@/components/ui/Input";
-import { CardSkeleton } from "@/components/ui/CardSkeleton";
-import { TableSkeleton } from "@/components/ui/TableSkeleton";
-import { EmptyState } from "@/components/ui/EmptyState";
-import {
-  FilterClearButton,
-  FilterGroup,
-  FilterOptionButton,
-} from "@/components/ui/FilterBar";
-import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
-import {
-  BarChart3,
-  Calendar,
-  CircleDollarSign,
-  Download,
-  FileDown,
-  Info,
-  Package,
-  Receipt,
-  TrendingUp,
-  Users,
-} from "lucide-react";
-import type { AppliedRange, FinancialReport } from "@/types";
+import { api, getApiErrorMessage } from "@/lib/api";
+import { reportPeriodPresets } from "@/lib/reportPresentation";
+import { getBogotaDateInputValue } from "@/lib/utils";
+import type { AppliedRange } from "@/types";
 
 function rangeLabel(range?: AppliedRange) {
   if (!range?.startDate && !range?.endDate) return "Período completo";
@@ -69,228 +50,16 @@ function rangeLabel(range?: AppliedRange) {
   return start && end ? `${start} - ${end}` : start ? `Desde ${start}` : `Hasta ${end}`;
 }
 
-function NarrativeSummary({ report }: { report: FinancialReport }) {
-  const totalSold = safeDecimalNumber(report.netIncome);
-  const expenses = safeDecimalNumber(report.operatingExpenses);
-  const realProfit = safeDecimalNumber(report.netProfit);
-
-  let message = "";
-  let dotClass = "bg-muted-foreground/50";
-  if (totalSold === 0 && expenses === 0) {
-    message = "No hubo ventas ni gastos registrados en este período.";
-  } else if (totalSold === 0) {
-    message = `No hubo ventas en este período. Tuviste ${formatReportMoney(expenses)} en gastos.`;
-    dotClass = "bg-warning";
-  } else if (realProfit > 0) {
-    message = `En este período vendiste ${formatReportMoney(totalSold)}. Te quedaron ${formatReportMoney(realProfit)} de ganancia después de ${formatReportMoney(expenses)} en gastos.`;
-    dotClass = "bg-success";
-  } else if (realProfit === 0) {
-    message = `En este período vendiste ${formatReportMoney(totalSold)}. Quedaste en punto de equilibrio después de ${formatReportMoney(expenses)} en gastos.`;
-  } else {
-    message = `En este período vendiste ${formatReportMoney(totalSold)}. Estás con un balance negativo de ${formatReportMoney(Math.abs(realProfit))} después de ${formatReportMoney(expenses)} en gastos.`;
-    dotClass = "bg-danger";
-  }
-
-  return (
-    <div className="mb-4 flex items-center gap-2 rounded-lg bg-muted/40 px-3.5 py-2.5">
-      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} />
-      <p className="text-xs font-medium text-foreground leading-relaxed tabular-nums">
-        {message}
-      </p>
-    </div>
-  );
-}
-
-function BreakdownCard({ report }: { report: FinancialReport }) {
-  const totalSold = safeDecimalNumber(report.netIncome);
-  const productCost = safeDecimalNumber(report.cogs);
-  const grossProfit = safeDecimalNumber(report.grossProfit);
-  const expenses = safeDecimalNumber(report.operatingExpenses);
-  const realProfit = safeDecimalNumber(report.netProfit);
-
-  return (
-    <div className="flex h-full flex-col justify-between rounded-lg bg-muted/40 p-4">
-      <div>
-        <p className="text-xs sm:text-sm font-semibold text-foreground">Desglose</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">El camino de tu plata</p>
-      </div>
-
-      <div className="mt-4 space-y-2 text-xs">
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Total vendido</span>
-          <span className="font-semibold text-foreground tabular-nums">
-            {formatReportMoney(totalSold)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between text-danger-text">
-          <span>(-) Costo de productos</span>
-          <span className="font-semibold tabular-nums">
-            -{formatReportMoney(productCost)}
-          </span>
-        </div>
-
-        <div className="border-t border-border/60" />
-
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Ganancia antes de gastos</span>
-          <span className="font-semibold text-foreground tabular-nums">
-            {formatReportMoney(grossProfit)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between text-danger-text">
-          <span>(-) Gastos</span>
-          <span className="font-semibold tabular-nums">
-            -{formatReportMoney(expenses)}
-          </span>
-        </div>
-
-        <div className="border-t border-border/60" />
-
-        <div className="flex items-center justify-between pt-0.5">
-          <span className="font-semibold text-foreground">Ganancia real</span>
-          <span
-            className={cn(
-              "text-sm font-semibold tabular-nums",
-              realProfit >= 0 ? "text-success-text" : "text-danger-text",
-            )}
-          >
-            {formatReportMoney(realProfit)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ComparisonChart({
-  current,
-  previous,
-  range,
-  comparisonRange,
-}: {
-  current: FinancialReport;
-  previous: FinancialReport;
-  range: AppliedRange;
-  comparisonRange?: AppliedRange;
-}) {
-  const granularity = adaptiveReportGranularity(range.startDate, range.endDate);
-  const metrics = [
-    {
-      label: "Actual",
-      sublabel: rangeLabel(range),
-      value: safeDecimalNumber(current.netIncome),
-      color: "bg-foreground/85",
-    },
-    {
-      label: "Anterior",
-      sublabel: comparisonRange ? rangeLabel(comparisonRange) : "Período previo",
-      value: safeDecimalNumber(previous.netIncome),
-      color: "bg-muted-foreground/45",
-    },
-  ];
-  const scale = Math.max(
-    ...metrics.map((m) => Math.abs(m.value)),
-    1,
-  );
-  const currentProfit = safeDecimalNumber(current.netProfit);
-  const previousProfit = safeDecimalNumber(previous.netProfit);
-  const currentExpenses = safeDecimalNumber(current.operatingExpenses);
-  const previousExpenses = safeDecimalNumber(previous.operatingExpenses);
-
-  return (
-    <div
-      className="flex h-full flex-col justify-between space-y-4"
-      aria-label={`Comparación económica por ${granularity === "day" ? "día" : "mes"}`}
-      role="img"
-    >
-      <div className="space-y-3.5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-xs sm:text-sm font-semibold text-foreground">
-              Comparación con período anterior
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Comparando el total vendido entre ambos períodos
-            </p>
-          </div>
-          <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
-            Granularidad: {granularity === "day" ? "día" : "mes"}
-          </span>
-        </div>
-        <div className="space-y-2">
-          {metrics.map((item) => (
-            <div key={item.label} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-foreground">
-                  {item.label}{" "}
-                  <span className="text-[11px] font-normal text-muted-foreground tabular-nums">
-                    ({item.sublabel})
-                  </span>
-                </span>
-                <span className="font-semibold text-foreground tabular-nums">
-                  {formatReportMoney(item.value)}
-                </span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-sm bg-muted/60">
-                <div
-                  className={cn("h-full rounded-sm", item.color)}
-                  style={{
-                    width: `${Math.max(2, (Math.abs(item.value) / scale) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
-        <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <span className="text-[11px] text-muted-foreground block">
-            Ganancia anterior
-          </span>
-          <span className="mt-0.5 text-xs font-semibold text-foreground tabular-nums block">
-            {formatReportMoney(previousProfit)}
-          </span>
-          <span className="text-[11px] text-muted-foreground tabular-nums">
-            Actual: {formatReportMoney(currentProfit)}
-          </span>
-        </div>
-        <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <span className="text-[11px] text-muted-foreground block">
-            Gastos anteriores
-          </span>
-          <span className="mt-0.5 text-xs font-semibold text-foreground tabular-nums block">
-            {formatReportMoney(previousExpenses)}
-          </span>
-          <span className="text-[11px] text-muted-foreground tabular-nums">
-            Actual: {formatReportMoney(currentExpenses)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OperationalEmpty({ label }: { label: string }) {
-  return (
-    <EmptyState
-      icon={<BarChart3 className="h-5 w-5 text-muted-foreground" />}
-      title={`Sin datos de ${label}`}
-      subtitle="Prueba otro período o espera nuevas operaciones."
-      className="min-h-[140px]"
-    />
-  );
-}
-
 export default function ReportsPage() {
   const toast = useToast();
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const presets = reportPeriodPresets(getBogotaDateInputValue());
+  const [range, setRange] = useState(() => {
+    const thisMonth = presets.find((preset) => preset.id === "thisMonth")!;
+    return { startDate: thisMonth.startDate, endDate: thisMonth.endDate };
+  });
   const [showExporting, setShowExporting] = useState(false);
   const [isDownloadingDailyReport, setIsDownloadingDailyReport] = useState(false);
+  const { startDate, endDate } = range;
 
   const dailyReport = useDailyReport();
   const economic = useEconomicOverview(startDate, endDate);
@@ -300,36 +69,10 @@ export default function ReportsPage() {
   const categories = useSalesByCategory(startDate, endDate);
   const topProducts = useTopSellingProducts(startDate, endDate, 5);
   const customers = useCustomerStatistics(startDate, endDate);
-  const overview = economic.data;
-  const current = overview?.current;
+  const sellers = useUserPerformance(startDate, endDate);
+  const current = economic.data?.current;
+  const appliedLabel = rangeLabel(economic.data?.appliedRange);
 
-  const todayValue = getBogotaDateInputValue();
-  const weekStartValue = shiftDateInputValue(todayValue, -6);
-  const monthStartValue = shiftDateInputValue(todayValue, -29);
-  const isAllDatesActive = !startDate && !endDate;
-  const isTodayActive = startDate === todayValue && endDate === todayValue;
-  const isWeekActive = startDate === weekStartValue && endDate === todayValue;
-  const isLast30Active = startDate === monthStartValue && endDate === todayValue;
-
-  const setAllDates = () => {
-    setStartDate("");
-    setEndDate("");
-  };
-  const setToday = () => {
-    const today = getBogotaDateInputValue();
-    setStartDate(today);
-    setEndDate(today);
-  };
-  const setLast7Days = () => {
-    const today = getBogotaDateInputValue();
-    setStartDate(shiftDateInputValue(today, -6));
-    setEndDate(today);
-  };
-  const setLast30Days = () => {
-    const today = getBogotaDateInputValue();
-    setStartDate(shiftDateInputValue(today, -29));
-    setEndDate(today);
-  };
   const handleEconomicExport = async () => {
     setShowExporting(true);
     try {
@@ -346,40 +89,25 @@ export default function ReportsPage() {
       setShowExporting(false);
     }
   };
+
   const handleDailyReportPdf = async () => {
     setIsDownloadingDailyReport(true);
     try {
       await api.downloadData("/reports/daily-report/pdf");
       toast.success("Reporte del día descargado");
     } catch (error) {
-      toast.error(
-        getApiErrorMessage(error, "No se pudo generar el reporte del día"),
-      );
+      toast.error(getApiErrorMessage(error, "No se pudo generar el reporte del día"));
     } finally {
       setIsDownloadingDailyReport(false);
     }
   };
-
-  const operationalPaymentMethods = useMemo(
-    () => paymentMethods.data?.data ?? [],
-    [paymentMethods.data?.data],
-  );
-  const operationalCategories = useMemo(
-    () => categories.data?.data ?? [],
-    [categories.data?.data],
-  );
-  const operationalProducts = useMemo(
-    () => topProducts.data?.data ?? [],
-    [topProducts.data?.data],
-  );
-  const operationalCustomers = customers.data?.topCustomers ?? [];
 
   return (
     <DashboardLayout>
       <div className="space-y-4 lg:space-y-5">
         <PageHeader
           title="Reportes"
-          count={rangeLabel(economic.data?.appliedRange)}
+          count={appliedLabel}
           subtitle="Así va tu negocio"
           actions={
             <>
@@ -418,559 +146,42 @@ export default function ReportsPage() {
           isRefreshing={dailyReport.isFetching}
         />
 
-        <section
-          className="rounded-xl border border-border/70 bg-card p-2.5 shadow-2xs"
-          aria-label="Filtros de período"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <FilterGroup label="Período">
-              <FilterOptionButton active={isAllDatesActive} onClick={setAllDates}>
-                Todo
-              </FilterOptionButton>
-              <FilterOptionButton active={isTodayActive} onClick={setToday}>
-                Hoy
-              </FilterOptionButton>
-              <FilterOptionButton active={isWeekActive} onClick={setLast7Days}>
-                7 días
-              </FilterOptionButton>
-              <FilterOptionButton active={isLast30Active} onClick={setLast30Days}>
-                Últimos 30 días
-              </FilterOptionButton>
-            </FilterGroup>
+        <PeriodFilter
+          presets={presets}
+          startDate={startDate}
+          endDate={endDate}
+          appliedLabel={appliedLabel}
+          onChange={setRange}
+        />
 
-            <div className="flex flex-wrap items-center gap-2">
-              <label
-                className="text-xs font-medium text-muted-foreground"
-                htmlFor="reports-start"
-              >
-                Desde
-              </label>
-              <Input
-                id="reports-start"
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className="w-auto min-w-[10.5rem]"
-              />
-              <label
-                className="text-xs font-medium text-muted-foreground"
-                htmlFor="reports-end"
-              >
-                Hasta
-              </label>
-              <Input
-                id="reports-end"
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                className="w-auto min-w-[10.5rem]"
-              />
-            </div>
-
-            {(startDate || endDate) && (
-              <FilterClearButton
-                onClick={() => {
-                  setStartDate("");
-                  setEndDate("");
-                }}
-              />
-            )}
-
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground tabular-nums">
-              <Calendar className="h-3 w-3 shrink-0" aria-hidden="true" />
-              {rangeLabel(economic.data?.appliedRange)}
-            </span>
-          </div>
-        </section>
-
-        <SectionShell title="Economía" icon={CircleDollarSign}>
-          {economic.isLoading ? (
-            <div aria-busy="true">
-              <CardSkeleton
-                count={4}
-                label="Cargando economía…"
-                className="sm:grid-cols-2 xl:grid-cols-4"
-                cardClassName="min-h-[96px]"
-              />
-            </div>
-          ) : economic.error ? (
-            <ErrorState
-              message={getApiErrorMessage(
-                economic.error,
-                "No se pudo cargar el resumen económico",
-              )}
-              onRetry={() => economic.refetch()}
-              retryLabel="Reintentar"
-              className="min-h-[140px]"
-            />
-          ) : !current ? (
-            <OperationalEmpty label="economía" />
-          ) : (
-            <>
-              <NarrativeSummary report={current} />
-              <div className="grid gap-3 lg:gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard
-                  label="Total vendido"
-                  value={formatReportMoney(current.netIncome)}
-                  helper="Lo que entró por ventas"
-                  delta={overview!.deltas.netIncome}
-                />
-                <MetricCard
-                  label="Ganancia antes de gastos"
-                  value={formatReportMoney(current.grossProfit)}
-                  helper={`${current.grossMarginPercentage?.toFixed(1) ?? "-"}% de margen sobre ventas`}
-                  delta={overview!.deltas.grossProfit}
-                />
-                <MetricCard
-                  label="Ganancia real"
-                  value={formatReportMoney(current.netProfit)}
-                  helper={`${current.netMarginPercentage?.toFixed(1) ?? "-"}% de margen neto`}
-                  delta={overview!.deltas.netProfit}
-                />
-                <MetricCard
-                  label="Gastos"
-                  value={formatReportMoney(current.operatingExpenses)}
-                  helper="Lo que pagas para que funcione el negocio"
-                  delta={overview!.deltas.operatingExpenses}
-                />
-              </div>
-              {current.dataQuality.excludedItems > 0 && (
-                <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3.5 py-2.5">
-                  <Info
-                    className="h-4 w-4 shrink-0 mt-0.5 text-warning-text"
-                    aria-hidden="true"
-                  />
-                  <p role="status" className="text-xs text-warning-text tabular-nums">
-                    <span className="font-semibold">
-                      {current.dataQuality.snapshotBackedItems} registros con costo exacto
-                    </span>
-                    .{" "}
-                    <span>
-                      {current.dataQuality.excludedItems} registro
-                      {current.dataQuality.excludedItems === 1 ? "" : "s"} excluido
-                      {current.dataQuality.excludedItems === 1 ? "" : "s"}; no se estimó
-                      su costo actual (la ganancia es aproximada).
-                    </span>
-                  </p>
-                </div>
-              )}
-              <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
-                <div>
-                  <ComparisonChart
-                    current={current}
-                    previous={overview!.previous}
-                    range={overview!.appliedRange}
-                    comparisonRange={overview!.comparisonRange}
-                  />
-                </div>
-                <BreakdownCard report={current} />
-              </div>
-            </>
-          )}
-        </SectionShell>
-
-        <div className="grid gap-4 lg:gap-5 xl:grid-cols-2">
-          <SectionShell title="Caja y pagos" icon={Receipt}>
-            {cash.isLoading ? (
-              <div aria-busy="true">
-                <CardSkeleton
-                  count={2}
-                  label="Cargando caja…"
-                  className="sm:grid-cols-2"
-                  cardClassName="min-h-[92px]"
-                />
-              </div>
-            ) : cash.error ? (
-              <ErrorState
-                message={getApiErrorMessage(cash.error, "No se pudo cargar caja")}
-                onRetry={() => cash.refetch()}
-                retryLabel="Reintentar"
-                className="min-h-[140px]"
-              />
-            ) : cash.data ? (
-              <div className="space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg bg-muted/40 p-3.5">
-                    <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-success shrink-0" />
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Plata que entró
-                      </p>
-                    </div>
-                    <p className="mt-1.5 text-lg sm:text-xl font-semibold tracking-tight text-foreground tabular-nums">
-                      {formatReportMoney(cash.data.collections.total)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-muted/40 p-3.5">
-                    <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-warning shrink-0" />
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Plata que salió
-                      </p>
-                    </div>
-                    <p className="mt-1.5 text-lg sm:text-xl font-semibold tracking-tight text-foreground tabular-nums">
-                      {formatReportMoney(cash.data.expensePayments.total)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between rounded-lg bg-muted/40 px-3.5 py-2.5 text-xs">
-                  <span className="font-medium text-muted-foreground">
-                    Flujo neto de caja
-                  </span>
-                  <span
-                    className={cn(
-                      "font-semibold tabular-nums",
-                      safeDecimalNumber(cash.data.collections.total) -
-                        safeDecimalNumber(cash.data.expensePayments.total) >=
-                        0
-                        ? "text-success-text"
-                        : "text-danger-text",
-                    )}
-                  >
-                    {formatReportMoney(
-                      safeDecimalNumber(cash.data.collections.total) -
-                        safeDecimalNumber(cash.data.expensePayments.total),
-                    )}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <OperationalEmpty label="caja" />
-            )}
-          </SectionShell>
-
-          <SectionShell title="Inventario actual" icon={Package}>
-            {inventory.isLoading ? (
-              <div aria-busy="true">
-                <CardSkeleton
-                  count={4}
-                  label="Cargando inventario…"
-                  className="sm:grid-cols-2"
-                  cardClassName="min-h-[76px]"
-                />
-              </div>
-            ) : inventory.error ? (
-              <ErrorState
-                message={getApiErrorMessage(
-                  inventory.error,
-                  "No se pudo cargar inventario",
-                )}
-                onRetry={() => inventory.refetch()}
-                retryLabel="Reintentar"
-                className="min-h-[140px]"
-              />
-            ) : inventory.data ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg bg-muted/40 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Lo que costó tu inventario
-                  </p>
-                  <p className="mt-1 text-sm sm:text-base font-semibold text-foreground tabular-nums">
-                    {formatReportMoney(inventory.data.current.stockValue)}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-muted/40 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Lo que vale si vendes todo
-                  </p>
-                  <p className="mt-1 text-sm sm:text-base font-semibold text-foreground tabular-nums">
-                    {formatReportMoney(inventory.data.current.retailValue)}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-muted/40 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Ganancia posible
-                  </p>
-                  <p className="mt-1 text-sm sm:text-base font-semibold text-success-text tabular-nums">
-                    {formatReportMoney(inventory.data.current.potentialProfit)}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-muted/40 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Unidades en stock
-                  </p>
-                  <p className="mt-1 text-sm sm:text-base font-semibold text-foreground tabular-nums">
-                    {inventory.data.current.stockQuantity.toLocaleString("es-CO")}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <OperationalEmpty label="inventario" />
-            )}
-          </SectionShell>
-        </div>
-
-        <div className="space-y-3">
-          <h2 className="text-xs font-semibold text-muted-foreground">
-            Análisis operativo
+        <div className="space-y-4 lg:space-y-5">
+          <h2 className="text-sm font-semibold tracking-tight text-foreground">
+            Análisis del período
           </h2>
-          <div className="grid gap-4 lg:gap-5 xl:grid-cols-2">
-            <SectionShell title="Productos más vendidos" icon={TrendingUp}>
-              {topProducts.isLoading ? (
-                <div aria-busy="true">
-                  <TableSkeleton
-                    rows={5}
-                    columns={2}
-                    label="Cargando productos…"
-                    className="border-0 bg-transparent"
-                  />
-                </div>
-              ) : topProducts.error ? (
-                <ErrorState
-                  message={getApiErrorMessage(
-                    topProducts.error,
-                    "No se pudieron cargar productos",
-                  )}
-                  onRetry={() => topProducts.refetch()}
-                  retryLabel="Reintentar"
-                  className="min-h-[140px]"
-                />
-              ) : operationalProducts.length === 0 ? (
-                <OperationalEmpty label="productos" />
-              ) : (
-                <div className="space-y-2">
-                  {(() => {
-                    const maxProductTotal = Math.max(
-                      ...operationalProducts.map((p) => p.total || 0),
-                      1,
-                    );
-                    return operationalProducts.map((product, index) => (
-                      <div
-                        key={product.productId}
-                        className="space-y-1.5 rounded-lg bg-muted/40 px-3 py-2.5"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-[11px] font-semibold text-muted-foreground tabular-nums">
-                              {index + 1}
-                            </span>
-                            <span className="truncate text-xs sm:text-sm font-medium text-foreground">
-                              {product.productName}
-                            </span>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <span className="text-[11px] text-muted-foreground tabular-nums">
-                              {product.quantity} vendidos
-                            </span>
-                            <span className="text-xs font-semibold text-foreground tabular-nums">
-                              {formatCurrency(product.total)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="h-1 overflow-hidden rounded-sm bg-muted">
-                          <div
-                            className="h-full rounded-sm bg-foreground/70"
-                            style={{
-                              width: `${Math.max(3, ((product.total || 0) / maxProductTotal) * 100)}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              )}
-            </SectionShell>
 
-            <SectionShell title="Categorías" icon={BarChart3}>
-              {categories.isLoading ? (
-                <div aria-busy="true">
-                  <TableSkeleton
-                    rows={5}
-                    columns={2}
-                    label="Cargando categorías…"
-                    className="border-0 bg-transparent"
-                  />
-                </div>
-              ) : categories.error ? (
-                <ErrorState
-                  message={getApiErrorMessage(
-                    categories.error,
-                    "No se pudieron cargar categorías",
-                  )}
-                  onRetry={() => categories.refetch()}
-                  retryLabel="Reintentar"
-                  className="min-h-[140px]"
-                />
-              ) : operationalCategories.length === 0 ? (
-                <OperationalEmpty label="categorías" />
-              ) : (
-                <div className="space-y-2">
-                  {(() => {
-                    const totalCategorySales = Math.max(
-                      operationalCategories.reduce((sum, c) => sum + (c.total || 0), 0),
-                      1,
-                    );
-                    return operationalCategories.map((category) => {
-                      const share = Math.round(((category.total || 0) / totalCategorySales) * 100);
-                      return (
-                        <div
-                          key={category.category}
-                          className="space-y-1.5 rounded-lg bg-muted/40 px-3 py-2.5"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <span className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground" />
-                              <span className="truncate text-xs sm:text-sm font-medium text-foreground">
-                                {category.category}
-                              </span>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <span className="text-[11px] text-muted-foreground tabular-nums">
-                                {category.quantity}{" "}
-                                <span className="text-muted-foreground">
-                                  unidades
-                                </span>
-                              </span>
-                              <span className="text-xs font-semibold text-foreground tabular-nums">
-                                {formatCurrency(category.total)}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="h-1 overflow-hidden rounded-sm bg-muted">
-                            <div
-                              className="h-full rounded-sm bg-foreground/65"
-                              style={{ width: `${Math.max(3, share)}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              )}
-            </SectionShell>
+          <EconomySection query={economic} />
 
-            <SectionShell title="Mejores clientes" icon={Users}>
-              {customers.isLoading ? (
-                <div aria-busy="true">
-                  <TableSkeleton rows={5} columns={3} label="Cargando clientes…" />
-                </div>
-              ) : customers.error ? (
-                <ErrorState
-                  message={getApiErrorMessage(
-                    customers.error,
-                    "No se pudieron cargar clientes",
-                  )}
-                  onRetry={() => customers.refetch()}
-                  retryLabel="Reintentar"
-                  className="min-h-[140px]"
-                />
-              ) : operationalCustomers.length === 0 ? (
-                <OperationalEmpty label="clientes" />
-              ) : (
-                <div className="overflow-hidden rounded-lg border border-border/60">
-                  <div className="overflow-x-auto">
-                    <Table variant="default" className="min-w-[420px]">
-                      <TableHeader>
-                        <TableRow>
-                          <TableCell as="th">Cliente</TableCell>
-                          <TableCell as="th" numeric>
-                            Compras
-                          </TableCell>
-                          <TableCell as="th" numeric>
-                            Total
-                          </TableCell>
-                        </TableRow>
-                      </TableHeader>
-                      <tbody>
-                        {operationalCustomers.map((customer) => (
-                          <TableRow key={customer.customerId}>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/50 text-[11px] font-semibold text-foreground">
-                                  {customer.customerName.charAt(0).toUpperCase()}
-                                </span>
-                                <span className="text-xs font-medium text-foreground truncate">
-                                  {customer.customerName}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell numeric className="text-xs text-muted-foreground">
-                              {customer.totalSales}
-                            </TableCell>
-                            <TableCell numeric className="text-xs font-semibold text-foreground">
-                              {formatCurrency(customer.totalRevenue)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </tbody>
-                    </Table>
-                  </div>
-                </div>
-              )}
-            </SectionShell>
+          <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-2">
+            <CashFlowBlock query={cash} />
+            <InventoryBlock query={inventory} />
+          </div>
 
-            <SectionShell title="Métodos de pago" icon={Receipt}>
-              {paymentMethods.isLoading ? (
-                <div aria-busy="true">
-                  <TableSkeleton
-                    rows={4}
-                    columns={2}
-                    label="Cargando pagos…"
-                    className="border-0 bg-transparent"
-                  />
-                </div>
-              ) : paymentMethods.error ? (
-                <ErrorState
-                  message={getApiErrorMessage(
-                    paymentMethods.error,
-                    "No se pudieron cargar pagos",
-                  )}
-                  onRetry={() => paymentMethods.refetch()}
-                  retryLabel="Reintentar"
-                  className="min-h-[140px]"
-                />
-              ) : operationalPaymentMethods.length === 0 ? (
-                <OperationalEmpty label="métodos de pago" />
-              ) : (
-                <div className="space-y-2">
-                  {(() => {
-                    const totalMethodsAmount = Math.max(
-                      operationalPaymentMethods.reduce((sum, m) => sum + (m.total || 0), 0),
-                      1,
-                    );
-                    return operationalPaymentMethods.map((method) => {
-                      const share = Math.round(((method.total || 0) / totalMethodsAmount) * 100);
-                      return (
-                        <div
-                          key={method.paymentMethod}
-                          className="space-y-1.5 rounded-lg bg-muted/40 px-3 py-2.5"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground" />
-                              <span className="text-xs sm:text-sm font-medium text-foreground">
-                                {formatPaymentMethod(method.paymentMethod)}
-                              </span>
-                              <span className="rounded-sm border border-border/60 bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
-                                {share}%
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {method.count != null && (
-                                <span className="text-[11px] text-muted-foreground tabular-nums">
-                                  {method.count} {method.count === 1 ? "pago" : "pagos"}
-                                </span>
-                              )}
-                              <span className="text-xs font-semibold text-foreground tabular-nums">
-                                {formatCurrency(method.total)}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="h-1 overflow-hidden rounded-sm bg-muted">
-                            <div
-                              className="h-full rounded-sm bg-foreground/65"
-                              style={{ width: `${Math.max(3, share)}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              )}
-            </SectionShell>
+          <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-2">
+            <TopProductsBlock query={topProducts} />
+            <ProductProfitBlock
+              products={current?.products ?? []}
+              isLoading={economic.isLoading}
+            />
+          </div>
+
+          <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-2">
+            <CategoriesBlock query={categories} />
+            <PaymentMethodsBlock query={paymentMethods} />
+          </div>
+
+          <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-2">
+            <CustomersBlock query={customers} />
+            <SellerPerformanceBlock query={sellers} />
           </div>
         </div>
       </div>

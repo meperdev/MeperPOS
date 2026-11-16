@@ -1,5 +1,10 @@
-import { formatCurrency, toFiniteNumber } from "@/lib/utils";
-import type { DailyReport, DailyReportSale } from "@/types";
+import { formatCurrency, shiftDateInputValue, toFiniteNumber } from "@/lib/utils";
+import type {
+  CustomerStatistics,
+  DailyReport,
+  DailyReportSale,
+  FinancialProductMargin,
+} from "@/types";
 
 export type ReportGranularity = "day" | "month";
 
@@ -137,4 +142,152 @@ export function dailyReportSalesRows(sales: DailyReportSale[]): DailyReportSaleR
       customerLabel: sale.customer?.name ?? "Sin cliente",
       total: sale.total,
     }));
+}
+
+export type ReportPeriodPresetId = "today" | "last7" | "thisMonth" | "last30";
+
+export interface ReportPeriodPreset {
+  id: ReportPeriodPresetId;
+  label: string;
+  startDate: string;
+  endDate: string;
+}
+
+/**
+ * Every preset resolves to an explicit `YYYY-MM-DD` window, so the page never
+ * falls back to an ambiguous "all time" range whose meaning differs per endpoint.
+ */
+export function reportPeriodPresets(todayValue: string): ReportPeriodPreset[] {
+  const monthStart = `${todayValue.slice(0, 7)}-01`;
+
+  return [
+    { id: "today", label: "Hoy", startDate: todayValue, endDate: todayValue },
+    {
+      id: "last7",
+      label: "7 días",
+      startDate: shiftDateInputValue(todayValue, -6),
+      endDate: todayValue,
+    },
+    { id: "thisMonth", label: "Este mes", startDate: monthStart, endDate: todayValue },
+    {
+      id: "last30",
+      label: "Últimos 30 días",
+      startDate: shiftDateInputValue(todayValue, -29),
+      endDate: todayValue,
+    },
+  ];
+}
+
+export function activeReportPeriodPresetId(
+  presets: ReportPeriodPreset[],
+  startDate: string,
+  endDate: string,
+): ReportPeriodPresetId | null {
+  const match = presets.find(
+    (preset) => preset.startDate === startDate && preset.endDate === endDate,
+  );
+  return match?.id ?? null;
+}
+
+/** Keeps a custom range complete and ordered; `null` when neither date is set. */
+export function normalizeReportPeriod(
+  startDate: string,
+  endDate: string,
+): { startDate: string; endDate: string } | null {
+  const start = startDate || endDate;
+  const end = endDate || startDate;
+  if (!start || !end) return null;
+  return start <= end
+    ? { startDate: start, endDate: end }
+    : { startDate: end, endDate: start };
+}
+
+export interface CategoryShare {
+  label: string;
+  total: number;
+  quantity: number;
+  /** Exact fraction of the period total, for stacked-bar widths. */
+  share: number;
+  /** Rounded percentage, for the legend. */
+  percentage: number;
+}
+
+/**
+ * Turns the category ranking into one 100%-stacked mix: the five biggest
+ * categories plus everything else grouped as "Otras". A category that sold
+ * nothing is not a slice.
+ */
+export function categoryShares(
+  categories: Array<{ category: string; total: number; quantity: number }>,
+  limit = 5,
+): CategoryShare[] {
+  const sorted = categories
+    .filter((category) => category.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const visible = sorted.slice(0, limit);
+  const rest = sorted.slice(limit);
+  const remainder = rest.reduce(
+    (sum, category) => ({
+      total: sum.total + category.total,
+      quantity: sum.quantity + category.quantity,
+    }),
+    { total: 0, quantity: 0 },
+  );
+  const entries =
+    remainder.total > 0
+      ? [...visible, { category: "Otras", ...remainder }]
+      : visible;
+  const total = entries.reduce((sum, entry) => sum + entry.total, 0);
+
+  return entries.map((entry) => {
+    const share = total > 0 ? entry.total / total : 0;
+    return {
+      label: entry.category,
+      total: entry.total,
+      quantity: entry.quantity,
+      share,
+      percentage: Math.round(share * 100),
+    };
+  });
+}
+
+/** A payment method that collected nothing is not worth a row. */
+export function visiblePaymentMethods<T extends { total: number | string }>(
+  methods: T[],
+): T[] {
+  return methods.filter((method) => safeDecimalNumber(method.total) !== 0);
+}
+
+export const CUSTOMER_RANKING_LIMIT = 5;
+
+type CustomerRankingRow = CustomerStatistics["topCustomers"][number];
+
+/**
+ * Five rows is a ranking; one row is a sentence. The caller renders the
+ * `single` mode as a line of text instead of a table card.
+ */
+export type CustomerRanking =
+  | { mode: "empty"; rows: [] }
+  | { mode: "single"; rows: [CustomerRankingRow] }
+  | { mode: "table"; rows: CustomerRankingRow[] };
+
+export function customerRanking(
+  rows: CustomerRankingRow[],
+  limit = CUSTOMER_RANKING_LIMIT,
+): CustomerRanking {
+  if (rows.length === 0) return { mode: "empty", rows: [] };
+  if (rows.length === 1) return { mode: "single", rows: [rows[0]] };
+  return { mode: "table", rows: rows.slice(0, limit) };
+}
+
+/** The server already ships per-product margins; ranking them is presentation. */
+export function topProductsByGrossProfit(
+  products: FinancialProductMargin[],
+  limit = 5,
+): FinancialProductMargin[] {
+  return [...products]
+    .sort(
+      (a, b) => safeDecimalNumber(b.grossProfit) - safeDecimalNumber(a.grossProfit),
+    )
+    .slice(0, limit);
 }
