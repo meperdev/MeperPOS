@@ -32,7 +32,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Select } from "@/components/ui/Select";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { cn, formatCurrency, formatDateTime, toFiniteNumber } from "@/lib/utils";
@@ -156,7 +156,7 @@ function LoanCard({ loan, onOpen }: { loan: Loan; onOpen: () => void }) {
   const TypeIcon = loan.type === "MONEY" ? HandCoins : Wrench;
 
   return (
-    <Card onClick={onOpen} className="flex h-full flex-col justify-between p-4">
+    <Card onClick={onOpen} className="flex h-full flex-col justify-between p-4 active:bg-muted/40">
       <div>
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -188,7 +188,7 @@ function LoanCard({ loan, onOpen }: { loan: Loan; onOpen: () => void }) {
 export default function LoansPage() {
   const toast = useToast();
   const [page, setPage] = useState(1);
-  const [viewMode, setViewMode] = usePersistedViewMode("loans");
+  const [viewMode, setViewMode] = useEffectiveViewMode("loans");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"" | MonetaryLoanType>("");
   const [statusFilter, setStatusFilter] = useState<"" | MoneyLoanStatus>("");
@@ -385,7 +385,7 @@ export default function LoansPage() {
                       <TableRow
                         key={row.id}
                         data-testid="loan-row"
-                        className="cursor-pointer"
+                        className="cursor-pointer active:bg-muted/40"
                         onClick={() => {
                           setSelectedId(row.id);
                           setAmount(undefined);

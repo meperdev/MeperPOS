@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import type { Category } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -61,7 +61,7 @@ export default function CategoriesPage() {
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [viewMode, setViewMode] = usePersistedViewMode("categories");
+  const [viewMode, setViewMode] = useEffectiveViewMode("categories");
   const [showModal, setShowModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
@@ -243,14 +243,14 @@ export default function CategoriesPage() {
                   return (
                     <div
                       key={category.id}
-                      className="group relative flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs cursor-pointer transition-colors hover:border-border"
+                      className="group relative flex min-w-0 flex-col rounded-xl border border-border/70 bg-card p-4 shadow-2xs cursor-pointer transition-colors hover:border-border active:bg-muted/60"
                     >
                       {/* The card's edit target: a real button stretched over the card; controls below sit above it. */}
                       <button
                         type="button"
                         aria-label={`Editar ${category.name}`}
                         onClick={() => handleEdit(category)}
-                        className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                        className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] transition-colors duration-150 active:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                       />
                       <div>
                         {/* Card Header */}
@@ -359,7 +359,7 @@ export default function CategoriesPage() {
                         return (
                           <TableRow
                             key={category.id}
-                            className="cursor-pointer"
+                            className="cursor-pointer active:bg-muted/40"
                             onClick={() => handleEdit(category)}
                           >
                             <TableCell>

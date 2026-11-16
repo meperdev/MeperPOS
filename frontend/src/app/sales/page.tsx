@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/FilterBar";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import { Download, Eye, Receipt } from "lucide-react";
 import {
   cn,
@@ -51,7 +51,7 @@ function SalesPageContent() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
-  const [viewMode, setViewMode] = usePersistedViewMode("sales");
+  const [viewMode, setViewMode] = useEffectiveViewMode("sales");
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [startDate, setStartDate] = useState("");
@@ -274,7 +274,7 @@ function SalesPageContent() {
                   <div
                     key={sale.id}
                     onClick={() => handleViewDetails(sale)}
-                    className="cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3 transition-colors hover:border-border"
+                    className="cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3 transition-colors hover:border-border active:bg-muted/60"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground tabular-nums">
@@ -392,7 +392,7 @@ function SalesPageContent() {
                         <TableRow
                           key={sale.id}
                           onClick={() => handleViewDetails(sale)}
-                          className="cursor-pointer"
+                          className="cursor-pointer active:bg-muted/40"
                         >
                           <TableCell>
                             <span className="text-xs font-semibold text-foreground tabular-nums">

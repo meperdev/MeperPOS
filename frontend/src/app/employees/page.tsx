@@ -21,7 +21,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -120,13 +120,13 @@ function EmployeeCard({
   const contact = [employee.phone, employee.email].filter(Boolean).join(" · ");
 
   return (
-    <Card className="relative flex cursor-pointer flex-col hover:border-border hover:bg-muted/20">
+    <Card className="relative flex cursor-pointer flex-col hover:border-border hover:bg-muted/20 active:bg-muted/40">
       {/* The card's edit target: a real button stretched over the card; controls below sit above it. */}
       <button
         type="button"
         aria-label={`Editar ${employee.name}`}
         onClick={onEdit}
-        className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+        className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] transition-colors duration-150 active:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
       />
       <div className="flex items-start gap-3 p-4 pb-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-xs font-semibold text-primary-text">
@@ -216,7 +216,7 @@ export default function EmployeesPage() {
   const [shiftFor, setShiftFor] = useState<Employee | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Employee | null>(null);
   const [changingId, setChangingId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = usePersistedViewMode("employees");
+  const [viewMode, setViewMode] = useEffectiveViewMode("employees");
   const [page, setPage] = useState(1);
   const pageSize = viewMode === "table" ? 10 : 9;
 
@@ -382,7 +382,7 @@ export default function EmployeesPage() {
                         {paged.map((employee) => (
                           <TableRow
                             key={employee.id}
-                            className="cursor-pointer"
+                            className="cursor-pointer active:bg-muted/40"
                             onClick={() => setDialog({ mode: "edit", employee })}
                           >
                             <TableCell>

@@ -2150,3 +2150,61 @@ describe("POS cart financing (pos-loan-initiation)", () => {
     await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
   });
 });
+
+describe("POS phone layout (S3.3)", () => {
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(window, "matchMedia");
+  });
+
+  function stubMatchMedia(matches: boolean) {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn((query: string) => ({
+        matches,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("p1", "Cafe molido")], meta: { total: 1, totalPages: 1 } },
+      isLoading: false,
+    });
+  });
+
+  function grid() {
+    return screen.getByTestId("pos-capacity-area").firstElementChild as HTMLElement;
+  }
+
+  it("drops the nested bordered card below lg so the products panel is flat", () => {
+    render(<POSPage />);
+
+    const panel = screen.getByTestId("pos-products-panel");
+    // No card inside a page: the panel keeps its frame on desktop only.
+    expect(panel.className).toContain("rounded-2xl");
+    expect(panel.className).toContain("border");
+    expect(panel.className).toContain("max-lg:rounded-none");
+    expect(panel.className).toContain("max-lg:border-0");
+    expect(panel.className).toContain("max-lg:bg-transparent");
+  });
+
+  it("fits three product columns on a phone and keeps two-or-more geometry on desktop", () => {
+    stubMatchMedia(true);
+    render(<POSPage />);
+
+    expect(grid().style.gridTemplateColumns).toContain("104px");
+  });
+
+  it("keeps the desktop column floor when the viewport is not a phone", () => {
+    stubMatchMedia(false);
+    render(<POSPage />);
+
+    expect(grid().style.gridTemplateColumns).toContain("152px");
+  });
+});

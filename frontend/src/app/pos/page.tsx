@@ -63,7 +63,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { hasAnyRole } from "@/lib/auth";
 import { api, getApiErrorMessage } from "@/lib/api";
 
-import { observePOSGrid, POS_GRID_ROW_CLASSES, POS_GRID_TEMPLATE_COLUMNS } from "./pos-layout";
+import { useMediaQuery } from "@/hooks/useEffectiveViewMode";
+import {
+  observePOSGrid,
+  POS_GRID_ROW_CLASSES,
+  POS_PHONE_QUERY,
+  posGridTemplateColumns,
+} from "./pos-layout";
 
 // S1 code splitting (#98): the payment modal and mobile cart drawer are the
 // heaviest POS-only components; they load as separate chunks on first open
@@ -236,6 +242,9 @@ export default function POSPage() {
   );
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [openedFromMobileCart, setOpenedFromMobileCart] = useState(false);
+  // The phone grid is a dense tile wall; wider viewports keep the measured
+  // geometry. A viewport that cannot be measured keeps the desktop layout.
+  const isPhoneViewport = useMediaQuery(POS_PHONE_QUERY, false);
 
   // Debounce search input: 400ms delay, reset to page 1 on new search
   const handleSearchChange = useCallback((value: string) => {
@@ -983,9 +992,13 @@ export default function POSPage() {
             so a panel that guessed its own `dvh` offset pushed a second
             scrollbar onto the page). `lg:h-full` keeps the desktop split.
           */}
-          <div data-testid="pos-products-panel" className="flex h-full min-h-0 flex-col rounded-2xl border border-border/70 bg-card">
-            {/* Products Header */}
-            <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-border/60">
+          <div
+            data-testid="pos-products-panel"
+            className="flex h-full min-h-0 flex-col rounded-2xl border border-border/70 bg-card max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent"
+          >
+            {/* Products Header — desktop only: on a phone the top bar already says
+                POS and the floating cart bar already carries the count. */}
+            <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-border/60 max-lg:hidden">
               <h2 className="text-sm font-semibold tracking-tight text-foreground">
                 Productos
               </h2>
@@ -999,7 +1012,7 @@ export default function POSPage() {
             </div>
 
             {/* Unified search & scanner — types to filter the grid, Enter scans/adds */}
-            <div className="@container flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15">
+            <div className="@container flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15 max-lg:px-0 max-lg:bg-transparent">
               {/* Intrinsic wrap, like FilterBar: Favoritos and the category select share a row under the search when narrow. */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[14rem] flex-[999_1_16rem]">
@@ -1073,10 +1086,10 @@ export default function POSPage() {
 
             {/* Product Grid */}
             {/* Below lg the panel is exactly the shell's content box, so this area scrolls and the pager stays put. */}
-            <div ref={capacityAreaRef} data-testid="pos-capacity-area" className="min-h-0 flex-1 overflow-y-auto p-4 lg:overflow-visible">
+            <div ref={capacityAreaRef} data-testid="pos-capacity-area" className="min-h-0 flex-1 overflow-y-auto p-4 max-lg:px-0 lg:overflow-visible">
               <div
                 ref={productGridRef}
-                style={{ gridTemplateColumns: POS_GRID_TEMPLATE_COLUMNS }}
+                style={{ gridTemplateColumns: posGridTemplateColumns(isPhoneViewport) }}
                 className={cn(
                   "grid",
                   POS_GRID_ROW_CLASSES,

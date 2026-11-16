@@ -116,8 +116,21 @@ describe("Suppliers card footer", () => {
     expect(screen.getByRole("button", { name: "Activos" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("lays the supplier cards out on the shared intrinsic collection grid", () => {
+  it("hugs its contact lines instead of stretching them to a fixed height", () => {
     render(<SuppliersPage />);
+
+    const edit = screen.getByRole("button", { name: `Editar ${SUPPLIER_NAME}` });
+    const card = edit.parentElement as HTMLElement;
+
+    // Same stretch defect as the customer card: the contact block reserved a
+    // magic height inside a grid-stretched card that spread its content apart.
+    expect(card.className).not.toContain("justify-between");
+    expect(card.className).not.toContain("min-h-[4.25rem]");
+    expect(card.className).toContain("active:bg-muted/60");
+    expect(edit.className).toContain("active:bg-muted/20");
+  });
+
+  it("lays the supplier cards out on the shared intrinsic collection grid", () => {    render(<SuppliersPage />);
 
     const grid = screen.getByRole("button", { name: `Copiar cuenta de ${SUPPLIER_NAME}` }).closest<HTMLElement>(".grid");
     expect(grid!.className).toContain("grid-cols-[repeat(auto-fill,minmax(16rem,1fr))]");

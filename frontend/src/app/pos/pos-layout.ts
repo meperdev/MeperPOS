@@ -2,6 +2,11 @@ const MAX_POS_COLUMNS = 5;
 const POS_COLUMN_GAP = 12;
 // Two cards must fit the products column beside an 18rem cart at a 1024px viewport with the 320px sidebar.
 export const POS_MIN_CARD_WIDTH = 152;
+// A phone fits three tiles across: at 390px that is ~110px each, which is why
+// the card itself is a short fixed tile below sm (see ProductCard).
+export const POS_MIN_CARD_WIDTH_PHONE = 104;
+export const POS_PHONE_COLUMNS = 3;
+export const POS_PHONE_QUERY = "(max-width: 639px)";
 // Keep in sync with the auto-rows-[224px] class on the POS grid: two rows must fit a 900px-tall viewport.
 export const POS_CARD_ROW_HEIGHT = 224;
 
@@ -21,9 +26,17 @@ function isDesktopViewport(): boolean {
   return window.matchMedia(POS_DESKTOP_QUERY).matches;
 }
 
-// Grow the minimum track at wide widths so auto-fill cannot create a sixth
-// column, but still allow fewer readable cards on narrow panels.
-export const POS_GRID_TEMPLATE_COLUMNS = `repeat(auto-fill, minmax(min(100%, max(${POS_MIN_CARD_WIDTH}px, calc((100% - ${(MAX_POS_COLUMNS - 1) * POS_COLUMN_GAP}px) / ${MAX_POS_COLUMNS}))), 1fr))`;
+/**
+ * The grid's track definition. Grow the minimum track at wide widths so
+ * auto-fill cannot create a sixth column, but still allow fewer readable cards
+ * on narrow panels. A phone gets a three-across tile wall; everything wider
+ * keeps the measured desktop geometry (see POS_MIN_CARD_WIDTH).
+ */
+export function posGridTemplateColumns(phone: boolean): string {
+  const minWidth = phone ? POS_MIN_CARD_WIDTH_PHONE : POS_MIN_CARD_WIDTH;
+  const maxColumns = phone ? POS_PHONE_COLUMNS : MAX_POS_COLUMNS;
+  return `repeat(auto-fill, minmax(min(100%, max(${minWidth}px, calc((100% - ${(maxColumns - 1) * POS_COLUMN_GAP}px) / ${maxColumns}))), 1fr))`;
+}
 
 function measureCapacity(area: HTMLElement, grid: HTMLElement): number {
   const areaStyle = window.getComputedStyle(area);
