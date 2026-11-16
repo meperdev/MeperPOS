@@ -28,10 +28,34 @@ describe("report presentation contract", () => {
   });
 });
 
-type DailyReportSlices = Pick<DailyReport, "lowStock" | "purchaseOrders" | "loans" | "sales">;
+type DailyReportSlices = Pick<
+  DailyReport,
+  "date" | "lowStock" | "purchaseOrders" | "loans" | "sales"
+>;
 
 function dailyReportSlices(overrides: Partial<DailyReportSlices> = {}): DailyReportSlices {
-  return { lowStock: [], purchaseOrders: [], loans: [], sales: [], ...overrides };
+  return {
+    date: "2026-03-15",
+    lowStock: [],
+    purchaseOrders: [],
+    loans: [],
+    sales: [],
+    ...overrides,
+  };
+}
+
+function loan(overrides: Partial<DailyReportSlices["loans"][number]>) {
+  return {
+    id: "loan-1",
+    type: "MONEY",
+    amount: "50000.00",
+    balance: "20000.00",
+    dueAt: "2026-03-10",
+    reason: "Préstamo",
+    customer: "Cliente Uno",
+    supplier: null,
+    ...overrides,
+  };
 }
 
 const lowStockProduct = (index: number) => ({
@@ -49,72 +73,6 @@ describe("daily report presentation", () => {
     expect(formatReportClockTime("2026-03-15T18:42:00.000Z")).toBe("13:42");
     expect(formatReportClockTime(null)).toBe("—");
     expect(formatReportDayLabel("2026-03-15")).toBe("15 de marzo");
-  });
-
-  it("keeps only the pending groups that have work, with a three-item sample", () => {
-    const items = dailyReportPendingItems(
-      dailyReportSlices({
-        lowStock: [0, 1, 2, 3, 4, 5, 6].map(lowStockProduct),
-        loans: [
-          {
-            id: "loan-1",
-            type: "MONEY",
-            amount: "50000.00",
-            balance: "20000.00",
-            dueAt: "2026-03-10",
-            reason: "Préstamo",
-            customer: "Cliente Uno",
-            supplier: null,
-          },
-        ],
-      }),
-    );
-
-    expect(items.map((item) => item.key)).toEqual(["lowStock", "loans"]);
-    expect(items[0]).toMatchObject({
-      label: "Productos con stock bajo",
-      href: "/inventory?filter=lowStock",
-      count: 7,
-      remaining: 4,
-    });
-    expect(items[0].sample).toEqual([
-      "Producto 0 · 0 en stock",
-      "Producto 1 · 1 en stock",
-      "Producto 2 · 2 en stock",
-    ]);
-    expect(items[1]).toMatchObject({
-      label: "Préstamos vencidos o por vencer",
-      href: "/loans",
-      count: 1,
-      remaining: 0,
-    });
-    expect(items[1].sample[0]).toContain("Cliente Uno");
-  });
-
-  it("links pending purchase orders to the list filtered to open orders", () => {
-    const [item] = dailyReportPendingItems(
-      dailyReportSlices({
-        purchaseOrders: [
-          {
-            id: "po-1",
-            orderNumber: 12,
-            status: "PARTIAL_RECEIVED",
-            total: "90000.00",
-            supplier: { name: "Proveedor Uno" },
-          },
-        ] as DailyReportSlices["purchaseOrders"],
-      }),
-    );
-
-    expect(item).toMatchObject({
-      key: "purchaseOrders",
-      href: "/purchase-orders?status=OPEN",
-      count: 1,
-    });
-  });
-
-  it("collapses a day without pending work into no rows at all", () => {
-    expect(dailyReportPendingItems(dailyReportSlices())).toEqual([]);
   });
 
   it("lists today's sales newest first and names the walk-in bucket", () => {
@@ -141,6 +99,121 @@ describe("daily report presentation", () => {
       { id: "sale-2", saleNumber: 41, time: "13:42", customerLabel: "Cliente Uno", total: "120000.00" },
       { id: "sale-1", saleNumber: 40, time: "09:05", customerLabel: "Sin cliente", total: "45000.00" },
     ]);
+  });
+});
+
+describe("daily report pending chips", () => {
+  it("keeps only the groups that have work, with three chips and the rest as a count", () => {
+    const groups = dailyReportPendingItems(
+      dailyReportSlices({
+        lowStock: [0, 1, 2, 3, 4, 5, 6].map(lowStockProduct),
+        loans: [loan({})],
+      }),
+    );
+
+    expect(groups.map((group) => group.key)).toEqual(["lowStock", "loans"]);
+    expect(groups[0]).toMatchObject({
+      label: "Productos con stock bajo",
+      href: "/inventory?filter=lowStock",
+      count: 7,
+      remaining: 4,
+    });
+    expect(groups[0].chips).toEqual([
+      { id: "low-0", label: "Producto 0", value: "0 / mín 10", severity: "danger" },
+      { id: "low-1", label: "Producto 1", value: "1 / mín 10", severity: "warning" },
+      { id: "low-2", label: "Producto 2", value: "2 / mín 10", severity: "warning" },
+    ]);
+    expect(groups[1]).toMatchObject({
+      label: "Préstamos vencidos o por vencer",
+      href: "/loans",
+      count: 1,
+      remaining: 0,
+    });
+    expect(groups[1].chips[0]).toMatchObject({
+      label: expect.stringContaining("Cliente Uno"),
+      value: "venció 10 mar",
+      severity: "danger",
+    });
+  });
+
+  it("marks an out-of-stock product as danger even when the minimum is zero", () => {
+    const [group] = dailyReportPendingItems(
+      dailyReportSlices({
+        lowStock: [{ ...lowStockProduct(0), stock: -2, minStock: 0 }],
+      }),
+    );
+
+    expect(group.chips[0]).toMatchObject({ value: "-2 / mín 0", severity: "danger" });
+  });
+
+  it("names the order status and links pending purchase orders to the open list", () => {
+    const [group] = dailyReportPendingItems(
+      dailyReportSlices({
+        purchaseOrders: [
+          {
+            id: "po-1",
+            orderNumber: 12,
+            status: "PENDING",
+            total: "90000.00",
+            supplier: { name: "Proveedor Uno" },
+          },
+          {
+            id: "po-2",
+            orderNumber: 13,
+            status: "PARTIAL_RECEIVED",
+            total: "40000.00",
+            supplier: null,
+          },
+        ] as DailyReportSlices["purchaseOrders"],
+      }),
+    );
+
+    expect(group).toMatchObject({
+      key: "purchaseOrders",
+      href: "/purchase-orders?status=OPEN",
+      count: 2,
+    });
+    expect(group.chips).toEqual([
+      { id: "po-1", label: "#12 · Proveedor Uno", value: "Pendiente", severity: "warning" },
+      { id: "po-2", label: "#13 · Sin proveedor", value: "Parcial", severity: "info" },
+    ]);
+  });
+
+  it("separates an overdue loan from one that is due soon", () => {
+    const chips = dailyReportPendingItems(
+      dailyReportSlices({
+        loans: [
+          loan({ id: "past", dueAt: "2026-03-10T00:00:00.000Z" }),
+          loan({ id: "tomorrow", dueAt: "2026-03-16", customer: null, supplier: "Proveedor" }),
+          loan({ id: "later", dueAt: "2026-11-18" }),
+        ],
+      }),
+    )[0].chips;
+
+    expect(chips.map(({ id, value, severity }) => ({ id, value, severity }))).toEqual([
+      { id: "past", value: "venció 10 mar", severity: "danger" },
+      { id: "tomorrow", value: "vence 16 mar", severity: "warning" },
+      { id: "later", value: "vence 18 nov", severity: "warning" },
+    ]);
+    // The holder leads the chip and the balance the server sent follows it.
+    // `formatCurrency` separates the symbol with a non-breaking space.
+    expect(chips.map((chip) => chip.label.replace(/\u00a0/g, " "))).toEqual([
+      "Cliente Uno · $ 20.000",
+      "Proveedor · $ 20.000",
+      "Cliente Uno · $ 20.000",
+    ]);
+  });
+
+  it("says a loan due on the report day falls today", () => {
+    const [chip] = dailyReportPendingItems(
+      dailyReportSlices({ loans: [loan({ dueAt: "2026-03-15" })] }),
+    )[0].chips;
+
+    expect(chip).toMatchObject({ value: "vence hoy", severity: "warning" });
+  });
+
+  it("collapses a day without pending work into no groups at all", () => {
+    expect(dailyReportPendingItems(dailyReportSlices())).toEqual([]);
   });
 });
 
