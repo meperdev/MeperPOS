@@ -133,7 +133,9 @@ describe('ReportsService', () => {
         where: expect.objectContaining({
           sale: expect.objectContaining({
             organizationId: 'org-1',
-            status: 'COMPLETED',
+            // A partially returned sale collected its payment for real, so the
+            // operational payment-method report keeps it (S5.5).
+            status: { in: ['COMPLETED', 'RETURNED_PARTIAL'] },
             createdAt: expect.objectContaining({
               gte: expect.any(Date),
               lte: expect.any(Date),

@@ -66,6 +66,38 @@ interface CustomerSaleWhereInput {
   createdAt?: DateFilter;
 }
 
+/**
+ * A sale whose return event is partially or fully realized, as the operational
+ * reports need it: the item rows on the tax-inclusive bill (what those reports
+ * already added up) and the RETURN movements that took stock back inside the
+ * period. Cancellations are a different event and never reach this shape.
+ */
+interface PartiallyReturnedSale {
+  createdAt: Date;
+  total: Prisma.Decimal;
+  customerId: string | null;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    total: Prisma.Decimal;
+    categoryName: string;
+  }>;
+  inventoryMovements: Array<{
+    productId: string;
+    quantity: number;
+    createdAt: Date;
+  }>;
+}
+
+/** A signed sale-item contribution, dated by the event that produced it. */
+interface OperationalSaleItemEvent {
+  productId: string;
+  categoryName: string;
+  quantity: number;
+  total: Prisma.Decimal;
+  date: Date;
+}
+
 interface DaySummary {
   total: number;
   subtotal: number;
@@ -443,9 +475,92 @@ function expandFinancialSale(
   return records;
 }
 
-// ─── Service ──────────────────────────────────────────────────────────────────
+/**
+ * Signed operational item contributions of the partially returned sales, on the
+ * same tax-inclusive `SaleItem.total` basis the operational reports already use.
+ *
+ * The rule is Economía's rule, not a second one: the positive part belongs to
+ * the day the sale was registered, and every returned unit belongs to the day
+ * its RETURN movement happened, even when that day falls in a later period.
+ */
+function expandPartialReturnItems(
+  sales: PartiallyReturnedSale[],
+  dateFilter: DateFilter,
+): OperationalSaleItemEvent[] {
+  const events: OperationalSaleItemEvent[] = [];
 
-@Injectable()
+  for (const sale of sales) {
+    const itemsByProduct = new Map(
+      sale.items.map((item) => [item.productId, item]),
+    );
+
+    if (isInDateFilter(sale.createdAt, dateFilter)) {
+      for (const item of sale.items) {
+        events.push({
+          productId: item.productId,
+          categoryName: item.categoryName,
+          quantity: item.quantity,
+          total: item.total,
+          date: sale.createdAt,
+        });
+      }
+    }
+
+    for (const movement of sale.inventoryMovements) {
+      const item = itemsByProduct.get(movement.productId);
+      if (!item || item.quantity === 0) continue;
+      const ratio = new Prisma.Decimal(movement.quantity).div(item.quantity);
+      events.push({
+        productId: movement.productId,
+        categoryName: item.categoryName,
+        quantity: -movement.quantity,
+        total: item.total.mul(ratio).neg(),
+        date: movement.createdAt,
+      });
+    }
+  }
+
+  return events;
+}
+
+/**
+ * The part of a partially returned sale's billed total that the period's RETURN
+ * movements gave back, kept on the `Sale.total` basis the customer report sums.
+ */
+function returnedSaleRevenue(
+  sale: PartiallyReturnedSale,
+  dateFilter: DateFilter,
+): Prisma.Decimal {
+  if (!isInDateFilter(sale.createdAt, dateFilter)) {
+    return new Prisma.Decimal(0);
+  }
+
+  const itemTotal = sale.items.reduce(
+    (sum, item) => sum.add(item.total),
+    new Prisma.Decimal(0),
+  );
+  if (itemTotal.isZero()) {
+    return new Prisma.Decimal(0);
+  }
+
+  const returnedByProduct = new Map<string, number>();
+  for (const movement of sale.inventoryMovements) {
+    returnedByProduct.set(
+      movement.productId,
+      (returnedByProduct.get(movement.productId) ?? 0) + movement.quantity,
+    );
+  }
+
+  const returnedItemTotal = sale.items.reduce((sum, item) => {
+    const returned = returnedByProduct.get(item.productId) ?? 0;
+    if (!returned || item.quantity === 0) return sum;
+    return sum.add(item.total.mul(returned).div(item.quantity));
+  }, new Prisma.Decimal(0));
+
+  return sale.total.mul(returnedItemTotal).div(itemTotal);
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────@Injectable()
 export class ReportsService {
   constructor(
     private prisma: PrismaService,
@@ -768,6 +883,68 @@ export class ReportsService {
     });
   }
 
+  /**
+   * The partially returned sales whose own creation or whose RETURN movements
+   * touch the requested period, with the item rows the operational reports add up
+   * and the RETURN movements that must be taken back out of them (S5.5).
+   *
+   * `organizationId` stays optional for the SuperAdmin report path, mirroring the
+   * operational queries themselves.
+   */
+  private async findPartiallyReturnedSales(
+    organizationId: string | undefined,
+    dateFilter: DateFilter | undefined,
+  ): Promise<PartiallyReturnedSale[]> {
+    const returnMovementWhere: Prisma.InventoryMovementWhereInput = dateFilter
+      ? { type: 'RETURN', createdAt: dateFilter }
+      : { type: 'RETURN' };
+    // Without a range every return counts, so only the movement branch is needed.
+    const touchedInPeriod: Prisma.SaleWhereInput[] = dateFilter
+      ? [
+          { createdAt: dateFilter },
+          { inventoryMovements: { some: returnMovementWhere } },
+        ]
+      : [{ inventoryMovements: { some: returnMovementWhere } }];
+
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        ...(organizationId ? { organizationId } : {}),
+        status: 'RETURNED_PARTIAL',
+        OR: touchedInPeriod,
+      },
+      select: {
+        createdAt: true,
+        total: true,
+        customerId: true,
+        items: {
+          select: {
+            productId: true,
+            quantity: true,
+            total: true,
+            product: { select: { category: { select: { name: true } } } },
+          },
+        },
+        inventoryMovements: {
+          where: returnMovementWhere,
+          select: { productId: true, quantity: true, createdAt: true },
+        },
+      },
+    });
+
+    return sales.map((sale) => ({
+      createdAt: sale.createdAt,
+      total: sale.total,
+      customerId: sale.customerId,
+      items: sale.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        total: item.total,
+        categoryName: item.product.category.name,
+      })),
+      inventoryMovements: sale.inventoryMovements,
+    }));
+  }
+
   async getDashboardKPIs(
     organizationId: string | undefined,
     startDate?: string,
@@ -941,7 +1118,10 @@ export class ReportsService {
       by: ['method'],
       where: {
         sale: {
-          status: 'COMPLETED',
+          // A partially returned sale really collected this money: the system
+          // records no refund row for it, so netting the return out of the
+          // payment method would invent a refund that never happened (S5.5).
+          status: { in: ['COMPLETED', 'RETURNED_PARTIAL'] },
           ...(organizationId ? { organizationId } : ({} as any)),
           ...(dateFilter && { createdAt: dateFilter }),
         },
@@ -983,24 +1163,27 @@ export class ReportsService {
     });
 
     const productIds = productsByCategory.map((p) => p.productId);
-    const products = await this.prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        ...(organizationId ? { organizationId } : {}),
-      },
-      select: {
-        id: true,
-        category: {
-          select: {
-            name: true,
+    const [products, partiallyReturnedSales] = await Promise.all([
+      this.prisma.product.findMany({
+        where: {
+          id: { in: productIds },
+          ...(organizationId ? { organizationId } : {}),
+        },
+        select: {
+          id: true,
+          category: {
+            select: {
+              name: true,
+            },
           },
         },
-      },
-    });
+      }),
+      this.findPartiallyReturnedSales(organizationId, dateFilter),
+    ]);
 
     const categorySales = new Map<
       string,
-      { total: number; quantity: number }
+      { total: Prisma.Decimal; quantity: number }
     >();
 
     products.forEach((product) => {
@@ -1010,22 +1193,37 @@ export class ReportsService {
       if (saleData) {
         const categoryName = product.category.name;
         const existing = categorySales.get(categoryName) ?? {
-          total: 0,
+          total: new Prisma.Decimal(0),
           quantity: 0,
         };
         categorySales.set(categoryName, {
-          total: existing.total + Number(saleData._sum.total),
+          total: existing.total.add(new Prisma.Decimal(saleData._sum.total ?? 0)),
           quantity: existing.quantity + (saleData._sum.quantity ?? 0),
         });
       }
     });
 
+    // The kept part of a partially returned sale belongs to its category; the
+    // returned units are taken back out on the day they came back (S5.5).
+    for (const event of expandPartialReturnItems(partiallyReturnedSales, dateFilter ?? {})) {
+      const existing = categorySales.get(event.categoryName) ?? {
+        total: new Prisma.Decimal(0),
+        quantity: 0,
+      };
+      categorySales.set(event.categoryName, {
+        total: existing.total.add(event.total),
+        quantity: existing.quantity + event.quantity,
+      });
+    }
+
     return {
-      data: Array.from(categorySales.entries()).map(([category, data]) => ({
-        category,
-        total: data.total,
-        quantity: data.quantity,
-      })),
+      data: Array.from(categorySales.entries())
+        .filter(([, data]) => data.quantity !== 0 || !data.total.isZero())
+        .map(([category, data]) => ({
+          category,
+          total: data.total.toNumber(),
+          quantity: data.quantity,
+        })),
       appliedRange: buildAppliedRange(startDate, endDate),
     };
   }
@@ -1121,18 +1319,46 @@ export class ReportsService {
     };
     const where: SaleItemWhereInput = { sale: saleNested };
 
-    const products = await this.prisma.saleItem.groupBy({
-      by: ['productId'],
-      where: where as never,
-      _sum: { quantity: true, total: true },
-      orderBy: { _sum: { total: 'desc' } },
-      take: limit,
-    });
+    const [products, partiallyReturnedSales] = await Promise.all([
+      this.prisma.saleItem.groupBy({
+        by: ['productId'],
+        where: where as never,
+        _sum: { quantity: true, total: true },
+      }),
+      this.findPartiallyReturnedSales(organizationId, dateFilter),
+    ]);
 
-    const productIds = products.map((p) => p.productId);
+    const totals = new Map<
+      string,
+      { quantity: number; total: Prisma.Decimal }
+    >();
+    for (const product of products) {
+      totals.set(product.productId, {
+        quantity: product._sum.quantity ?? 0,
+        total: new Prisma.Decimal(product._sum.total ?? 0),
+      });
+    }
+    for (const event of expandPartialReturnItems(partiallyReturnedSales, dateFilter ?? {})) {
+      const current = totals.get(event.productId) ?? {
+        quantity: 0,
+        total: new Prisma.Decimal(0),
+      };
+      current.quantity += event.quantity;
+      current.total = current.total.add(event.total);
+      totals.set(event.productId, current);
+    }
+
+    // The ranking is decided after the returns are taken out, so the limit has to
+    // be applied here: the best-selling product of the period can be a partially
+    // returned sale that the completed-only query never saw.
+    const ranked = Array.from(totals.entries())
+      .filter(([, value]) => value.quantity !== 0 || !value.total.isZero())
+      .sort((a, b) => b[1].total.comparedTo(a[1].total))
+      .slice(0, limit);
+
     const productDetails = await this.prisma.product.findMany({
       where: {
-        id: { in: productIds },
+        id: { in: ranked.map(([productId]) => productId) },
         ...(organizationId ? { organizationId } : {}),
       },
       select: {
@@ -1143,13 +1369,13 @@ export class ReportsService {
     });
 
     return {
-      data: products.map((p) => {
-        const product = productDetails.find((pd) => pd.id === p.productId);
+      data: ranked.map(([productId, value]) => {
+        const product = productDetails.find((pd) => pd.id === productId);
         return {
-          productId: p.productId,
+          productId,
           productName: product?.name || 'Unknown',
-          quantity: p._sum.quantity,
-          total: Number(p._sum.total),
+          quantity: value.quantity,
+          total: value.total.toNumber(),
           stock: product?.stock || 0,
         };
       }),
@@ -1169,7 +1395,7 @@ export class ReportsService {
       ...(dateFilter && { createdAt: dateFilter }),
     };
 
-    const [totalCustomers, customersWithSales, topCustomers] =
+    const [totalCustomers, customersWithSales, topCustomers, partiallyReturnedSales] =
       await Promise.all([
         this.prisma.customer.count({
           where: {
@@ -1191,6 +1417,7 @@ export class ReportsService {
           orderBy: { _sum: { total: 'desc' } },
           take: 10,
         }),
+        this.findPartiallyReturnedSales(organizationId, dateFilter),
       ]);
 
     const customerIds = topCustomers
@@ -1203,18 +1430,37 @@ export class ReportsService {
       },
     });
 
+    // A partially returned sale stays counted, but only for the revenue the
+    // customer kept (S5.5).
+    const returnedRevenue = new Map<string | null, Prisma.Decimal>();
+    for (const sale of partiallyReturnedSales) {
+      const returned = returnedSaleRevenue(sale, dateFilter ?? {});
+      if (returned.isZero()) continue;
+      returnedRevenue.set(
+        sale.customerId,
+        (returnedRevenue.get(sale.customerId) ?? new Prisma.Decimal(0)).add(
+          returned,
+        ),
+      );
+    }
+
     return {
       totalCustomers,
       activeCustomers: customersWithSales.length,
-      topCustomers: topCustomers.map((c) => {
-        const customer = customerDetails.find((cd) => cd.id === c.customerId);
-        return {
-          customerId: c.customerId,
-          customerName: customer?.name || 'Guest',
-          totalSales: c._count.id,
-          totalRevenue: Number(c._sum.total),
-        };
-      }),
+      topCustomers: topCustomers
+        .map((c) => {
+          const customer = customerDetails.find((cd) => cd.id === c.customerId);
+          return {
+            customerId: c.customerId,
+            customerName: customer?.name || 'Guest',
+            totalSales: c._count.id,
+            totalRevenue: new Prisma.Decimal(c._sum.total ?? 0)
+              .sub(returnedRevenue.get(c.customerId) ?? 0)
+              .toNumber(),
+          };
+        })
+        // The ranking is by net revenue, so it is applied after the returns.
+        .sort((a, b) => b.totalRevenue - a.totalRevenue),
       appliedRange: buildAppliedRange(startDate, endDate),
     };
   }
