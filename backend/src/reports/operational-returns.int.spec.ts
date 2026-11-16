@@ -10,7 +10,10 @@
  */
 import { CacheService } from '../common/services/cache.service';
 import { ReportsService } from './reports.service';
-import { setupTwoOrgFixture, type TwoOrgFixture } from '../testing/two-org-fixture';
+import {
+  setupTwoOrgFixture,
+  type TwoOrgFixture,
+} from '../testing/two-org-fixture';
 
 const PERIOD = { startDate: '2026-08-01', endDate: '2026-08-31' };
 const SALE_CREATED = new Date('2026-08-10T15:00:00.000Z');
@@ -215,7 +218,9 @@ describe('Operational sales reports net partial returns (S5.5)', () => {
 
   afterAll(async () => {
     const prisma = fixture.prisma;
-    await prisma.inventoryMovement.deleteMany({ where: { organizationId: orgId } });
+    await prisma.inventoryMovement.deleteMany({
+      where: { organizationId: orgId },
+    });
     await prisma.payment.deleteMany({ where: { organizationId: orgId } });
     await prisma.saleItem.deleteMany({ where: { organizationId: orgId } });
     await prisma.sale.deleteMany({ where: { organizationId: orgId } });
@@ -256,8 +261,16 @@ describe('Operational sales reports net partial returns (S5.5)', () => {
 
     expect(report.data).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ category: 'S5.5 Bebidas', total: 300, quantity: 3 }),
-        expect.objectContaining({ category: 'S5.5 Snacks', total: 200, quantity: 2 }),
+        expect.objectContaining({
+          category: 'S5.5 Bebidas',
+          total: 300,
+          quantity: 3,
+        }),
+        expect.objectContaining({
+          category: 'S5.5 Snacks',
+          total: 200,
+          quantity: 2,
+        }),
       ]),
     );
   });

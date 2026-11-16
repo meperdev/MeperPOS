@@ -110,6 +110,7 @@
         "total": "0.00",
         "byPaymentMethod": []
       },
+      "netFlow": "0.00",
       "appliedRange": {
         "startDate": "2025-01-01",
         "endDate": "2025-12-31",
@@ -214,6 +215,7 @@
           "total": "0.00",
           "byPaymentMethod": []
         },
+        "netFlow": "0.00",
         "appliedRange": {
           "startDate": "2025-01-01",
           "endDate": "2025-12-31",

@@ -256,6 +256,7 @@
           }
         ]
       },
+      "netFlow": "-220480.00",
       "appliedRange": {
         "startDate": "2026-01-01",
         "endDate": "2026-12-31",
@@ -436,6 +437,7 @@
             }
           ]
         },
+        "netFlow": "-220480.00",
         "appliedRange": {
           "startDate": "2026-01-01",
           "endDate": "2026-12-31",
@@ -619,12 +621,6 @@
           "customerName": "Golden Cliente Dos",
           "totalSales": 1,
           "totalRevenue": 9520
-        },
-        {
-          "customerId": null,
-          "customerName": "Guest",
-          "totalSales": 1,
-          "totalRevenue": 9000
         }
       ],
       "appliedRange": {

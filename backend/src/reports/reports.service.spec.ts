@@ -9,6 +9,7 @@ describe('ReportsService', () => {
       findMany: jest.fn(),
       count: jest.fn(),
       aggregate: jest.fn(),
+      groupBy: jest.fn(),
     },
     user: {
       findMany: jest.fn(),
@@ -19,9 +20,11 @@ describe('ReportsService', () => {
     },
     customer: {
       count: jest.fn(),
+      findMany: jest.fn(),
     },
     saleItem: {
       findMany: jest.fn(),
+      groupBy: jest.fn(),
     },
     payment: {
       groupBy: jest.fn(),
@@ -604,6 +607,74 @@ describe('ReportsService', () => {
     );
   });
 
+  it('returns categories ranked by total, highest first', async () => {
+    prismaMock.saleItem.groupBy.mockResolvedValue([
+      { productId: 'p-bebidas', _sum: { total: 10000, quantity: 1 } },
+      { productId: 'p-snacks', _sum: { total: 30000, quantity: 3 } },
+      { productId: 'p-otros', _sum: { total: 20000, quantity: 2 } },
+    ]);
+    prismaMock.product.findMany.mockResolvedValue([
+      { id: 'p-bebidas', category: { name: 'Bebidas' } },
+      { id: 'p-snacks', category: { name: 'Snacks' } },
+      { id: 'p-otros', category: { name: 'Otros' } },
+    ]);
+    prismaMock.sale.findMany.mockResolvedValue([]);
+
+    const result = await service.getSalesByCategory(
+      'org-1',
+      '2026-08-01',
+      '2026-08-31',
+    );
+
+    expect(result.data).toEqual([
+      { category: 'Snacks', total: 30000, quantity: 3 },
+      { category: 'Otros', total: 20000, quantity: 2 },
+      { category: 'Bebidas', total: 10000, quantity: 1 },
+    ]);
+  });
+
+  it('ranks real customers only and still fills the top ten', async () => {
+    const realCustomers = Array.from({ length: 11 }, (_, index) => ({
+      customerId: `c-${index + 1}`,
+      _count: { id: 1 },
+      _sum: { total: 1100 - index * 100 },
+    }));
+    // The walk-in bucket is the biggest "customer" of the period: it must not
+    // take a slot away from a real one.
+    const groups = [
+      { customerId: null, _count: { id: 9 }, _sum: { total: 999999 } },
+      ...realCustomers,
+    ];
+    prismaMock.customer.count.mockResolvedValue(11);
+    prismaMock.sale.groupBy.mockResolvedValue(groups);
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    prismaMock.customer.findMany.mockResolvedValue(
+      realCustomers.map((customer) => ({
+        id: customer.customerId,
+        name: customer.customerId,
+      })),
+    );
+
+    const result = await service.getCustomerStatistics(
+      'org-1',
+      '2026-08-01',
+      '2026-08-31',
+    );
+
+    expect(result.topCustomers).toHaveLength(10);
+    expect(
+      result.topCustomers.every((customer) => customer.customerId !== null),
+    ).toBe(true);
+    expect(result.topCustomers[0]).toEqual(
+      expect.objectContaining({ customerId: 'c-1', totalRevenue: 1100 }),
+    );
+    // The real customer that does not fit is the eleventh, not a real one
+    // displaced by the walk-in bucket.
+    expect(
+      result.topCustomers.some((customer) => customer.customerId === 'c-11'),
+    ).toBe(false);
+  });
+
   it('values inventory at list price, ignoring active promotions', async () => {
     prismaMock.product.findMany.mockResolvedValue([
       {
@@ -765,7 +836,7 @@ describe('ReportsService', () => {
       ).toBe('org-1');
     });
 
-    it('keeps the cash flow response shape unchanged', async () => {
+    it('keeps the cash flow response shape unchanged apart from the server-owned net flow', async () => {
       cashFlowPrisma.payrollCashOutflow.findMany.mockResolvedValue([
         { amount: new Prisma.Decimal('50.00'), method: 'CASH' },
       ]);
@@ -781,8 +852,11 @@ describe('ReportsService', () => {
         'appliedRange',
         'collections',
         'expensePayments',
+        // S5.6 moved the subtraction from the browser into the report.
+        'netFlow',
       ]);
       expect(result.accountingBasis).toBe('CASH_BY_PAYMENT_DATE');
+      expect(result.netFlow).toBe('-50.00');
       expect(Object.keys(result.expensePayments).sort()).toEqual([
         'byPaymentMethod',
         'total',

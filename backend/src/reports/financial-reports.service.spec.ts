@@ -278,6 +278,70 @@ describe('ReportsService financial read model', () => {
     expect(result.expensePayments.total).toBe('3.50');
   });
 
+  it('returns the net cash flow as the difference between collections and expense payments', async () => {
+    prismaMock.payment.groupBy.mockResolvedValue([
+      {
+        method: 'CASH',
+        _sum: { amount: decimal('100.00') },
+        _count: { method: 1 },
+      },
+    ]);
+    prismaMock.expensePayment.findMany.mockResolvedValue([
+      {
+        amount: decimal('40.00'),
+        method: 'TRANSFER',
+        date: new Date('2026-03-12'),
+      },
+    ]);
+    const service = new ReportsService(prismaMock as never, cacheMock as never);
+
+    const result = await service.getCashFlow(
+      'org-a',
+      '2026-03-10',
+      '2026-03-12',
+    );
+
+    // The server owns the number the page used to subtract in the browser (S5.6).
+    expect(result.collections.total).toBe('100.00');
+    expect(result.expensePayments.total).toBe('40.00');
+    expect(result.netFlow).toBe('60.00');
+  });
+
+  it('reports a negative net cash flow and keeps the empty period at zero', async () => {
+    prismaMock.payment.groupBy.mockResolvedValue([
+      {
+        method: 'CASH',
+        _sum: { amount: decimal('10.00') },
+        _count: { method: 1 },
+      },
+    ]);
+    prismaMock.expensePayment.findMany.mockResolvedValue([
+      {
+        amount: decimal('25.00'),
+        method: 'CASH',
+        date: new Date('2026-03-12'),
+      },
+    ]);
+    const service = new ReportsService(prismaMock as never, cacheMock as never);
+
+    const negative = await service.getCashFlow(
+      'org-a',
+      '2026-03-10',
+      '2026-03-12',
+    );
+    expect(negative.netFlow).toBe('-15.00');
+
+    prismaMock.payment.groupBy.mockResolvedValue([]);
+    prismaMock.expensePayment.findMany.mockResolvedValue([]);
+
+    const empty = await service.getCashFlow(
+      'org-a',
+      '2026-03-10',
+      '2026-03-12',
+    );
+    expect(empty.netFlow).toBe('0.00');
+  });
+
   it('returns current inventory valuation and period movement quantities separately', async () => {
     prismaMock.product.findMany.mockResolvedValue([
       { stock: 3, costPrice: decimal('10.00'), salePrice: decimal('18.00') },

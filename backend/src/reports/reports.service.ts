@@ -7,7 +7,10 @@ import {
   parseBogotaEndOfDay,
   parseBogotaStartOfDay,
 } from '../common/utils/bogota-date';
-import { ExpensesService, buildStoredDateWindow } from '../expenses/expenses.service';
+import {
+  ExpensesService,
+  buildStoredDateWindow,
+} from '../expenses/expenses.service';
 import { normalizeStock } from '../products/product-type.logic';
 import {
   aggregateFinancialSales,
@@ -560,7 +563,9 @@ function returnedSaleRevenue(
   return sale.total.mul(returnedItemTotal).div(itemTotal);
 }
 
-// ─── Service ──────────────────────────────────────────────────────────────────@Injectable()
+// ─── Service ──────────────────────────────────────────────────────────────────
+
+@Injectable()
 export class ReportsService {
   constructor(
     private prisma: PrismaService,
@@ -670,13 +675,22 @@ export class ReportsService {
       }),
     ]);
 
+    const collections = aggregatePaymentGroups(paymentGroups);
+    const expensePaymentsByMethod = aggregateCashPayments(
+      [...expensePayments, ...payrollCashOutflows],
+      payrollCashReturns,
+    );
+
     return {
       accountingBasis: 'CASH_BY_PAYMENT_DATE',
-      collections: aggregatePaymentGroups(paymentGroups),
-      expensePayments: aggregateCashPayments(
-        [...expensePayments, ...payrollCashOutflows],
-        payrollCashReturns,
-      ),
+      collections,
+      expensePayments: expensePaymentsByMethod,
+      // The page used to subtract these two totals in the browser (S5.6); the
+      // report owns the number now, in Decimal, with the same money format as its
+      // siblings.
+      netFlow: new Prisma.Decimal(collections.total)
+        .sub(new Prisma.Decimal(expensePaymentsByMethod.total))
+        .toFixed(2),
       appliedRange: buildFinancialRangeMeta(period.current),
     };
   }
@@ -1197,7 +1211,9 @@ export class ReportsService {
           quantity: 0,
         };
         categorySales.set(categoryName, {
-          total: existing.total.add(new Prisma.Decimal(saleData._sum.total ?? 0)),
+          total: existing.total.add(
+            new Prisma.Decimal(saleData._sum.total ?? 0),
+          ),
           quantity: existing.quantity + (saleData._sum.quantity ?? 0),
         });
       }
@@ -1205,7 +1221,10 @@ export class ReportsService {
 
     // The kept part of a partially returned sale belongs to its category; the
     // returned units are taken back out on the day they came back (S5.5).
-    for (const event of expandPartialReturnItems(partiallyReturnedSales, dateFilter ?? {})) {
+    for (const event of expandPartialReturnItems(
+      partiallyReturnedSales,
+      dateFilter ?? {},
+    )) {
       const existing = categorySales.get(event.categoryName) ?? {
         total: new Prisma.Decimal(0),
         quantity: 0,
@@ -1219,6 +1238,9 @@ export class ReportsService {
     return {
       data: Array.from(categorySales.entries())
         .filter(([, data]) => data.quantity !== 0 || !data.total.isZero())
+        // Highest total first: the page paints one stacked bar and a legend in
+        // this order, so it must not depend on row order from the database.
+        .sort((a, b) => b[1].total.comparedTo(a[1].total))
         .map(([category, data]) => ({
           category,
           total: data.total.toNumber(),
@@ -1338,7 +1360,10 @@ export class ReportsService {
         total: new Prisma.Decimal(product._sum.total ?? 0),
       });
     }
-    for (const event of expandPartialReturnItems(partiallyReturnedSales, dateFilter ?? {})) {
+    for (const event of expandPartialReturnItems(
+      partiallyReturnedSales,
+      dateFilter ?? {},
+    )) {
       const current = totals.get(event.productId) ?? {
         quantity: 0,
         total: new Prisma.Decimal(0),
@@ -1395,30 +1420,32 @@ export class ReportsService {
       ...(dateFilter && { createdAt: dateFilter }),
     };
 
-    const [totalCustomers, customersWithSales, topCustomers, partiallyReturnedSales] =
-      await Promise.all([
-        this.prisma.customer.count({
-          where: {
-            ...(organizationId ? { organizationId } : {}),
-            active: true,
-          },
-        }),
-        this.prisma.sale.groupBy({
-          by: ['customerId'],
-          where: where as never,
-          _count: { id: true },
-          _sum: { total: true },
-        }),
-        this.prisma.sale.groupBy({
-          by: ['customerId'],
-          where: where as never,
-          _count: { id: true },
-          _sum: { total: true },
-          orderBy: { _sum: { total: 'desc' } },
-          take: 10,
-        }),
-        this.findPartiallyReturnedSales(organizationId, dateFilter),
-      ]);
+    const [
+      totalCustomers,
+      customersWithSales,
+      topCustomers,
+      partiallyReturnedSales,
+    ] = await Promise.all([
+      this.prisma.customer.count({
+        where: {
+          ...(organizationId ? { organizationId } : {}),
+          active: true,
+        },
+      }),
+      this.prisma.sale.groupBy({
+        by: ['customerId'],
+        where: where as never,
+        _count: { id: true },
+        _sum: { total: true },
+      }),
+      this.prisma.sale.groupBy({
+        by: ['customerId'],
+        where: where as never,
+        _count: { id: true },
+        _sum: { total: true },
+      }),
+      this.findPartiallyReturnedSales(organizationId, dateFilter),
+    ]);
 
     const customerIds = topCustomers
       .map((c) => c.customerId)
@@ -1448,6 +1475,13 @@ export class ReportsService {
       totalCustomers,
       activeCustomers: customersWithSales.length,
       topCustomers: topCustomers
+        // Sales without a customer are the walk-in bucket, not a customer: it
+        // never occupies one of the ranked slots. The ranking therefore stays
+        // complete after dropping it.
+        .filter(
+          (c): c is (typeof topCustomers)[number] & { customerId: string } =>
+            c.customerId !== null,
+        )
         .map((c) => {
           const customer = customerDetails.find((cd) => cd.id === c.customerId);
           return {
@@ -1460,7 +1494,8 @@ export class ReportsService {
           };
         })
         // The ranking is by net revenue, so it is applied after the returns.
-        .sort((a, b) => b.totalRevenue - a.totalRevenue),
+        .sort((a, b) => b.totalRevenue - a.totalRevenue)
+        .slice(0, 10),
       appliedRange: buildAppliedRange(startDate, endDate),
     };
   }

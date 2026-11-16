@@ -14,12 +14,18 @@
  * reports return, never about the shape of a where clause.
  */
 import { ConfigService } from '@nestjs/config';
-import { parseBogotaEndOfDay, parseBogotaStartOfDay } from '../common/utils/bogota-date';
+import {
+  parseBogotaEndOfDay,
+  parseBogotaStartOfDay,
+} from '../common/utils/bogota-date';
 import { CacheService } from '../common/services/cache.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { ExpensesService } from '../expenses/expenses.service';
 import { ReportsService } from './reports.service';
-import { setupTwoOrgFixture, type TwoOrgFixture } from '../testing/two-org-fixture';
+import {
+  setupTwoOrgFixture,
+  type TwoOrgFixture,
+} from '../testing/two-org-fixture';
 
 const AUGUST = { startDate: '2026-08-01', endDate: '2026-08-31' };
 
@@ -46,48 +52,49 @@ describe('Report periods compare expense calendar days (S5.1)', () => {
     // Date-only rows land on UTC midnight, whichever day of the period they are.
     // The mid-day row keeps the previous behaviour: a row that still carries a
     // time of day on a period day keeps matching.
-    const [firstDay, lastDay, midDayFirstDay, dayAfterRange] = await Promise.all([
-      fixture.prisma.expense.create({
-        data: {
-          organizationId: orgId,
-          labelId: label.id,
-          date: new Date('2026-08-01T00:00:00.000Z'),
-          total: 100,
-          status: 'PAID',
-          createdById: userId,
-        },
-      }),
-      fixture.prisma.expense.create({
-        data: {
-          organizationId: orgId,
-          labelId: label.id,
-          date: new Date('2026-08-31T00:00:00.000Z'),
-          total: 20,
-          status: 'PAID',
-          createdById: userId,
-        },
-      }),
-      fixture.prisma.expense.create({
-        data: {
-          organizationId: orgId,
-          labelId: label.id,
-          date: new Date('2026-08-01T15:00:00.000Z'),
-          total: 7,
-          status: 'PAID',
-          createdById: userId,
-        },
-      }),
-      fixture.prisma.expense.create({
-        data: {
-          organizationId: orgId,
-          labelId: label.id,
-          date: new Date('2026-09-01T00:00:00.000Z'),
-          total: 1000,
-          status: 'PAID',
-          createdById: userId,
-        },
-      }),
-    ]);
+    const [firstDay, lastDay, midDayFirstDay, dayAfterRange] =
+      await Promise.all([
+        fixture.prisma.expense.create({
+          data: {
+            organizationId: orgId,
+            labelId: label.id,
+            date: new Date('2026-08-01T00:00:00.000Z'),
+            total: 100,
+            status: 'PAID',
+            createdById: userId,
+          },
+        }),
+        fixture.prisma.expense.create({
+          data: {
+            organizationId: orgId,
+            labelId: label.id,
+            date: new Date('2026-08-31T00:00:00.000Z'),
+            total: 20,
+            status: 'PAID',
+            createdById: userId,
+          },
+        }),
+        fixture.prisma.expense.create({
+          data: {
+            organizationId: orgId,
+            labelId: label.id,
+            date: new Date('2026-08-01T15:00:00.000Z'),
+            total: 7,
+            status: 'PAID',
+            createdById: userId,
+          },
+        }),
+        fixture.prisma.expense.create({
+          data: {
+            organizationId: orgId,
+            labelId: label.id,
+            date: new Date('2026-09-01T00:00:00.000Z'),
+            total: 1000,
+            status: 'PAID',
+            createdById: userId,
+          },
+        }),
+      ]);
 
     await fixture.prisma.expensePayment.createMany({
       data: [
@@ -141,7 +148,9 @@ describe('Report periods compare expense calendar days (S5.1)', () => {
 
   afterAll(async () => {
     const prisma = fixture.prisma;
-    await prisma.expensePayment.deleteMany({ where: { organizationId: orgId } });
+    await prisma.expensePayment.deleteMany({
+      where: { organizationId: orgId },
+    });
     await prisma.expense.deleteMany({ where: { organizationId: orgId } });
     await prisma.expenseLabel.deleteMany({ where: { organizationId: orgId } });
     await prisma.expenseGroup.deleteMany({ where: { organizationId: orgId } });
