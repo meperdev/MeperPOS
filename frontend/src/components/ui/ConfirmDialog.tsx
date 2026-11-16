@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { haptic } from "@/lib/haptics";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,9 @@ export function ConfirmDialog({
   const actionSheet = useBelowSmViewport();
 
   const handleConfirm = async () => {
+    // Every use of this dialog removes something, so the confirm is the one
+    // destructive action the phone can feel (S4.2).
+    haptic("warning");
     try {
       setIsConfirming(true);
       await onConfirm();

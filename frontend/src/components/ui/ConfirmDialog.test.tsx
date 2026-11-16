@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { HAPTIC_PATTERNS } from "@/lib/haptics";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 afterEach(cleanup);
@@ -92,5 +93,38 @@ describe("ConfirmDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ConfirmDialog haptics", () => {
+  const vibrate = vi.fn(() => true);
+
+  beforeEach(() => {
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      writable: true,
+      value: vibrate,
+    });
+  });
+
+  afterEach(() => {
+    vibrate.mockClear();
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  it("buzzes the warning pattern when the action is confirmed", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+
+    expect(vibrate).toHaveBeenCalledWith(HAPTIC_PATTERNS.warning);
+  });
+
+  it("stays silent when the user backs out", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(vibrate).not.toHaveBeenCalled();
   });
 });

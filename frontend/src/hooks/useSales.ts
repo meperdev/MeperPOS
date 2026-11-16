@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import type { Sale, PaginatedResponse, CartItem, SaleFilters } from "@/types";
 
 export function useSales(params?: SaleFilters) {
@@ -64,6 +65,9 @@ export function useCreateSale() {
     }) =>
       api.post<Sale>("/sales", data).then((res) => res.data),
     onSuccess: () => {
+      // Payment confirmed: the one haptic that confirms money moved (S4.2).
+      // It lives here, not in the POS page, so every sale path feels the same.
+      haptic("success");
       queryClient.invalidateQueries({ queryKey: ["sales"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });

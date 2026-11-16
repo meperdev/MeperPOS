@@ -24,7 +24,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterClearButton,
@@ -481,9 +482,11 @@ export default function ReportsPage() {
         <SectionShell title="Economía" icon={CircleDollarSign}>
           {economic.isLoading ? (
             <div aria-busy="true">
-              <LoadingState
-                icon={<CircleDollarSign className="h-4 w-4 text-muted-foreground" />}
-                message="Cargando economía…"
+              <CardSkeleton
+                count={4}
+                label="Cargando economía…"
+                className="sm:grid-cols-2 xl:grid-cols-4"
+                cardClassName="min-h-[96px]"
               />
             </div>
           ) : economic.error ? (
@@ -566,9 +569,11 @@ export default function ReportsPage() {
           <SectionShell title="Caja y pagos" icon={Receipt}>
             {cash.isLoading ? (
               <div aria-busy="true">
-                <LoadingState
-                  icon={<Receipt className="h-4 w-4 text-muted-foreground" />}
-                  message="Cargando caja…"
+                <CardSkeleton
+                  count={2}
+                  label="Cargando caja…"
+                  className="sm:grid-cols-2"
+                  cardClassName="min-h-[92px]"
                 />
               </div>
             ) : cash.error ? (
@@ -633,9 +638,11 @@ export default function ReportsPage() {
           <SectionShell title="Inventario actual" icon={Package}>
             {inventory.isLoading ? (
               <div aria-busy="true">
-                <LoadingState
-                  icon={<Package className="h-4 w-4 text-muted-foreground" />}
-                  message="Cargando inventario…"
+                <CardSkeleton
+                  count={4}
+                  label="Cargando inventario…"
+                  className="sm:grid-cols-2"
+                  cardClassName="min-h-[76px]"
                 />
               </div>
             ) : inventory.error ? (
@@ -697,9 +704,11 @@ export default function ReportsPage() {
             <SectionShell title="Productos más vendidos" icon={TrendingUp}>
               {topProducts.isLoading ? (
                 <div aria-busy="true">
-                  <LoadingState
-                    icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
-                    message="Cargando productos…"
+                  <TableSkeleton
+                    rows={5}
+                    columns={2}
+                    label="Cargando productos…"
+                    className="border-0 bg-transparent"
                   />
                 </div>
               ) : topProducts.error ? (
@@ -762,9 +771,11 @@ export default function ReportsPage() {
             <SectionShell title="Categorías" icon={BarChart3}>
               {categories.isLoading ? (
                 <div aria-busy="true">
-                  <LoadingState
-                    icon={<BarChart3 className="h-4 w-4 text-muted-foreground" />}
-                    message="Cargando categorías…"
+                  <TableSkeleton
+                    rows={5}
+                    columns={2}
+                    label="Cargando categorías…"
+                    className="border-0 bg-transparent"
                   />
                 </div>
               ) : categories.error ? (
@@ -829,10 +840,7 @@ export default function ReportsPage() {
             <SectionShell title="Mejores clientes" icon={Users}>
               {customers.isLoading ? (
                 <div aria-busy="true">
-                  <LoadingState
-                    icon={<Users className="h-4 w-4 text-muted-foreground" />}
-                    message="Cargando clientes…"
-                  />
+                  <TableSkeleton rows={5} columns={3} label="Cargando clientes…" />
                 </div>
               ) : customers.error ? (
                 <ErrorState
@@ -892,9 +900,11 @@ export default function ReportsPage() {
             <SectionShell title="Métodos de pago" icon={Receipt}>
               {paymentMethods.isLoading ? (
                 <div aria-busy="true">
-                  <LoadingState
-                    icon={<Receipt className="h-4 w-4 text-muted-foreground" />}
-                    message="Cargando pagos…"
+                  <TableSkeleton
+                    rows={4}
+                    columns={2}
+                    label="Cargando pagos…"
+                    className="border-0 bg-transparent"
                   />
                 </div>
               ) : paymentMethods.error ? (

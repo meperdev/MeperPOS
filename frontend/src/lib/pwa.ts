@@ -94,6 +94,40 @@ export const PWA_ICONS: PwaIcon[] = [
   },
 ];
 
+/**
+ * Long-press shortcuts on the installed icon (Android launchers, Chrome on
+ * desktop). Both point at the till: the POS page reads no `new` parameter, and
+ * a shortcut to a URL the app does not understand would be a dead tap.
+ */
+export type PwaShortcut = NonNullable<
+  MetadataRoute.Manifest["shortcuts"]
+>[number];
+
+/**
+ * Derived from `PWA_ICONS` on purpose: a shortcut icon is the app icon, and a
+ * separate literal could describe a file the build does not ship.
+ */
+const PWA_SHORTCUT_ICONS = PWA_ICONS.filter(
+  (icon) => icon.sizes === "192x192" && icon.purpose === "any",
+).map(({ src, sizes, type }) => ({ src, sizes, type }));
+
+export const PWA_SHORTCUTS: PwaShortcut[] = [
+  {
+    name: "POS",
+    short_name: "POS",
+    description: "Abrir la caja",
+    url: "/pos",
+    icons: PWA_SHORTCUT_ICONS,
+  },
+  {
+    name: "Nueva venta",
+    short_name: "Nueva venta",
+    description: "Cobrar una venta nueva",
+    url: "/pos",
+    icons: PWA_SHORTCUT_ICONS,
+  },
+];
+
 export function buildManifest(): MetadataRoute.Manifest {
   return {
     id: PWA_SCOPE,
@@ -108,7 +142,90 @@ export function buildManifest(): MetadataRoute.Manifest {
     background_color: PWA_BACKGROUND_COLOR,
     theme_color: PWA_THEME_COLOR_LIGHT,
     icons: PWA_ICONS,
+    shortcuts: PWA_SHORTCUTS,
   };
+}
+
+export type PwaColorScheme = "light" | "dark";
+
+export const PWA_COLOR_SCHEMES: PwaColorScheme[] = ["light", "dark"];
+
+/** Directory of the generated splash PNGs (`frontend/public/splash/`). */
+export const PWA_SPLASH_DIR = "/splash";
+
+export interface PwaStartupImage {
+  /** File size, in device pixels. */
+  width: number;
+  height: number;
+  /** Logical viewport of the iPhone that asks for this image. */
+  deviceWidth: number;
+  deviceHeight: number;
+  pixelRatio: number;
+  src: Record<PwaColorScheme, string>;
+}
+
+/**
+ * iOS paints its own blank screen while an installed app boots unless a splash
+ * image matches the device. Each entry is one iPhone screen; the file name is
+ * the pixel size, and the light/dark pair exists because the app has two
+ * backgrounds (the PNGs are generated with the icon centred on `--background`).
+ *
+ * The PNGs themselves are committed under `public/splash/`; `pwa.test.ts` reads
+ * their real dimensions, so a file cannot be replaced by the wrong size.
+ */
+function splashImage(
+  deviceWidth: number,
+  deviceHeight: number,
+  pixelRatio: number,
+): PwaStartupImage {
+  const width = deviceWidth * pixelRatio;
+  const height = deviceHeight * pixelRatio;
+  const file = `${width}x${height}`;
+  return {
+    width,
+    height,
+    deviceWidth,
+    deviceHeight,
+    pixelRatio,
+    src: {
+      light: `${PWA_SPLASH_DIR}/${file}-light.png`,
+      dark: `${PWA_SPLASH_DIR}/${file}-dark.png`,
+    },
+  };
+}
+
+export const PWA_STARTUP_IMAGES: PwaStartupImage[] = [
+  // 390x844 @3 — iPhone 12/13/14
+  splashImage(390, 844, 3),
+  // 393x852 @3 — iPhone 14 Pro/15/16
+  splashImage(393, 852, 3),
+  // 430x932 @3 — iPhone 14/15 Pro Max, 16 Plus
+  splashImage(430, 932, 3),
+  // 375x812 @3 — iPhone X/XS/11 Pro, 12/13 mini
+  splashImage(375, 812, 3),
+  // 414x896 @2 — iPhone XR/11/11 Pro Max
+  splashImage(414, 896, 2),
+  // 375x667 @2 — iPhone SE (2nd/3rd gen), 8
+  splashImage(375, 667, 2),
+];
+
+export interface StartupImageLink {
+  url: string;
+  media: string;
+}
+
+/**
+ * `apple-touch-startup-image` links, one per screen and colour scheme. WebKit
+ * matches on the media query, so the device metrics are part of the contract:
+ * a link without them would be offered to every phone.
+ */
+export function buildStartupImageLinks(): StartupImageLink[] {
+  return PWA_STARTUP_IMAGES.flatMap((image) =>
+    PWA_COLOR_SCHEMES.map((scheme) => ({
+      url: image.src[scheme],
+      media: `(prefers-color-scheme: ${scheme}) and (device-width: ${image.deviceWidth}px) and (device-height: ${image.deviceHeight}px) and (-webkit-device-pixel-ratio: ${image.pixelRatio})`,
+    })),
+  );
 }
 
 export function buildPwaMetadata(): Metadata {
@@ -128,6 +245,8 @@ export function buildPwaMetadata(): Metadata {
        * transparent status bar would put dark text over dark content.
        */
       statusBarStyle: "default",
+      /** One per iPhone screen and colour scheme; see `PWA_STARTUP_IMAGES`. */
+      startupImage: buildStartupImageLinks(),
     },
     /**
      * Next maps `appleWebApp.capable` to the standard `mobile-web-app-capable`

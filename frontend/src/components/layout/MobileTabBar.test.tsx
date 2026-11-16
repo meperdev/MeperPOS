@@ -240,4 +240,13 @@ describe("MobileTabBar placement", () => {
       expect(target.className).toMatch(/\bmin-h-11\b/);
     }
   });
+
+  it("keeps its own snapshot, so a route change never fades the bar", () => {
+    setUser("OWNER");
+    render(<MobileTabBar />);
+
+    expect(tabBar().className).toContain(
+      "[view-transition-name:mobile-tab-bar]",
+    );
+  });
 });

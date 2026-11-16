@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { navigateWithRouteTransition } from "@/lib/viewTransition";
 import { isNavItemActive, mobileTabsFor } from "./nav-routes";
 import { useMobileDrawer } from "./mobile-drawer";
 
@@ -22,6 +23,7 @@ export const MOBILE_TAB_BAR_LABEL = "Secciones principales";
  */
 export function MobileTabBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuth();
   const { isOpen, toggle } = useMobileDrawer();
   const tabs = mobileTabsFor(user?.role);
@@ -43,6 +45,9 @@ export function MobileTabBar() {
         "h-[calc(var(--mobile-tabbar)+var(--safe-bottom))] pb-[var(--safe-bottom)]",
         "pl-[var(--safe-left)] pr-[var(--safe-right)]",
         "bg-card border-t border-border",
+        // Its own snapshot, so a route change cross-fades the content and never
+        // the bar (see `viewTransition.ts`).
+        "[view-transition-name:mobile-tab-bar]",
       )}
     >
       {tabs.map((tab) => {
@@ -52,6 +57,12 @@ export function MobileTabBar() {
             key={tab.href}
             href={tab.href}
             aria-current={isActive ? "page" : undefined}
+            onClick={(event) => {
+              // Re-tapping the tab you are on must not wait for a route change
+              // that will not happen.
+              if (isActive) return;
+              navigateWithRouteTransition(event, () => router.push(tab.href));
+            }}
             className={itemClass(isActive)}
           >
             <span aria-hidden="true" className="shrink-0">

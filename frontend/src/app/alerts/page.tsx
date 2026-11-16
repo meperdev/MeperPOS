@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BellRing, Package, RefreshCw } from "lucide-react";
+import { Package, RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   FilterGroup,
@@ -10,7 +10,7 @@ import {
 import { Pagination } from "@/components/ui/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -99,10 +99,13 @@ export default function AlertHistoryPage() {
         </div>
 
         {history.isLoading ? (
-          <LoadingState
-            icon={<BellRing className="h-4 w-4" />}
-            message="Cargando historial…"
-          />
+          <div aria-busy="true">
+            <TableSkeleton
+              rows={6}
+              columns={3}
+              label="Cargando historial…"
+            />
+          </div>
         ) : history.isError && !history.data ? (
           <ErrorState
             message="No se pudo cargar el historial de notificaciones."

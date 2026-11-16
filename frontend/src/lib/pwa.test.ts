@@ -9,6 +9,7 @@ import {
   PWA_OFFLINE_URL,
   PWA_SCOPE,
   PWA_START_URL,
+  PWA_STARTUP_IMAGES,
   PWA_THEME_COLOR_DARK,
   PWA_THEME_COLOR_LIGHT,
   SW_CACHE_VERSION,
@@ -16,6 +17,7 @@ import {
   SW_STATIC_CACHE,
   buildPwaMetadata,
   buildPwaViewport,
+  buildStartupImageLinks,
 } from "@/lib/pwa";
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/constants";
 
@@ -145,6 +147,93 @@ describe("theme color single source of truth", () => {
 
     expect(layout).not.toMatch(/#[0-9a-fA-F]{6}/);
     expect(layout).toContain('from "@/lib/pwa"');
+  });
+});
+
+describe("app shortcuts", () => {
+  const shortcuts = manifest.shortcuts ?? [];
+
+  it("offers POS and Nueva venta from the long press on the installed icon", () => {
+    expect(shortcuts.map((shortcut) => shortcut.name)).toEqual([
+      "POS",
+      "Nueva venta",
+    ]);
+    // Both land on the till: the POS page takes no `new` parameter, and adding
+    // a URL it does not read would be a dead shortcut.
+    for (const shortcut of shortcuts) {
+      expect(shortcut.url).toBe("/pos");
+      expect(shortcut.url.startsWith(PWA_SCOPE)).toBe(true);
+      expect(shortcut.icons?.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("draws every shortcut icon from a PNG the build already ships", () => {
+    const shipped = new Set(
+      PWA_ICONS.map((icon) => `${icon.src} ${icon.sizes}`),
+    );
+
+    for (const shortcut of shortcuts) {
+      for (const icon of shortcut.icons ?? []) {
+        const [width, height] = (icon.sizes ?? "").split("x").map(Number);
+        expect(icon.type).toBe("image/png");
+        expect(shipped.has(`${icon.src} ${icon.sizes}`)).toBe(true);
+        expect(pngSize(publicFile(icon.src))).toEqual({ width, height });
+      }
+    }
+  });
+});
+
+describe("iOS startup images", () => {
+  it("covers the iPhone screens the app is expected to run on", () => {
+    // Portrait splash art only: the manifest keeps `orientation: any`, and iOS
+    // falls back to the app background when no image matches.
+    expect(PWA_STARTUP_IMAGES.map((image) => `${image.width}x${image.height}`))
+      .toEqual([
+        "1170x2532",
+        "1179x2556",
+        "1290x2796",
+        "1125x2436",
+        "828x1792",
+        "750x1334",
+      ]);
+  });
+
+  it("ships a light and a dark PNG at exactly the declared size", () => {
+    for (const image of PWA_STARTUP_IMAGES) {
+      expect(image.width).toBe(image.deviceWidth * image.pixelRatio);
+      expect(image.height).toBe(image.deviceHeight * image.pixelRatio);
+      for (const scheme of ["light", "dark"] as const) {
+        expect(pngSize(publicFile(image.src[scheme]))).toEqual({
+          width: image.width,
+          height: image.height,
+        });
+      }
+    }
+  });
+
+  it("declares one link per screen and colour scheme, keyed to that device", () => {
+    const links = buildStartupImageLinks();
+
+    expect(links).toHaveLength(PWA_STARTUP_IMAGES.length * 2);
+    expect(new Set(links.map((link) => link.url)).size).toBe(links.length);
+    for (const image of PWA_STARTUP_IMAGES) {
+      expect(links).toContainEqual({
+        url: image.src.light,
+        media: `(prefers-color-scheme: light) and (device-width: ${image.deviceWidth}px) and (device-height: ${image.deviceHeight}px) and (-webkit-device-pixel-ratio: ${image.pixelRatio})`,
+      });
+      expect(links).toContainEqual({
+        url: image.src.dark,
+        media: `(prefers-color-scheme: dark) and (device-width: ${image.deviceWidth}px) and (device-height: ${image.deviceHeight}px) and (-webkit-device-pixel-ratio: ${image.pixelRatio})`,
+      });
+    }
+  });
+
+  it("routes the links through the metadata the root layout already exports", () => {
+    const appleWebApp = buildPwaMetadata().appleWebApp as unknown as {
+      startupImage?: Array<{ url: string; media?: string }>;
+    };
+
+    expect(appleWebApp.startupImage).toEqual(buildStartupImageLinks());
   });
 });
 

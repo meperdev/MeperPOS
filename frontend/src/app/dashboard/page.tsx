@@ -2,9 +2,9 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useDashboard } from "@/hooks/useReports";
-import { LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { TodayStats } from "@/components/dashboard/TodayStats";
 import { AlertPanels } from "@/components/dashboard/AlertPanels";
@@ -18,10 +18,23 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <LoadingState
-          icon={<LayoutDashboard className="w-5 h-5 text-primary/50" />}
-          message="Cargando panel…"
-        />
+        {/* The panel's own shape, not a spinner: the KPI row, the revenue block
+            and the latest-sales list, so the page does not jump into place. */}
+        <div aria-busy="true" className="space-y-4 overflow-x-hidden">
+          <CardSkeleton
+            count={4}
+            label="Cargando panel…"
+            className="grid-cols-2 xl:grid-cols-4"
+            cardClassName="min-h-[92px]"
+          />
+          <CardSkeleton
+            count={1}
+            label=""
+            className="grid-cols-1"
+            cardClassName="min-h-[240px]"
+          />
+          <TableSkeleton rows={4} columns={3} label="" />
+        </div>
       </DashboardLayout>
     );
   }

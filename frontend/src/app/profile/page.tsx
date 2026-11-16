@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { User as UserIcon, Lock, Mail, Shield } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -73,10 +73,22 @@ export default function ProfilePage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <LoadingState
-          icon={<UserIcon className="w-4 h-4 text-muted-foreground" />}
-          message="Cargando perfil…"
-        />
+        {/* The profile's own shape: the summary card, then the two cards that
+            hold personal data and credentials. */}
+        <div aria-busy="true" className="space-y-4 lg:space-y-5">
+          <CardSkeleton
+            count={1}
+            label="Cargando perfil…"
+            className="grid-cols-1"
+            cardClassName="min-h-[80px]"
+          />
+          <CardSkeleton
+            count={2}
+            label=""
+            className="lg:grid-cols-2"
+            cardClassName="min-h-[260px]"
+          />
+        </div>
       </DashboardLayout>
     );
   }

@@ -40,6 +40,8 @@ export function MobileTopBar() {
         "bg-card border-b border-border",
         "h-[calc(var(--mobile-header)+var(--safe-top))] pt-[var(--safe-top)]",
         "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]",
+        // Its own snapshot: the bar stays put while the content fades.
+        "[view-transition-name:mobile-top-bar]",
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-0.5">

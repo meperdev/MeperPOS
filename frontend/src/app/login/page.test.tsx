@@ -217,3 +217,25 @@ describe("LoginPage Redesign", () => {
     );
   });
 });
+
+describe("LoginPage mobile keyboard", () => {
+  it("keeps the keyboard from capitalising or correcting the email", () => {
+    render(<LoginPage />);
+
+    const email = document.querySelector<HTMLInputElement>("#email");
+    expect(email).toHaveAttribute("autocapitalize", "none");
+    expect(email).toHaveAttribute("autocorrect", "off");
+    expect(email).toHaveAttribute("spellcheck", "false");
+    // "next" moves to the password instead of submitting a half-filled form.
+    expect(email).toHaveAttribute("enterkeyhint", "next");
+  });
+
+  it("sends the password return key straight to the submit button", () => {
+    render(<LoginPage />);
+
+    expect(document.querySelector("#password")).toHaveAttribute(
+      "enterkeyhint",
+      "go",
+    );
+  });
+});

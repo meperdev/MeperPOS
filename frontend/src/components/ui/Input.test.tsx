@@ -31,3 +31,24 @@ describe("Input number stepper", () => {
     expect(screen.getByRole("button", { name: "Disminuir" })).toBeInTheDocument();
   });
 });
+
+describe("Input mobile keyboard hints", () => {
+  it("forwards the hints a phone keyboard needs", () => {
+    render(
+      <Input
+        label="Correo electrónico"
+        type="email"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint="next"
+      />,
+    );
+
+    const field = screen.getByLabelText("Correo electrónico");
+    expect(field).toHaveAttribute("autocapitalize", "none");
+    expect(field).toHaveAttribute("autocorrect", "off");
+    expect(field).toHaveAttribute("spellcheck", "false");
+    expect(field).toHaveAttribute("enterkeyhint", "next");
+  });
+});
