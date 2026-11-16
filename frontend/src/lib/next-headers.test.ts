@@ -52,7 +52,7 @@ const EXACT_HEADERS: Record<string, string> = {
  * because Next only needs it for dev HMR/source maps.
  */
 const PRODUCTION_CSP =
-  "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://res.cloudinary.com; font-src 'self' data:; connect-src 'self' https://meperpos-api.up.railway.app; object-src 'none'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests";
+  "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://res.cloudinary.com; font-src 'self' data:; connect-src 'self' https://meperpos-api.up.railway.app; object-src 'none'; frame-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests";
 
 /** Authenticated app-route prefixes derived from frontend/src/app/. */
 const AUTHENTICATED_ROUTE_PREFIXES = [
@@ -215,6 +215,18 @@ describe("CSP phase 1 — sanitize without nonce (spec S3, task T2)", () => {
     expect(csp).toContain("upgrade-insecure-requests");
     expect(csp).toContain("worker-src 'self'");
     expect(csp).toContain("manifest-src 'self'");
+  });
+
+  it("lets the receipt sheet frame its blob PDF and nothing else", async () => {
+    // `openReceiptPdf` mounts the server-generated PDF (a `blob:` URL) in an
+    // in-app dialog instead of opening a tab. Without this the browser refuses
+    // the frame and "Ver comprobante" shows an empty card; `'self'` keeps every
+    // other frame out, and `frame-ancestors 'none'` still blocks us being framed.
+    const rules = await loadRules({ NODE_ENV: "production", CSP_REPORT_ONLY: "" });
+
+    expect(policyOf(rules, "Content-Security-Policy")).toContain(
+      "frame-src 'self' blob:",
+    );
   });
 
   it("keeps the pre-existing hardening directives and origins", async () => {

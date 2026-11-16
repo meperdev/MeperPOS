@@ -34,31 +34,204 @@ export async function downloadReceiptPdf(saleId: string): Promise<void> {
   api.saveBlob(blob, filename);
 }
 
+/** Label shared by the sheet's accessible name and its close control. */
+export const RECEIPT_SHEET_LABEL = "Comprobante de venta";
+export const RECEIPT_SHEET_CLOSE_LABEL = "Cerrar comprobante";
+
 /**
- * Opens the receipt PDF in a new tab so the user can review it before
- * printing. Printing uses the browser's PDF viewer, which keeps the printed
- * output identical to the downloaded document.
+ * The sheet's primary action. "Print" is not a thing a web page can do to a PDF
+ * frame on iOS — an installed app shows the first page as an image and no
+ * toolbar — so the action is the system share sheet, which carries Print and
+ * Save to Files. The wording names both outcomes the user gets.
+ */
+export const RECEIPT_SHEET_SHARE_LABEL = "Imprimir o compartir";
+export const RECEIPT_SHEET_DOWNLOAD_LABEL = "Descargar comprobante";
+
+interface ReceiptSheetSource {
+  url: string;
+  blob: Blob;
+  filename: string;
+}
+
+/** Target height every control in the sheet pays (D3 touch target). */
+const SHEET_CONTROL_CLASS =
+  "flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
+/**
+ * Prints a framed document, and reports whether the frame allowed it. A PDF
+ * frame belongs to the browser's viewer extension, so `contentWindow` is
+ * cross-origin and this throws; the guard is what makes the caller fall back to
+ * the file the user can keep.
+ */
+function printFramedReceipt(frame: HTMLIFrameElement): boolean {
+  try {
+    const frameWindow = frame.contentWindow;
+    if (!frameWindow) return false;
+    frameWindow.focus?.();
+    frameWindow.print?.();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** True when this browser can hand a file to the system share sheet. */
+function canShareFile(file: File): boolean {
+  if (typeof navigator === "undefined") return false;
+  if (
+    typeof navigator.canShare !== "function" ||
+    typeof navigator.share !== "function"
+  ) {
+    return false;
+  }
+  try {
+    return navigator.canShare({ files: [file] });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Close whatever sheet is open, so a second tap cannot stack two of them.
+ * Kept at module scope because the sheet is plain DOM: it has no React owner
+ * that unmounting would clean up.
+ */
+let closeOpenReceiptSheet: (() => void) | null = null;
+
+/**
+ * Mounts the fetched PDF over the app, inside the app.
+ *
+ * It used to call `window.open("", "_blank")` and explain the popup blocker
+ * when that returned null. On a phone that is the wrong shape twice over: the
+ * installed app has one window, and the tab it opened left the app or died on
+ * a blocker. The receipt now opens here, the same browser PDF viewer the tab
+ * used, so the printed output is still byte-identical to the downloaded
+ * document — and there is no window to be blocked.
+ *
+ * The markup is built by hand rather than with `components/ui/Modal` because
+ * this call site is an async helper, not a component: the three callers (POS,
+ * the sales list, a sale) only ever call `openReceiptPdf(id)`. The classes copy
+ * that Modal's treatment so it reads as the same surface (D5: solid card,
+ * `bg-black/40` overlay, no blur).
+ */
+function showReceiptSheet({ url, blob, filename }: ReceiptSheetSource): void {
+  closeOpenReceiptSheet?.();
+
+  const previouslyFocused =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+  const previousOverflow = document.body.style.overflow;
+
+  const overlay = document.createElement("div");
+  overlay.dataset.receiptSheet = "";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", RECEIPT_SHEET_LABEL);
+  overlay.className =
+    "fixed inset-0 z-[80] flex items-end justify-center bg-black/40 p-3 dark:bg-black/60 sm:items-center sm:p-6";
+
+  const panel = document.createElement("div");
+  panel.className =
+    "flex h-[85dvh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg shadow-black/10 sm:h-[90dvh]";
+
+  const header = document.createElement("div");
+  header.className =
+    "flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5";
+
+  const title = document.createElement("p");
+  title.className = "min-w-0 truncate text-xs font-semibold text-foreground";
+  title.textContent = RECEIPT_SHEET_LABEL;
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.textContent = "Cerrar";
+  closeButton.setAttribute("aria-label", RECEIPT_SHEET_CLOSE_LABEL);
+  closeButton.className =
+    "flex h-11 min-w-11 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
+  const frame = document.createElement("iframe");
+  frame.title = RECEIPT_SHEET_LABEL;
+  frame.className = "min-h-0 w-full flex-1 border-0 bg-muted";
+  frame.src = url;
+
+  // The file the system sheet receives. It reuses the server's name, which
+  // already carries the sale number (`comprobante_42.pdf`), so the shared or
+  // saved file cannot be confused with another receipt.
+  const file = new File([blob], filename, { type: "application/pdf" });
+
+  const footer = document.createElement("div");
+  footer.className =
+    "shrink-0 border-t border-border/60 px-3.5 pt-2.5 pb-[calc(0.625rem+var(--safe-bottom))]";
+
+  const shareButton = document.createElement("button");
+  shareButton.type = "button";
+  shareButton.textContent = RECEIPT_SHEET_SHARE_LABEL;
+  shareButton.className = `${SHEET_CONTROL_CLASS} border border-primary/80 bg-primary text-white shadow-2xs hover:bg-primary-dark active:bg-primary-dark`;
+  shareButton.addEventListener("click", async () => {
+    try {
+      await navigator.share({ files: [file], title: RECEIPT_SHEET_LABEL });
+    } catch (error) {
+      // Closing the share sheet is a decision, not a failure.
+      if ((error as { name?: string } | null)?.name === "AbortError") return;
+      if (printFramedReceipt(frame)) return;
+      api.saveBlob(blob, filename);
+    }
+  });
+
+  const downloadLink = document.createElement("a");
+  downloadLink.href = url;
+  downloadLink.download = filename;
+  downloadLink.textContent = RECEIPT_SHEET_DOWNLOAD_LABEL;
+  downloadLink.className = `${SHEET_CONTROL_CLASS} border border-border/70 bg-card text-foreground shadow-2xs hover:border-border hover:bg-muted/50 active:bg-muted`;
+
+  footer.append(canShareFile(file) ? shareButton : downloadLink);
+
+  header.append(title, closeButton);
+  panel.append(header, frame, footer);
+  overlay.append(panel);
+
+  const close = () => {
+    window.removeEventListener("keydown", onKeyDown, true);
+    overlay.remove();
+    window.URL.revokeObjectURL(url);
+    document.body.style.overflow = previousOverflow;
+    closeOpenReceiptSheet = null;
+    previouslyFocused?.focus?.();
+  };
+
+  function onKeyDown(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    close();
+  }
+
+  closeButton.addEventListener("click", close);
+  overlay.addEventListener("click", (event) => {
+    // Only the padding around the panel dismisses: a tap inside the PDF viewer
+    // belongs to the viewer.
+    if (event.target === overlay) close();
+  });
+  window.addEventListener("keydown", onKeyDown, true);
+
+  document.body.style.overflow = "hidden";
+  document.body.append(overlay);
+  closeOpenReceiptSheet = close;
+  closeButton.focus();
+}
+
+/**
+ * Opens the receipt over the current screen.
+ *
+ * Printing happens through the file the sheet offers, never by re-rendering it:
+ * the PDF is the server's own document, so the printed output stays
+ * byte-identical to the downloaded one.
  */
 export async function openReceiptPdf(saleId: string): Promise<void> {
-  // Reserve the tab synchronously so popup blockers see a user gesture; the
-  // PDF is fetched afterwards and injected into that tab.
-  const receiptWindow = window.open("", "_blank");
-
-  if (!receiptWindow) {
-    throw new Error(
-      "Permita las ventanas emergentes para ver el comprobante",
-    );
-  }
-
-  receiptWindow.opener = null;
-
-  try {
-    const { blob } = await fetchReceiptPdf(saleId);
-    const url = window.URL.createObjectURL(blob);
-    receiptWindow.location.href = url;
-    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-  } catch (error) {
-    receiptWindow.close();
-    throw error;
-  }
+  const { blob, filename } = await fetchReceiptPdf(saleId);
+  showReceiptSheet({
+    url: window.URL.createObjectURL(blob),
+    blob,
+    filename,
+  });
 }

@@ -176,6 +176,12 @@ export default function LoginPage() {
               onBlur={(e) => setEmail(e.target.value.trim())}
               required
               autoComplete="username email"
+              // A phone keyboard must not "fix" an address: no capital after the
+              // dot, no autocorrect, no red squiggle under the domain.
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
               icon={<Mail className="h-4 w-4" />}
             />
 
@@ -189,6 +195,8 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
+              // Last field of the form: the keyboard's return key is the submit.
+              enterKeyHint="go"
               icon={<Lock className="h-4 w-4" />}
               suffixIcon={
                 <button

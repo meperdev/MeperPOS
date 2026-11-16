@@ -57,6 +57,7 @@ const CSP_DIRECTIVE_ORDER = [
   "font-src",
   "connect-src",
   "object-src",
+  "frame-src",
   "worker-src",
   "manifest-src",
   "frame-ancestors",
@@ -76,6 +77,15 @@ const CSP_COMMON_SOURCES: Partial<Record<CspDirective, readonly string[]>> = {
   "img-src": ["'self'", "data:", "blob:", CLOUDINARY_ORIGIN],
   "font-src": ["'self'", "data:"],
   "object-src": ["'none'"],
+  /**
+   * The receipt sheet (S4.6) shows the server's PDF in a hidden-by-default
+   * in-app surface: the document is a `blob:` created by `useReceipt`, so
+   * without this the browser refuses to frame it and "Ver comprobante" opens
+   * an empty card. `blob:` here cannot load a script or a document into the
+   * app's own origin, and `frame-ancestors 'none'` still keeps us unframeable.
+   * No other frame source is allowed.
+   */
+  "frame-src": ["'self'", "blob:"],
   // No Web/Service Worker exists in the app, so `blob:` is NOT needed here.
   // The `blob:` usages are image previews (`img-src`) and a download anchor
   // (`URL.createObjectURL`), neither of which is governed by `worker-src`.
