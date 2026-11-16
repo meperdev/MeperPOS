@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Modal } from "./Modal";
-import { BentoSelect } from "./BentoSelect";
+import { Select } from "./Select";
 
 afterEach(cleanup);
 it("keeps scrolling enabled by default", () => {
@@ -25,11 +25,11 @@ it("renders footer outside the scrolling content area when provided", () => {
   expect(screen.getByRole("button", { name: "Guardar" }).parentElement?.className).toContain("border-t");
 });
 
-it("keeps the modal open when Escape only closes a BentoSelect list inside it", () => {
+it("keeps the modal open when Escape only closes a Select list inside it", () => {
   const onClose = vi.fn();
   render(
     <Modal isOpen onClose={onClose} title="Prueba">
-      <BentoSelect
+      <Select
         value=""
         placeholder="Elige"
         options={[{ value: "a", label: "Opción A" }]}

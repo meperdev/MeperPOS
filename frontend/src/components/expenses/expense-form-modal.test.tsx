@@ -110,7 +110,7 @@ vi.mock("@/lib/api", () => ({
 import { ExpenseFormModal } from "./ExpenseFormModal";
 
 /**
- * BentoSelect renders as a trigger <button> (not a native <select>), so the
+ * Select renders as a trigger <button> (not a native <select>), so the
  * option is picked by opening the popover and clicking the option label.
  */
 async function pickGroup(

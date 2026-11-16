@@ -109,7 +109,7 @@ describe("Suppliers page modal — customer-supplier-info-fields (T19)", () => {
     const accountNumberInput = await screen.findByLabelText(/Número de cuenta/i);
     expect(accountNumberInput).toBeTruthy();
 
-    // BentoSelect triggers are named by their visible label, not by the selected text.
+    // Select triggers are named by their visible label, not by the selected text.
     const bankTrigger = screen.getByRole("button", { name: /Banco \/ Entidad/i });
     const accountTypeTrigger = screen.getByRole("button", { name: /Tipo de cuenta/i });
 
@@ -173,7 +173,7 @@ describe("Suppliers page modal — customer-supplier-info-fields (T19)", () => {
 
     const accountNumberInput = await screen.findByLabelText(/Número de cuenta/i);
     expect(accountNumberInput).toHaveValue("0111111111");
-    // BentoSelect value=Bancolombia and value=CHECKING render their labels as the trigger text.
+    // Select value=Bancolombia and value=CHECKING render their labels as the trigger text.
     expect(screen.getByRole("button", { name: /Banco \/ Entidad/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Tipo de cuenta/i })).toBeTruthy();
   });

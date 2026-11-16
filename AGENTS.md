@@ -90,7 +90,7 @@ Next.js App Router under `frontend/src/`:
 
 **Layout**: `DashboardLayout` wraps all authenticated pages. It renders the `Sidebar` and enforces role-based redirects. Mobile uses a slide-over sidebar; on desktop the sidebar is fixed and the main content column is offset with `lg:ml-[320px]`, so the two numbers must be changed together.
 
-**UI Components** (`components/ui/`): `Badge`, `BentoSelect`, `Button`, `Card`, `ConfirmDialog`, `CurrencyInput`, `DynamicFallback`, `EmptyState`, `ErrorState`, `FilterBar`, `ImageUpload`, `Input`, `LoadingState`, `MetricCard`, `Modal`, `Pagination`, `Select`, `Stepper`, `Table`. All accept a `className` prop and use the `cn()` utility (clsx + tailwind-merge).
+**UI Components** (`components/ui/`): `Badge`, `Button`, `Card`, `ConfirmDialog`, `CurrencyInput`, `DynamicFallback`, `EmptyState`, `ErrorState`, `FilterBar`, `ImageUpload`, `Input`, `LoadingState`, `MetricCard`, `Modal`, `Pagination`, `Select`, `Stepper`, `Table`. All accept a `className` prop and use the `cn()` utility (clsx + tailwind-merge).
 
 **Styling**: TailwindCSS v4 with CSS variables for theming. Variables defined in `globals.css` under `:root` (light) and `.dark` (dark mode). Key tokens: `--primary` (teal), `--terracotta` (accent), `--card`, `--border`, `--muted`. Theme toggled via `ThemeContext` which sets a `dark` class on `<html>`.
 

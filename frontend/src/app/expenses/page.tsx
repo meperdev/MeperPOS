@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { Pagination } from "@/components/ui/Pagination";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import {
   FilterBar,
   FilterClearButton,
@@ -309,7 +309,7 @@ export default function ExpensesPage() {
               Exporta las salidas del mes seleccionado en formato Excel o CSV.
             </span>
             <div className="flex items-center gap-2">
-              <BentoSelect
+              <Select
                 value={exportFormat}
                 onChange={(value) => setExportFormat(value as "excel" | "csv")}
                 className="w-36"
@@ -355,7 +355,7 @@ export default function ExpensesPage() {
                 }}
                 className="w-full sm:w-auto cursor-pointer tabular-nums"
               />
-              <BentoSelect
+              <Select
                 value={labelId}
                 onChange={(value) => {
                   setPage(1);
@@ -371,7 +371,7 @@ export default function ExpensesPage() {
                   })),
                 ]}
               />
-              <BentoSelect
+              <Select
                 value={supplierId}
                 onChange={(value) => {
                   setPage(1);
@@ -387,7 +387,7 @@ export default function ExpensesPage() {
                   })),
                 ]}
               />
-              <BentoSelect
+              <Select
                 value={status}
                 onChange={(value) => {
                   setPage(1);

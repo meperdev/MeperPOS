@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Pagination } from "@/components/ui/Pagination";
 import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -793,7 +793,7 @@ export default function SuppliersPage() {
               Datos bancarios y pagos
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <BentoSelect
+              <Select
                 label="Banco / Entidad"
                 value={formData.bank || ""}
                 onChange={(value) =>
@@ -814,7 +814,7 @@ export default function SuppliersPage() {
                   { value: "Lulo Bank", label: "Lulo Bank" },
                 ]}
               />
-              <BentoSelect
+              <Select
                 label="Tipo de cuenta"
                 value={formData.accountType || ""}
                 onChange={(value) =>

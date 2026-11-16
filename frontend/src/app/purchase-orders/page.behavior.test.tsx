@@ -18,8 +18,8 @@ vi.mock("@/components/layout/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("@/components/ui/BentoSelect", () => ({
-  BentoSelect: ({ placeholder }: { placeholder?: string }) => (
+vi.mock("@/components/ui/Select", () => ({
+  Select: ({ placeholder }: { placeholder?: string }) => (
     <select aria-label={placeholder ?? "select"} />
   ),
 }));

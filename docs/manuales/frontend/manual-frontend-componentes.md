@@ -2,7 +2,7 @@
 
 **Proyecto:** MeperPOS (Next.js App Router)
 **Alcance:** `frontend/src`
-**Ultima actualizacion:** 2026-03-12
+**Ultima actualizacion:** 2026-11-15
 
 ## 1) Objetivo
 
@@ -66,7 +66,8 @@ Regla operativa: cuando abras un ticket/cambio, referencia siempre el ID primero
 |---|---|---|---|
 | `FE-UI-BUTTON` | `Button` | `frontend/src/components/ui/Button.tsx` | variantes, tamanos, estados loading/disabled |
 | `FE-UI-INPUT` | `Input` | `frontend/src/components/ui/Input.tsx` | inputs/textarea, label/error, estilos de campo |
-| `FE-UI-SELECT` | `Select` | `frontend/src/components/ui/Select.tsx` | select base y render de opciones |
+| `FE-UI-CURRENCY-INPUT` | `CurrencyInput` | `frontend/src/components/ui/CurrencyInput.tsx` | campos de dinero, un solo componente con dos modos: entero COP por defecto (`value` numero o string, `onChange` emite numero, prefijo `$`, `max`, miles con punto) y modo `decimals` (`decimals`, `value` string decimal crudo que acepta la peticion, `onChange` emite ese string, coma abre los decimales); `helper` se muestra debajo en ambos modos |
+| `FE-UI-SELECT` | `Select`, `SelectOption` | `frontend/src/components/ui/Select.tsx` | select unico de la app: `onChange(value)` (no evento), select nativo oculto para `name`/`required`/`disabled`, soporte de `error` |
 | `FE-UI-CARD` | `Card`, `CardHeader`, `CardContent`, `CardFooter` | `frontend/src/components/ui/Card.tsx` | contenedores de cards globales |
 | `FE-UI-BADGE` | `Badge` | `frontend/src/components/ui/Badge.tsx` | chips de estado/segmento/alerta |
 | `FE-UI-MODAL` | `Modal` | `frontend/src/components/ui/Modal.tsx` | comportamiento de overlays/modales |

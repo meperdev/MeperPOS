@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { SearchField } from "@/components/ui/SearchField";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { useProducts } from "@/hooks/useProducts";
@@ -193,7 +193,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
     >
       <div className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <BentoSelect
+          <Select
             label="Proveedor"
             value={supplierId}
             onChange={(value) => setSupplierId(value)}

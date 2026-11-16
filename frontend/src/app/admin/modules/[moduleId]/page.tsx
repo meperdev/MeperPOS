@@ -4,7 +4,7 @@ import { use, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Boxes, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -224,7 +224,7 @@ export default function ModuleDetailPage({
           filterControls={
             <>
               <div className="w-36">
-                <BentoSelect
+                <Select
                   value={stateFilter}
                   options={MODULE_STATE_FILTER_OPTIONS}
                   onChange={(value) => {

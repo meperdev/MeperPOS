@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -258,7 +258,7 @@ export default function OrganizationsPage() {
         filterControls={
           <>
             <div className="w-36">
-              <BentoSelect
+              <Select
                 value={statusFilter}
                 options={statusFilterOptions}
                 onChange={(value) => {
@@ -268,7 +268,7 @@ export default function OrganizationsPage() {
               />
             </div>
             <div className="w-32">
-              <BentoSelect
+              <Select
                 value={planFilter}
                 options={planFilterOptions}
                 onChange={(value) => {
@@ -278,7 +278,7 @@ export default function OrganizationsPage() {
               />
             </div>
             <div className="w-40">
-              <BentoSelect
+              <Select
                 value={sort}
                 options={SORT_OPTIONS}
                 onChange={(value) => {
@@ -441,13 +441,13 @@ export default function OrganizationsPage() {
       >
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">{editing?.name}</p>
-          <BentoSelect
+          <Select
             label="Estado"
             value={statusDraft}
             options={statusOptions}
             onChange={setStatusDraft}
           />
-          <BentoSelect
+          <Select
             label="Plan"
             value={planDraft}
             options={planOptions}
@@ -488,7 +488,7 @@ export default function OrganizationsPage() {
             error={formErrors.slug}
             required
           />
-          <BentoSelect
+          <Select
             label="Plan"
             value={formData.plan}
             options={planOptions}

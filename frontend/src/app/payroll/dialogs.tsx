@@ -431,8 +431,8 @@ export function InstallmentDialog({
       <Select
         label="Método de pago"
         value={method}
-        onChange={(event) =>
-          setMethod(event.target.value as PayrollPaymentMethod)
+        onChange={(value) =>
+          setMethod(value as PayrollPaymentMethod)
         }
         options={METHOD_OPTIONS}
       />
@@ -496,8 +496,8 @@ export function CorrectionDialog({
         label="Abono a corregir"
         required
         value={installmentId}
-        onChange={(event) => {
-          setInstallmentId(event.target.value);
+        onChange={(value) => {
+          setInstallmentId(value);
           setError(null);
         }}
         options={obligation.installments.map((item) => ({
@@ -613,8 +613,8 @@ export function CashReturnDialog({
       <Select
         label="Método de la devolución"
         value={returnMethod}
-        onChange={(event) =>
-          setReturnMethod(event.target.value as PayrollPaymentMethod)
+        onChange={(value) =>
+          setReturnMethod(value as PayrollPaymentMethod)
         }
         options={METHOD_OPTIONS}
       />

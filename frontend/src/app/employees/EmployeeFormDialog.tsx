@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import { MoneyField } from "@/components/ui/MoneyField";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -213,13 +213,14 @@ export function EmployeeFormDialog({
           label="Modalidad de remuneración"
           options={MODALITY_OPTIONS}
           value={form.remunerationModality}
-          onChange={(event) =>
-            set("remunerationModality", event.target.value)
+          onChange={(value) =>
+            set("remunerationModality", value)
           }
         />
 
         <div className="sm:col-span-2">
-          <MoneyField
+          <CurrencyInput
+            decimals
             label="Valor de referencia"
             value={form.referenceAmount}
             onChange={(raw) => set("referenceAmount", raw)}

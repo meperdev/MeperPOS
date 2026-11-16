@@ -174,7 +174,7 @@ export function ShiftDialog({
                 label="Tipo de jornada"
                 options={KIND_OPTIONS}
                 value={kind}
-                onChange={(event) => setKind(event.target.value as ShiftKind)}
+                onChange={(value) => setKind(value as ShiftKind)}
               />
               <Input
                 label="Valor"

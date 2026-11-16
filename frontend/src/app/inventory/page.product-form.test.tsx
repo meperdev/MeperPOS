@@ -72,8 +72,8 @@ vi.mock("@/components/ui/CurrencyInput", () => ({
     label?: string; value?: number | string; onChange: (value: number) => void; placeholder?: string;
   }) => <input aria-label={label || placeholder} value={value ?? ""} onChange={(e) => onChange(Number(e.target.value))} />,
 }));
-vi.mock("@/components/ui/BentoSelect", () => ({
-  BentoSelect: ({ label, placeholder, value, options, onChange }: {
+vi.mock("@/components/ui/Select", () => ({
+  Select: ({ label, placeholder, value, options, onChange }: {
     label?: string; placeholder?: string; value?: string;
     options: { value: string; label: string }[]; onChange: (value: string) => void;
   }) => <select aria-label={label || placeholder} value={value} onChange={(e) => onChange(e.target.value)}>

@@ -11,7 +11,7 @@ import {
   type CreatePurchaseOrderItemPayload,
 } from "@/hooks/usePurchaseOrders";
 import { Button, buttonClassName } from "@/components/ui/Button";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { SearchField } from "@/components/ui/SearchField";
@@ -151,7 +151,7 @@ export default function NewPurchaseOrderPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
           <div className="lg:col-span-2 space-y-4">
             <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-4">
-              <BentoSelect
+              <Select
                 label="Proveedor *"
                 value={supplierId}
                 onChange={setSupplierId}

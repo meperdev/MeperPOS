@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/Input";
 import { SearchField } from "@/components/ui/SearchField";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Button } from "@/components/ui/Button";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Badge } from "@/components/ui/Badge";
 import { Stepper } from "@/components/ui/Stepper";
 import { Modal } from "@/components/ui/Modal";
@@ -1036,7 +1036,7 @@ export default function POSPage() {
                   />
                   Favoritos
                 </Button>
-                <BentoSelect
+                <Select
                   value={selectedFilter}
                   onChange={(value) => {
                     setSelectedFilter(value);

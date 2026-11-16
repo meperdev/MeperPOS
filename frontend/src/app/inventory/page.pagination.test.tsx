@@ -100,8 +100,8 @@ vi.mock("@/components/ui/CurrencyInput", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/BentoSelect", () => ({
-  BentoSelect: ({
+vi.mock("@/components/ui/Select", () => ({
+  Select: ({
     value,
     onChange,
     options,

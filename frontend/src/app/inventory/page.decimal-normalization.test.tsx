@@ -50,8 +50,8 @@ vi.mock("@/components/products/ProductCard", () => ({
 vi.mock("@/components/ui/ImageUpload", () => ({
   ImageUpload: () => <div data-testid="product-image" />,
 }));
-vi.mock("@/components/ui/BentoSelect", () => ({
-  BentoSelect: ({ label, placeholder }: { label?: string; placeholder?: string }) => (
+vi.mock("@/components/ui/Select", () => ({
+  Select: ({ label, placeholder }: { label?: string; placeholder?: string }) => (
     <span aria-label={label || placeholder} />
   ),
 }));
