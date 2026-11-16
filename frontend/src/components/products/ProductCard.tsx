@@ -124,15 +124,22 @@ function OfferBadge({ discount }: { discount: number }) {
  * under overflow-hidden + a rounded corner + a hover transform leaves a grey wedge in
  * the corner, so nothing in the card blurs or fades: the info panel is a flat tint.
  */
-function ProductMedia({ product }: { product: ProductCardData }) {
+function ProductMedia({ product, hideOnPhone }: { product: ProductCardData; hideOnPhone: boolean }) {
   return (
-    <div data-testid="product-media" className="absolute inset-0 overflow-hidden rounded-[inherit] bg-muted">
+    <div
+      data-testid="product-media"
+      className={cn(
+        "absolute inset-0 overflow-hidden rounded-[inherit] bg-muted",
+        // No photo and no room for a well: a phone tile must not show a grey strip.
+        hideOnPhone && "max-sm:hidden",
+      )}
+    >
       {product.imageUrl ? (
         <Image
           src={product.imageUrl}
           alt={product.name}
           fill
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          sizes="(max-width: 640px) 33vw, (max-width: 1024px) 33vw, 25vw"
           className="object-cover"
         />
       ) : (
@@ -159,12 +166,15 @@ function RailButton({
   tone,
   onClick,
   disabled,
+  compact = false,
   children,
 }: {
   label: string;
   tone?: string;
   onClick?: () => void;
   disabled?: boolean;
+  /** A phone tile: keep the 44px target, shrink what it draws. */
+  compact?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -179,6 +189,7 @@ function RailButton({
       <span
         className={cn(
           "flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card/90 text-muted-foreground transition-colors",
+          compact && "max-sm:h-6 max-sm:w-6",
           tone,
         )}
       >
@@ -213,14 +224,25 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
   // POS adds through the full-card button, so its rail holds favorite alone.
   const railVisible = isInventory ? Boolean(footerHandler) : Boolean(onToggleFavorite);
 
+  // The POS grid on a phone is a dense tile wall (nine tiles on a 390x844
+  // screen), so the card trades its poster proportions for a short tile below
+  // sm. Inventory keeps its poster at every width.
+  const compactPos = !isInventory;
+  // A phone tile with no photo has no media layer at all: the name panel becomes
+  // the tile, so the card must not paint the muted backdrop or a divider over it.
+  const barePhoneTile = compactPos && !product.imageUrl;
+
   return (
     <div
       className={cn(
         "group relative isolate flex w-full max-w-[22rem] aspect-[4/5] max-h-[22rem] min-h-[15.5rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-2xs transition-colors duration-150 hover:border-primary/40",
+        compactPos &&
+          "max-sm:min-h-[7rem] max-sm:max-h-none max-sm:aspect-auto max-sm:max-w-none max-sm:rounded-xl",
+        barePhoneTile && "max-sm:bg-card",
         isInactive && "opacity-60",
       )}
     >
-      <ProductMedia product={product} />
+      <ProductMedia product={product} hideOnPhone={barePhoneTile} />
 
       {/* The card overlay stays below independent management and favorite buttons. */}
       {onClick && (
@@ -230,16 +252,24 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
           aria-disabled={isInventory ? undefined : cannotAdd}
           disabled={!isInventory && cannotAdd}
           onClick={onClick}
-          className="absolute inset-0 z-10 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+          // Press feedback is a colour wash, never a scale (D5).
+          className="absolute inset-0 z-10 rounded-[inherit] transition-colors duration-150 active:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
         />
       )}
 
       {/*
         Chips are click-through overlays parked top-left, over the lightest part of the photo.
         Being absolute they take no space, so no chip can ever reflow or resize the card.
+        A phone tile is too small for them: the stock count keeps its tone and the offer
+        moves into the name panel, clear of the favorite control.
       */}
       {(showStatusChip || hasPromo) && (
-        <div className="pointer-events-none absolute left-2 top-2 z-20 flex max-w-[calc(100%-3.75rem)] flex-col items-start gap-1">
+        <div
+          className={cn(
+            "pointer-events-none absolute left-2 top-2 z-20 flex max-w-[calc(100%-3.75rem)] flex-col items-start gap-1",
+            compactPos && "max-sm:hidden",
+          )}
+        >
           {showStatusChip && <StatusChip status={status} />}
           {hasPromo && <OfferBadge discount={discount} />}
         </div>
@@ -253,11 +283,15 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
             // Pointer devices reveal the management control on hover/focus; touch always shows it.
             isInventory &&
               "transition-opacity focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100",
+            // On a phone tile there is no photo corner to spare: the favourite moves to
+            // the bottom row beside the price, where the price reserves its disc width.
+            compactPos && "max-sm:top-auto max-sm:bottom-1.5 max-sm:right-1",
           )}
         >
           {!isInventory && onToggleFavorite && (
             <RailButton
               label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+              compact={compactPos}
               tone={
                 isFavorite
                   ? "border-warning/60 bg-warning/35 text-warning-text"
@@ -265,7 +299,14 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
               }
               onClick={onToggleFavorite}
             >
-              <Star className={cn("h-3.5 w-3.5", isFavorite && "fill-current")} aria-hidden="true" />
+              <Star
+                className={cn(
+                  "h-3.5 w-3.5",
+                  isFavorite && "fill-current",
+                  compactPos && "max-sm:h-3 max-sm:w-3",
+                )}
+                aria-hidden="true"
+              />
             </RailButton>
           )}
           {isInventory && footerHandler && (
@@ -292,40 +333,92 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
       */}
       <div
         data-testid="product-sheet"
-        className="relative mt-auto flex w-full min-w-0 flex-col border-t border-border bg-card px-3 pb-3 pt-3 text-foreground"
+        className={cn(
+          "relative mt-auto flex w-full min-w-0 flex-col border-t border-border bg-card px-3 pb-3 pt-3 text-foreground",
+          compactPos && "max-sm:px-2 max-sm:pb-1.5 max-sm:pt-1.5",
+          // The tile starts at the sheet's own top edge: no strip above it, and
+          // therefore no divider to mark one. The name, stock and price spread
+          // over the tile's height so no dead band is left under the price.
+          barePhoneTile && "max-sm:mt-0 max-sm:h-full max-sm:justify-between max-sm:border-t-0",
+        )}
       >
-        <h3 className="line-clamp-2 min-h-[2.25rem] min-w-0 break-words text-sm sm:text-[15px] font-semibold leading-snug text-foreground">
+        <h3
+          className={cn(
+            "line-clamp-2 min-h-[2.25rem] min-w-0 break-words text-sm sm:text-[15px] font-semibold leading-snug text-foreground",
+            compactPos && "max-sm:min-h-0 max-sm:text-xs",
+          )}
+        >
           {product.name}
         </h3>
 
-        {(product.sku || showStock) && (
-          <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
+        {(product.sku || showStock || (compactPos && hasPromo)) && (
+          <div className="mt-1 flex min-w-0 items-center justify-between gap-2 max-sm:mt-0.5 max-sm:flex-wrap">
             {product.sku && (
-              <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">{product.sku}</span>
+              <span
+                className={cn(
+                  "min-w-0 truncate font-mono text-[11px] text-muted-foreground",
+                  // The tile has room for the name, the price and the stock — not the SKU.
+                  compactPos && "max-sm:hidden",
+                )}
+              >
+                {product.sku}
+              </span>
             )}
             {showStock && (
               <span
                 data-testid="product-stock"
                 className={cn(
                   "ml-auto shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium leading-none tabular-nums",
+                  // On a phone tile the count is its own line, reading from the left.
+                  compactPos && "max-sm:ml-0",
                   STOCK_TONE[status] ?? "border-border bg-muted text-foreground",
                 )}
               >
                 {product.stock} uds.
               </span>
             )}
+            {compactPos && hasPromo && (
+              // The overlay badge is gone on a phone tile; the discount keeps its
+              // place at the end of the stock line and wraps instead of shrinking.
+              <span
+                data-testid="offer-compact"
+                className="ml-auto hidden shrink-0 items-center rounded-md border border-danger/30 bg-danger/10 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-danger-text max-sm:inline-flex"
+              >
+                -{discount}%
+              </span>
+            )}
           </div>
         )}
 
-        <div data-testid="product-price-panel" className={cn("min-w-0", product.sku || showStock ? "mt-2" : "mt-auto pt-2")}>
-          <span className="block w-fit max-w-full truncate rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-[11px] font-semibold leading-none text-primary-text">
+        <div
+          data-testid="product-price-panel"
+          className={cn(
+            "min-w-0",
+            product.sku || showStock ? "mt-2" : "mt-auto pt-2",
+            compactPos && "max-sm:mt-1",
+          )}
+        >
+          <span
+            className={cn(
+              "block w-fit max-w-full truncate rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-[11px] font-semibold leading-none text-primary-text",
+              compactPos && "max-sm:hidden",
+            )}
+          >
             {categoryName}
           </span>
           {/* Wraps so the list price drops below the selling price instead of overflowing. */}
-          <div className="mt-1.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <div
+            data-testid="product-price-row"
+            className={cn(
+              "mt-1.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 max-sm:mt-0",
+              // The bottom row of a phone tile: the price keeps the left, the favourite
+              // disc sits at the right, and the row is tall enough to centre both.
+              compactPos && "max-sm:min-h-11 max-sm:items-center max-sm:pr-8",
+            )}
+          >
             <span
               data-testid={hasPromo ? "offer-effective-price" : undefined}
-              className="whitespace-nowrap text-xl font-semibold leading-none tabular-nums tracking-tight text-foreground"
+              className="whitespace-nowrap text-xl font-semibold leading-none tabular-nums tracking-tight text-foreground max-sm:text-[13px]"
             >
               {formatCurrency(sellingPrice)}
             </span>

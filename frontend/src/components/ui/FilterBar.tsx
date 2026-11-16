@@ -96,6 +96,9 @@ export function FilterGroup({
         className={cn(
           // Track is the inset surface: muted on light, the page background on dark (darker than the card it sits on).
           "inline-flex items-center gap-0.5 rounded-lg bg-muted dark:bg-background p-0.5 max-w-full overflow-x-auto",
+          // Too many segments for a phone: the row scrolls by whole chips, without a
+          // scrollbar, and the end padding keeps the last chip fully reachable.
+          "snap-x snap-mandatory scrollbar-hide scroll-px-1 overscroll-x-contain",
           innerClassName,
         )}
       >
@@ -120,7 +123,9 @@ export function FilterOptionButton({
       aria-pressed={active}
       className={cn(
         // inline-flex centring: a bare inline SVG sits on the text baseline and drifts off-centre in icon-only segments.
-        "inline-flex h-8 items-center justify-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+        "inline-flex h-8 items-center justify-center gap-1.5 px-3 max-sm:px-2.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+        // A segment never shrinks: squeezing is what cut "Inactivo" to "Inactiv…".
+        "shrink-0 snap-start",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         active
           ? "bg-card dark:bg-muted text-foreground shadow-2xs border border-border/60"

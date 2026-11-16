@@ -77,6 +77,8 @@ export function RowActions({
   const itemClass = (disabled?: boolean, destructive?: boolean) =>
     cn(
       "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors",
+      // A menu row is a touch target on a phone; desktop keeps its dense list.
+      "max-sm:min-h-11",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
       disabled
         ? "cursor-not-allowed text-muted-foreground/50"
@@ -224,7 +226,7 @@ export function RowActions({
         title={label}
         onClick={toggle}
         className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          "inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground max-sm:h-11 max-sm:w-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
           triggerClassName,
         )}
       >
