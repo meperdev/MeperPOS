@@ -13,7 +13,7 @@ vi.mock("@/contexts/ToastContext", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  api: { exportData: vi.fn() },
+  api: { exportData: vi.fn(), downloadData: vi.fn() },
   getApiErrorMessage: () => "error",
 }));
 
@@ -23,6 +23,16 @@ const loading = () => ({
   error: null,
   refetch: vi.fn(),
 });
+
+vi.mock("@/hooks/useDailyReport", () => ({
+  useDailyReport: () => ({
+    data: undefined,
+    isLoading: true,
+    isFetching: false,
+    error: null,
+    refetch: () => undefined,
+  }),
+}));
 
 vi.mock("@/hooks/useReports", () => {
   const pending = () => ({
@@ -57,6 +67,7 @@ describe("Reportes loading", () => {
 
     // Every section keeps its own accessible loading message.
     for (const label of [
+      "Cargando reporte del día…",
       "Cargando economía…",
       "Cargando caja…",
       "Cargando inventario…",
@@ -67,7 +78,7 @@ describe("Reportes loading", () => {
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(document.querySelectorAll('[aria-busy="true"]').length).toBe(7);
-    expect(screen.getAllByRole("status").length).toBeGreaterThanOrEqual(7);
+    expect(document.querySelectorAll('[aria-busy="true"]').length).toBe(8);
+    expect(screen.getAllByRole("status").length).toBeGreaterThanOrEqual(8);
   });
 });

@@ -11,6 +11,9 @@ import {
   useSalesByPaymentMethod,
   useTopSellingProducts,
 } from "@/hooks/useReports";
+import { useDailyReport } from "@/hooks/useDailyReport";
+import { DailyReportSection } from "@/components/reports/DailyReportSection";
+import { SectionShell } from "@/components/reports/SectionShell";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { adaptiveReportGranularity, formatReportMoney, safeDecimalNumber } from "@/lib/reportPresentation";
 import {
@@ -40,6 +43,7 @@ import {
   Calendar,
   CircleDollarSign,
   Download,
+  FileDown,
   Info,
   Package,
   Receipt,
@@ -63,29 +67,6 @@ function rangeLabel(range?: AppliedRange) {
   const start = format(range.startDate);
   const end = format(range.endDate);
   return start && end ? `${start} - ${end}` : start ? `Desde ${start}` : `Hasta ${end}`;
-}
-
-function SectionShell({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: typeof BarChart3;
-  children: React.ReactNode;
-  tone?: "primary" | "accent";
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs">
-      <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
-        <Icon className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
-        <h2 className="text-xs sm:text-sm font-semibold tracking-tight text-foreground">
-          {title}
-        </h2>
-      </div>
-      <div className="p-4">{children}</div>
-    </section>
-  );
 }
 
 function NarrativeSummary({ report }: { report: FinancialReport }) {
@@ -309,8 +290,9 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showExporting, setShowExporting] = useState(false);
-  const [showExportSection, setShowExportSection] = useState(false);
+  const [isDownloadingDailyReport, setIsDownloadingDailyReport] = useState(false);
 
+  const dailyReport = useDailyReport();
   const economic = useEconomicOverview(startDate, endDate);
   const cash = useCashFlow(startDate, endDate);
   const inventory = useInventorySnapshot(startDate, endDate);
@@ -364,6 +346,19 @@ export default function ReportsPage() {
       setShowExporting(false);
     }
   };
+  const handleDailyReportPdf = async () => {
+    setIsDownloadingDailyReport(true);
+    try {
+      await api.downloadData("/reports/daily-report/pdf");
+      toast.success("Reporte del día descargado");
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(error, "No se pudo generar el reporte del día"),
+      );
+    } finally {
+      setIsDownloadingDailyReport(false);
+    }
+  };
 
   const operationalPaymentMethods = useMemo(
     () => paymentMethods.data?.data ?? [],
@@ -387,32 +382,41 @@ export default function ReportsPage() {
           count={rangeLabel(economic.data?.appliedRange)}
           subtitle="Así va tu negocio"
           actions={
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowExportSection((current) => !current)}
-              className="shrink-0"
-            >
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
-              {showExportSection ? "Ocultar exportación" : "Exportar"}
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleDailyReportPdf}
+                loading={isDownloadingDailyReport}
+                className="shrink-0"
+              >
+                {!isDownloadingDailyReport && (
+                  <FileDown className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                Reporte del día (PDF)
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleEconomicExport}
+                loading={showExporting}
+                className="shrink-0"
+              >
+                {!showExporting && <Download className="h-3.5 w-3.5" aria-hidden="true" />}
+                Exportar
+              </Button>
+            </>
           }
         />
 
-        {showExportSection && (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border/70 bg-card p-3.5 shadow-2xs">
-            <div className="flex-1 text-xs text-muted-foreground">
-              Genera el paquete económico del período{" "}
-              <span className="font-semibold text-foreground tabular-nums">
-                ({startDate} → {endDate})
-              </span>
-              .
-            </div>
-            <Button size="sm" onClick={handleEconomicExport} loading={showExporting}>
-              <Download className="h-3.5 w-3.5" aria-hidden="true" /> Exportar economía
-            </Button>
-          </div>
-        )}
+        <DailyReportSection
+          report={dailyReport.data}
+          isLoading={dailyReport.isLoading}
+          error={dailyReport.error}
+          onRetry={() => dailyReport.refetch()}
+          onRefresh={() => dailyReport.refetch()}
+          isRefreshing={dailyReport.isFetching}
+        />
 
         <section
           className="rounded-xl border border-border/70 bg-card p-2.5 shadow-2xs"

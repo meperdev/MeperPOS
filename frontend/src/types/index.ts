@@ -368,6 +368,78 @@ export interface DailySale {
   count: number;
 }
 
+/**
+ * `GET /reports/daily-report` — the payload the intelligence daily report sends.
+ * Prisma `Decimal` values arrive as strings; the page formats them and never
+ * re-derives an amount.
+ */
+export interface DailyReportSaleItem {
+  quantity: number;
+  unitPrice: string;
+  total: string;
+  product: { name: string; sku: string } | null;
+}
+
+export interface DailyReportSale {
+  id: string;
+  saleNumber: number;
+  createdAt: string;
+  total: string;
+  customer: { name: string; documentNumber: string } | null;
+  items: DailyReportSaleItem[];
+}
+
+export interface DailyReportExpense {
+  id: string;
+  date: string;
+  description: string;
+  total: string;
+  status: string;
+  label: { name: string } | null;
+}
+
+export interface DailyReportLowStockProduct {
+  id: string;
+  name: string;
+  sku: string;
+  type: string;
+  tracksStock: boolean;
+  stock: number;
+  minStock: number;
+}
+
+export interface DailyReportPurchaseOrder {
+  id: string;
+  orderNumber: number;
+  status: string;
+  total: string;
+  supplier: { name: string } | null;
+}
+
+export interface DailyReportLoan {
+  id: string;
+  type: string;
+  amount: string;
+  balance: string;
+  dueAt: string | null;
+  reason: string;
+  customer: string | null;
+  supplier: string | null;
+}
+
+export interface DailyReport {
+  cutoff: string;
+  date: string;
+  timezone: string;
+  salesTotal: string;
+  expenseTotal: string;
+  sales: DailyReportSale[];
+  expenses: DailyReportExpense[];
+  lowStock: DailyReportLowStockProduct[];
+  purchaseOrders: DailyReportPurchaseOrder[];
+  loans: DailyReportLoan[];
+}
+
 export interface ImportStartResponse {
   jobId: string;
   totalRows: number;

@@ -9,6 +9,7 @@ const useSalesByPaymentMethodMock = vi.fn();
 const useSalesByCategoryMock = vi.fn();
 const useTopSellingProductsMock = vi.fn();
 const useCustomerStatisticsMock = vi.fn();
+const useDailyReportMock = vi.fn();
 
 vi.mock("@/components/layout/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -33,8 +34,13 @@ vi.mock("@/contexts/ToastContext", () => ({
 vi.mock("@/lib/api", () => ({
   api: {
     exportData: vi.fn(),
+    downloadData: vi.fn(),
   },
   getApiErrorMessage: () => "error",
+}));
+
+vi.mock("@/hooks/useDailyReport", () => ({
+  useDailyReport: () => useDailyReportMock(),
 }));
 
 vi.mock("@/hooks/useReports", () => ({
@@ -66,6 +72,25 @@ const range = {
 describe("Reports economics-first evidence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    useDailyReportMock.mockReturnValue({
+      data: {
+        cutoff: "2026-01-12T18:42:00.000Z",
+        date: "2026-01-12",
+        timezone: "America/Bogota",
+        salesTotal: "999000.00",
+        expenseTotal: "0.00",
+        sales: [],
+        expenses: [],
+        lowStock: [],
+        purchaseOrders: [],
+        loans: [],
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    });
 
     useEconomicOverviewMock.mockReturnValue({
       data: {
@@ -163,21 +188,33 @@ describe("Reports economics-first evidence", () => {
     expect(screen.queryByText("Importar Inventario")).toBeNull();
   });
 
-  it("expands the enterprise export toggle and triggers the economic export", () => {
+  it("renders today's daily report above the period filter, with its own totals", () => {
     render(<ReportsPage />);
 
-    const toggle = screen.getByRole("button", { name: "Exportar" });
+    const today = screen.getByRole("heading", { name: "Hoy" });
+    const filters = screen.getByLabelText("Filtros de período");
+    expect(
+      today.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // The period range shown is January; the daily report still shows its own total.
+    expect(screen.getByText(/999\.000/)).toBeInTheDocument();
+  });
+
+  it("exports the economic package straight from the header and downloads the PDF", () => {
+    render(<ReportsPage />);
+
     expect(screen.queryByText(/Genera el paquete económico del período/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ocultar exportación" })).toBeNull();
 
-    fireEvent.click(toggle);
-    expect(screen.getByRole("button", { name: "Exportar economía" })).toBeTruthy();
-    expect(screen.getByText(/Genera el paquete económico del período/)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Exportar economía" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
     expect(api.exportData).toHaveBeenCalledWith(
       "/exports/economic",
       expect.objectContaining({ format: "excel", type: "economic" }),
     );
+
+    fireEvent.click(screen.getByRole("button", { name: /Reporte del día \(PDF\)/ }));
+    expect(api.downloadData).toHaveBeenCalledWith("/reports/daily-report/pdf");
   });
 
   it("exposes the financial data-quality warning instead of estimating costs", () => {
