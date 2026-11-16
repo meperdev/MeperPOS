@@ -14,6 +14,7 @@ import {
 } from "react";
 import type { Product, Sale } from "@/types";
 import { formatCurrency } from "@/lib/utils";
+import { HAPTIC_PATTERNS } from "@/lib/haptics";
 import { useAuth } from "@/contexts/AuthContext";
 
 type UseProductsParams = {
@@ -2206,5 +2207,69 @@ describe("POS phone layout (S3.3)", () => {
     render(<POSPage />);
 
     expect(grid().style.gridTemplateColumns).toContain("152px");
+  });
+});
+
+describe("POS add-to-cart haptics (S4.2)", () => {
+  // `navigator.vibrate` is Android-only and jsdom never ships it, so each case
+  // installs the API the phone would expose and removes it afterwards.
+  const vibrate = vi.fn(() => true);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      writable: true,
+      value: vibrate,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  it("buzzes once when a product tile actually lands in the cart", async () => {
+    useProductsMock.mockReturnValue({
+      data: {
+        data: [makeProduct("1", "Producto Base")],
+        meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Base" }));
+
+    expect(screen.getByText("1 en carrito")).toBeTruthy();
+    expect(vibrate).toHaveBeenCalledExactlyOnceWith(HAPTIC_PATTERNS.tap);
+  });
+
+  it("stays silent when the add is rejected because the line already holds all the stock", async () => {
+    // One unit on hand: the first tap takes it, the second one is the reject.
+    useProductsMock.mockReturnValue({
+      data: {
+        data: [makeProduct("1", "Producto Base", { stock: 1 })],
+        meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    const tile = screen.getByRole("button", { name: "Producto Base" });
+    await userEvent.click(tile);
+    expect(vibrate).toHaveBeenCalledExactlyOnceWith(HAPTIC_PATTERNS.tap);
+
+    vibrate.mockClear();
+    await userEvent.click(tile);
+
+    // The cart did not move, so nothing may buzz.
+    expect(screen.getByDisplayValue("1")).toBeTruthy();
+    expect(vibrate).not.toHaveBeenCalled();
   });
 });

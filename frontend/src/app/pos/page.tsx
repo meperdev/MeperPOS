@@ -56,6 +56,7 @@ import {
   HandCoins,
 } from "lucide-react";
 import { cn, formatCurrency, safeGetItem, safeSetItem } from "@/lib/utils";
+import { haptic } from "@/lib/haptics";
 import { effectiveStock } from "@/lib/product-type";
 import type { CartItem, Product, Sale } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
@@ -141,6 +142,65 @@ function cartItemPriceOverride(
   return Math.abs(lineUnitPrice - serverUnitPrice) > 0.01
     ? { serverUnitPrice }
     : null;
+}
+
+/**
+ * One add, applied purely: every way the cart can absorb a tap — append a new
+ * line, raise an existing one, or refuse it because the stock is gone or the
+ * line already holds all of it — decided in one place.
+ *
+ * It returns `changed` alongside the cart because the answer decides two things
+ * that must never disagree: the state, and the tap haptic (S4.2). A refused add
+ * buzzes like a success if the caller has to re-derive the outcome itself.
+ */
+function addCartLine(
+  cart: CartItem[],
+  product: Product,
+  quantity: number,
+): { cart: CartItem[]; changed: boolean } {
+  const stock = effectiveStock(product);
+  if (stock <= 0) return { cart, changed: false };
+
+  const existing = cart.find((item) => item.productId === product.id);
+  if (existing) {
+    // Cap at available stock — silently ignore if already at max
+    if (existing.quantity >= stock) return { cart, changed: false };
+    const newQty = Math.min(existing.quantity + quantity, stock);
+    const discountAmount = existing.discountPercent
+      ? Math.min(
+          (existing.unitPrice * newQty * existing.discountPercent) / 100,
+          existing.unitPrice * newQty,
+        )
+      : Math.min(existing.discountAmount, existing.unitPrice * newQty);
+    return {
+      cart: cart.map((item) =>
+        item.productId === product.id
+          ? { ...item, quantity: newQty, discountAmount }
+          : item,
+      ),
+      changed: true,
+    };
+  }
+
+  return {
+    cart: [
+      ...cart,
+      {
+        productId: product.id,
+        product,
+        quantity: Math.min(quantity, stock),
+        // Promotional price wins when present; list price stays snapshotted
+        // as originalUnitPrice so the cart can strike it through. Prices are
+        // normalized to numbers because salePrice can arrive as a Decimal
+        // string over HTTP while effectiveSalePrice is a number.
+        unitPrice: Number(product.effectiveSalePrice ?? product.salePrice),
+        originalUnitPrice: Number(product.salePrice),
+        discountAmount: 0,
+        availableStock: stock,
+      },
+    ],
+    changed: true,
+  };
 }
 
 interface PaymentMethod {
@@ -315,6 +375,14 @@ export default function POSPage() {
   // financed lines could be sold or financed a second time.
   const cartLockedRef = useRef(cartLocked);
   cartLockedRef.current = cartLocked;
+  // Same reason as `cartLockedRef`: `addToCart` has to answer "did this change
+  // anything?" before React has re-rendered, and the answer decides whether the
+  // phone buzzes (S4.2). The mirror is synced in an effect to keep the render
+  // pure; `addToCart` advances it by hand so two taps in one tick still compose.
+  const cartRef = useRef<CartItem[]>(cart);
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
   const posLoanAttemptRef = useRef<{ key: string; signature: string } | null>(
     null,
   );
@@ -424,46 +492,21 @@ export default function POSPage() {
 
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
     if (cartLockedRef.current) return;
-    if (effectiveStock(product) <= 0) return;
 
-    setCart((prev) => {
-      const existing = prev.find((item) => item.productId === product.id);
-      if (existing) {
-        // Cap at available stock — silently ignore if already at max
-        if (existing.quantity >= effectiveStock(product)) return prev;
-        const newQty = Math.min(
-          existing.quantity + quantity,
-          effectiveStock(product),
-        );
-        const discountAmount = existing.discountPercent
-          ? Math.min(
-              (existing.unitPrice * newQty * existing.discountPercent) / 100,
-              existing.unitPrice * newQty,
-            )
-          : Math.min(existing.discountAmount, existing.unitPrice * newQty);
-        return prev.map((item) =>
-          item.productId === product.id
-            ? { ...item, quantity: newQty, discountAmount }
-            : item,
-        );
-      }
-      return [
-        ...prev,
-        {
-          productId: product.id,
-          product,
-          quantity: Math.min(quantity, effectiveStock(product)),
-          // Promotional price wins when present; list price stays snapshotted
-          // as originalUnitPrice so the cart can strike it through. Prices are
-          // normalized to numbers because salePrice can arrive as a Decimal
-          // string over HTTP while effectiveSalePrice is a number.
-          unitPrice: Number(product.effectiveSalePrice ?? product.salePrice),
-          originalUnitPrice: Number(product.salePrice),
-          discountAmount: 0,
-          availableStock: effectiveStock(product),
-        },
-      ];
-    });
+    // Every add the POS offers — the product tile and the scanner — comes
+    // through here, so this is the one place a tap can buzz. The buzz answers
+    // "the line moved": a locked cart, a product out of stock or a line already
+    // holding all the stock is refused silently, in the cart and in the hand.
+    const decision = addCartLine(cartRef.current, product, quantity);
+    if (!decision.changed) return;
+
+    // Advance the mirror by hand so two taps in one tick compose instead of
+    // both reading the cart from before the first render. The functional
+    // updater stays the authority for the state: a stale mirror could then
+    // mistime a buzz, never drop a line.
+    cartRef.current = decision.cart;
+    setCart((prev) => addCartLine(prev, product, quantity).cart);
+    haptic("tap");
   }, []);
 
   // Every removal is reversible for a few seconds: a stray tap on "−" or on the
