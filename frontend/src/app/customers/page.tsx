@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from "@/hooks/useCustomers";
@@ -27,6 +27,15 @@ import {
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
+import {
+  COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+  COLLECTION_CARD_MIN_WIDTH,
+  COLLECTION_GRID_GAP,
+  MAX_COLLECTION_PAGE_SIZE,
+  MIN_VISIBLE_ROWS,
+  remapPageForPageSize,
+} from "@/lib/collection-grid";
 import { cn } from "@/lib/utils";
 import {
   Plus,
@@ -51,6 +60,9 @@ const segmentConfig: Record<string, { variant: "success" | "warning" | "default"
   OCCASIONAL: { variant: "default", label: "Ocasional" },
   INACTIVE:   { variant: "danger",  label: "Inactivo" },
 };
+
+/** Table view: a dense list keeps the page it always had. */
+const TABLE_PAGE_SIZE = 10;
 
 function CustomerAvatar({ name }: { name: string }) {
   const initials = name
@@ -81,6 +93,34 @@ export default function CustomersPage() {
   const [segment, setSegment] = useState("");
   const [viewMode, setViewMode] = useEffectiveViewMode("customers");
   const [page, setPage] = useState(1);
+
+  // Card view fills the viewport: the grid reports how many cards fit, and the
+  // table keeps the fixed page it always had.
+  const {
+    pageSize: gridPageSize,
+    containerRef: gridRef,
+    footerRef,
+  } = useResponsivePageSize({
+    minCardWidth: COLLECTION_CARD_MIN_WIDTH,
+    gap: COLLECTION_GRID_GAP,
+    rowHeight: COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+    minRows: MIN_VISIBLE_ROWS,
+    min: TABLE_PAGE_SIZE,
+    max: MAX_COLLECTION_PAGE_SIZE,
+    enabled: viewMode === "grid",
+  });
+  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+
+  // Re-anchor on the item the user was already looking at when a resize changes
+  // the page size, instead of leaving them on a page that now starts elsewhere.
+  const previousPageSize = useRef(pageSize);
+  useEffect(() => {
+    const previous = previousPageSize.current;
+    if (previous === pageSize) return;
+    previousPageSize.current = pageSize;
+    const nextPage = remapPageForPageSize({ page, previousSize: previous, nextSize: pageSize });
+    if (nextPage !== page) setPage(nextPage);
+  }, [pageSize, page]);
   const [showModal, setShowModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState<string | null>(null);
@@ -93,7 +133,7 @@ export default function CustomersPage() {
     isError: customersFailed,
     error: customersError,
     refetch: refetchCustomers,
-  } = useCustomers({ page, limit: viewMode === "grid" ? 12 : 10, search: search || undefined, segment: segment || undefined });
+  } = useCustomers({ page, limit: pageSize, search: search || undefined, segment: segment || undefined });
   const createCustomer = useCreateCustomer();
   const updateCustomer = useUpdateCustomer();
   const deleteCustomer = useDeleteCustomer();
@@ -236,7 +276,7 @@ export default function CustomersPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
+              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {customers.map((customer) => {
                   const seg = segmentConfig[customer.segment] || segmentConfig.OCCASIONAL;
                   const hasOptionalContact = Boolean(
@@ -526,13 +566,18 @@ export default function CustomersPage() {
             )}
 
             {meta && (
-              <Pagination
-                currentPage={page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-                totalItems={meta.total}
-                itemLabel="cliente"
-              />
+              // `contents` keeps the pager a direct flex child (sticky bottom and
+              // mt-auto still work) while the sizing hook measures it.
+              <div ref={footerRef} className="contents">
+                <Pagination
+                  currentPage={page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                  totalItems={meta.total}
+                  pageSize={pageSize}
+                  itemLabel="cliente"
+                />
+              </div>
             )}
           </>
         )}

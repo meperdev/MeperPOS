@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useCategories,
@@ -43,6 +43,15 @@ import {
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
+import {
+  COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+  COLLECTION_CARD_MIN_WIDTH,
+  COLLECTION_GRID_GAP,
+  MAX_COLLECTION_PAGE_SIZE,
+  MIN_VISIBLE_ROWS,
+  remapPageForPageSize,
+} from "@/lib/collection-grid";
 import type { Category } from "@/types";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -57,11 +66,42 @@ const CATEGORY_ICON_TONES = [
   "border-danger/30 bg-danger/10 text-danger-text",
 ] as const;
 
+/** Table view: a dense list keeps the page it always had. */
+const TABLE_PAGE_SIZE = 10;
+
 export default function CategoriesPage() {
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useEffectiveViewMode("categories");
+
+  // Card view fills the viewport: the grid reports how many cards fit, and the
+  // table keeps the fixed page it always had.
+  const {
+    pageSize: gridPageSize,
+    containerRef: gridRef,
+    footerRef,
+  } = useResponsivePageSize({
+    minCardWidth: COLLECTION_CARD_MIN_WIDTH,
+    gap: COLLECTION_GRID_GAP,
+    rowHeight: COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+    minRows: MIN_VISIBLE_ROWS,
+    min: TABLE_PAGE_SIZE,
+    max: MAX_COLLECTION_PAGE_SIZE,
+    enabled: viewMode === "grid",
+  });
+  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+
+  // Re-anchor on the item the user was already looking at when a resize changes
+  // the page size, instead of leaving them on a page that now starts elsewhere.
+  const previousPageSize = useRef(pageSize);
+  useEffect(() => {
+    const previous = previousPageSize.current;
+    if (previous === pageSize) return;
+    previousPageSize.current = pageSize;
+    const nextPage = remapPageForPageSize({ page, previousSize: previous, nextSize: pageSize });
+    if (nextPage !== page) setPage(nextPage);
+  }, [pageSize, page]);
   const [showModal, setShowModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
@@ -78,7 +118,7 @@ export default function CategoriesPage() {
     refetch: refetchCategories,
   } = useCategories({
     page,
-    limit: viewMode === "grid" ? 12 : 10,
+    limit: pageSize,
     search: search || undefined,
   });
   const createCategory = useCreateCategory();
@@ -237,7 +277,7 @@ export default function CategoriesPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
+              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {categories.map((category, i) => {
                   const count = category.productCount ?? 0;
                   return (
@@ -449,13 +489,18 @@ export default function CategoriesPage() {
             )}
 
             {meta && (
-              <Pagination
-                currentPage={page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-                totalItems={meta.total}
-                itemLabel="categoría"
-              />
+              // `contents` keeps the pager a direct flex child (sticky bottom and
+              // mt-auto still work) while the sizing hook measures it.
+              <div ref={footerRef} className="contents">
+                <Pagination
+                  currentPage={page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                  totalItems={meta.total}
+                  pageSize={pageSize}
+                  itemLabel="categoría"
+                />
+              </div>
             )}
           </>
         )}

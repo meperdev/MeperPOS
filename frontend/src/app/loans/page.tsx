@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, HandCoins, Wrench } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -33,6 +33,15 @@ import { Select } from "@/components/ui/Select";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
+import {
+  COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+  COLLECTION_CARD_MIN_WIDTH,
+  COLLECTION_GRID_GAP,
+  MAX_COLLECTION_PAGE_SIZE,
+  MIN_VISIBLE_ROWS,
+  remapPageForPageSize,
+} from "@/lib/collection-grid";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { cn, formatCurrency, formatDateTime, toFiniteNumber } from "@/lib/utils";
@@ -89,6 +98,9 @@ function canCompletePosLoan(loan: Loan): boolean {
     toFiniteNumber(loan.balance) === 0
   );
 }
+
+/** Table view: a dense list keeps the page it always had. */
+const TABLE_PAGE_SIZE = 10;
 
 /** One labelled fact inside the detail modal. */
 function DetailField({
@@ -205,7 +217,33 @@ export default function LoansPage() {
     null,
   );
 
-  const pageSize = 10;
+  // Card view fills the viewport: the grid reports how many cards fit, and the
+  // table keeps the fixed page it always had.
+  const {
+    pageSize: gridPageSize,
+    containerRef: gridRef,
+    footerRef,
+  } = useResponsivePageSize({
+    minCardWidth: COLLECTION_CARD_MIN_WIDTH,
+    gap: COLLECTION_GRID_GAP,
+    rowHeight: COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+    minRows: MIN_VISIBLE_ROWS,
+    min: TABLE_PAGE_SIZE,
+    max: MAX_COLLECTION_PAGE_SIZE,
+    enabled: viewMode === "grid",
+  });
+  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+
+  // Re-anchor on the item the user was already looking at when a resize changes
+  // the page size, instead of leaving them on a page that now starts elsewhere.
+  const previousPageSize = useRef(pageSize);
+  useEffect(() => {
+    const previous = previousPageSize.current;
+    if (previous === pageSize) return;
+    previousPageSize.current = pageSize;
+    const nextPage = remapPageForPageSize({ page, previousSize: previous, nextSize: pageSize });
+    if (nextPage !== page) setPage(nextPage);
+  }, [pageSize, page]);
 
   const loansQuery = useLoans(
     typeFilter
@@ -430,6 +468,7 @@ export default function LoansPage() {
           ) : (
             <ul
               data-testid="loan-cards"
+              ref={gridRef}
               className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}
             >
               {loans.map((row) => (
@@ -446,14 +485,16 @@ export default function LoansPage() {
             </ul>
           )}
 
-          <Pagination
-            currentPage={loansQuery.data?.page ?? page}
-            totalPages={loansQuery.data?.totalPages ?? 0}
-            totalItems={loansQuery.data?.total}
-            pageSize={pageSize}
-            itemLabel="préstamo"
-            onPageChange={setPage}
-          />
+          <div ref={footerRef} className="contents">
+            <Pagination
+              currentPage={loansQuery.data?.page ?? page}
+              totalPages={loansQuery.data?.totalPages ?? 0}
+              totalItems={loansQuery.data?.total}
+              pageSize={pageSize}
+              itemLabel="préstamo"
+              onPageChange={setPage}
+            />
+          </div>
         </div>
       </div>
 

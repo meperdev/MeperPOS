@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -20,6 +20,15 @@ import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
+import {
+  COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+  COLLECTION_CARD_MIN_WIDTH,
+  COLLECTION_GRID_GAP,
+  MAX_COLLECTION_PAGE_SIZE,
+  MIN_VISIBLE_ROWS,
+  remapPageForPageSize,
+} from "@/lib/collection-grid";
 import {
   Plus,
   Eye,
@@ -41,6 +50,9 @@ const statusOptions: Array<{ value: "" | PurchaseOrderStatus; label: string }> =
   { value: "CANCELLED", label: "Cancelada" },
 ];
 
+/** Table view: a dense list keeps the page it always had. */
+const TABLE_PAGE_SIZE = 10;
+
 export default function PurchaseOrdersPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -54,10 +66,38 @@ export default function PurchaseOrdersPage() {
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useEffectiveViewMode("purchase-orders");
 
+  // Card view fills the viewport: the grid reports how many cards fit, and the
+  // table keeps the fixed page it always had.
+  const {
+    pageSize: gridPageSize,
+    containerRef: gridRef,
+    footerRef,
+  } = useResponsivePageSize({
+    minCardWidth: COLLECTION_CARD_MIN_WIDTH,
+    gap: COLLECTION_GRID_GAP,
+    rowHeight: COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+    minRows: MIN_VISIBLE_ROWS,
+    min: TABLE_PAGE_SIZE,
+    max: MAX_COLLECTION_PAGE_SIZE,
+    enabled: viewMode === "grid",
+  });
+  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+
+  // Re-anchor on the item the user was already looking at when a resize changes
+  // the page size, instead of leaving them on a page that now starts elsewhere.
+  const previousPageSize = useRef(pageSize);
+  useEffect(() => {
+    const previous = previousPageSize.current;
+    if (previous === pageSize) return;
+    previousPageSize.current = pageSize;
+    const nextPage = remapPageForPageSize({ page, previousSize: previous, nextSize: pageSize });
+    if (nextPage !== page) setPage(nextPage);
+  }, [pageSize, page]);
+
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
   const { data, isLoading, isError, refetch } = usePurchaseOrders({
     page,
-    limit: viewMode === "grid" ? 12 : 10,
+    limit: pageSize,
     q: q.trim() || undefined,
     supplierId: supplierId || undefined,
     status: status || undefined,
@@ -280,7 +320,7 @@ export default function PurchaseOrdersPage() {
                 </div>
               </div>
             ) : (
-              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
+              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {orders.map((order) => (
                   <div
                     key={order.id}
@@ -346,14 +386,19 @@ export default function PurchaseOrdersPage() {
             )}
 
             {meta && (
-              <Pagination
-                currentPage={page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-                totalItems={meta.total}
-                itemLabel="orden"
-                itemLabelPlural="órdenes"
-              />
+              // `contents` keeps the pager a direct flex child (sticky bottom and
+              // mt-auto still work) while the sizing hook measures it.
+              <div ref={footerRef} className="contents">
+                <Pagination
+                  currentPage={page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                  totalItems={meta.total}
+                  pageSize={pageSize}
+                  itemLabel="orden"
+                  itemLabelPlural="órdenes"
+                />
+              </div>
             )}
           </>
         )}

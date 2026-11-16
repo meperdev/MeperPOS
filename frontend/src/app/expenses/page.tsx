@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSuppliers } from "@/hooks/useSuppliers";
@@ -15,6 +15,15 @@ import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { cn, formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
+import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
+import {
+  COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+  COLLECTION_CARD_MIN_WIDTH,
+  COLLECTION_GRID_GAP,
+  MAX_COLLECTION_PAGE_SIZE,
+  MIN_VISIBLE_ROWS,
+  remapPageForPageSize,
+} from "@/lib/collection-grid";
 import { Button } from "@/components/ui/Button";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -97,6 +106,12 @@ function expenseName(expense: Expense): string {
   return expense.label?.name ?? expense.description ?? "salida general";
 }
 
+/** Table view: a dense list keeps the page it always had. */
+const TABLE_PAGE_SIZE = 10;
+
+/** Card view floor: the fixed card page this list always had. */
+const DEFAULT_CARD_PAGE_SIZE = 9;
+
 export default function ExpensesPage() {
   const toast = useToast();
   const { user } = useAuth();
@@ -133,12 +148,40 @@ export default function ExpensesPage() {
   const [duplicateTarget, setDuplicateTarget] = useState<Expense | null>(null);
   const [taxonomyOpen, setTaxonomyOpen] = useState(false);
 
+  // Card view fills the viewport: the grid reports how many cards fit, and the
+  // table keeps the fixed page it always had.
+  const {
+    pageSize: gridPageSize,
+    containerRef: gridRef,
+    footerRef,
+  } = useResponsivePageSize({
+    minCardWidth: COLLECTION_CARD_MIN_WIDTH,
+    gap: COLLECTION_GRID_GAP,
+    rowHeight: COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+    minRows: MIN_VISIBLE_ROWS,
+    min: DEFAULT_CARD_PAGE_SIZE,
+    max: MAX_COLLECTION_PAGE_SIZE,
+    enabled: viewMode === "grid",
+  });
+  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+
+  // Re-anchor on the item the user was already looking at when a resize changes
+  // the page size, instead of leaving them on a page that now starts elsewhere.
+  const previousPageSize = useRef(pageSize);
+  useEffect(() => {
+    const previous = previousPageSize.current;
+    if (previous === pageSize) return;
+    previousPageSize.current = pageSize;
+    const nextPage = remapPageForPageSize({ page, previousSize: previous, nextSize: pageSize });
+    if (nextPage !== page) setPage(nextPage);
+  }, [pageSize, page]);
+
   const { data: summary } = useExpenseSummary(month);
   const { data: groupsData } = useExpenseGroups();
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
   const { data, isLoading, isError, error, refetch } = useExpenses({
     page,
-    limit: viewMode === "grid" ? 9 : 10,
+    limit: pageSize,
     month,
     labelId: labelId || undefined,
     supplierId: supplierId || undefined,
@@ -652,7 +695,7 @@ export default function ExpensesPage() {
               </div>
             ) : (
               /* Desktop Grid View */
-              <div className={cn(COLLECTION_GRID_CLASSES, "hidden md:grid flex-1 content-start")}>
+              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "hidden md:grid flex-1 content-start")}>
                 {expenses.length === 0 ? (
                   <div className="col-span-full py-14">
                     <EmptyState
@@ -765,14 +808,18 @@ export default function ExpensesPage() {
             )}
 
             {meta && (
-              <Pagination
-                currentPage={page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-                totalItems={meta.total}
-                pageSize={viewMode === "grid" ? 9 : 10}
-                itemLabel="salida"
-              />
+              // `contents` keeps the pager a direct flex child (sticky bottom and
+              // mt-auto still work) while the sizing hook measures it.
+              <div ref={footerRef} className="contents">
+                <Pagination
+                  currentPage={page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                  totalItems={meta.total}
+                  pageSize={pageSize}
+                  itemLabel="salida"
+                />
+              </div>
             )}
           </>
         )}
