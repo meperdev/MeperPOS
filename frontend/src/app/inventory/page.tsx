@@ -49,6 +49,7 @@ import {
   PRODUCT_CARD_MIN_WIDTH,
   remapPageForPageSize,
 } from "@/lib/collection-grid";
+import { shouldAutoFocusTextInput } from "@/lib/input-focus";
 import {
   Plus,
   AlertTriangle,
@@ -487,6 +488,8 @@ function InventoryContent() {
     // advance focus to the Name field instead. Applied on BOTH create and edit
     // so scanning a code during an edit also respects capture-and-advance; the
     // auto-focus to barcode itself is create-only (see effect below).
+    // This move is not gated on the pointer: it answers the reader's own Enter
+    // on a field they are already typing in, which is a request to type here.
     e.preventDefault();
     nameInputRef.current?.focus();
   };
@@ -495,8 +498,11 @@ function InventoryContent() {
   // === null). When editing an existing product we do NOT steal focus to the
   // barcode field, leaving the default focus behavior intact. rAF defers to the
   // next frame so the conditionally-rendered Modal has mounted the field.
+  // Opening a form is the app taking the focus by itself, so a phone keeps its
+  // keyboard closed and only a pointer that can type asks for the field.
   useEffect(() => {
     if (!showModal || editingProduct) return;
+    if (!shouldAutoFocusTextInput()) return;
     const scheduleFocus =
       typeof window.requestAnimationFrame === "function"
         ? window.requestAnimationFrame.bind(window)

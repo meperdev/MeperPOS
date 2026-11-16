@@ -258,6 +258,9 @@ export default function POSPage() {
   }, [authLoading]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scannerInputRef = useRef<HTMLInputElement | null>(null);
+  // A scanner focus the page asked for and has not delivered yet: on a hard
+  // load the shell can render the page before its grid exists.
+  const scannerFocusPendingRef = useRef(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>("");
@@ -469,9 +472,51 @@ export default function POSPage() {
         : (callback: FrameRequestCallback) => window.setTimeout(callback, 0);
 
     scheduleFocus(() => {
-      scannerInputRef.current?.focus();
+      const field = scannerInputRef.current;
+      // Absent or still disabled: the request stays pending and the field
+      // claims it when it attaches (see registerScannerInput).
+      if (!field || field.disabled) return;
+      scannerFocusPendingRef.current = false;
+      field.focus();
     });
   }, []);
+
+  /**
+   * Mirrors the scanner field and delivers a focus the page asked for.
+   *
+   * A hard load renders the page inside the layout shell, so the effect that
+   * hands the scanner its focus can run a frame before the grid — and the field
+   * — exists. The request stays pending across that gap and lands here instead
+   * of being lost.
+   *
+   * `Input` re-attaches its DOM ref on every render, so this runs often. The
+   * pending request is answered once, and only while the app may take the focus
+   * by itself: a pointer that can type, a field that is not disabled by an open
+   * dialog, and nothing else focused. Any other focus belongs to the reader.
+   */
+  const registerScannerInput = useCallback(
+    (field: HTMLInputElement | HTMLTextAreaElement | null) => {
+      const input = field instanceof HTMLInputElement ? field : null;
+      scannerInputRef.current = input;
+      if (!input || input.disabled || !scannerFocusPendingRef.current) return;
+      if (!shouldAutoFocusTextInput()) {
+        scannerFocusPendingRef.current = false;
+        return;
+      }
+      const active = typeof document === "undefined" ? null : document.activeElement;
+      if (active && active !== document.body && active !== input) return;
+      scannerFocusPendingRef.current = false;
+      input.focus();
+    },
+    [],
+  );
+
+  // Arms the page-ready focus: it lands now when the field is mounted, or when
+  // the field attaches if the grid is still missing.
+  const requestScannerFocus = useCallback(() => {
+    scannerFocusPendingRef.current = true;
+    focusScannerInput();
+  }, [focusScannerInput]);
 
   useEffect(() => {
     safeSetItem(FAVORITE_PRODUCTS_KEY, JSON.stringify(favoriteProductIds));
@@ -483,8 +528,8 @@ export default function POSPage() {
     // it the focus as soon as the page is ready. On a phone that focus opens the
     // software keyboard over the grid, so the page never does it by itself.
     if (!shouldAutoFocusTextInput()) return;
-    focusScannerInput();
-  }, [isScannerBlocked, focusScannerInput]);
+    requestScannerFocus();
+  }, [isScannerBlocked, requestScannerFocus]);
 
   // Warm the lazily loaded modal chunks once idle (S1 code splitting).
   useEffect(
@@ -1066,7 +1111,7 @@ export default function POSPage() {
                 <div className="relative min-w-[14rem] flex-[999_1_16rem]">
                   <Search className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    ref={scannerInputRef}
+                    ref={registerScannerInput}
                     placeholder="Escanear o buscar por nombre, SKU o código..."
                     value={searchQuery}
                     onChange={(e) => {
