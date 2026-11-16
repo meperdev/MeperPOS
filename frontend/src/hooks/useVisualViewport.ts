@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 /**
  * Tailwind's `sm`. Below it every overlay is a bottom sheet; from it up the
@@ -75,7 +75,21 @@ export function measureKeyboardInset(): number {
  * iOS does not resize the layout viewport when the keyboard opens; it shrinks
  * `visualViewport` instead, so a bottom-anchored surface has to lift itself by
  * this amount or it ends up underneath the keyboard.
+ *
+ * `enabled` keeps a surface that is not on screen out of the subscription: a
+ * closed modal renders nothing, and three viewport listeners per mounted modal
+ * is a cost paid on every scroll and resize of a phone. While disabled the hook
+ * neither listens nor measures, and answers 0.
  */
-export function useVisualViewport(): number {
-  return useSyncExternalStore(subscribeViewport, measureKeyboardInset, () => 0);
+export function useVisualViewport(enabled = true): number {
+  const subscribe = useCallback(
+    (onChange: () => void) =>
+      enabled ? subscribeViewport(onChange) : () => {},
+    [enabled],
+  );
+  const snapshot = useCallback(
+    () => (enabled ? measureKeyboardInset() : 0),
+    [enabled],
+  );
+  return useSyncExternalStore(subscribe, snapshot, () => 0);
 }

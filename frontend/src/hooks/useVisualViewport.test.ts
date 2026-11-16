@@ -61,6 +61,7 @@ const stubVisualViewport = (height: number, offsetTop = 0) => {
 };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   restoreMatchMedia();
   Reflect.deleteProperty(window, "visualViewport");
   Object.defineProperty(window, "innerHeight", {
@@ -144,5 +145,24 @@ describe("useVisualViewport", () => {
     const { result } = renderHook(() => useVisualViewport());
 
     expect(result.current).toBe(300);
+  });
+
+  it("stays inert while disabled: no listeners and no measurement", () => {
+    Object.defineProperty(window, "innerHeight", {
+      value: 844,
+      configurable: true,
+      writable: true,
+    });
+    // The keyboard is open, and the hook is told not to care.
+    const { listenerCount } = stubVisualViewport(544);
+    const addEventListener = vi.spyOn(window, "addEventListener");
+
+    const { result } = renderHook(() => useVisualViewport(false));
+
+    expect(result.current).toBe(0);
+    expect(listenerCount()).toBe(0);
+    expect(
+      addEventListener.mock.calls.filter(([type]) => type === "resize"),
+    ).toHaveLength(0);
   });
 });

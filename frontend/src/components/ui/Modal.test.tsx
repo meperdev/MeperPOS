@@ -5,6 +5,7 @@ import { Select } from "./Select";
 
 afterEach(cleanup);
 
+
 /** Pretend the viewport is below (false) or at/above (true) Tailwind's `sm` breakpoint (640px). */
 const stubSmBreakpoint = (matches: boolean) => {
   Object.defineProperty(window, "matchMedia", {
@@ -236,5 +237,62 @@ describe("bottom sheet below sm", () => {
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Nuevo cliente" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * Counts the visual-viewport subscriptions a component holds: a closed modal
+ * should hold none.
+ */
+const stubCountedVisualViewport = () => {
+  let listeners = 0;
+  Object.defineProperty(window, "visualViewport", {
+    value: {
+      width: 390,
+      height: 844,
+      offsetTop: 0,
+      offsetLeft: 0,
+      scale: 1,
+      addEventListener: () => {
+        listeners += 1;
+      },
+      removeEventListener: () => {
+        listeners -= 1;
+      },
+      dispatchEvent: () => true,
+    },
+    configurable: true,
+    writable: true,
+  });
+  return { listenerCount: () => listeners };
+};
+
+describe("keyboard listeners follow the open state", () => {
+  afterEach(() => Reflect.deleteProperty(window, "visualViewport"));
+
+  it("subscribes to the visual viewport only while the modal is open", () => {
+    stubSmBreakpoint(false);
+    const { listenerCount } = stubCountedVisualViewport();
+
+    const { rerender } = render(
+      <Modal isOpen={false} onClose={vi.fn()} title="Nuevo cliente">
+        <span>Contenido</span>
+      </Modal>,
+    );
+    expect(listenerCount()).toBe(0);
+
+    rerender(
+      <Modal isOpen onClose={vi.fn()} title="Nuevo cliente">
+        <span>Contenido</span>
+      </Modal>,
+    );
+    expect(listenerCount()).toBeGreaterThan(0);
+
+    rerender(
+      <Modal isOpen={false} onClose={vi.fn()} title="Nuevo cliente">
+        <span>Contenido</span>
+      </Modal>,
+    );
+    expect(listenerCount()).toBe(0);
   });
 });

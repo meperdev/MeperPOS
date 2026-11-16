@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { navigateWithRouteTransition } from "@/lib/viewTransition";
 import { isNavItemActive, mobileTabsFor } from "./nav-routes";
 import { useMobileDrawer } from "./mobile-drawer";
 
@@ -19,11 +18,11 @@ export const MOBILE_TAB_BAR_LABEL = "Secciones principales";
  *
  * Solid `bg-card` with a hairline on top (D5: no blur), fixed to the bottom edge
  * and paying the home-indicator inset itself. `z-30` keeps the drawer's overlay
- * (z-40) able to dim it.
+ * (z-40) able to dim it. Every tab is a plain `<Link>`: the section change is
+ * Next's own client navigation, so nothing captures the page on the way.
  */
 export function MobileTabBar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { user } = useAuth();
   const { isOpen, toggle } = useMobileDrawer();
   const tabs = mobileTabsFor(user?.role);
@@ -45,9 +44,6 @@ export function MobileTabBar() {
         "h-[calc(var(--mobile-tabbar)+var(--safe-bottom))] pb-[var(--safe-bottom)]",
         "pl-[var(--safe-left)] pr-[var(--safe-right)]",
         "bg-card border-t border-border",
-        // Its own snapshot, so a route change cross-fades the content and never
-        // the bar (see `viewTransition.ts`).
-        "[view-transition-name:mobile-tab-bar]",
       )}
     >
       {tabs.map((tab) => {
@@ -57,12 +53,6 @@ export function MobileTabBar() {
             key={tab.href}
             href={tab.href}
             aria-current={isActive ? "page" : undefined}
-            onClick={(event) => {
-              // Re-tapping the tab you are on must not wait for a route change
-              // that will not happen.
-              if (isActive) return;
-              navigateWithRouteTransition(event, () => router.push(tab.href));
-            }}
             className={itemClass(isActive)}
           >
             <span aria-hidden="true" className="shrink-0">
