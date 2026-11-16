@@ -39,12 +39,12 @@ Branch: `feat/reports-redesign` · Delivery: `single-pr` ("TOdo junto, solo sepa
 | T6 | S2, S3, S4, S5.2, S6 (Análisis) | delegated (frontend writer, parallel) | done (RED helpers/hooks → GREEN) | c1bd4a1 |
 | T8 | S1 (L11) filtered pending links + `status=OPEN` | inline | done (RED 6 → GREEN) | 622d042 |
 | T9 | S4 (L11) period dates fit on phones | inline | done (RED → GREEN) | 4589f0c |
-| T10 | S8 | delegated (writer W2, parallel) | pending | |
-| T11 | S9 | delegated (writer W1, parallel) | pending | |
-| T12 | S10 | delegated (writer W1, parallel) | pending | |
-| T13 | S11 | delegated (writer W3, parallel) | pending | |
-| T14 | S12 | delegated (writer W4, parallel) + independent verifier (item 4: scheduler claim ordering) | pending | |
-| T15 | S13 | delegated (writer W5, parallel) | pending | |
+| T10 | S8 | delegated (writer W2, parallel) | done (RED → GREEN) | 0605bc8 |
+| T11 | S9 | delegated (writer W1, parallel) | done (RED → GREEN) | 13a446b |
+| T12 | S10 | delegated (writer W1, parallel) | done (RED → GREEN) | 18f5649 |
+| T13 | S11 | delegated (writer W3, parallel) | done (RED → GREEN) | 31a2a84 |
+| T14 | S12 | delegated (writer W4, parallel) + independent verifier (item 4: scheduler claim ordering) | done (RED 14+7 → GREEN; verifier met, review approved) | cebd93f, 4a63761, 1900fdc |
+| T15 | S13 | delegated (writer W5, parallel) | done (RED → GREEN) | baf9199 |
 | T7 | all | parent: commits, suites, verifier, native review, visual check | done except the visual check (browser not connected) | |
 
 Route evidence: Writer trigger (a) parallelism — backend (`backend/**`) and frontend (`frontend/**`) are independent units with disjoint edit surfaces, each several hundred lines; the frontend codes against the backend contract below. The parent owns git and builds the commits from the backend writer's per-task checkpoints.
@@ -75,3 +75,4 @@ Backend → frontend contract:
 - L13 (2026-11-16, user): "Bien quiero unos ajustes especificos: 1. [Image 1] El input y toda la zona en general de Salidas se ve mal. 2. [Image 2] Me gustaria que topda esa informacion de Productos con stock bajo, Órdenes de compra, Préstamos, etc. SE visualicen mejor y se l epuede añadir alguna key o chip. 3. [Image 3] Me gustaria que ordenaras mejor esa seccion baja de reports no porque no me guste sino porque quiero que las cards esten junto a cards de su mismo tamaño, me entiendes? 4. NO tengo como acceder a la pagina de historial de notificacin que no sea por parte de la propia notificacion, seria adecuado dejarle alguna acceso desde los tres botones? asi como MI perfil y configuracion? Y tambien mejorarla un poco siento que se hizo de rapidez, aplicarle mas diseño como el actual. 5. [Image 4] Wpp no tiene limite con los intentos, entonces ajustarlo y generar algo como para resetear o no se que opcion sea mejor para mantener lo que importa y no ver tanto falló no se, que me recomiendas tu? REcuerda delegar no te preocupes y orquestar y tomar decisiones de diseño tu. :)"
 - L14 (2026-11-16, user): "[Image 1] tambien haz que general se sienta mejor, no dos lineas y un mini cuadro apra la foto xd"
 - L15 (parent): WhatsApp evidence — `WhatsAppDeliveryService.scheduled` claims the SCHEDULED row before resolving the recipient, so every day without a verified number writes a FAILED `no_recipient` row; one attempt per day by design, no streak limit. Delivery: same branch and PR #369, one commit per task. Five writers launched together with disjoint edit surfaces.
+- L16 (parent): five writers done inside their surfaces. Full suites on the final bytes: frontend 171 files / 1618 tests, tsc clean; backend 4861 passed after adding the `/api/whatsapp/deliveries/automatic` row to `docs/authorization-matrix.md` (matrix-coverage gate). Verifier on T14: S12 a–d met, no blocker; one send per day under cron + catch-up + race; its probes added as regression tests (4a63761). Native review of T14 (lenses risk, resilience, reliability): approved, acknowledged (lineage review-afb1a0ffb90c4b14). Advisories fixed in 1900fdc: run hour from `nextRunAt`, automatic state refreshed every 5 minutes, deterministic row order in the int spec, `consecutiveFailures` contract wording. Open: a pause never resumes by itself (by design: the manual send resumes); an ambiguous central channel reads as "sin número"; logo removal needs a backend endpoint; expenses `ViewModeToggle` is hidden below `sm`; `formatDate` renders UTC-midnight days in the reader's zone (pre-existing). Intermediate commits were not typechecked one by one; the final tree is. Visual check still owed (browser not connected).
