@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import type { Customer, DashboardData, Sale } from "@/types";
 
@@ -214,18 +213,23 @@ describe("Dashboard scope evidence (DIA-4/13/10 — reports no longer duplicated
     cleanup();
   });
 
-  it("renders the 8-metric KPI grid and the compact operational panels", () => {
+  it("renders the today KPI row, the low-stock strip, the totals card and the compact panels", () => {
     render(<DashboardPage />);
 
-    // 8 compact metrics — two rows of four
+    // Today KPIs — four cards with sparkline and delta
     expect(screen.getByText("Ventas hoy")).toBeTruthy();
     expect(screen.getByText("Salidas hoy")).toBeTruthy();
     expect(screen.getByText("Transacciones")).toBeTruthy();
     expect(screen.getByText("Ticket promedio")).toBeTruthy();
+
+    // All-time totals — one card with three divided cells
     expect(screen.getByText("Ventas completadas")).toBeTruthy();
     expect(screen.getByText("Productos totales")).toBeTruthy();
     expect(screen.getByText("Clientes totales")).toBeTruthy();
-    expect(screen.getByText("Stock crítico")).toBeTruthy();
+
+    // Stock crítico became its own alert strip, not a metric card
+    expect(screen.getByText(/1 producto en stock crítico/)).toBeTruthy();
+    expect(screen.queryByText("Stock crítico")).toBeNull();
 
     // Compact operational panels (low-stock is no longer duplicated here)
     expect(screen.queryByText("Stock bajo")).toBeNull();
@@ -280,10 +284,11 @@ describe("Dashboard scope evidence (DIA-4/13/10 — reports no longer duplicated
     expect(screen.queryByText("Inventario actual")).toBeNull();
   });
 
-  it("routes to low-stock inventory filter from the Stock crítico KPI action", async () => {
+  it("links the low-stock strip to the low-stock inventory filter", () => {
     render(<DashboardPage />);
 
-    await userEvent.click(screen.getByRole("button", { name: /reordenar/i }));
-    expect(pushMock).toHaveBeenCalledWith("/inventory?filter=lowStock");
+    expect(
+      screen.getByRole("link", { name: /1 producto en stock crítico/i }),
+    ).toHaveAttribute("href", "/inventory?filter=lowStock");
   });
 });

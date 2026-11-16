@@ -102,6 +102,11 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
  * Shared MetricCard for reports and dashboard: muted label, semibold tabular
  * value, helper line and an optional delta pill, with tone alternation.
  *
+ * The label and value stay anchored at the top: the footer is pushed down with
+ * `mt-auto` instead of distributing the free space, so a card stretched by its
+ * grid row (or by an action button in a sibling card) never floats the number
+ * in the middle.
+ *
  * When no `tone` is provided it renders exactly like the historical reports
  * MetricCard (neutral card surface), so refactors are behavior-preserving.
  * `sparkline` and `action` are additive and optional; omitting both keeps the
@@ -131,10 +136,10 @@ export function MetricCard({
       className={
         tone
           ? cn(
-              "rounded-xl border p-3 sm:p-4 shadow-2xs flex flex-col justify-between",
+              "rounded-xl border p-3 sm:p-4 shadow-2xs flex flex-col",
               toneCardClasses[tone],
             )
-          : "rounded-xl border border-border/70 bg-card p-3 sm:p-4 shadow-2xs flex flex-col justify-between"
+          : "rounded-xl border border-border/70 bg-card p-3 sm:p-4 shadow-2xs flex flex-col"
       }
     >
       <p className="text-xs font-medium text-muted-foreground">
@@ -155,7 +160,7 @@ export function MetricCard({
           color={tone ? toneSparkColor[tone] : NEUTRAL_SPARK_COLOR}
         />
       )}
-      <div className="mt-3 flex items-center justify-between gap-2 text-xs">
+      <div className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs">
         {delta ? (
           <span
             className={cn(

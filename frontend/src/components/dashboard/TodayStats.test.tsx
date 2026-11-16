@@ -1,15 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { TodayStatsInner } from "./TodayStats";
 
-const pushMock = vi.fn();
 const useDailySalesMock = vi.fn();
 const useDashboardMock = vi.fn();
 const useExpensesMock = vi.fn();
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: string;
+    children: ReactNode;
+  }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock("@/hooks/useReports", () => ({
@@ -32,7 +42,7 @@ function daily(date: string, total: number, count: number) {
   };
 }
 
-describe("TodayStats (8 KPI cards in two rows of four)", () => {
+describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useDailySalesMock.mockReturnValue({
@@ -62,36 +72,32 @@ describe("TodayStats (8 KPI cards in two rows of four)", () => {
     expect(screen.getByText("Ventas hoy")).toBeTruthy();
   });
 
-  it("renders the 8 KPI cards split into two rows of four", () => {
+  it("renders the four today KPI cards in one row", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 
     const row1 = screen.getByTestId("kpi-row-1");
-    const row2 = screen.getByTestId("kpi-row-2");
-
     expect(row1.querySelectorAll("[data-tone]")).toHaveLength(4);
-    expect(row2.querySelectorAll("[data-tone]")).toHaveLength(4);
 
     const row1Cards = within(row1);
     expect(row1Cards.getByText("Ventas hoy")).toBeTruthy();
     expect(row1Cards.getByText("Salidas hoy")).toBeTruthy();
     expect(row1Cards.getByText("Transacciones")).toBeTruthy();
     expect(row1Cards.getByText("Ticket promedio")).toBeTruthy();
-
-    const row2Cards = within(row2);
-    expect(row2Cards.getByText("Ventas completadas")).toBeTruthy();
-    expect(row2Cards.getByText("Productos totales")).toBeTruthy();
-    expect(row2Cards.getByText("Clientes totales")).toBeTruthy();
-    expect(row2Cards.getByText("Stock crítico")).toBeTruthy();
   });
 
-  it("shows a sparkline on every row-1 card and none on row-2", () => {
+  it("shows a sparkline on every today card and none in the totals card", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 
-    const row1 = screen.getByTestId("kpi-row-1");
-    const row2 = screen.getByTestId("kpi-row-2");
-
-    expect(row1.querySelectorAll('[data-testid="metric-sparkline"]')).toHaveLength(4);
-    expect(row2.querySelectorAll('[data-testid="metric-sparkline"]')).toHaveLength(0);
+    expect(
+      screen
+        .getByTestId("kpi-row-1")
+        .querySelectorAll('[data-testid="metric-sparkline"]'),
+    ).toHaveLength(4);
+    expect(
+      screen
+        .getByTestId("kpi-totals")
+        .querySelectorAll('[data-testid="metric-sparkline"]'),
+    ).toHaveLength(0);
   });
 
   it("shows today's real sales total, transactions count and average ticket", () => {
@@ -110,15 +116,114 @@ describe("TodayStats (8 KPI cards in two rows of four)", () => {
     expect(screen.getByText(/\$\s60\.000/)).toBeTruthy();
   });
 
-  it("reads the accumulated metrics from useDashboard", () => {
+  it("renders the accumulated metrics as one totals card with three labelled values", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 
-    const row2 = within(screen.getByTestId("kpi-row-2"));
+    const totals = within(screen.getByRole("region", { name: "Totales" }));
 
-    expect(row2.getByText("12")).toBeTruthy();
-    expect(row2.getByText("30")).toBeTruthy();
-    expect(row2.getByText("8")).toBeTruthy();
-    expect(row2.getByText("2")).toBeTruthy();
+    expect(totals.getByText("Ventas completadas")).toBeTruthy();
+    expect(totals.getByText("12")).toBeTruthy();
+    expect(totals.getByText("Productos totales")).toBeTruthy();
+    expect(totals.getByText("30")).toBeTruthy();
+    expect(totals.getByText("Clientes totales")).toBeTruthy();
+    expect(totals.getByText("8")).toBeTruthy();
+  });
+
+  it("formats the totals values with es-CO grouping", () => {
+    useDashboardMock.mockReturnValue({
+      data: {
+        totalSales: 1234,
+        totalProducts: 5678,
+        totalCustomers: 9,
+        lowStockProducts: 0,
+      },
+    });
+
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    const totals = within(screen.getByTestId("kpi-totals"));
+
+    expect(totals.getByText("1.234")).toBeTruthy();
+    expect(totals.getByText("5.678")).toBeTruthy();
+    expect(totals.getByText("9")).toBeTruthy();
+  });
+
+  it("renders the low-stock count as a link to the low-stock inventory filter", () => {
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    const strip = screen.getByRole("link", {
+      name: /2 productos en stock crítico/,
+    });
+
+    expect(strip).toHaveAttribute("href", "/inventory?filter=lowStock");
+    expect(within(strip).getByText("Reordenar")).toBeTruthy();
+  });
+
+  it("uses the singular copy for a single low-stock product", () => {
+    useDashboardMock.mockReturnValue({
+      data: {
+        totalSales: 12,
+        totalProducts: 30,
+        totalCustomers: 8,
+        lowStockProducts: 1,
+      },
+    });
+
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    expect(
+      screen.getByRole("link", { name: /1 producto en stock crítico/ }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/1 productos/)).toBeNull();
+  });
+
+  it("does not render the low-stock strip when nothing needs reordering", () => {
+    useDashboardMock.mockReturnValue({
+      data: {
+        totalSales: 12,
+        totalProducts: 30,
+        totalCustomers: 8,
+        lowStockProducts: 0,
+      },
+    });
+
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    expect(screen.queryByTestId("kpi-low-stock")).toBeNull();
+    expect(screen.queryByText("Reordenar")).toBeNull();
+    expect(screen.getByTestId("kpi-totals")).toBeTruthy();
+  });
+
+  it("orders the sections: today row, then the low-stock strip, then the totals", () => {
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    const row = screen.getByTestId("kpi-row-1");
+    const strip = screen.getByTestId("kpi-low-stock");
+    const totals = screen.getByTestId("kpi-totals");
+
+    expect(
+      row.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      strip.compareDocumentPosition(totals) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("does not surface the 30-day trends or the previous period", () => {
+    useDashboardMock.mockReturnValue({
+      data: {
+        totalSales: 12,
+        totalProducts: 30,
+        totalCustomers: 8,
+        lowStockProducts: 2,
+        trends: { totalSales: 777, totalRevenue: 555, totalCustomers: 333 },
+        previousPeriod: { revenue: 888888, sales: 444 },
+      },
+    });
+
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    expect(screen.queryByText(/777|555|333|888\.888|444/)).toBeNull();
   });
 
   it("renders 'Sin base' when there is no real yesterday baseline", () => {
@@ -127,7 +232,7 @@ describe("TodayStats (8 KPI cards in two rows of four)", () => {
     const row1 = within(screen.getByTestId("kpi-row-1"));
     // Only today's record exists, so every row-1 delta falls back to "Sin base".
     expect(row1.getAllByText("Sin base")).toHaveLength(4);
-    expect(within(screen.getByTestId("kpi-row-2")).queryByText("Sin base")).toBeNull();
+    expect(within(screen.getByTestId("kpi-totals")).queryByText("Sin base")).toBeNull();
   });
 
   it("computes the delta from yesterday's real series value", () => {
@@ -142,14 +247,6 @@ describe("TodayStats (8 KPI cards in two rows of four)", () => {
     // Sales: (250000 - 200000) / 200000 = +25.0%
     expect(screen.getAllByText("+25.0%").length).toBeGreaterThan(0);
     expect(screen.queryByText("Sin base")).toBeTruthy();
-  });
-
-  it("routes the Stock crítico Reordenar action to the low-stock filter", async () => {
-    render(<TodayStatsInner today="2026-08-22" />);
-
-    await userEvent.click(screen.getByRole("button", { name: "Reordenar" }));
-
-    expect(pushMock).toHaveBeenCalledWith("/inventory?filter=lowStock");
   });
 
   it("shows $0 for sales and expenses when there is no data today", () => {

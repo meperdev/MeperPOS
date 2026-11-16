@@ -109,4 +109,18 @@ describe("MetricCard (DIA-5)", () => {
 
     expect(screen.queryByRole("button")).toBeNull();
   });
+
+  it("anchors the value under its label and pushes the helper footer to the bottom", () => {
+    const { container } = render(
+      <MetricCard label="Ventas hoy" value="$ 250.000" helper="del día" />,
+    );
+
+    // The defect was a stretched card that floated the value in the middle:
+    // the root distributed the free space instead of anchoring label+value.
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).not.toContain("justify-between");
+
+    const footer = screen.getByText("del día").closest("div") as HTMLElement;
+    expect(footer.className).toContain("mt-auto");
+  });
 });
