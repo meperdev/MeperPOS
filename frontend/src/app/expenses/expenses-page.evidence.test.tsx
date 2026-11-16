@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { getBogotaDateInputValue } from "@/lib/utils";
@@ -207,6 +207,32 @@ describe("Expenses page evidence", () => {
     expect(useExpenseSummaryMock).toHaveBeenCalledWith(CURRENT_MONTH);
   });
 
+  it("keeps the month total and every category in one strip, above one filter toolbar", () => {
+    useExpenseSummaryMock.mockReturnValue({
+      data: {
+        month: "2026-08",
+        total: "900000",
+        groups: [
+          { groupId: "group-1", name: "Gastos del local", total: "500000", labels: [{ labelId: "label-1", name: "Arriendo", total: "300000" }] },
+          { groupId: "group-2", name: "Gastos de empleados", total: "250000", labels: [{ labelId: "label-2", name: "Sueldos", total: "250000" }] },
+          { groupId: "group-3", name: "Compras", total: "150000", labels: [{ labelId: "label-3", name: "Insumos", total: "150000" }] },
+        ],
+      },
+      isLoading: false,
+    });
+
+    render(<ExpensesPage />);
+
+    const strip = screen.getByRole("region", { name: "Resumen del mes" });
+    expect(within(strip).getByText(/900\.000/)).toBeTruthy();
+    expect(within(strip).getByText("Gastos de empleados")).toBeTruthy();
+    expect(within(strip).getByText("Compras")).toBeTruthy();
+
+    const toolbar = screen.getByRole("region", { name: "Filtros de salidas" });
+    expect(within(toolbar).getByRole("searchbox")).toBeTruthy();
+    expect(within(toolbar).getByLabelText("Mes")).toBeTruthy();
+  });
+
   it("renders the expense list with status badge and COP totals", () => {
     render(<ExpensesPage />);
 
@@ -229,6 +255,37 @@ describe("Expenses page evidence", () => {
     expect(useExpensesMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ month: "2026-07", page: 1 }),
     );
+  });
+
+  // Preserved behaviour: choosing a label still narrows the list query and
+  // returns the user to the first page. The control moved into the toolbar.
+  it("applies the label filter to the list query and starts over on page one", async () => {
+    const user = userEvent.setup();
+
+    render(<ExpensesPage />);
+
+    await user.click(screen.getByRole("button", { name: "Etiqueta" }));
+    await user.click(screen.getByRole("option", { name: "Arriendo" }));
+
+    expect(useExpensesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ labelId: "label-1", page: 1 }),
+    );
+  });
+
+  // Preserved behaviour: the shared view switch still swaps the cards for the
+  // table; it now sits inside the filter toolbar.
+  it("switches to the table view from the toolbar", async () => {
+    const user = userEvent.setup();
+
+    render(<ExpensesPage />);
+    expect(screen.queryByText("Grupo / etiqueta")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Vista en lista" }));
+
+    expect(screen.getByText("Grupo / etiqueta")).toBeTruthy();
+
+    // Leave the stored preference as it was for the rest of the file.
+    window.localStorage.removeItem("meperpos:view-mode:expenses");
   });
 
   it("exports the filtered list through the exports endpoint (EXP-9)", async () => {

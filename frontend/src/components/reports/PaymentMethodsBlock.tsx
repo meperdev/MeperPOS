@@ -1,16 +1,18 @@
 "use client";
 
-import { Receipt } from "lucide-react";
 import { visiblePaymentMethods } from "@/lib/reportPresentation";
 import { formatCurrency, formatPaymentMethod } from "@/lib/utils";
 import type { ReportEnvelope, SaleByPaymentMethod } from "@/types";
 import { chartSeriesColor } from "./chartColors";
-import { QuerySection, type ReportQuery } from "./QuerySection";
+import { QueryBody, type ReportQuery } from "./QuerySection";
 
 /**
  * How the period was paid: one segmented bar and the figures underneath.
  * A method that collected nothing is not a row, so a single-method period does
  * not render two zero lines.
+ *
+ * Content only — `CashPaymentsBlock` renders it inside the shared "Caja y
+ * pagos" card, beside the cash figures, so both halves keep one frame.
  */
 export function PaymentMethodsBlock({
   query,
@@ -21,10 +23,8 @@ export function PaymentMethodsBlock({
   const total = methods.reduce((sum, method) => sum + method.total, 0);
 
   return (
-    <QuerySection
+    <QueryBody
       query={query}
-      title="Métodos de pago"
-      icon={Receipt}
       loadingLabel="Cargando pagos…"
       loadingRows={4}
       loadingColumns={2}
@@ -87,6 +87,6 @@ export function PaymentMethodsBlock({
           })}
         </ul>
       </div>
-    </QuerySection>
+    </QueryBody>
   );
 }

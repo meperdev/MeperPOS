@@ -22,6 +22,7 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   WhatsAppDeliveryService,
+  type WhatsAppAutomaticSend,
   type WhatsAppDeliveryOutcome,
 } from './whatsapp-delivery.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
@@ -105,13 +106,29 @@ export class WhatsAppDeliveryController {
   }
 
   /**
+   * The automatic send, read-only: whether it is active, paused without a
+   * recipient, or paused by a failure streak, plus its next run. Same guards and
+   * same tenant rule as the history — the organization is the token's, and the
+   * state is only reported as this organization's when the scheduled send would
+   * actually carry this organization's report.
+   */
+  @Get('automatic')
+  async automatic(
+    @CurrentUser() user: RequestUser,
+  ): Promise<WhatsAppAutomaticSend> {
+    return this.deliveries.automaticState(requireOrganization(user));
+  }
+
+  /**
    * Send the daily report now, to the caller's own verified WhatsApp number.
    *
    * The recipient is the phone this administrator linked to their own user, so the
    * figures travel to the person asking for them and to nobody else. `sent`,
    * `failed` with a fixed reason and `already_attempted` are returned as the
    * service produced them; the missing-identity outcome is turned into a 409 so
-   * the caller sees an actionable answer instead of a silent 200.
+   * the caller sees an actionable answer instead of a silent 200. This is also the
+   * resume action for a paused automatic send, which is why a successful result
+   * clears the streak on the server side.
    */
   @Post('report')
   @HttpCode(200)

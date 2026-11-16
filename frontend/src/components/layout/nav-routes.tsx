@@ -146,9 +146,9 @@ export const navItems: NavItem[] = [
 ];
 
 /**
- * Sections that have a screen but no navigation row, labelled the way the
- * account menu words them. Labels only: the role rules for these paths live in
- * `DashboardLayout`'s route gate.
+ * Sections that have a screen but no navigation row, labelled the way the mobile
+ * top bar names them. The account menu words its own destinations in
+ * `accountMenuSections` below; both point at the same paths.
  */
 const sectionLabels: Record<string, string> = {
   "/settings": "Configuración",
@@ -156,6 +156,42 @@ const sectionLabels: Record<string, string> = {
   "/alerts": "Alertas",
   "/users": "Usuarios",
 };
+
+/**
+ * Destinations of the account menu, in the order the menu paints them.
+ *
+ * The roles are the audience `DashboardLayout`'s route gate admits on the same
+ * path: the menu is display only — every endpoint behind a destination is
+ * guarded on the server — but a row the gate would bounce is noise, so both
+ * sides read the same lists.
+ */
+export interface AccountMenuSection {
+  href: string;
+  label: string;
+  roles: AppRole[];
+}
+
+export const accountMenuSections: AccountMenuSection[] = [
+  {
+    href: "/profile",
+    label: "Mi perfil",
+    roles: ["ADMIN", "CASHIER", "INVENTORY_USER"],
+  },
+  {
+    href: "/alerts",
+    label: "Historial de alertas",
+    roles: ["ADMIN", "INVENTORY_USER"],
+  },
+  { href: "/settings", label: "Configuración", roles: ["ADMIN"] },
+];
+
+export function visibleAccountMenuSections(
+  userRole: AppRole | string | undefined,
+): AccountMenuSection[] {
+  return accountMenuSections.filter((section) =>
+    hasAnyRole(userRole, section.roles),
+  );
+}
 
 export function canOpenNavItem(
   userRole: AppRole | string | undefined,

@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CalendarClock, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  HandCoins,
+  PackageSearch,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -13,10 +22,34 @@ import {
   formatReportClockTime,
   formatReportDayLabel,
   formatReportMoney,
+  type DailyReportPendingKey,
+  type DailyReportPendingSeverity,
 } from "@/lib/reportPresentation";
 import { cn } from "@/lib/utils";
 import type { DailyReport } from "@/types";
 import { SectionShell } from "./SectionShell";
+
+const PENDING_ICONS: Record<DailyReportPendingKey, LucideIcon> = {
+  lowStock: PackageSearch,
+  purchaseOrders: ClipboardList,
+  loans: HandCoins,
+};
+
+const SEVERITY_DOT: Record<DailyReportPendingSeverity, string> = {
+  danger: "bg-danger",
+  warning: "bg-warning",
+  info: "bg-info",
+};
+
+/**
+ * One to three cards share the row; a fourth would be a grid of empty columns,
+ * so the column count follows how many groups actually have work.
+ */
+const PENDING_GRID_COLUMNS: Record<number, string> = {
+  1: "",
+  2: "md:grid-cols-2",
+  3: "md:grid-cols-3",
+};
 
 /**
  * "Hoy": the payload the intelligence daily report sends, on screen.
@@ -116,31 +149,80 @@ export function DailyReportSection({
               Sin pendientes para hoy: stock, órdenes de compra y préstamos al día.
             </p>
           ) : (
-            <ul className="divide-y divide-border/50 border-t border-border/60">
-              {pendingItems.map((item) => (
-                <li key={item.key} className="flex items-start justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xs font-medium text-foreground">{item.label}</span>
-                      <span className="text-[11px] font-semibold text-foreground tabular-nums">
-                        {item.count}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {item.sample.join(" · ")}
-                      {item.remaining > 0 ? ` · +${item.remaining} más` : ""}
-                    </p>
-                  </div>
-                  <Link
-                    href={item.href}
-                    className="inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            <div
+              data-pending-grid
+              data-pending-count={pendingItems.length}
+              className={cn(
+                "grid gap-2 md:gap-3",
+                PENDING_GRID_COLUMNS[Math.min(pendingItems.length, 3)],
+              )}
+            >
+              {pendingItems.map((item) => {
+                const Icon = PENDING_ICONS[item.key];
+                return (
+                  <article
+                    key={item.key}
+                    data-pending-group={item.key}
+                    className="flex h-full flex-col rounded-lg border border-border/60 bg-card p-3"
                   >
-                    Ver
-                    <ChevronRight className="h-3 w-3" aria-hidden="true" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-start gap-2">
+                        <Icon
+                          className="mt-px h-4 w-4 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        <div className="flex min-w-0 items-baseline gap-1.5">
+                          <span className="text-xs font-medium leading-snug text-foreground">
+                            {item.label}
+                          </span>
+                          <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
+                            {item.count}
+                          </span>
+                        </div>
+                      </div>
+                      <Link
+                        href={item.href}
+                        className="-my-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        Ver
+                        <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                      </Link>
+                    </div>
+
+                    <ul className="mt-2 space-y-1">
+                      {item.chips.map((chip) => (
+                        <li
+                          key={chip.id}
+                          data-pending-chip={chip.id}
+                          className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2 py-1"
+                        >
+                          <span
+                            data-severity={chip.severity}
+                            aria-hidden="true"
+                            className={cn(
+                              "h-1.5 w-1.5 shrink-0 rounded-full",
+                              SEVERITY_DOT[chip.severity],
+                            )}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">
+                            {chip.label}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                            {chip.value}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {item.remaining > 0 && (
+                      <p className="mt-auto pt-1.5 text-[11px] text-muted-foreground">
+                        +{item.remaining} más
+                      </p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
           )}
 
           <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2">

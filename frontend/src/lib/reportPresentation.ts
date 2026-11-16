@@ -61,38 +61,99 @@ export function adaptiveReportGranularity(
 
 export type DailyReportPendingKey = "lowStock" | "purchaseOrders" | "loans";
 
+/** How loud the status dot of a pending chip is; the label never depends on it. */
+export type DailyReportPendingSeverity = "danger" | "warning" | "info";
+
+export interface DailyReportPendingChip {
+  id: string;
+  /** What the item is: product, order plus supplier, or holder plus balance. */
+  label: string;
+  /** The key value the operator acts on: stock vs minimum, status, or due date. */
+  value: string;
+  severity: DailyReportPendingSeverity;
+}
+
 export interface DailyReportPendingItem {
   key: DailyReportPendingKey;
   label: string;
   href: string;
   count: number;
-  /** At most three display-ready examples, in the order the server sent them. */
-  sample: string[];
-  /** Examples left out of `sample`. */
+  /** At most three display-ready chips, in the order the server sent them. */
+  chips: DailyReportPendingChip[];
+  /** Items left out of `chips`. */
   remaining: number;
 }
 
 const PENDING_SAMPLE_SIZE = 3;
 
+const bogotaShortMonthFormatter = new Intl.DateTimeFormat("es-CO", {
+  month: "short",
+  timeZone: BOGOTA_TIME_ZONE,
+});
+
+/** The calendar day of a `YYYY-MM-DD` value or of an ISO instant, never shifted. */
+function reportCalendarDay(value: string) {
+  return value.slice(0, 10);
+}
+
+/** Bogotá day and short month, e.g. "18 nov" — the deadline reading of a chip. */
+export function formatReportShortDay(value: string | null | undefined) {
+  if (!value) return "";
+  const [year, month, day] = reportCalendarDay(value).split("-").map(Number);
+  if (!year || !month || !day) return "";
+  const monthLabel = bogotaShortMonthFormatter
+    .format(new Date(Date.UTC(year, month - 1, day, 12)))
+    .replace(/\.$/, "");
+  return `${day} ${monthLabel}`;
+}
+
+/** A loan is late once its day is behind the report day, and due soon otherwise. */
+function loanDue(
+  dueAt: string | null,
+  reportDay: string,
+): { value: string; severity: DailyReportPendingSeverity } {
+  const day = dueAt ? reportCalendarDay(dueAt) : "";
+  if (!day) return { value: "sin fecha", severity: "warning" };
+  if (day < reportDay) {
+    return { value: `venció ${formatReportShortDay(day)}`, severity: "danger" };
+  }
+  if (day === reportDay) return { value: "vence hoy", severity: "warning" };
+  return { value: `vence ${formatReportShortDay(day)}`, severity: "warning" };
+}
+
+const PURCHASE_ORDER_CHIP: Record<
+  string,
+  { value: string; severity: DailyReportPendingSeverity }
+> = {
+  PENDING: { value: "Pendiente", severity: "warning" },
+  PARTIAL_RECEIVED: { value: "Parcial", severity: "info" },
+};
+
+/** An order that is neither pending nor partially received is still open work. */
+const OPEN_ORDER_FALLBACK = { value: "Por recibir", severity: "warning" } as const;
+
 /**
  * The pending work of the daily report, in the order the operator acts on it.
- * Groups with nothing pending are dropped so the block never renders an empty row.
+ * Each group carries at most three chips and the count of the rest; groups with
+ * nothing pending are dropped so the grid never renders an empty card.
  */
 export function dailyReportPendingItems(
-  report: Pick<DailyReport, "lowStock" | "purchaseOrders" | "loans">,
+  report: Pick<DailyReport, "date" | "lowStock" | "purchaseOrders" | "loans">,
 ): DailyReportPendingItem[] {
+  const reportDay = reportCalendarDay(report.date);
+
   const build = (
     key: DailyReportPendingKey,
     label: string,
     href: string,
-    values: string[],
+    chips: DailyReportPendingChip[],
   ): DailyReportPendingItem => ({
     key,
     label,
     href,
-    count: values.length,
-    sample: values.slice(0, PENDING_SAMPLE_SIZE),
-    remaining: Math.max(0, values.length - PENDING_SAMPLE_SIZE),
+    count: chips.length,
+    chips: chips.slice(0, PENDING_SAMPLE_SIZE),
+    remaining: Math.max(0, chips.length - PENDING_SAMPLE_SIZE),
   });
 
   return [
@@ -100,15 +161,26 @@ export function dailyReportPendingItems(
       "lowStock",
       "Productos con stock bajo",
       "/inventory?filter=lowStock",
-      report.lowStock.map((product) => `${product.name} · ${product.stock} en stock`),
+      report.lowStock.map((product) => ({
+        id: product.id,
+        label: product.name,
+        value: `${product.stock} / mín ${product.minStock}`,
+        severity: product.stock <= 0 ? "danger" : "warning",
+      })),
     ),
     build(
       "purchaseOrders",
       "Órdenes de compra pendientes",
       "/purchase-orders?status=OPEN",
-      report.purchaseOrders.map(
-        (order) => `${order.supplier?.name ?? "Sin proveedor"} · #${order.orderNumber}`,
-      ),
+      report.purchaseOrders.map((order) => {
+        const status = PURCHASE_ORDER_CHIP[order.status] ?? OPEN_ORDER_FALLBACK;
+        return {
+          id: order.id,
+          label: `#${order.orderNumber} · ${order.supplier?.name ?? "Sin proveedor"}`,
+          value: status.value,
+          severity: status.severity,
+        };
+      }),
     ),
     build(
       "loans",
@@ -116,7 +188,11 @@ export function dailyReportPendingItems(
       "/loans",
       report.loans.map((loan) => {
         const holder = loan.customer ?? loan.supplier ?? "Sin contraparte";
-        return `${holder} · ${formatReportMoney(loan.balance)}`;
+        return {
+          id: loan.id,
+          label: `${holder} · ${formatReportMoney(loan.balance)}`,
+          ...loanDue(loan.dueAt, reportDay),
+        };
       }),
     ),
   ].filter((item) => item.count > 0);

@@ -27,22 +27,18 @@ import {
 import { Button } from "@/components/ui/Button";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { Pagination } from "@/components/ui/Pagination";
+import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { Select } from "@/components/ui/Select";
-import {
-  FilterBar,
-  FilterClearButton,
-} from "@/components/ui/FilterBar";
-import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ExpenseStatusBadge } from "@/components/expenses/ExpenseStatusBadge";
+import { ExpenseCard, expenseName } from "@/components/expenses/ExpenseCard";
+import { ExpenseFilters } from "@/components/expenses/ExpenseFilters";
 import { ExpenseSummaryCards } from "@/components/expenses/ExpenseSummaryCards";
 import { DynamicFallback } from "@/components/ui/DynamicFallback";
 import { prefetchOnIdle } from "@/lib/prefetch";
@@ -94,17 +90,6 @@ const HistoryModal = dynamic(loadHistoryModal, {
 const ExpenseDetailModal = dynamic(loadExpenseDetailModal, {
   loading: () => <DynamicFallback />,
 });
-
-const STATUS_OPTIONS: Array<{ value: "" | ExpenseStatus; label: string }> = [
-  { value: "", label: "Todos los estados" },
-  { value: "PARTIAL", label: "Parcial" },
-  { value: "PAID", label: "Pagado" },
-];
-
-/** Names the row for assistive tech, since the per-row icon controls repeat. */
-function expenseName(expense: Expense): string {
-  return expense.label?.name ?? expense.description ?? "salida general";
-}
 
 /** Table view: a dense list keeps the page it always had. */
 const TABLE_PAGE_SIZE = 10;
@@ -375,84 +360,45 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        {/* Monthly Summary Cards */}
+        {/* Monthly summary: one strip, no half-width cards */}
         <ExpenseSummaryCards month={month} summary={summary} />
 
-        {/* Filters */}
-        <FilterBar
-          searchValue={search}
+        {/* One toolbar: search and every filter share the row and the height */}
+        <ExpenseFilters
+          search={search}
           onSearchChange={(value) => {
             setPage(1);
             setSearch(value);
           }}
-          searchPlaceholder="Buscar por descripción…"
-          filterControls={
-            <>
-              <Input
-                type="month"
-                aria-label="Mes"
-                value={month}
-                onChange={(e) => {
-                  setPage(1);
-                  setMonth(e.target.value);
-                }}
-                className="w-full sm:w-auto cursor-pointer tabular-nums"
-              />
-              <Select
-                value={labelId}
-                onChange={(value) => {
-                  setPage(1);
-                  setLabelId(value);
-                }}
-                className="w-full sm:w-44"
-                placeholder="Todas las etiquetas"
-                options={[
-                  { value: "", label: "Todas las etiquetas" },
-                  ...labels.map((label) => ({
-                    value: label.id,
-                    label: label.name,
-                  })),
-                ]}
-              />
-              <Select
-                value={supplierId}
-                onChange={(value) => {
-                  setPage(1);
-                  setSupplierId(value);
-                }}
-                className="w-full sm:w-44"
-                placeholder="Todos los proveedores"
-                options={[
-                  { value: "", label: "Todos los proveedores" },
-                  ...suppliers.map((supplier) => ({
-                    value: supplier.id,
-                    label: supplier.name,
-                  })),
-                ]}
-              />
-              <Select
-                value={status}
-                onChange={(value) => {
-                  setPage(1);
-                  setStatus(value as "" | ExpenseStatus);
-                }}
-                className="w-full sm:w-36"
-                placeholder="Todos los estados"
-                options={STATUS_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-              />
-              {hasFilters && <FilterClearButton onClick={clearFilters} />}
-              <ViewModeToggle
-                value={viewMode}
-                onChange={(mode) => {
-                  setPage(1);
-                  setViewMode(mode);
-                }}
-              />
-            </>
-          }
+          month={month}
+          onMonthChange={(value) => {
+            setPage(1);
+            setMonth(value);
+          }}
+          labelId={labelId}
+          onLabelChange={(value) => {
+            setPage(1);
+            setLabelId(value);
+          }}
+          labels={labels}
+          supplierId={supplierId}
+          onSupplierChange={(value) => {
+            setPage(1);
+            setSupplierId(value);
+          }}
+          suppliers={suppliers}
+          status={status}
+          onStatusChange={(value) => {
+            setPage(1);
+            setStatus(value);
+          }}
+          hasFilters={hasFilters}
+          onClear={clearFilters}
+          viewMode={viewMode}
+          onViewModeChange={(mode) => {
+            setPage(1);
+            setViewMode(mode);
+          }}
         />
 
         {isLoading ? (
@@ -466,108 +412,47 @@ export default function ExpensesPage() {
           />
         ) : (
           <>
-            {/* Mobile Cards (Always visible on mobile) */}
-            <div className="md:hidden flex-1 space-y-3">
+            {/*
+              One collection grid for every card, phone to desktop: the track
+              comes from the shared collection token and the grid is hidden from
+              `md` up only while the table view is the chosen one.
+            */}
+            <div
+              ref={gridRef}
+              className={cn(
+                COLLECTION_GRID_CLASSES,
+                "flex-1 content-start",
+                viewMode === "table" && "md:hidden",
+              )}
+            >
               {expenses.length === 0 ? (
-                <EmptyState
-                  icon={<Wallet className="w-5 h-5 text-muted-foreground" />}
-                  title="No hay salidas registradas"
-                />
+                <div className="col-span-full py-14">
+                  <EmptyState
+                    icon={<Wallet className="w-5 h-5 text-muted-foreground" />}
+                    title="No hay salidas registradas"
+                  />
+                </div>
               ) : (
                 expenses.map((expense) => {
                   const isPaid = expense.status === "PAID";
-                  const paymentButtonLabel = isPaid
-                    ? "La salida ya está pagada"
-                    : "Agregar pago";
-                  const paidSum = (expense.payments ?? []).reduce(
-                    (acc, p) => acc + (Number(p.amount) || 0),
-                    0,
-                  );
-                  const remaining = Math.max(Number(expense.total) - paidSum, 0);
-                  const name = expenseName(expense);
-
                   return (
-                    <div
+                    <ExpenseCard
                       key={expense.id}
-                      className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 truncate">
-                          {expense.label?.group?.name && (
-                            <span className="text-[11px] font-medium text-muted-foreground truncate">
-                              {expense.label.group.name} /
-                            </span>
-                          )}
-                          <span className="font-semibold text-sm text-foreground truncate">
-                            {expense.label?.name ?? "Salida general"}
-                          </span>
-                        </div>
-                        <ExpenseStatusBadge status={expense.status} />
-                      </div>
-
-                      {expense.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {expense.description}
-                        </p>
+                      expense={expense}
+                      onOpenDetail={() => setDetailExpense(expense)}
+                      actions={actionsFor(
+                        expense,
+                        isPaid,
+                        isPaid ? "La salida ya está pagada" : "Agregar pago",
                       )}
-
-                      <div className="space-y-1.5 text-xs pt-1 border-t border-border/50">
-                        {expense.supplier?.name && (
-                          <div className="flex justify-between items-center text-muted-foreground">
-                            <span>Proveedor</span>
-                            <span className="font-medium text-foreground truncate max-w-[180px]">
-                              {expense.supplier.name}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center text-muted-foreground">
-                          <span>Fecha</span>
-                          <span className="tabular-nums text-foreground">{formatDate(expense.date)}</span>
-                        </div>
-                        {expense.receiptUrl && (
-                          <div className="flex items-center gap-1 text-[11px] text-success-text font-medium">
-                            <FileCheck className="w-3.5 h-3.5" />
-                            <span>Comprobante adjunto</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
-                        <div>
-                          <p className="text-[11px] font-medium text-muted-foreground">Total</p>
-                          <p className="text-sm font-semibold text-foreground tabular-nums">
-                            {formatCurrency(Number(expense.total))}
-                          </p>
-                          {!isPaid && remaining > 0 && (
-                            <p className="text-[11px] text-warning-text tabular-nums">
-                              Saldo: {formatCurrency(remaining)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            aria-label={`Ver detalle de ${name}`}
-                            title="Ver detalle"
-                            onClick={() => setDetailExpense(expense)}
-                            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                          >
-                            <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <RowActions
-                            label={`Más acciones de ${name}`}
-                            items={actionsFor(expense, isPaid, paymentButtonLabel)}
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    />
                   );
                 })
               )}
             </div>
 
             {/* Desktop Table View */}
-            {viewMode === "table" ? (
+            {viewMode === "table" && (
               <div className="hidden md:block flex-1">
                 <div className="h-full rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
                   <div className="overflow-x-auto">
@@ -692,118 +577,6 @@ export default function ExpensesPage() {
                     </Table>
                   </div>
                 </div>
-              </div>
-            ) : (
-              /* Desktop Grid View */
-              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "hidden md:grid flex-1 content-start")}>
-                {expenses.length === 0 ? (
-                  <div className="col-span-full py-14">
-                    <EmptyState
-                      icon={
-                        <Wallet className="w-5 h-5 text-muted-foreground" />
-                      }
-                      title="No hay salidas registradas"
-                    />
-                  </div>
-                ) : (
-                  expenses.map((expense) => {
-                    const isPaid = expense.status === "PAID";
-                    const paymentButtonLabel = isPaid
-                      ? "La salida ya está pagada"
-                      : "Agregar pago";
-                    const paidSum = (expense.payments ?? []).reduce(
-                      (acc, p) => acc + (Number(p.amount) || 0),
-                      0,
-                    );
-                    const remaining = Math.max(Number(expense.total) - paidSum, 0);
-                    const name = expenseName(expense);
-
-                    return (
-                      <div
-                        key={expense.id}
-                        className="rounded-xl border border-border/70 bg-card p-2.5 shadow-2xs space-y-2 flex flex-col justify-between"
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 truncate">
-                              {expense.label?.group?.name && (
-                                <span className="text-[11px] font-medium text-muted-foreground truncate">
-                                  {expense.label.group.name} /
-                                </span>
-                              )}
-                              <span className="font-semibold text-sm text-foreground truncate">
-                                {expense.label?.name ?? "Salida general"}
-                              </span>
-                            </div>
-                            <ExpenseStatusBadge status={expense.status} />
-                          </div>
-
-                          <p
-                            className={cn(
-                              "line-clamp-1 text-xs",
-                              expense.description
-                                ? "text-muted-foreground"
-                                : "text-muted-foreground/60",
-                            )}
-                          >
-                            {expense.description ?? "Sin descripción"}
-                          </p>
-
-                          <div className="space-y-1 text-xs pt-1 border-t border-border/50">
-                            <div className="flex justify-between items-center text-muted-foreground">
-                              <span>Proveedor</span>
-                              <span className="font-medium text-foreground truncate max-w-[180px]">
-                                {expense.supplier?.name ?? "—"}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center text-muted-foreground">
-                              <span>Fecha</span>
-                              <span className="inline-flex items-center gap-1.5 tabular-nums text-foreground">
-                                {formatDate(expense.date)}
-                                {expense.receiptUrl && (
-                                  <FileCheck
-                                    className="w-3.5 h-3.5 text-success-text"
-                                    aria-label="Comprobante adjunto"
-                                  />
-                                )}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-2 border-t border-border/60 mt-auto">
-                          <div>
-                            <p className="text-[11px] font-medium text-muted-foreground">Total</p>
-                            <p className="text-sm font-semibold text-foreground tabular-nums">
-                              {formatCurrency(Number(expense.total))}
-                            </p>
-                            {!isPaid && remaining > 0 && (
-                              <p className="text-[11px] text-warning-text tabular-nums">
-                                Saldo: {formatCurrency(remaining)}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              aria-label={`Ver detalle de ${name}`}
-                              title="Ver detalle"
-                              onClick={() => setDetailExpense(expense)}
-                              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                            >
-                              <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-                            </button>
-                            <RowActions
-                              label={`Más acciones de ${name}`}
-                              items={actionsFor(expense, isPaid, paymentButtonLabel)}
-                            />
-                          </div>
-
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
               </div>
             )}
 

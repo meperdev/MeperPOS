@@ -1070,3 +1070,97 @@ describe("the mobile drawer is the phone's whole screen", () => {
     expect(close.className).toContain("w-11");
   });
 });
+
+// S11: the alerts history is one more destination of the account menu the user
+// already opens for Mi perfil and Configuración, so it reaches the phone too —
+// the drawer renders the same footer. The audience is the /alerts route gate:
+// ADMIN and INVENTORY_USER, with OWNER and SUPER_ADMIN inheriting ADMIN.
+describe("alerts history in the account menu", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    safeSetItem(SIDEBAR_COLLAPSED_KEY, "false");
+  });
+
+  afterEach(closeMobileDrawer);
+
+  function renderAs(role: string) {
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "user-1",
+        name: "Ana Perez",
+        role,
+        active: true,
+        organizationId: "org-a",
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+    return render(<Sidebar />, { wrapper });
+  }
+
+  it.each([
+    ["OWNER", true],
+    ["ADMIN", true],
+    ["INVENTORY_USER", true],
+    ["SUPER_ADMIN", true],
+    ["CASHIER", false],
+    ["MEMBER", false],
+  ])(
+    "shows the alerts history to %s only when the role may open /alerts",
+    async (role, permitted) => {
+      renderAs(role);
+
+      await waitFor(() => expect(api.get).toHaveBeenCalled());
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Opciones de cuenta" }),
+      );
+
+      const item = screen.queryByRole("menuitem", {
+        name: /Historial de alertas/,
+      });
+      if (permitted) expect(item).toBeInTheDocument();
+      else expect(item).not.toBeInTheDocument();
+    },
+  );
+
+  it("sits right after Mi perfil in the menu", async () => {
+    renderAs("ADMIN");
+
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    await userEvent.click(
+      screen.getByRole("button", { name: "Opciones de cuenta" }),
+    );
+
+    const labels = screen
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent?.trim());
+    expect(labels.slice(0, 3)).toEqual([
+      "Mi perfil",
+      "Historial de alertas",
+      "Configuración",
+    ]);
+  });
+
+  it("opens the history from the phone drawer's account menu and closes it", async () => {
+    const { container } = renderAs("ADMIN");
+    const drawer = container.querySelector<HTMLElement>("[data-sidebar-root]")!;
+
+    act(() => openMobileDrawer());
+    expect(drawer).toHaveAttribute("data-state", "open");
+
+    // The phone's account menu is the drawer footer, the same one the rail paints.
+    await userEvent.click(
+      within(drawer).getByRole("button", { name: "Opciones de cuenta" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: /Historial de alertas/ }),
+    );
+
+    expect(pushMock).toHaveBeenCalledWith("/alerts");
+    expect(drawer).toHaveAttribute("data-state", "closed");
+  });
+});

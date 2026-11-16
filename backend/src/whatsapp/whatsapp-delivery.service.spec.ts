@@ -6,10 +6,14 @@ import {
   type WhatsAppConnectionsService,
 } from './whatsapp-connections.service';
 import {
+  MAX_CONSECUTIVE_SCHEDULED_FAILURES,
   bogotaReportDay,
   chatIdFor,
+  nextScheduledRunAt,
   reportDayOf,
+  scheduledFailureStreak,
   WhatsAppDeliveryService,
+  type RecentScheduledDelivery,
 } from './whatsapp-delivery.service';
 import type { WhatsAppIdentityService } from './whatsapp-identity.service';
 import type { WhatsAppFileSender } from './whatsapp-provider';
@@ -23,6 +27,10 @@ const OTHER_PHONE = '573009998877';
 const CENTRAL_CONNECTION_ID = 'central-connection';
 const COMMERCIAL_CONNECTION_ID = 'commercial-connection';
 const REPORT_DAY = new Date('2026-03-03T00:00:00.000Z');
+
+/** The report day `offset` whole days after `day`. */
+const dayAfter = (day: Date, offset: number): Date =>
+  new Date(day.getTime() + offset * 24 * 60 * 60 * 1000);
 
 /** A report fixture the real PDF renderer accepts, personal data included. */
 const report = {
@@ -117,6 +125,7 @@ interface DeliveryRow {
   providerMessageId: string | null;
   attempts: number;
   sentAt: Date | null;
+  createdAt: Date;
 }
 
 const identity = (
@@ -162,6 +171,9 @@ function setup(
   const rows: DeliveryRow[] = [];
   let sequence = 0;
 
+  /** A monotonic claim clock, so "newest first" is a property of the double. */
+  const claimedAt = () => new Date(Date.UTC(2026, 0, 1) + sequence * 60_000);
+
   const prisma = {
     whatsAppDelivery: {
       create: jest.fn(
@@ -185,13 +197,15 @@ function setup(
               }),
             );
           }
+          sequence += 1;
           const row: DeliveryRow = {
-            id: `delivery-${++sequence}`,
+            id: `delivery-${sequence}`,
             status: 'PENDING',
             failureReason: null,
             providerMessageId: null,
             attempts: 0,
             sentAt: null,
+            createdAt: claimedAt(),
             ...data,
           };
           rows.push(row);
@@ -220,23 +234,72 @@ function setup(
         }: {
           where: {
             connectionId: string;
-            kind: string;
-            reportDate: Date;
+            kind?: string;
+            reportDate?: Date;
+            status?: string;
           };
         }) =>
           Promise.resolve(
-            rows.find(
-              (row) =>
-                row.connectionId === where.connectionId &&
-                row.kind === where.kind &&
-                row.reportDate.getTime() === where.reportDate.getTime(),
-            ) ?? null,
+            where.status
+              ? (rows
+                  .filter(
+                    (row) =>
+                      row.connectionId === where.connectionId &&
+                      row.status === where.status,
+                  )
+                  .sort(
+                    (left, right) =>
+                      right.createdAt.getTime() - left.createdAt.getTime(),
+                  )[0] ?? null)
+              : (rows.find(
+                  (row) =>
+                    row.connectionId === where.connectionId &&
+                    row.kind === where.kind &&
+                    row.reportDate.getTime() === where.reportDate?.getTime(),
+                ) ?? null),
+          ),
+      ),
+      findMany: jest.fn(
+        ({
+          where,
+          take,
+        }: {
+          where: { connectionId: string; kind: string };
+          take: number;
+        }) =>
+          Promise.resolve(
+            rows
+              .filter(
+                (row) =>
+                  row.connectionId === where.connectionId &&
+                  row.kind === where.kind,
+              )
+              .sort(
+                (left, right) =>
+                  right.reportDate.getTime() - left.reportDate.getTime() ||
+                  right.createdAt.getTime() - left.createdAt.getTime(),
+              )
+              .slice(0, take)
+              .map((row) => ({
+                status: row.status,
+                createdAt: row.createdAt,
+              })),
           ),
       ),
     },
     whatsAppConnection: {
       findUnique: jest.fn(() =>
         Promise.resolve({ organizationId: connectionOrganizationId }),
+      ),
+      findFirst: jest.fn(({ where }: { where?: { channel?: string } } = {}) =>
+        Promise.resolve(
+          where?.channel === 'INTELLIGENCE'
+            ? {
+                id: CENTRAL_CONNECTION_ID,
+                organizationId: connectionOrganizationId,
+              }
+            : null,
+        ),
       ),
     },
     whatsAppIdentity: {
@@ -353,6 +416,107 @@ describe('WhatsAppDeliveryService', () => {
       expect(chatIdFor('120363000000000000@g.us')).toBeNull();
       expect(chatIdFor('573001112233@lid')).toBeNull();
       expect(chatIdFor('')).toBeNull();
+    });
+  });
+
+  describe('the automatic send schedule', () => {
+    it('is due at 20:00 in America/Bogota, before and after the hour', () => {
+      // 10:00 Bogota on 2026-03-03: today at 20:00 is 01:00 UTC the next day.
+      expect(nextScheduledRunAt(new Date('2026-03-03T15:00:00.000Z'))).toEqual(
+        new Date('2026-03-04T01:00:00.000Z'),
+      );
+      // 19:59 Bogota the same day: still today.
+      expect(nextScheduledRunAt(new Date('2026-03-04T00:59:00.000Z'))).toEqual(
+        new Date('2026-03-04T01:00:00.000Z'),
+      );
+      // Exactly at the hour the cron has fired: the next one is tomorrow.
+      expect(nextScheduledRunAt(new Date('2026-03-04T01:00:00.000Z'))).toEqual(
+        new Date('2026-03-05T01:00:00.000Z'),
+      );
+      // 23:59 Bogota: tomorrow's 20:00, and it stays in the same Bogota day.
+      expect(nextScheduledRunAt(new Date('2026-03-04T04:59:00.000Z'))).toEqual(
+        new Date('2026-03-05T01:00:00.000Z'),
+      );
+    });
+  });
+
+  describe('scheduled failure streak', () => {
+    const failure = (createdAt: string): RecentScheduledDelivery => ({
+      status: 'FAILED',
+      createdAt: new Date(createdAt),
+    });
+    const sent = (createdAt: string): RecentScheduledDelivery => ({
+      status: 'SENT',
+      createdAt: new Date(createdAt),
+    });
+
+    it('pauses on three consecutive failed days and dates the pause at the third', () => {
+      const streak = scheduledFailureStreak(
+        [
+          failure('2026-03-03T01:05:00.000Z'),
+          failure('2026-03-02T01:05:00.000Z'),
+          failure('2026-03-01T01:05:00.000Z'),
+        ],
+        null,
+      );
+
+      expect(streak).toEqual({
+        consecutiveFailures: MAX_CONSECUTIVE_SCHEDULED_FAILURES,
+        paused: true,
+        pausedSince: new Date('2026-03-03T01:05:00.000Z'),
+      });
+    });
+
+    it('counts a shorter run without pausing', () => {
+      expect(
+        scheduledFailureStreak(
+          [
+            failure('2026-03-02T01:05:00.000Z'),
+            failure('2026-03-01T01:05:00.000Z'),
+          ],
+          null,
+        ),
+      ).toEqual({ consecutiveFailures: 2, paused: false, pausedSince: null });
+    });
+
+    it('stops at a successful scheduled day, whatever came before it', () => {
+      expect(
+        scheduledFailureStreak(
+          [
+            sent('2026-03-03T01:05:00.000Z'),
+            failure('2026-03-02T01:05:00.000Z'),
+            failure('2026-03-01T01:05:00.000Z'),
+          ],
+          null,
+        ),
+      ).toEqual({ consecutiveFailures: 0, paused: false, pausedSince: null });
+    });
+
+    it('resumes after a successful delivery of any kind newer than the streak', () => {
+      expect(
+        scheduledFailureStreak(
+          [
+            failure('2026-03-03T01:05:00.000Z'),
+            failure('2026-03-02T01:05:00.000Z'),
+            failure('2026-03-01T01:05:00.000Z'),
+          ],
+          // The manual send the administrator made after the third failure.
+          new Date('2026-03-03T15:00:00.000Z'),
+        ),
+      ).toEqual({ consecutiveFailures: 0, paused: false, pausedSince: null });
+    });
+
+    it('stays paused when the only success is older than the oldest failure', () => {
+      expect(
+        scheduledFailureStreak(
+          [
+            failure('2026-03-03T01:05:00.000Z'),
+            failure('2026-03-02T01:05:00.000Z'),
+            failure('2026-03-01T01:05:00.000Z'),
+          ],
+          new Date('2026-02-28T15:00:00.000Z'),
+        ),
+      ).toMatchObject({ paused: true });
     });
   });
 
@@ -525,18 +689,22 @@ describe('WhatsAppDeliveryService', () => {
       });
     });
 
-    it('answers a distinct outcome when nobody is a verified administrator', async () => {
-      const { service, sender, rows } = setup({ identities: [] });
+    it('skips the day and records nothing when nobody is a verified administrator', async () => {
+      const spies = spyOnLogger();
+      try {
+        const { service, sender, rows } = setup({ identities: [] });
 
-      await expect(
-        service.scheduled(COMMERCIAL_CONNECTION_ID, REPORT_DAY),
-      ).resolves.toEqual({ status: 'no_identity' });
-      expect(sender.sendFile).not.toHaveBeenCalled();
-      expect(rows[0]).toMatchObject({
-        status: 'FAILED',
-        failureReason: 'no_recipient',
-        attempts: 1,
-      });
+        await expect(
+          service.scheduled(COMMERCIAL_CONNECTION_ID, REPORT_DAY),
+        ).resolves.toEqual({ status: 'no_identity' });
+        expect(sender.sendFile).not.toHaveBeenCalled();
+        // Nothing was attempted, so nothing is recorded: the screen reports the
+        // missing recipient from the automatic state instead of a failed day.
+        expect(rows).toHaveLength(0);
+        expect(stringified(spies)).toContain('skipped_no_recipient');
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+      }
     });
 
     it('never sends figures to a verified non-administrator identity', async () => {
@@ -581,37 +749,42 @@ describe('WhatsAppDeliveryService', () => {
     });
 
     it('refuses to guess which organization the central connection speaks for', async () => {
-      const { service, sender, reports, rows } = setup({
-        connectionOrganizationId: null,
-        identities: [
-          identity({ phone: PHONE }),
-          identity({
-            phone: OTHER_PHONE,
-            userId: OTHER_USER_ID,
-            organizationId: OTHER_ORGANIZATION_ID,
-          }),
-        ],
-        memberships: [
-          membership(),
-          membership({
-            userId: OTHER_USER_ID,
-            organizationId: OTHER_ORGANIZATION_ID,
-          }),
-        ],
-      });
+      const spies = spyOnLogger();
+      try {
+        const { service, sender, reports, rows } = setup({
+          connectionOrganizationId: null,
+          identities: [
+            identity({ phone: PHONE }),
+            identity({
+              phone: OTHER_PHONE,
+              userId: OTHER_USER_ID,
+              organizationId: OTHER_ORGANIZATION_ID,
+            }),
+          ],
+          memberships: [
+            membership(),
+            membership({
+              userId: OTHER_USER_ID,
+              organizationId: OTHER_ORGANIZATION_ID,
+            }),
+          ],
+        });
 
-      await expect(
-        service.scheduled(CENTRAL_CONNECTION_ID, REPORT_DAY),
-      ).resolves.toEqual({
-        status: 'failed',
-        reason: 'organization_ambiguous',
-      });
-      expect(reports.generate).not.toHaveBeenCalled();
-      expect(sender.sendFile).not.toHaveBeenCalled();
-      expect(rows[0]).toMatchObject({
-        status: 'FAILED',
-        failureReason: 'organization_ambiguous',
-      });
+        await expect(
+          service.scheduled(CENTRAL_CONNECTION_ID, REPORT_DAY),
+        ).resolves.toEqual({
+          status: 'failed',
+          reason: 'organization_ambiguous',
+        });
+        expect(reports.generate).not.toHaveBeenCalled();
+        expect(sender.sendFile).not.toHaveBeenCalled();
+        // An unresolved recipient is skipped before the claim, so the day leaves
+        // no row behind and the history stops filling with days nobody sent.
+        expect(rows).toHaveLength(0);
+        expect(stringified(spies)).toContain('skipped_organization_ambiguous');
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+      }
     });
 
     it('exposes the claimed day to a read-only caller', async () => {
@@ -624,6 +797,276 @@ describe('WhatsAppDeliveryService', () => {
       await expect(
         service.findScheduled(COMMERCIAL_CONNECTION_ID, REPORT_DAY),
       ).resolves.toMatchObject({ status: 'SENT' });
+    });
+
+    it('answers the day that already has a row before resolving a recipient', async () => {
+      const identities = [identity({ phone: PHONE })];
+      const { service } = setup({ identities });
+
+      await expect(
+        service.scheduled(COMMERCIAL_CONNECTION_ID, REPORT_DAY),
+      ).resolves.toMatchObject({ status: 'sent' });
+
+      // The only administrator is revoked later that day; the day is still the
+      // same attempt, so a retry says so instead of reporting a missing recipient.
+      identities.length = 0;
+
+      await expect(
+        service.scheduled(COMMERCIAL_CONNECTION_ID, REPORT_DAY),
+      ).resolves.toEqual({ status: 'already_attempted' });
+    });
+
+    it('pauses after three consecutive failed days and writes no row for the skipped day', async () => {
+      const spies = spyOnLogger();
+      try {
+        const sendFile = jest
+          .fn()
+          .mockRejectedValue(new Error('provider down'));
+        const { service, prisma, rows } = setup({ sendFile });
+
+        for (
+          let offset = 0;
+          offset < MAX_CONSECUTIVE_SCHEDULED_FAILURES;
+          offset += 1
+        ) {
+          await expect(
+            service.scheduled(
+              COMMERCIAL_CONNECTION_ID,
+              dayAfter(REPORT_DAY, offset),
+            ),
+          ).resolves.toEqual({ status: 'failed', reason: 'send_failed' });
+        }
+        const failedDays = rows.length;
+        expect(failedDays).toBe(MAX_CONSECUTIVE_SCHEDULED_FAILURES);
+
+        await expect(
+          service.scheduled(
+            COMMERCIAL_CONNECTION_ID,
+            dayAfter(REPORT_DAY, MAX_CONSECUTIVE_SCHEDULED_FAILURES),
+          ),
+        ).resolves.toEqual({ status: 'paused' });
+
+        // The pause is a skip, not an attempt: no row, no provider call.
+        expect(rows).toHaveLength(failedDays);
+        expect(sendFile).toHaveBeenCalledTimes(
+          MAX_CONSECUTIVE_SCHEDULED_FAILURES,
+        );
+        expect(stringified(spies)).toContain('skipped_paused');
+
+        // The verdict comes from the last scheduled days of this connection only.
+        expect(prisma.whatsAppDelivery.findMany).toHaveBeenCalledWith({
+          where: { connectionId: COMMERCIAL_CONNECTION_ID, kind: 'SCHEDULED' },
+          orderBy: [
+            { reportDate: 'desc' },
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
+          take: MAX_CONSECUTIVE_SCHEDULED_FAILURES,
+          select: { status: true, createdAt: true },
+        });
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+      }
+    });
+
+    it('keeps sending on a streak shorter than the limit', async () => {
+      const sendFile = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockResolvedValue({ providerMessageId: 'wamid-1' });
+      const { service } = setup({ sendFile });
+
+      await service.scheduled(COMMERCIAL_CONNECTION_ID, REPORT_DAY);
+      await service.scheduled(
+        COMMERCIAL_CONNECTION_ID,
+        dayAfter(REPORT_DAY, 1),
+      );
+
+      await expect(
+        service.scheduled(COMMERCIAL_CONNECTION_ID, dayAfter(REPORT_DAY, 2)),
+      ).resolves.toEqual({ status: 'sent', providerMessageId: 'wamid-1' });
+    });
+
+    it('is not paused by failed manual sends', async () => {
+      const sendFile = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockResolvedValue({ providerMessageId: 'wamid-1' });
+      const { service } = setup({ sendFile });
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await expect(
+          service.onDemand({ organizationId: ORGANIZATION_ID, phone: PHONE }),
+        ).resolves.toEqual({ status: 'failed', reason: 'send_failed' });
+      }
+
+      await expect(
+        service.scheduled(COMMERCIAL_CONNECTION_ID, REPORT_DAY),
+      ).resolves.toEqual({ status: 'sent', providerMessageId: 'wamid-1' });
+    });
+
+    it('a manual send after the streak resumes the automatic one', async () => {
+      // Three failed scheduled days, then the on-demand document the
+      // administrator asks for, then the next scheduled day.
+      const sendFile = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockResolvedValue({ providerMessageId: 'wamid-1' });
+      const { service, rows } = setup({
+        sendFile,
+        connectionOrganizationId: null,
+        identities: [identity({ phone: PHONE })],
+      });
+
+      for (
+        let offset = 0;
+        offset < MAX_CONSECUTIVE_SCHEDULED_FAILURES;
+        offset += 1
+      ) {
+        await service.scheduled(
+          CENTRAL_CONNECTION_ID,
+          dayAfter(REPORT_DAY, offset),
+        );
+      }
+      await expect(
+        service.scheduled(
+          CENTRAL_CONNECTION_ID,
+          dayAfter(REPORT_DAY, MAX_CONSECUTIVE_SCHEDULED_FAILURES),
+        ),
+      ).resolves.toEqual({ status: 'paused' });
+
+      await expect(
+        service.onDemand({ organizationId: ORGANIZATION_ID, phone: PHONE }),
+      ).resolves.toEqual({ status: 'sent', providerMessageId: 'wamid-1' });
+
+      await expect(
+        service.scheduled(
+          CENTRAL_CONNECTION_ID,
+          dayAfter(REPORT_DAY, MAX_CONSECUTIVE_SCHEDULED_FAILURES),
+        ),
+      ).resolves.toEqual({ status: 'sent', providerMessageId: 'wamid-1' });
+
+      expect(rows.map((row) => row.kind)).toEqual([
+        'SCHEDULED',
+        'SCHEDULED',
+        'SCHEDULED',
+        'ON_DEMAND',
+        'SCHEDULED',
+      ]);
+    });
+  });
+
+  describe('automatic send state', () => {
+    // 10:00 in Bogota on 2026-03-03: the next run is today at 20:00.
+    const NOW = new Date('2026-03-03T15:00:00.000Z');
+    const NEXT_RUN = '2026-03-04T01:00:00.000Z';
+
+    it('is active with the next run when a recipient exists', async () => {
+      const { service } = setup({
+        connectionOrganizationId: null,
+        identities: [identity({ phone: PHONE })],
+      });
+
+      await expect(
+        service.automaticState(ORGANIZATION_ID, NOW),
+      ).resolves.toEqual({
+        state: 'active',
+        consecutiveFailures: 0,
+        pausedSince: null,
+        nextRunAt: NEXT_RUN,
+      });
+    });
+
+    it('is paused without a recipient when nobody is a verified administrator', async () => {
+      const { service } = setup({
+        connectionOrganizationId: null,
+        identities: [],
+      });
+
+      await expect(
+        service.automaticState(ORGANIZATION_ID, NOW),
+      ).resolves.toEqual({
+        state: 'paused_no_recipient',
+        consecutiveFailures: 0,
+        pausedSince: null,
+        nextRunAt: NEXT_RUN,
+      });
+    });
+
+    it('is paused for an organization the automatic send does not serve', async () => {
+      const { service } = setup({
+        connectionOrganizationId: null,
+        identities: [
+          identity({
+            phone: OTHER_PHONE,
+            userId: OTHER_USER_ID,
+            organizationId: OTHER_ORGANIZATION_ID,
+          }),
+        ],
+        memberships: [
+          membership({
+            userId: OTHER_USER_ID,
+            organizationId: OTHER_ORGANIZATION_ID,
+          }),
+        ],
+      });
+
+      await expect(
+        service.automaticState(ORGANIZATION_ID, NOW),
+      ).resolves.toMatchObject({
+        state: 'paused_no_recipient',
+        consecutiveFailures: 0,
+      });
+    });
+
+    it('reports the failure pause with its count and instant, and clears after a manual send', async () => {
+      const sendFile = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockRejectedValueOnce(new Error('provider down'))
+        .mockResolvedValue({ providerMessageId: 'wamid-1' });
+      const { service, rows } = setup({
+        sendFile,
+        connectionOrganizationId: null,
+        identities: [identity({ phone: PHONE })],
+      });
+
+      for (
+        let offset = 0;
+        offset < MAX_CONSECUTIVE_SCHEDULED_FAILURES;
+        offset += 1
+      ) {
+        await service.scheduled(
+          CENTRAL_CONNECTION_ID,
+          dayAfter(REPORT_DAY, offset),
+        );
+      }
+
+      const paused = await service.automaticState(ORGANIZATION_ID, NOW);
+      expect(paused.state).toBe('paused_failures');
+      expect(paused.consecutiveFailures).toBe(
+        MAX_CONSECUTIVE_SCHEDULED_FAILURES,
+      );
+      // The streak reached the limit with the newest failure.
+      expect(paused.pausedSince).toBe(
+        rows[MAX_CONSECUTIVE_SCHEDULED_FAILURES - 1].createdAt.toISOString(),
+      );
+
+      await service.onDemand({ organizationId: ORGANIZATION_ID, phone: PHONE });
+
+      await expect(
+        service.automaticState(ORGANIZATION_ID, NOW),
+      ).resolves.toMatchObject({
+        state: 'active',
+        consecutiveFailures: 0,
+        pausedSince: null,
+      });
     });
   });
 

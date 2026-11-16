@@ -4,6 +4,7 @@ import axios from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type {
+  WhatsAppAutomaticSend,
   WhatsAppDelivery,
   WhatsAppIdentity,
   WhatsAppLinkChallenge,
@@ -155,6 +156,25 @@ export function useWhatsAppDeliveries() {
 }
 
 /**
+ * Whether the automatic report will send itself, and why not when it will not.
+ *
+ * Read-only by design: the state is the server's verdict from the same helpers
+ * the scheduler runs, so this hook only reports it. An optional interval keeps the
+ * card current while a link code is on screen — a number verified from a phone is
+ * what turns `paused_no_recipient` back into `active`.
+ */
+export function useWhatsAppAutomaticSend(pollMs?: number) {
+  return useQuery({
+    queryKey: [WHATSAPP_KEY, "deliveries", "automatic"],
+    queryFn: () =>
+      api
+        .get<WhatsAppAutomaticSend>("/whatsapp/deliveries/automatic")
+        .then((res) => res.data),
+    ...(pollMs ? { refetchInterval: pollMs } : {}),
+  });
+}
+
+/**
  * The 409 that answers "there is no verified number to send this to" is an
  * outcome, not a fault: it is folded back into the result so the screen can offer
  * the link action instead of showing an error box over a working page.
@@ -185,7 +205,12 @@ export function useWhatsAppSendReport() {
       }
     },
     onSuccess: () => {
+      // The send lands in the history, and a successful one is also what resumes
+      // a paused automatic send, so the state is re-read next to it.
       queryClient.invalidateQueries({ queryKey: [WHATSAPP_KEY, "deliveries"] });
+      queryClient.invalidateQueries({
+        queryKey: [WHATSAPP_KEY, "deliveries", "automatic"],
+      });
     },
   });
 }

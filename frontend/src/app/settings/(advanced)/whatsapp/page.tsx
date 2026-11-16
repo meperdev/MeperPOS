@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   Ban,
+  ChevronDown,
+  ChevronRight,
   Link2,
   MessageCircle,
   QrCode,
@@ -22,6 +24,7 @@ import { SettingsCard } from "../../_components/SettingsCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import {
+  useWhatsAppAutomaticSend,
   useWhatsAppChallenge,
   useWhatsAppConnect,
   useWhatsAppDeliveries,
@@ -42,9 +45,22 @@ import type {
   WhatsAppLinkChallenge,
   WhatsAppReportOutcome,
 } from "@/types";
+import {
+  formatDeliveryDay,
+  groupDeliveries,
+  groupHeadline,
+  groupRange,
+} from "./delivery-groups";
+import { AutomaticSendStatus } from "./automatic-send";
 
 /** How often the link list refreshes while a code is waiting to be sent. */
 const IDENTITY_POLL_MS = 5_000;
+
+/** How often the automatic-send state is refreshed while the page is open. */
+const AUTOMATIC_STATE_POLL_MS = 5 * 60_000;
+
+/** How many grouped rows the history shows before offering to open the rest. */
+const HISTORY_GROUPS_LIMIT = 8;
 
 const KIND_LABELS: Record<WhatsAppDeliveryKind, string> = {
   SCHEDULED: "Automático",
@@ -191,6 +207,16 @@ function WhatsAppSettings() {
 
   const deliveriesQuery = useWhatsAppDeliveries();
   const sendReport = useWhatsAppSendReport();
+  // The state changes on the server clock (the 20:00 run can pause it), so it is
+  // always refreshed; faster while a code is on screen, because a number verified
+  // from a phone is what turns "pausado sin número" back into "activo".
+  const automaticQuery = useWhatsAppAutomaticSend(
+    linkCode ? IDENTITY_POLL_MS : AUTOMATIC_STATE_POLL_MS,
+  );
+  const [showAllGroups, setShowAllGroups] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
 
   // The QR is a login credential: it is requested on demand and held only while
   // the operator is looking at it.
@@ -211,7 +237,16 @@ function WhatsAppSettings() {
 
   const sentCount = deliveries.filter((d) => d.status === "SENT").length;
   const failedCount = deliveries.filter((d) => d.status === "FAILED").length;
-  const lastDelivery = deliveries.find((d) => d.sentAt) ?? deliveries[0] ?? null;
+  // The last report that left, never the last attempt: a failed day is not an envío.
+  const lastDelivery =
+    deliveries.find((delivery) => delivery.status === "SENT") ?? null;
+
+  // Consecutive identical attempts are one row, so eleven failed days read as one
+  // line and the days themselves stay behind a disclosure.
+  const groups = groupDeliveries(deliveries);
+  const visibleGroups = showAllGroups
+    ? groups
+    : groups.slice(0, HISTORY_GROUPS_LIMIT);
 
   const handleConnect = async () => {
     try {
@@ -291,6 +326,10 @@ function WhatsAppSettings() {
       return;
     }
     setQrRequested(true);
+  };
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((current) => ({ ...current, [key]: !current[key] }));
   };
 
   return (
@@ -588,6 +627,17 @@ function WhatsAppSettings() {
         icon={<Send className="h-4 w-4" aria-hidden="true" />}
       >
         <div className="space-y-4">
+          <AutomaticSendStatus
+            state={automaticQuery.data}
+            isLoading={automaticQuery.isLoading}
+            isError={automaticQuery.isError}
+            onRetry={() => void automaticQuery.refetch()}
+            onLinkNumber={handleRequestCode}
+            onResume={handleSendReport}
+            linking={requestChallenge.isPending}
+            resuming={sendReport.isPending}
+          />
+
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
               El envío manual va al número verificado más antiguo de tu usuario.
@@ -610,27 +660,28 @@ function WhatsAppSettings() {
           )}
 
           {deliveries.length > 0 && (
-            <dl className="grid grid-cols-3 overflow-hidden rounded-lg border border-border/70 bg-muted/20">
-              <div className="min-w-0 border-r border-border/60 px-3 py-2.5">
+            <dl className="grid grid-cols-1 overflow-hidden rounded-lg border border-border/70 bg-muted/20 sm:grid-cols-3">
+              <div className="min-w-0 border-b border-border/60 px-3 py-2.5 sm:border-b-0 sm:border-r">
                 <dt className="text-[11px] text-muted-foreground">Enviados</dt>
                 <dd className="mt-0.5 text-sm tabular-nums text-foreground">
                   {sentCount}
                 </dd>
               </div>
-              <div className="min-w-0 border-r border-border/60 px-3 py-2.5">
-                <dt className="text-[11px] text-muted-foreground">Fallidos</dt>
-                <dd className="mt-0.5 text-sm tabular-nums text-foreground">
-                  {failedCount}
-                </dd>
-              </div>
-              <div className="min-w-0 px-3 py-2.5">
+              <div className="min-w-0 border-b border-border/60 px-3 py-2.5 sm:border-b-0 sm:border-r">
                 <dt className="text-[11px] text-muted-foreground">
                   Último envío
                 </dt>
                 <dd className="mt-0.5 text-xs text-foreground">
-                  {lastDelivery
-                    ? formatDate(lastDelivery.reportDate)
-                    : "—"}
+                  {lastDelivery ? formatDate(lastDelivery.reportDate) : "—"}
+                </dd>
+              </div>
+              {/* Failures are the quiet figure: the history below already says why. */}
+              <div className="min-w-0 px-3 py-2.5">
+                <dt className="text-[11px] text-muted-foreground">
+                  Fallos recientes
+                </dt>
+                <dd className="mt-0.5 text-sm tabular-nums text-muted-foreground">
+                  {failedCount}
                 </dd>
               </div>
             </dl>
@@ -664,45 +715,119 @@ function WhatsAppSettings() {
                 className="min-h-[140px]"
               />
             ) : (
-              <div className="-mx-4 overflow-x-auto sm:-mx-5">
-                <Table className="min-w-[420px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableCell as="th">Tipo</TableCell>
-                      <TableCell as="th">Fecha del reporte</TableCell>
-                      <TableCell as="th">Estado</TableCell>
-                      <TableCell as="th">Enviado el</TableCell>
-                    </TableRow>
-                  </TableHeader>
-                  <tbody>
-                    {deliveries.map((delivery) => (
-                      <TableRow key={delivery.id}>
-                        <TableCell className="text-foreground">
-                          {KIND_LABELS[delivery.kind]}
-                        </TableCell>
-                        <TableCell className="tabular-nums text-foreground">
-                          {formatDate(delivery.reportDate)}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge
-                            domain="whatsapp-delivery"
-                            status={delivery.status}
-                          />
-                          {delivery.status === "FAILED" &&
-                            delivery.failureReason && (
-                              <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                                {FAILURE_LABELS[delivery.failureReason]}
-                              </span>
-                            )}
-                        </TableCell>
-                        <TableCell className="tabular-nums text-muted-foreground">
-                          {delivery.sentAt ? formatDateTime(delivery.sentAt) : "—"}
-                        </TableCell>
+              <>
+                <div className="-mx-4 overflow-x-auto sm:-mx-5">
+                  <Table className="min-w-[420px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableCell as="th">Tipo</TableCell>
+                        <TableCell as="th">Fecha del reporte</TableCell>
+                        <TableCell as="th">Estado</TableCell>
+                        <TableCell as="th">Enviado el</TableCell>
                       </TableRow>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <tbody>
+                      {visibleGroups.map((group) => {
+                        const single = group.members.length === 1;
+                        const open =
+                          !single && Boolean(expandedGroups[group.key]);
+                        // A group of one is the attempt itself, rendered as a row.
+                        const attempt = group.members[0];
+
+                        return (
+                          <Fragment key={group.key}>
+                            <TableRow>
+                              <TableCell className="text-foreground">
+                                {KIND_LABELS[group.kind]}
+                              </TableCell>
+                              <TableCell className="text-foreground">
+                                {single ? (
+                                  <span className="tabular-nums">
+                                    {formatDate(attempt.reportDate)}
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroup(group.key)}
+                                    aria-expanded={open}
+                                    data-testid="delivery-group-summary"
+                                    className="flex min-w-0 items-start gap-1.5 text-left"
+                                  >
+                                    {open ? (
+                                      <ChevronDown
+                                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                        aria-hidden="true"
+                                      />
+                                    ) : (
+                                      <ChevronRight
+                                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                        aria-hidden="true"
+                                      />
+                                    )}
+                                    <span className="min-w-0">
+                                      <span className="block text-foreground">
+                                        {groupHeadline(group)}
+                                      </span>
+                                      <span className="block text-[11px] tabular-nums text-muted-foreground">
+                                        {groupRange(group)}
+                                      </span>
+                                    </span>
+                                  </button>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <StatusBadge
+                                  domain="whatsapp-delivery"
+                                  status={group.status}
+                                />
+                                {group.status === "FAILED" &&
+                                  group.failureReason && (
+                                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                                      {FAILURE_LABELS[group.failureReason]}
+                                    </span>
+                                  )}
+                              </TableCell>
+                              <TableCell className="tabular-nums text-muted-foreground">
+                                {single && attempt.sentAt
+                                  ? formatDateTime(attempt.sentAt)
+                                  : "—"}
+                              </TableCell>
+                            </TableRow>
+
+                            {open &&
+                              group.members.map((day) => (
+                                <TableRow key={`${group.key}:${day.id}`}>
+                                  <TableCell>{null}</TableCell>
+                                  <TableCell className="pl-6 text-[11px] tabular-nums text-muted-foreground">
+                                    {formatDeliveryDay(day.reportDate)}
+                                  </TableCell>
+                                  <TableCell>{null}</TableCell>
+                                  <TableCell className="tabular-nums text-muted-foreground">
+                                    {day.sentAt
+                                      ? formatDateTime(day.sentAt)
+                                      : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+
+                {groups.length > HISTORY_GROUPS_LIMIT && (
+                  <div className="mt-2 flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowAllGroups((current) => !current)}
+                    >
+                      {showAllGroups ? "Ver menos" : "Ver más"}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

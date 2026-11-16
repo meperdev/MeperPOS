@@ -5,7 +5,10 @@ import {
   DailyReportService,
   type DailyReport,
 } from '../reports/daily-report.service';
-import { WhatsAppDeliveryService } from './whatsapp-delivery.service';
+import {
+  WhatsAppDeliveryService,
+  type WhatsAppOnDemandOutcome,
+} from './whatsapp-delivery.service';
 import { normaliseContactPhone } from './whatsapp-ingestion.service';
 import { WhatsAppIdentityService } from './whatsapp-identity.service';
 import {
@@ -326,6 +329,29 @@ export function renderAdminReply(answer: WhatsAppAdminAnswer): string | null {
 }
 
 /**
+ * The gate's one-word report for an on-demand send.
+ *
+ * `paused` is a scheduled outcome — the failure streak only guards the automatic
+ * run — so it is not part of `WhatsAppOnDemandOutcome` and cannot reach this
+ * mapping. The switch is exhaustive on purpose: a new outcome has to be given a
+ * word here, and none may fall through as `undefined` into the transport.
+ */
+function deliveredFlag(
+  outcome: WhatsAppOnDemandOutcome,
+): 'sent' | 'already_attempted' | 'failed' | 'no_identity' {
+  switch (outcome.status) {
+    case 'sent':
+      return 'sent';
+    case 'failed':
+      return 'failed';
+    case 'already_attempted':
+      return 'already_attempted';
+    case 'no_identity':
+      return 'no_identity';
+  }
+}
+
+/**
  * Administrative gate for the central INTELLIGENCE channel: the first stage of the
  * administrative assistant.
  *
@@ -628,12 +654,7 @@ export class WhatsAppAdminService {
         status: 'delivered',
         tool: 'daily_report_pdf',
         organizationId: context.organizationId,
-        delivery:
-          outcome.status === 'sent'
-            ? 'sent'
-            : outcome.status === 'failed'
-              ? 'failed'
-              : outcome.status,
+        delivery: deliveredFlag(outcome),
       };
     } catch {
       this.logger.warn({

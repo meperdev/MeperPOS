@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   challenge: vi.fn(),
   revoke: vi.fn(),
   sendReport: vi.fn(),
+  automatic: vi.fn(),
   qrRefetch: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("@/hooks/useWhatsApp", () => ({
   useWhatsAppQr: (enabled: boolean) => mocks.qr(enabled),
   useWhatsAppIdentities: () => mocks.identities(),
   useWhatsAppDeliveries: () => mocks.deliveries(),
+  useWhatsAppAutomaticSend: () => mocks.automatic(),
   useWhatsAppConnect: () => ({ mutateAsync: mocks.connect, isPending: false }),
   useWhatsAppStop: () => ({ mutateAsync: mocks.stop, isPending: false }),
   useWhatsAppRestart: () => ({ mutateAsync: mocks.restart, isPending: false }),
@@ -97,6 +99,14 @@ describe("WhatsApp settings page", () => {
     mocks.status.mockReturnValue(statusState());
     mocks.identities.mockReturnValue(emptyQuery([]));
     mocks.deliveries.mockReturnValue(emptyQuery([]));
+    mocks.automatic.mockReturnValue(
+      emptyQuery({
+        state: "active",
+        consecutiveFailures: 0,
+        pausedSince: null,
+        nextRunAt: "2026-11-17T01:00:00.000Z",
+      }),
+    );
     mocks.qr.mockImplementation((enabled: boolean) =>
       enabled
         ? {
@@ -242,8 +252,7 @@ describe("WhatsApp settings page", () => {
     ).toHaveAttribute("src", "data:image/png;base64,qr-base64");
   });
 
-  it("tells a sent delivery apart from a failed one", () => {
-    mocks.deliveries.mockReturnValue(
+  it("tells a sent delivery apart from a failed one", () => {    mocks.deliveries.mockReturnValue(
       emptyQuery([
         {
           id: "delivery-1",
@@ -366,6 +375,170 @@ describe("WhatsApp settings page", () => {
     const textBlock = label.parentElement!;
     expect(textBlock.className).toContain("min-w-0");
     expect(textBlock.className).toContain("flex-1");
+  });
+
+  it("keeps the automatic send state at the top of the daily report card", () => {
+    render(<WhatsAppSettingsPage />);
+
+    const card = screen
+      .getByRole("heading", { name: "Reporte diario" })
+      .closest("section")!;
+    const status = screen.getByText("Envío automático");
+    const manual = screen.getByText(/El envío manual va/);
+
+    expect(card).toContainElement(status);
+    expect(card).toContainElement(screen.getByText("Activo"));
+    // The state introduces the card; the manual row and the history follow it.
+    expect(
+      status.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("offers the manual send as the resume action when the automatic send paused", async () => {
+    const user = userEvent.setup();
+    mocks.automatic.mockReturnValue(
+      emptyQuery({
+        state: "paused_failures",
+        consecutiveFailures: 3,
+        pausedSince: "2026-11-14T01:05:00.000Z",
+        nextRunAt: "2026-11-17T01:00:00.000Z",
+      }),
+    );
+    mocks.sendReport.mockResolvedValue({
+      status: "sent",
+      providerMessageId: "wamid-1",
+    });
+
+    render(<WhatsAppSettingsPage />);
+
+    expect(screen.getByText("Pausado por fallos")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Enviar ahora para reanudar" }),
+    );
+
+    expect(mocks.sendReport).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/El reporte se envió/)).toBeInTheDocument();
+  });
+
+  it("collapses a run of identical failures into one row that opens to its days", async () => {
+    const user = userEvent.setup();
+    mocks.deliveries.mockReturnValue(
+      emptyQuery([
+        {
+          id: "delivery-3",
+          kind: "SCHEDULED",
+          reportDate: "2026-11-12T00:00:00.000Z",
+          status: "FAILED",
+          failureReason: "no_recipient",
+          sentAt: null,
+          attempts: 1,
+        },
+        {
+          id: "delivery-2",
+          kind: "SCHEDULED",
+          reportDate: "2026-11-11T00:00:00.000Z",
+          status: "FAILED",
+          failureReason: "no_recipient",
+          sentAt: null,
+          attempts: 1,
+        },
+        {
+          id: "delivery-1",
+          kind: "SCHEDULED",
+          reportDate: "2026-11-10T00:00:00.000Z",
+          status: "FAILED",
+          failureReason: "no_recipient",
+          sentAt: null,
+          attempts: 1,
+        },
+      ]),
+    );
+
+    render(<WhatsAppSettingsPage />);
+
+    expect(screen.getByText("Falló 3 días seguidos")).toBeInTheDocument();
+    expect(screen.getByText("10 nov – 12 nov")).toBeInTheDocument();
+    expect(
+      screen.getByText("no hay un número verificado que reciba el reporte"),
+    ).toBeInTheDocument();
+    // The days themselves are behind the disclosure, not spelled out twice.
+    expect(screen.queryByText("10 de noviembre de 2026")).toBeNull();
+
+    const summary = screen.getByTestId("delivery-group-summary");
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    await user.click(summary);
+
+    expect(summary).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("10 de noviembre de 2026")).toBeInTheDocument();
+    expect(screen.getByText("11 de noviembre de 2026")).toBeInTheDocument();
+    expect(screen.getByText("12 de noviembre de 2026")).toBeInTheDocument();
+  });
+
+  it("shows the first eight groups and opens the rest on demand", async () => {
+    const user = userEvent.setup();
+    const reasons = ["no_recipient", "provider_rejected", "send_failed"] as const;
+    mocks.deliveries.mockReturnValue(
+      emptyQuery(
+        // Ten runs of two consecutive days, newest first; the reason changes
+        // every two rows so each pair is its own group.
+        Array.from({ length: 20 }, (_, index) => ({
+          id: `delivery-${index}`,
+          kind: "SCHEDULED" as const,
+          reportDate: new Date(Date.UTC(2026, 10, 14 - index)).toISOString(),
+          status: "FAILED" as const,
+          failureReason: reasons[Math.floor(index / 2) % reasons.length],
+          sentAt: null,
+          attempts: 1,
+        })),
+      ),
+    );
+
+    render(<WhatsAppSettingsPage />);
+
+    expect(screen.getAllByTestId("delivery-group-summary")).toHaveLength(8);
+    expect(
+      screen.queryByRole("button", { name: "Ver menos" }),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Ver más" }));
+
+    expect(screen.getAllByTestId("delivery-group-summary")).toHaveLength(10);
+  });
+
+  it("reports what was sent instead of counting every failure", () => {
+    mocks.deliveries.mockReturnValue(
+      emptyQuery([
+        {
+          id: "delivery-2",
+          kind: "ON_DEMAND",
+          reportDate: "2026-11-11T00:00:00.000Z",
+          status: "SENT",
+          failureReason: null,
+          sentAt: "2026-11-11T19:41:00.000Z",
+          attempts: 1,
+        },
+        {
+          id: "delivery-1",
+          kind: "SCHEDULED",
+          reportDate: "2026-11-10T00:00:00.000Z",
+          status: "FAILED",
+          failureReason: "no_recipient",
+          sentAt: null,
+          attempts: 1,
+        },
+      ]),
+    );
+
+    render(<WhatsAppSettingsPage />);
+
+    expect(screen.getByText("Enviados")).toBeInTheDocument();
+    expect(screen.getByText("Último envío")).toBeInTheDocument();
+    expect(screen.getByText("Fallos recientes")).toBeInTheDocument();
+    expect(screen.queryByText("Fallidos")).toBeNull();
+    // Failures are the quiet third figure, not the headline.
+    expect(
+      screen.getByText("Fallos recientes").nextElementSibling?.className,
+    ).toContain("text-muted-foreground");
   });
 
   it("offers a horizontal scroll area only when the deliveries table is rendered", () => {

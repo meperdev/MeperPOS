@@ -11,11 +11,14 @@ import { QuerySection, type ReportQuery } from "./QuerySection";
  * One 100%-stacked bar plus a descending legend: the five biggest categories
  * and everything else as "Otras". A ranking of thin bars per category was
  * unreadable past the third row — the share of the total is the question here.
+ * The card runs full width, so the legend uses two columns on wide screens.
  */
 export function CategoriesBlock({
   query,
+  className,
 }: {
   query: ReportQuery<ReportEnvelope<SaleByCategory[]>>;
+  className?: string;
 }) {
   const shares = categoryShares(query.data?.data ?? []);
 
@@ -30,6 +33,7 @@ export function CategoriesBlock({
       errorMessage="No se pudieron cargar categorías"
       isEmpty={shares.length === 0}
       emptyText="Sin ventas por categoría en el período."
+      className={className}
     >
       <div className="space-y-3">
         <div
@@ -50,14 +54,14 @@ export function CategoriesBlock({
           ))}
         </div>
 
-        <ul className="divide-y divide-border/40">
+        <ul data-category-legend className="grid gap-x-8 lg:grid-cols-2">
           {shares.map((slice, index) => {
             const color =
               slice.label === "Otras" ? CHART_OTHER_COLOR : chartSeriesColor(index);
             return (
               <li
                 key={slice.label}
-                className="flex items-center justify-between gap-3 py-1.5"
+                className="flex items-center justify-between gap-3 border-b border-border/40 py-1.5"
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span

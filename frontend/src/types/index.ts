@@ -1056,6 +1056,26 @@ export interface WhatsAppDelivery {
 }
 
 /**
+ * GET /whatsapp/deliveries/automatic — whether the scheduled report will run.
+ * `paused_no_recipient` covers both "no verified number" and a central channel
+ * that would speak for more than one organization, because the fix is the same.
+ */
+export type WhatsAppAutomaticSendState =
+  | "active"
+  | "paused_no_recipient"
+  | "paused_failures";
+
+export interface WhatsAppAutomaticSend {
+  state: WhatsAppAutomaticSendState;
+  /** Failed scheduled days in the current streak; 1 or 2 while still active, pauses at the limit. */
+  consecutiveFailures: number;
+  /** ISO instant the failure streak reached its limit; null when not paused. */
+  pausedSince: string | null;
+  /** ISO instant of the next 20:00 America/Bogota run. */
+  nextRunAt: string;
+}
+
+/**
  * POST /whatsapp/deliveries/report — the send outcome, exactly as the server
  * reported it. `no_identity` arrives as a 409 body: nobody is linked, so nothing
  * was sent and nothing failed.

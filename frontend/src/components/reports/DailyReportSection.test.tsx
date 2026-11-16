@@ -51,7 +51,15 @@ const report: DailyReport = {
     stock: index,
     minStock: 10,
   })),
-  purchaseOrders: [],
+  purchaseOrders: [
+    {
+      id: "po-1",
+      orderNumber: 12,
+      status: "PENDING",
+      total: "90000.00",
+      supplier: { name: "Proveedor Uno" },
+    },
+  ],
   loans: [
     {
       id: "loan-1",
@@ -79,6 +87,11 @@ function renderSection(overrides: Partial<Parameters<typeof DailyReportSection>[
   );
 }
 
+/** Groups of the pending grid, found by their heading rail. */
+function pendingCard(label: string) {
+  return screen.getByText(label).closest("[data-pending-group]") as HTMLElement;
+}
+
 afterEach(cleanup);
 
 describe("Hoy (daily report)", () => {
@@ -94,17 +107,68 @@ describe("Hoy (daily report)", () => {
     expect(screen.getByText(/30\.000/)).toBeInTheDocument();
     expect(screen.getByText("Ventas registradas").closest("div")).toHaveTextContent("2");
 
-    const lowStockRow = screen.getByText("Productos con stock bajo").closest("li");
-    expect(lowStockRow).not.toBeNull();
-    expect(within(lowStockRow!).getByText("7")).toBeInTheDocument();
-    expect(within(lowStockRow!).getByRole("link", { name: /Ver/ })).toHaveAttribute(
+    const lowStockCard = pendingCard("Productos con stock bajo");
+    expect(within(lowStockCard).getByText("7")).toBeInTheDocument();
+    expect(within(lowStockCard).getByRole("link", { name: /Ver/ })).toHaveAttribute(
       "href",
       "/inventory?filter=lowStock",
     );
-    expect(within(lowStockRow!).getByText(/\+4 más/)).toBeInTheDocument();
+    expect(within(lowStockCard).getByText("+4 más")).toBeInTheDocument();
 
-    expect(screen.getByText("Préstamos vencidos o por vencer")).toBeInTheDocument();
-    expect(screen.queryByText("Órdenes de compra pendientes")).toBeNull();
+    expect(pendingCard("Préstamos vencidos o por vencer")).toBeInTheDocument();
+    expect(pendingCard("Órdenes de compra pendientes")).toBeInTheDocument();
+  });
+
+  it("lays the pending groups on one equal-height grid sized to how many have work", () => {
+    const { container } = renderSection();
+    const grid = container.querySelector("[data-pending-grid]")!;
+
+    expect(grid).toHaveAttribute("data-pending-count", "3");
+    expect(grid.className).toContain("md:grid-cols-3");
+    for (const card of container.querySelectorAll("[data-pending-group]")) {
+      expect(card.className).toContain("h-full");
+    }
+
+    cleanup();
+    const two = renderSection({
+      report: { ...report, purchaseOrders: [] },
+    }).container;
+    const twoGrid = two.querySelector("[data-pending-grid]")!;
+    expect(twoGrid).toHaveAttribute("data-pending-count", "2");
+    expect(twoGrid.className).toContain("md:grid-cols-2");
+    expect(twoGrid.className).not.toContain("md:grid-cols-3");
+  });
+
+  it("renders each pending item as a chip with its key value and a status dot", () => {
+    renderSection();
+
+    const lowStockCard = pendingCard("Productos con stock bajo");
+    const chips = lowStockCard.querySelectorAll("[data-pending-chip]");
+    expect(chips).toHaveLength(3);
+    expect(chips[0]).toHaveTextContent("Producto 0");
+    expect(chips[0]).toHaveTextContent("0 / mín 10");
+    expect(chips[0].querySelector("[data-severity]")).toHaveAttribute(
+      "data-severity",
+      "danger",
+    );
+    expect(chips[1].querySelector("[data-severity]")).toHaveAttribute(
+      "data-severity",
+      "warning",
+    );
+
+    const orders = pendingCard("Órdenes de compra pendientes");
+    expect(within(orders).getByText("#12 · Proveedor Uno")).toBeInTheDocument();
+    expect(within(orders).getByText("Pendiente")).toBeInTheDocument();
+    expect(
+      orders.querySelector("[data-severity]"),
+    ).toHaveAttribute("data-severity", "warning");
+
+    const loans = pendingCard("Préstamos vencidos o por vencer");
+    expect(within(loans).getByText("venció 10 mar")).toBeInTheDocument();
+    expect(loans.querySelector("[data-severity]")).toHaveAttribute(
+      "data-severity",
+      "danger",
+    );
   });
 
   it("collapses the pending block to one line when the day has no pending work", () => {
@@ -115,6 +179,7 @@ describe("Hoy (daily report)", () => {
     expect(
       screen.getByText("Sin pendientes para hoy: stock, órdenes de compra y préstamos al día."),
     ).toBeInTheDocument();
+    expect(document.querySelector("[data-pending-grid]")).toBeNull();
   });
 
   it("reveals today's sales with number, time, customer and total", () => {
