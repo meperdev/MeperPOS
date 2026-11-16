@@ -35,7 +35,25 @@ function findScrollParent(node: HTMLElement | null): HTMLElement | null {
 }
 
 const MENU_ROW_HEIGHT = 36;
+// Touch rows are 44px tall (min-h-11), so the open-direction estimate has to match or it
+// decides on a height the menu will not have.
+const MENU_ROW_HEIGHT_TOUCH = 44;
 const MENU_MAX_HEIGHT = 240;
+const TOUCH_VIEWPORT_QUERY = "(min-width: 640px)";
+
+/**
+ * Row height the open estimate must assume. Below the `sm` breakpoint the rows keep the
+ * 44px touch target; when the environment cannot answer, assume touch so the menu errs
+ * towards opening upwards rather than being clipped.
+ */
+function estimateMenuRowHeight(): number {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return MENU_ROW_HEIGHT_TOUCH;
+  }
+  return window.matchMedia(TOUCH_VIEWPORT_QUERY).matches
+    ? MENU_ROW_HEIGHT
+    : MENU_ROW_HEIGHT_TOUCH;
+}
 
 export function Select({
   options,
@@ -98,7 +116,7 @@ export function Select({
       const visibleBottom = Math.min(window.innerHeight, scroller?.bottom ?? window.innerHeight);
       const spaceBelow = visibleBottom - rect.bottom;
       const spaceAbove = rect.top - visibleTop;
-      const menuHeight = Math.min(MENU_MAX_HEIGHT, options.length * MENU_ROW_HEIGHT + 12);
+      const menuHeight = Math.min(MENU_MAX_HEIGHT, options.length * estimateMenuRowHeight() + 12);
       // Open upwards only when the menu does not fit below and there is more room above.
       if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
         setOpenUpwards(true);
@@ -237,7 +255,7 @@ export function Select({
                 aria-selected={isSelected}
                 onClick={() => handleSelect(option.value)}
                 className={cn(
-                  "flex w-full items-center justify-between px-3 py-2 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150",
+                  "flex w-full items-center justify-between px-3 py-2 min-h-11 sm:min-h-9 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   isSelected
                     ? "bg-primary-light text-primary-text font-bold"

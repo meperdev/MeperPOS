@@ -7,6 +7,37 @@ const baseOptions = [
   { value: "b", label: "Opción B" },
 ];
 
+const fourOptions = [
+  { value: "a", label: "Opción A" },
+  { value: "b", label: "Opción B" },
+  { value: "c", label: "Opción C" },
+  { value: "d", label: "Opción D" },
+];
+
+/** Pretend the viewport is below (false) or at/above (true) Tailwind's `sm` breakpoint (640px). */
+const stubSmBreakpoint = (matches: boolean) => {
+  const matchMedia = vi.fn((query: string) => ({
+    matches,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+  Object.defineProperty(window, "matchMedia", {
+    value: matchMedia,
+    configurable: true,
+    writable: true,
+  });
+  return matchMedia;
+};
+
+const restoreMatchMedia = () => {
+  Reflect.deleteProperty(window, "matchMedia");
+};
+
 describe("Select", () => {
   it("shows the placeholder when no option is selected", () => {
     const onChange = vi.fn();
@@ -109,6 +140,16 @@ describe("Select", () => {
     expect(screen.getByText("NUEVO")).toBeInTheDocument();
   });
 
+  it("sizes option rows for touch: 44px min height, compact again from sm up", () => {
+    render(<Select value="" options={baseOptions} onChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button"));
+
+    const row = screen.getByRole("option", { name: "Opción A" });
+    expect(row.className).toContain("min-h-11");
+    expect(row.className).toContain("sm:min-h-9");
+  });
+
   describe("open direction inside a scroll container", () => {
     const rects = new Map<string, Partial<DOMRect>>();
 
@@ -156,6 +197,46 @@ describe("Select", () => {
       const menu = screen.getByText("Opción A").closest(".absolute")!;
       expect(menu.className).toContain("top-full");
       spy.mockRestore();
+    });
+
+    it("uses the 44px touch row height below sm, so a menu that fits at 36px opens upwards", () => {
+      // 170px below the trigger: 4 rows at 36px + padding (156) fits, at 44px (188) does not.
+      rects.set("scroller", { top: 0, bottom: 400 });
+      rects.set("select", { top: 190, bottom: 230 });
+      const spy = mockRects();
+      const matchMedia = stubSmBreakpoint(false);
+      render(
+        <div data-scroller style={{ overflowY: "auto" }}>
+          <Select value="" options={fourOptions} onChange={vi.fn()} />
+        </div>,
+      );
+
+      fireEvent.click(screen.getByRole("button"));
+
+      const menu = screen.getByText("Opción A").closest(".absolute")!;
+      expect(menu.className).toContain("bottom-full");
+      expect(matchMedia).toHaveBeenCalledWith("(min-width: 640px)");
+      spy.mockRestore();
+      restoreMatchMedia();
+    });
+
+    it("keeps the 36px estimate from sm up, so the same geometry still opens downwards", () => {
+      rects.set("scroller", { top: 0, bottom: 400 });
+      rects.set("select", { top: 190, bottom: 230 });
+      const spy = mockRects();
+      stubSmBreakpoint(true);
+      render(
+        <div data-scroller style={{ overflowY: "auto" }}>
+          <Select value="" options={fourOptions} onChange={vi.fn()} />
+        </div>,
+      );
+
+      fireEvent.click(screen.getByRole("button"));
+
+      const menu = screen.getByText("Opción A").closest(".absolute")!;
+      expect(menu.className).toContain("top-full");
+      spy.mockRestore();
+      restoreMatchMedia();
     });
   });
 
