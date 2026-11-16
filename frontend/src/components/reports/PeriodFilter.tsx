@@ -56,33 +56,38 @@ export function PeriodFilter({
           ))}
         </FilterGroup>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <label
-            className="text-xs font-medium text-muted-foreground"
-            htmlFor="reports-start"
-          >
-            Desde
-          </label>
-          <Input
-            id="reports-start"
-            type="date"
-            value={startDate}
-            onChange={(event) => commit(event.target.value, endDate)}
-            className="w-auto min-w-[10.5rem]"
-          />
-          <label
-            className="text-xs font-medium text-muted-foreground"
-            htmlFor="reports-end"
-          >
-            Hasta
-          </label>
-          <Input
-            id="reports-end"
-            type="date"
-            value={endDate}
-            onChange={(event) => commit(startDate, event.target.value)}
-            className="w-auto min-w-[10.5rem]"
-          />
+        {/* Two equal tracks on phones so neither date can push past the screen edge. */}
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
+          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <label
+              className="text-xs font-medium text-muted-foreground"
+              htmlFor="reports-start"
+            >
+              Desde
+            </label>
+            <Input
+              id="reports-start"
+              type="date"
+              value={startDate}
+              onChange={(event) => commit(event.target.value, endDate)}
+              className="min-w-0 w-full sm:w-40"
+            />
+          </div>
+          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <label
+              className="text-xs font-medium text-muted-foreground"
+              htmlFor="reports-end"
+            >
+              Hasta
+            </label>
+            <Input
+              id="reports-end"
+              type="date"
+              value={endDate}
+              onChange={(event) => commit(startDate, event.target.value)}
+              className="min-w-0 w-full sm:w-40"
+            />
+          </div>
         </div>
 
         <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground tabular-nums">

@@ -25,6 +25,21 @@ function renderFilter(overrides: Partial<Parameters<typeof PeriodFilter>[0]> = {
 }
 
 describe("filtro de período", () => {
+  it("puts Desde and Hasta in two equal tracks on phones so no date leaves the screen", () => {
+    renderFilter();
+    const from = screen.getByLabelText("Desde");
+    const to = screen.getByLabelText("Hasta");
+    const grid = from.closest<HTMLElement>(".grid")!;
+
+    expect(grid).toContainElement(to);
+    expect(grid).toHaveClass("grid", "w-full", "grid-cols-2", "gap-2");
+    expect(grid).toHaveClass("sm:flex", "sm:w-auto");
+    for (const input of [from, to]) {
+      expect(input).toHaveClass("min-w-0", "w-full");
+      expect(input).not.toHaveClass("min-w-[10.5rem]");
+    }
+  });
+
   it("offers only ranges with an explicit window and marks Este mes as active", () => {
     renderFilter();
 
