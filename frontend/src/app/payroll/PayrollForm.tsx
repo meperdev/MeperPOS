@@ -182,7 +182,7 @@ export function EmployeeSelect({
       label="Empleado"
       required
       value={value}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={onChange}
       options={[
         { value: "", label: "Selecciona un empleado" },
         ...employees.map((employee) => ({

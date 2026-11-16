@@ -14,7 +14,6 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { BentoSelect } from "@/components/ui/BentoSelect";
 import { Button } from "@/components/ui/Button";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { Card } from "@/components/ui/Card";
@@ -300,7 +299,7 @@ export default function LoansPage() {
           searchPlaceholder="Buscar por contraparte o motivo…"
           filterControls={
             <>
-              <BentoSelect
+              <Select
                 value={statusFilter}
                 onChange={(val) => setStatusFilter(val as "" | MoneyLoanStatus)}
                 placeholder="Todos los estados"
@@ -494,8 +493,8 @@ export default function LoansPage() {
                   label="Método"
                   options={METHOD_OPTIONS}
                   value={method}
-                  onChange={(event) =>
-                    setMethod(event.target.value as CollectLoanInput["method"])
+                  onChange={(value) =>
+                    setMethod(value as CollectLoanInput["method"])
                   }
                 />
               </div>

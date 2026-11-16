@@ -20,7 +20,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ImageUpload } from "@/components/ui/ImageUpload";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Pagination } from "@/components/ui/Pagination";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
@@ -497,7 +497,7 @@ function InventoryContent() {
           searchPlaceholder="Buscar por nombre, SKU..."
           filterControls={
             <>
-              <BentoSelect
+              <Select
                 value={statusFilter}
                 onChange={updateStatusFilter}
                 className="w-full sm:w-36 shrink-0"
@@ -508,7 +508,7 @@ function InventoryContent() {
                   { value: "all", label: "Todos" },
                 ]}
               />
-              <BentoSelect
+              <Select
                 value={selectedCategory || ""}
                 onChange={(value) => updateSelectedCategory(value || null)}
                 className="w-full sm:w-52 shrink-0"
@@ -893,7 +893,7 @@ function InventoryContent() {
                   }
                   onKeyDown={handleBarcodeKeyDown}
                 />
-                <BentoSelect
+                <Select
                   label="Categoría"
                   value={formData.categoryId || ""}
                   onChange={(value) =>
@@ -907,7 +907,7 @@ function InventoryContent() {
                     })),
                   ]}
                 />
-                <BentoSelect
+                <Select
                   label="Tipo"
                   value={formData.type === "SERVICE" ? "SERVICE" : "PRODUCT"}
                   onChange={(value) =>
@@ -936,7 +936,7 @@ function InventoryContent() {
                   <h3 className="text-xs font-medium text-muted-foreground">Oferta</h3>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                     <div className="w-full min-w-0 sm:flex-1">
-                      <BentoSelect
+                      <Select
                         value={promotionTypeInput}
                         onChange={(value) =>
                           setPromotionTypeInput(

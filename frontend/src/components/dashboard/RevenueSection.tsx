@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { CategoryStackedChart } from "./CategoryStackedChart";
 import { PaymentMethodsCard } from "./PaymentMethodsCard";
 import { TopProductsCard } from "./TopProductsCard";
@@ -46,7 +46,7 @@ export function RevenueSectionInner({ today }: { today: string }) {
           Ingresos
         </p>
         <div className="w-36">
-          <BentoSelect
+          <Select
             options={RANGE_OPTIONS}
             value={range}
             onChange={(value) => setRange(value as DashboardRangeKey)}

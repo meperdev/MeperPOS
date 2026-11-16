@@ -12,7 +12,7 @@ import {
   useUpdateTaskStatus,
 } from "@/hooks/useTasks";
 import { Badge } from "@/components/ui/Badge";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -545,7 +545,7 @@ export default function TasksPage() {
               </FilterGroup>
 
               {assignees.length > 1 && (
-                <BentoSelect
+                <Select
                   value={selectedAssigneeId}
                   onChange={setSelectedAssigneeId}
                   className="w-full sm:w-44"
@@ -582,7 +582,7 @@ export default function TasksPage() {
                 </div>
 
                 <div className="sm:hidden flex items-center gap-1">
-                  <BentoSelect
+                  <Select
                     value={statusFilter}
                     onChange={(val) =>
                       setStatusFilter(val as "ALL" | TaskStatus)
@@ -850,7 +850,7 @@ export default function TasksPage() {
                       />
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <BentoSelect
+                        <Select
                           label="Asignar a"
                           value={taskDraft.assignedToId ?? ""}
                           onChange={(val) =>
@@ -1023,7 +1023,7 @@ export default function TasksPage() {
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <BentoSelect
+            <Select
               label="Asignar a compañero"
               value={newModalDraft.assignedToId}
               onChange={(val) =>

@@ -213,8 +213,8 @@ export function EmployeeFormDialog({
           label="Modalidad de remuneración"
           options={MODALITY_OPTIONS}
           value={form.remunerationModality}
-          onChange={(event) =>
-            set("remunerationModality", event.target.value)
+          onChange={(value) =>
+            set("remunerationModality", value)
           }
         />
 

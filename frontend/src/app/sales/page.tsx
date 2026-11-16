@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Badge } from "@/components/ui/Badge";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Modal } from "@/components/ui/Modal";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { Pagination } from "@/components/ui/Pagination";
@@ -204,7 +204,7 @@ function SalesPageContent() {
           }
           filterControls={
             <>
-              <BentoSelect
+              <Select
                 value={status}
                 onChange={(val) => {
                   setPage(1);

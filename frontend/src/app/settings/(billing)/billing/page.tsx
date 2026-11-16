@@ -9,7 +9,7 @@ import {
   useRegisterPayment,
 } from "@/hooks/useBilling";
 import { Button } from "@/components/ui/Button";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { SettingsCard } from "../../_components/SettingsCard";
@@ -320,7 +320,7 @@ export default function BillingSettingsPage() {
                     setPaymentForm({ ...paymentForm, amount: e.target.value })
                   }
                 />
-                <BentoSelect
+                <Select
                   label="Método"
                   value={paymentForm.method}
                   onChange={(value) =>

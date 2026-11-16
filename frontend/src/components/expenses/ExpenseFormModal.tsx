@@ -3,7 +3,7 @@
 import { useId, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { ImageUpload } from "@/components/ui/ImageUpload";
@@ -229,7 +229,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Left column: expense data */}
         <div className="space-y-3.5">
-          <BentoSelect
+          <Select
             label="Grupo"
             value={effectiveGroupId}
             disabled={isGroupsLoading}
@@ -245,7 +245,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             ]}
           />
 
-          <BentoSelect
+          <Select
             label="Etiqueta"
             value={effectiveLabelId}
             disabled={isGroupsLoading || !effectiveGroupId}
@@ -268,7 +268,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             ]}
           />
 
-          <BentoSelect
+          <Select
             label="Proveedor"
             value={supplierId}
             onChange={(value) => setSupplierId(value)}
@@ -281,7 +281,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             ]}
           />
 
-          <BentoSelect
+          <Select
             label="Orden de compra"
             value={purchaseOrderId}
             onChange={(value) => setPurchaseOrderId(value)}
@@ -420,7 +420,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                         }
                       />
                       <div className="flex items-end gap-2">
-                        <BentoSelect
+                        <Select
                           label="Método"
                           value={row.method}
                           onChange={(value) =>

@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 
 const baseOptions = [
   { value: "a", label: "Opción A" },
   { value: "b", label: "Opción B" },
 ];
 
-describe("BentoSelect", () => {
+describe("Select", () => {
   it("shows the placeholder when no option is selected", () => {
     const onChange = vi.fn();
     render(
-      <BentoSelect
+      <Select
         value="x"
         placeholder="Elige algo"
         options={baseOptions}
@@ -25,7 +25,7 @@ describe("BentoSelect", () => {
   it("renders the label prop above the trigger", () => {
     const onChange = vi.fn();
     render(
-      <BentoSelect
+      <Select
         value=""
         label="Categoría"
         options={baseOptions}
@@ -37,7 +37,7 @@ describe("BentoSelect", () => {
   });
 
   it("moves focus to the trigger when Tab leaves an open list, without cancelling Tab", () => {
-    render(<BentoSelect value="" options={baseOptions} onChange={vi.fn()} />);
+    render(<Select value="" options={baseOptions} onChange={vi.fn()} />);
 
     const trigger = screen.getByRole("button");
     fireEvent.click(trigger);
@@ -53,7 +53,7 @@ describe("BentoSelect", () => {
 
   it("opens the popover and lists the options when the trigger is clicked", () => {
     const onChange = vi.fn();
-    render(<BentoSelect value="" options={baseOptions} onChange={onChange} />);
+    render(<Select value="" options={baseOptions} onChange={onChange} />);
 
     expect(screen.queryByText("Opción A")).not.toBeInTheDocument();
 
@@ -65,7 +65,7 @@ describe("BentoSelect", () => {
 
   it("calls onChange with the selected value and closes the popover", () => {
     const onChange = vi.fn();
-    render(<BentoSelect value="" options={baseOptions} onChange={onChange} />);
+    render(<Select value="" options={baseOptions} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button"));
     fireEvent.click(screen.getByText("Opción A"));
@@ -76,7 +76,7 @@ describe("BentoSelect", () => {
 
   it("highlights the selected option with a check icon and selected classes", () => {
     const onChange = vi.fn();
-    render(<BentoSelect value="b" options={baseOptions} onChange={onChange} />);
+    render(<Select value="b" options={baseOptions} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button"));
 
@@ -97,7 +97,7 @@ describe("BentoSelect", () => {
   it("renders an option badge when one is provided", () => {
     const onChange = vi.fn();
     render(
-      <BentoSelect
+      <Select
         value=""
         options={[{ value: "a", label: "Opción A", badge: "NUEVO" }]}
         onChange={onChange}
@@ -127,7 +127,7 @@ describe("BentoSelect", () => {
     const renderInScroller = () =>
       render(
         <div data-scroller style={{ overflowY: "auto" }}>
-          <BentoSelect value="" options={baseOptions} onChange={vi.fn()} />
+          <Select value="" options={baseOptions} onChange={vi.fn()} />
         </div>,
       );
 
@@ -161,7 +161,7 @@ describe("BentoSelect", () => {
 
   it("closes the popover when a mousedown happens outside the container", () => {
     const onChange = vi.fn();
-    render(<BentoSelect value="" options={baseOptions} onChange={onChange} />);
+    render(<Select value="" options={baseOptions} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("Opción A")).toBeInTheDocument();
@@ -169,5 +169,57 @@ describe("BentoSelect", () => {
     fireEvent.mouseDown(document.body);
 
     expect(screen.queryByText("Opción A")).not.toBeInTheDocument();
+  });
+
+  describe("native select behind the trigger", () => {
+    it("names the trigger by its label and keeps a hidden native select beside it", () => {
+      render(<Select value="a" label="Método" name="method" options={baseOptions} onChange={vi.fn()} />);
+
+      const trigger = screen.getByRole("button", { name: "Método" });
+      const select = trigger.parentElement?.querySelector("select");
+      expect(select).not.toBeNull();
+      expect(select).toHaveAttribute("aria-hidden", "true");
+      expect(select).toHaveAttribute("name", "method");
+      expect(select).toHaveValue("a");
+    });
+
+    it("reports the chosen value when the native select changes", () => {
+      const onChange = vi.fn();
+      render(<Select value="a" label="Método" options={baseOptions} onChange={onChange} />);
+
+      const select = screen.getByRole("button", { name: "Método" }).parentElement!.querySelector("select")!;
+      fireEvent.change(select, { target: { value: "b" } });
+
+      expect(onChange).toHaveBeenCalledWith("b");
+    });
+
+    it("forwards required to the native select", () => {
+      render(<Select value="" label="Empleado" required options={baseOptions} onChange={vi.fn()} />);
+
+      const select = screen.getByRole("button", { name: "Empleado" }).parentElement!.querySelector("select")!;
+      expect(select).toBeRequired();
+    });
+  });
+
+  it("shows an error, marks the native field invalid and points the trigger at the message", () => {
+    render(<Select value="a" label="Método" error="Elige un método" options={baseOptions} onChange={vi.fn()} />);
+
+    const message = screen.getByText("Elige un método");
+    const trigger = screen.getByRole("button", { name: "Método" });
+    const select = trigger.parentElement!.querySelector("select")!;
+
+    expect(message).toBeInTheDocument();
+    expect(select).toHaveAttribute("aria-invalid", "true");
+    expect(trigger).toHaveAttribute("aria-describedby", message.id);
+  });
+
+  it("calls onChange with the value, not an event, when an option is clicked", () => {
+    const onChange = vi.fn();
+    render(<Select value="a" options={baseOptions} onChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("option", { name: "Opción B" }));
+
+    expect(onChange).toHaveBeenCalledWith("b");
   });
 });

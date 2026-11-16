@@ -10,7 +10,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { SettingsCard } from "../../_components/SettingsCard";
 import {
@@ -114,7 +114,7 @@ function ExportTile({ type, title, description, hasDates }: ExportTileDefinition
         <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
       </div>
 
-      <BentoSelect
+      <Select
         value={format}
         onChange={(value) => setFormat(value as "excel" | "csv")}
         placeholder="Formato de exportación"

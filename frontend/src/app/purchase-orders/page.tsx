@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { FilterBar, FilterClearButton } from "@/components/ui/FilterBar";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
@@ -115,7 +115,7 @@ export default function PurchaseOrdersPage() {
           searchPlaceholder="Buscar por número de orden o proveedor…"
           filterControls={
             <>
-              <BentoSelect
+              <Select
                 value={supplierId}
                 onChange={(value) => {
                   setPage(1);
@@ -131,7 +131,7 @@ export default function PurchaseOrdersPage() {
                   })),
                 ]}
               />
-              <BentoSelect
+              <Select
                 value={status}
                 onChange={(value) => {
                   setPage(1);

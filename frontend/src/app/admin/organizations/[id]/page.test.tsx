@@ -381,7 +381,7 @@ describe("OrganizationDetailPage", () => {
     });
 
     it("renders role dropdown for each member", () => {
-      // BentoSelect renders each role as a trigger <button> showing the
+      // Select renders each role as a trigger <button> showing the
       // selected role label (no native combobox). Assert those are present.
       const roleButtons = screen
         .getAllByRole("button")

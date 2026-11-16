@@ -11,7 +11,7 @@ import {
 } from "@/hooks/useUsers";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -293,7 +293,7 @@ export default function UsersPage() {
           <form onSubmit={handleEdit} className="space-y-4">
             <Input label="Nombre" value={editFormData.name} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} required />
             <Input label="Correo" type="email" value={editFormData.email} onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })} required />
-            <BentoSelect
+            <Select
               label="Rol"
               value={editFormData.role}
               onChange={(value) => setEditFormData({ ...editFormData, role: value as SelectableRole })}
@@ -317,7 +317,7 @@ export default function UsersPage() {
           <Input label="Correo" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
           <Input label="Contraseña" type="password" minLength={10} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required />
           <p className="text-xs text-muted-foreground">Mínimo 10 caracteres</p>
-          <BentoSelect
+          <Select
             label="Rol"
             value={formData.role}
             onChange={(value) => setFormData({ ...formData, role: value as SelectableRole })}

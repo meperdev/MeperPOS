@@ -66,7 +66,7 @@ Regla operativa: cuando abras un ticket/cambio, referencia siempre el ID primero
 |---|---|---|---|
 | `FE-UI-BUTTON` | `Button` | `frontend/src/components/ui/Button.tsx` | variantes, tamanos, estados loading/disabled |
 | `FE-UI-INPUT` | `Input` | `frontend/src/components/ui/Input.tsx` | inputs/textarea, label/error, estilos de campo |
-| `FE-UI-SELECT` | `Select` | `frontend/src/components/ui/Select.tsx` | select base y render de opciones |
+| `FE-UI-SELECT` | `Select`, `SelectOption` | `frontend/src/components/ui/Select.tsx` | select unico de la app: `onChange(value)` (no evento), select nativo oculto para `name`/`required`/`disabled`, soporte de `error` |
 | `FE-UI-CARD` | `Card`, `CardHeader`, `CardContent`, `CardFooter` | `frontend/src/components/ui/Card.tsx` | contenedores de cards globales |
 | `FE-UI-BADGE` | `Badge` | `frontend/src/components/ui/Badge.tsx` | chips de estado/segmento/alerta |
 | `FE-UI-MODAL` | `Modal` | `frontend/src/components/ui/Modal.tsx` | comportamiento de overlays/modales |

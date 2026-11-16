@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
-import { BentoSelect } from "@/components/ui/BentoSelect";
+import { Select } from "@/components/ui/Select";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -90,7 +90,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
   type OrgMember = (typeof members)[number];
 
   const renderRole = (ou: OrgMember) => (
-    <BentoSelect
+    <Select
       value={ou.role}
       options={roleOptions}
       onChange={(value) =>
@@ -175,7 +175,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Cambiar estado
               </label>
-              <BentoSelect
+              <Select
                 value={org.status}
                 options={statusOptions}
                 onChange={(value) => updateStatus.mutate({ id: org.id, status: value })}
@@ -186,7 +186,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Cambiar plan
               </label>
-              <BentoSelect
+              <Select
                 value={org.plan}
                 options={planOptions}
                 onChange={(value) => updatePlan.mutate({ id: org.id, plan: value })}
@@ -328,7 +328,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             value={newMember.name}
             onChange={(e) => setNewMember((prev) => ({ ...prev, name: e.target.value }))}
           />
-          <BentoSelect
+          <Select
             label="Rol"
             value={newMember.role}
             options={roleOptions}
