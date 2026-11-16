@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Package, RefreshCw } from "lucide-react";
+import { BellRing, RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   FilterGroup,
@@ -11,10 +11,9 @@ import { Pagination } from "@/components/ui/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/TableSkeleton";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { formatDateTime } from "@/lib/utils";
+import { AlertHistoryList } from "@/components/alerts/AlertHistoryList";
 import {
   useAlertNotifications,
   type StockAlertEventKind,
@@ -22,25 +21,11 @@ import {
 
 const PAGE_SIZE = 20;
 
-const KIND_LABELS: Record<StockAlertEventKind, string> = {
-  OPENED: "Abierta",
-  RESOLVED: "Resuelta",
-  NOTIFIED: "Enviada",
-  FAILED: "Fallida",
-  SKIPPED: "Omitida",
-};
-
-const KIND_TONES: Record<
-  StockAlertEventKind,
-  "primary" | "success" | "warning" | "danger" | "default"
-> = {
-  OPENED: "primary",
-  RESOLVED: "success",
-  NOTIFIED: "success",
-  FAILED: "danger",
-  SKIPPED: "warning",
-};
-
+/**
+ * The `kind` values the endpoint accepts. They are the only filters the history
+ * supports server-side, so they are the only ones the page offers: a client-side
+ * filter over one page would hide rows that exist on another.
+ */
 const FILTERS: Array<{ value: StockAlertEventKind | "ALL"; label: string }> = [
   { value: "ALL", label: "Todas" },
   { value: "OPENED", label: "Abiertas" },
@@ -67,8 +52,13 @@ export default function AlertHistoryPage() {
     <DashboardLayout>
       <div className="flex flex-1 flex-col gap-4 lg:gap-5">
         <PageHeader
-          title="Historial de notificaciones"
+          title="Historial de alertas"
           subtitle="Cada episodio de stock bajo y el resultado de su aviso por WhatsApp."
+          count={
+            meta
+              ? `${meta.total} ${meta.total === 1 ? "evento" : "eventos"}`
+              : undefined
+          }
           actions={
             <Button
               variant="outline"
@@ -114,37 +104,12 @@ export default function AlertHistoryPage() {
           />
         ) : items.length === 0 ? (
           <EmptyState
-            icon={<Package className="h-4 w-4" />}
+            icon={<BellRing className="h-4 w-4" />}
             title="Sin notificaciones todavía"
             subtitle="Cuando un producto llegue a su mínimo vas a ver el episodio acá."
           />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs">
-            <ul className="divide-y divide-border/60">
-              {items.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex flex-wrap items-center gap-3 px-3.5 py-3"
-                >
-                  <Badge variant={KIND_TONES[item.kind]} className="shrink-0">
-                    {KIND_LABELS[item.kind]}
-                  </Badge>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-foreground">
-                      {item.product.name}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {item.product.sku} · episodio {item.episode}
-                      {item.failureReason ? ` · ${item.failureReason}` : ""}
-                    </p>
-                  </div>
-                  <span className="text-[11px] tabular-nums text-muted-foreground">
-                    {formatDateTime(item.createdAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <AlertHistoryList items={items} />
         )}
 
         {meta ? (
@@ -153,8 +118,7 @@ export default function AlertHistoryPage() {
             totalPages={meta.totalPages}
             totalItems={meta.total}
             pageSize={meta.limit}
-            itemLabel="notificación"
-            itemLabelPlural="notificaciones"
+            itemLabel="evento"
             onPageChange={setPage}
           />
         ) : null}

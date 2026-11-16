@@ -56,13 +56,46 @@ describe("AlertHistoryPage", () => {
 
     render(<AlertHistoryPage />);
 
-    expect(screen.getByText("Historial de notificaciones")).toBeInTheDocument();
+    expect(screen.getByText("Historial de alertas")).toBeInTheDocument();
     expect(screen.getByText("Café molido 500 g")).toBeInTheDocument();
-    expect(screen.getByText("Enviada")).toBeInTheDocument();
+    expect(screen.getByText("Enviado")).toBeInTheDocument();
     expect(screen.getByText(/episodio 2/)).toBeInTheDocument();
   });
 
-  it("shows the failure code when the send failed", () => {
+  it("counts the whole history next to the title, not just the loaded page", () => {
+    historyMock.mockReturnValue(meta());
+
+    render(<AlertHistoryPage />);
+
+    expect(screen.getByText("21 eventos")).toBeInTheDocument();
+  });
+
+  it("groups the page's rows by day in Bogotá time", () => {
+    historyMock.mockReturnValue(
+      page({
+        data: {
+          data: [{ ...item, createdAt: new Date().toISOString() }],
+          meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+        },
+      }),
+    );
+
+    render(<AlertHistoryPage />);
+
+    expect(screen.getByRole("heading", { name: "Hoy" })).toBeInTheDocument();
+  });
+
+  it("links the product to the inventory catalog", () => {
+    historyMock.mockReturnValue(page());
+
+    render(<AlertHistoryPage />);
+
+    expect(
+      screen.getByRole("link", { name: "Café molido 500 g en inventario" }),
+    ).toHaveAttribute("href", "/inventory?filter=lowStock");
+  });
+
+  it("writes the failure reason in Spanish when the send failed", () => {
     historyMock.mockReturnValue(
       page({
         data: {
@@ -76,8 +109,8 @@ describe("AlertHistoryPage", () => {
 
     render(<AlertHistoryPage />);
 
-    expect(screen.getByText("Fallida")).toBeInTheDocument();
-    expect(screen.getByText(/provider_rejected/)).toBeInTheDocument();
+    expect(screen.getByText("Falló")).toBeInTheDocument();
+    expect(screen.getByText(/Rechazado por el proveedor/)).toBeInTheDocument();
   });
 
   it("asks the server for the selected kind and resets the page", async () => {

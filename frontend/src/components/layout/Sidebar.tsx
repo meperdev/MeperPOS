@@ -20,6 +20,7 @@ import {
   Building2,
   ChevronsLeft,
   ChevronsRight,
+  History,
   MoreVertical,
   X,
 } from "lucide-react";
@@ -29,11 +30,11 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn, safeGetItem, safeSetItem } from "@/lib/utils";
 import { APP_NAME, RAIL_FLYOUT_GAP } from "@/lib/constants";
-import { hasAnyRole } from "@/lib/auth";
 import {
   filterNavItems,
   isNavItemActive,
   mobileTabsFor,
+  visibleAccountMenuSections,
   type NavItem,
 } from "@/components/layout/nav-routes";
 import { useMobileDrawer } from "@/components/layout/mobile-drawer";
@@ -71,6 +72,20 @@ const footerIconButtonClass =
 
 const avatarCircleClass =
   "grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary";
+
+/** The glyph each account destination keeps in the menu. */
+function accountMenuIcon(href: string) {
+  switch (href) {
+    case "/profile":
+      return <UserIcon className="h-3.5 w-3.5" aria-hidden="true" />;
+    case "/alerts":
+      return <History className="h-3.5 w-3.5" aria-hidden="true" />;
+    case "/settings":
+      return <Settings className="h-3.5 w-3.5" aria-hidden="true" />;
+    default:
+      return undefined;
+  }
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -241,29 +256,18 @@ export function Sidebar() {
     : "?";
 
   // Everything that belongs to this identity, not to the daily operation, lives
-  // in one menu: the rail spine stays for the work itself.
-  const canSeeSettings = Boolean(user && hasAnyRole(user.role, ["ADMIN"]));
+  // in one menu: the rail spine stays for the work itself. Destinations and
+  // their audiences come from `nav-routes`, so the menu and the route gate
+  // cannot disagree about who may open a section.
   const accountItems: RowActionItem[] = [
-    {
-      label: "Mi perfil",
-      icon: <UserIcon className="h-3.5 w-3.5" aria-hidden="true" />,
+    ...visibleAccountMenuSections(user?.role).map((section) => ({
+      label: section.label,
+      icon: accountMenuIcon(section.href),
       onSelect: () => {
         closeMobileMenu();
-        router.push("/profile");
+        router.push(section.href);
       },
-    },
-    ...(canSeeSettings
-      ? [
-          {
-            label: "Configuración",
-            icon: <Settings className="h-3.5 w-3.5" aria-hidden="true" />,
-            onSelect: () => {
-              closeMobileMenu();
-              router.push("/settings");
-            },
-          } satisfies RowActionItem,
-        ]
-      : []),
+    })),
     {
       label:
         theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro",
