@@ -35,6 +35,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { DynamicFallback } from "@/components/ui/DynamicFallback";
 import { prefetchOnIdle } from "@/lib/prefetch";
+import { shouldAutoFocusTextInput } from "@/lib/input-focus";
 import { useCartUndo } from "@/hooks/useCartUndo";
 import dynamic from "next/dynamic";
 import { PaymentMethodCards } from "@/components/pos/PaymentMethodCards";
@@ -478,6 +479,10 @@ export default function POSPage() {
 
   useEffect(() => {
     if (isScannerBlocked) return;
+    // The scanner field is where a barcode reader types, so a desktop POS hands
+    // it the focus as soon as the page is ready. On a phone that focus opens the
+    // software keyboard over the grid, so the page never does it by itself.
+    if (!shouldAutoFocusTextInput()) return;
     focusScannerInput();
   }, [isScannerBlocked, focusScannerInput]);
 

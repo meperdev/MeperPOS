@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
@@ -9,6 +9,7 @@ import {
   SIDEBAR_SCROLL_KEY,
 } from "./Sidebar";
 import { SidebarProvider, SIDEBAR_COLLAPSED_KEY } from "@/contexts/SidebarContext";
+import { closeMobileDrawer, openMobileDrawer } from "./mobile-drawer";
 import { safeGetItem, safeSetItem } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -698,9 +699,16 @@ describe("Sidebar", () => {
     expect(header?.className).toContain(
       "h-[calc(var(--mobile-header)+var(--safe-top))]"
     );
-    expect(drawer?.className).toContain(
-      "top-[calc(var(--mobile-header)+var(--safe-top))]"
-    );
+    // The drawer is the whole phone screen now, so it pays every inset itself
+    // instead of starting below the header.
+    for (const inset of [
+      "pt-[var(--safe-top)]",
+      "pb-[var(--safe-bottom)]",
+      "pl-[var(--safe-left)]",
+      "pr-[var(--safe-right)]",
+    ]) {
+      expect(drawer?.className).toContain(inset);
+    }
   });
 
   it("renders the Lucky square icon and hides wordmark text when collapsed", async () => {
@@ -896,5 +904,169 @@ describe("drawer offers only what the tab bar does not", () => {
 
     const inventoryGroup = container.querySelector('[data-nav-group="Inventario"]');
     expect(inventoryGroup?.className).not.toContain("hidden");
+  });
+});
+
+// The phone gets one bell. The top bar owns it below `lg`, so the drawer's copy
+// leaves; the rail keeps its own at `lg`.
+describe("one bell on a phone (mobile shell)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    safeSetItem(SIDEBAR_COLLAPSED_KEY, "false");
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "user-1",
+        name: "Ana Perez",
+        role: "ADMIN",
+        active: true,
+        organizationId: "org-a",
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+  });
+
+  it("hides the drawer footer's bell below lg and keeps the top bar's", () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    const footerBell = within(screen.getByTestId("sidebar-user")).getByRole(
+      "button",
+      { name: /Alertas/ },
+    );
+    expect(footerBell.parentElement?.className).toContain("hidden");
+    expect(footerBell.parentElement?.className).toContain("lg:flex");
+
+    const topBarBell = within(screen.getByRole("banner")).getByRole("button", {
+      name: /Alertas/,
+    });
+    expect(topBarBell.parentElement?.className).not.toContain("hidden");
+  });
+
+  it("keeps the collapsed rail's bell at lg only", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <SidebarProvider>
+          <Sidebar />
+        </SidebarProvider>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(await screen.findByTestId("sidebar-collapse-toggle"));
+
+    const bell = within(screen.getByTestId("sidebar-user")).getByRole("button", {
+      name: /Alertas/,
+    });
+    expect(bell.parentElement?.className).toContain("hidden");
+    expect(bell.parentElement?.className).toContain("lg:inline-flex");
+  });
+});
+
+// A drawer that only covered part of the screen left a dimmed half page behind
+// it, which reads as a website menu. On a phone it is now a "Más" screen: the
+// whole viewport, its own close control, and the tab bar stays under it.
+describe("the mobile drawer is the phone's whole screen", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    safeSetItem(SIDEBAR_COLLAPSED_KEY, "false");
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "user-1",
+        name: "Ana Perez",
+        role: "ADMIN",
+        active: true,
+        organizationId: "org-a",
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+  });
+
+  afterEach(closeMobileDrawer);
+
+  function drawerElement(container: HTMLElement) {
+    return container.querySelector<HTMLElement>("[data-sidebar-root]")!;
+  }
+
+  it("covers the viewport and keeps the rail's own geometry at lg", () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    const { container } = render(<Sidebar />, { wrapper });
+    const drawer = drawerElement(container);
+
+    expect(drawer.className).toContain("inset-0");
+    expect(drawer.className).toContain("w-full");
+    expect(drawer.className).toContain("h-dvh");
+    // The rail is still a column of its own width that never hides.
+    expect(drawer.className).toContain("lg:w-[320px]");
+    expect(drawer.className).toContain("lg:h-screen");
+    expect(drawer.className).toContain("lg:translate-x-0");
+    expect(drawer.className).toContain("lg:opacity-100");
+    expect(drawer.className).toContain("lg:pointer-events-auto");
+  });
+
+  it("enters with a short travel plus a fade, and honours reduced motion", () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    const { container } = render(<Sidebar />, { wrapper });
+    const drawer = drawerElement(container);
+
+    // A full-screen wipe is not subtle: a few pixels and an opacity change read
+    // as a screen change without sliding the whole app away.
+    expect(drawer.className).toContain("-translate-x-3");
+    expect(drawer.className).toContain("opacity-0");
+    expect(drawer.className).not.toContain("-translate-x-full");
+    expect(drawer.className).toContain("motion-reduce:transition-none");
+
+    act(() => openMobileDrawer());
+
+    expect(drawer).toHaveAttribute("data-state", "open");
+    expect(drawer.className).toContain("translate-x-0");
+    expect(drawer.className).toContain("opacity-100");
+    expect(drawer.className).not.toContain("pointer-events-none");
+  });
+
+  it("leaves no dimmed overlay behind it", () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    act(() => openMobileDrawer());
+
+    expect(document.querySelectorAll('[class*="bg-black/40"]')).toHaveLength(0);
+  });
+
+  it("scrolls its own navigation and keeps 44px rows for the thumb", () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    const nav = screen.getByTestId("sidebar-nav");
+    expect(nav.className).toContain("overflow-y-auto");
+    // Nothing sits under the drawer any more, so the old tab-bar reserve is gone.
+    expect(nav.className).not.toContain("calc(5rem");
+
+    expect(screen.getByRole("link", { name: "Clientes" }).className).toContain("h-11");
+
+    const close = screen.getByRole("button", { name: "Cerrar menú" });
+    expect(close.className).toContain("h-11");
+    expect(close.className).toContain("w-11");
   });
 });

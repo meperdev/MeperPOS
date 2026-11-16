@@ -112,6 +112,77 @@ describe("mobile shell geometry tokens (S1.3)", () => {
   });
 });
 
+describe("scrollbars are a pointer-fine affordance (mobile: native overlay only)", () => {
+  // Comments are stripped so a rule mentioned only in prose never satisfies a
+  // contract. The media blocks are located by brace matching, because the file
+  // has nested rules and other media queries.
+  const cssNoComments = globalsCss.replace(/\/\*[\s\S]*?\*\//g, "");
+
+  function findMediaBlock(css: string, query: string): string | null {
+    const start = css.indexOf(`@media ${query}`);
+    if (start === -1) return null;
+    const open = css.indexOf("{", start);
+    if (open === -1) return null;
+    let depth = 0;
+    for (let i = open; i < css.length; i++) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}") {
+        depth--;
+        if (depth === 0) return css.slice(open + 1, i);
+      }
+    }
+    return null;
+  }
+
+  function withoutMediaBlock(css: string, query: string): string {
+    const start = css.indexOf(`@media ${query}`);
+    if (start === -1) return css;
+    const open = css.indexOf("{", start);
+    let depth = 0;
+    for (let i = open; i < css.length; i++) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}") {
+        depth--;
+        if (depth === 0) return css.slice(0, start) + css.slice(i + 1);
+      }
+    }
+    return css;
+  }
+
+  it("paints the styled thumb only under a fine pointer", () => {
+    const fine = findMediaBlock(cssNoComments, "(pointer: fine)");
+
+    expect(fine).not.toBeNull();
+    expect(fine).toContain(".scrollbar-app");
+    expect(fine).toContain(".scrollbar-app::-webkit-scrollbar");
+    expect(fine).toContain(".scrollbar-app::-webkit-scrollbar-thumb");
+    expect(fine).toContain("scrollbar-width: thin");
+  });
+
+  it("leaves every styled scrollbar inside that block, so touch gets the OS overlay", () => {
+    const outside = withoutMediaBlock(cssNoComments, "(pointer: fine)");
+
+    expect(outside).not.toContain(".scrollbar-app");
+    expect(outside).not.toContain("scrollbar-width: thin");
+    expect(outside).not.toContain("::-webkit-scrollbar-thumb");
+  });
+
+  it("adds nothing on a coarse pointer that forces a visible bar", () => {
+    const coarse = findMediaBlock(cssNoComments, "(pointer: coarse)");
+
+    // No block at all is the intended answer: the platform draws its own
+    // indicator while scrolling and hides it afterwards.
+    expect(coarse ?? "").not.toMatch(/scrollbar|overflow:\s*scroll/);
+  });
+
+  it("keeps scrollbar-hide available on every pointer", () => {
+    const outside = withoutMediaBlock(cssNoComments, "(pointer: fine)");
+
+    expect(outside).toContain(".scrollbar-hide");
+    expect(outside).toContain("scrollbar-width: none");
+  });
+});
+
 describe("categorical chart scale (S14): --chart-1..8 for category series", () => {
   const light = [
     "--chart-1: var(--primary);",

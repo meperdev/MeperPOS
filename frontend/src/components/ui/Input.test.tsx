@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Input } from "@/components/ui/Input";
 
@@ -50,5 +50,51 @@ describe("Input mobile keyboard hints", () => {
     expect(field).toHaveAttribute("autocorrect", "off");
     expect(field).toHaveAttribute("spellcheck", "false");
     expect(field).toHaveAttribute("enterkeyhint", "next");
+  });
+});
+
+describe("Input autofocus follows the pointer (no automatic keyboard)", () => {
+  afterEach(() => Reflect.deleteProperty(window, "matchMedia"));
+
+  function stubMediaQuery(answers: Record<string, boolean>) {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn((query: string) => ({
+        matches: answers[query] ?? false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  }
+
+  it("focuses the field on a fine pointer, where a scanner expects it", () => {
+    stubMediaQuery({});
+
+    render(<Input label="Correo" autoFocus />);
+
+    expect(screen.getByLabelText("Correo")).toHaveFocus();
+  });
+
+  it("does not raise the keyboard on a touch device", () => {
+    stubMediaQuery({ "(pointer: coarse)": true });
+
+    render(<Input label="Correo" autoFocus />);
+
+    expect(screen.getByLabelText("Correo")).not.toHaveFocus();
+  });
+
+  it("applies the same rule to a textarea", () => {
+    stubMediaQuery({ "(pointer: coarse)": true });
+
+    render(<Input textarea label="Notas" autoFocus />);
+
+    expect(screen.getByLabelText("Notas")).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
   });
 });

@@ -292,9 +292,8 @@ export function Sidebar() {
   const sidebarContent = (
     <>
       {/* Block 1: Brand - logo and wordmark sized to read as one lockup. The
-          drawer is 280px wide and now spends 44 of them on its close control,
-          so the lockup steps down a size below lg and keeps its full size on
-          the 320px rail. */}
+          drawer keeps a compact lockup so the brand and its 44px close control
+          share one row; the rail keeps the full size. */}
       <div
         data-testid="sidebar-brand"
         className={cn(
@@ -346,9 +345,9 @@ export function Sidebar() {
             <ChevronsLeft className="w-4 h-4" />
           )}
         </button>
-        {/* The drawer's own way out. The tab bar's "Más" opens it, and the
-            overlay, a link or Escape close it, but a control the thumb can
-            reach belongs at the top of a surface that covers 280 of 390px. */}
+        {/* The drawer's own way out. The tab bar's "Más" opens it, and a link or
+            Escape close it, but a control the thumb can reach belongs at the top
+            of the screen it now covers. */}
         <button
           type="button"
           onClick={closeMobileMenu}
@@ -364,7 +363,7 @@ export function Sidebar() {
           data-testid="sidebar-nav"
           ref={navRef}
           className={cn(
-            "h-full overflow-y-auto overscroll-contain pb-[calc(5rem+var(--safe-bottom))] lg:pb-3 sidebar-scroll",
+            "h-full overflow-y-auto overscroll-contain pb-3 sidebar-scroll",
             isCollapsed ? "px-2 py-3" : "px-3 py-3"
           )}
         >
@@ -480,7 +479,7 @@ export function Sidebar() {
             <div className="flex flex-col items-center gap-1">
               <AlertCenter
                 collapsed
-                className="inline-flex"
+                className="hidden lg:inline-flex"
                 buttonClassName={footerIconButtonClass}
               />
 
@@ -540,7 +539,7 @@ export function Sidebar() {
                 </div>
 
                 <AlertCenter
-                  className="shrink-0"
+                  className="hidden shrink-0 lg:flex"
                   buttonClassName={footerIconButtonClass}
                 />
 
@@ -598,33 +597,36 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile top bar: section title, back chevron and the bell. The drawer is
+      {/* Mobile top bar: section title, back chevron and the bell — the phone's
+          only bell now that the drawer is a whole-screen surface. The drawer is
           opened from the tab bar's "Más", so no hamburger lives here. */}
       <MobileTopBar />
 
-      {/* Mobile Overlay */}
-      {isMobileMenuOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/40 dark:bg-black/60 z-40"
-          onClick={closeMobileMenu}
-        />
-      )}
-
-      {/* Sidebar (Fixed Desktop / Responsive Drawer Mobile) */}
+      {/* Drawer on a phone, rail at lg. Below the breakpoint it owns the whole
+          viewport instead of sliding 280px over a dimmed page: it is the "Más"
+          screen, so it covers the top bar and the tab bar and pays every safe
+          inset itself. The rail keeps its column geometry. */}
       <aside
         data-sidebar-root
         id="mobile-nav-drawer"
         data-state={isMobileMenuOpen ? "open" : "closed"}
         className={cn(
-          "fixed bottom-0 left-0 lg:top-0 lg:bottom-auto lg:h-screen flex flex-col z-50",
-          "top-[calc(var(--mobile-header)+var(--safe-top))]",
-          "pl-[var(--safe-left)] pr-[var(--safe-right)]",
-          "bg-card border-r border-border/80 shadow-lg shadow-black/10 lg:shadow-none",
-          "transition-[width,transform] duration-300 ease-in-out",
-          "lg:translate-x-0",
+          "fixed flex flex-col z-50 bg-card",
+          "inset-0 h-dvh w-full",
+          "pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]",
+          "shadow-lg shadow-black/10",
+          // A screen-sized drawer slides a screen-sized distance, which reads as
+          // a wipe. A short travel plus a fade is the subtle version; the global
+          // reduced-motion rule turns the transition off.
+          "transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
+          isMobileMenuOpen
+            ? "translate-x-0 opacity-100"
+            : "-translate-x-3 opacity-0 pointer-events-none",
+          "lg:inset-y-0 lg:right-auto lg:h-screen lg:pt-0 lg:pb-0",
+          "lg:border-r lg:border-border/80 lg:shadow-none",
+          "lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto",
+          "lg:transition-[width,transform] lg:duration-300 lg:ease-in-out",
           isCollapsed ? "lg:w-[72px]" : "lg:w-[320px]",
-          "w-[280px] sm:w-[320px]",
-          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex flex-col flex-1 min-h-0">

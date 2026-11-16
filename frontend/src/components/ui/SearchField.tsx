@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { shouldAutoFocusTextInput } from "@/lib/input-focus";
 
 /**
  * Search input with the HIG behaviours: magnifier, native search semantics, a
@@ -36,7 +37,9 @@ export function SearchField({
       <input
         ref={inputRef}
         type="search"
-        autoFocus={autoFocus}
+        // A search field that grabs focus on mount opens the phone keyboard
+        // over the list it is meant to filter; `autoFocus` stays a desktop hint.
+        autoFocus={autoFocus && shouldAutoFocusTextInput()}
         aria-label={ariaLabel ?? "Buscar"}
         placeholder={placeholder}
         value={value}

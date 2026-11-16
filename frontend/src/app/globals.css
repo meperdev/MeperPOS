@@ -364,25 +364,36 @@ h4 {
     scrollbar-width: none;
 }
 
-.scrollbar-app {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent)
-        transparent;
-}
+/*
+ * The styled thin thumb is a desktop affordance. On a touch device the page
+ * scrollbar is an OS overlay indicator that appears while scrolling and fades
+ * out, so painting our own bar down the edge of every long page (Categorías,
+ * Ventas, …) is exactly the "website" tell the app must not have. Under
+ * `(pointer: coarse)` nothing is declared: no width, no colour, no track.
+ * `scrollbar-hide` above stays global because an inner horizontal strip that
+ * must not show a bar has to hide it on every pointer.
+ */
+@media (pointer: fine) {
+    .scrollbar-app {
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent)
+            transparent;
+    }
 
-.scrollbar-app::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
-}
-.scrollbar-app::-webkit-scrollbar-track {
-    background: transparent;
-}
-.scrollbar-app::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
-}
-.scrollbar-app::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+    .scrollbar-app::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+    }
+    .scrollbar-app::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .scrollbar-app::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+    }
+    .scrollbar-app::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+    }
 }
 
 /* ─── Safe areas ───────────────────────────────────────── */

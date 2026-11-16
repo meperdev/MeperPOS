@@ -296,3 +296,80 @@ describe("keyboard listeners follow the open state", () => {
     expect(listenerCount()).toBe(0);
   });
 });
+
+// A modal that lands on a text field raises the phone keyboard the moment it
+// opens, over content the reader has not seen yet. The dialog (or its close
+// control) takes the focus instead; desktop keeps landing on the first field.
+describe("initial focus follows the pointer", () => {
+  afterEach(restoreMatchMedia);
+
+  function stubPointer(answers: Record<string, boolean>) {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn((query: string) => ({
+        matches: answers[query] ?? false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  }
+
+  function renderForm() {
+    render(
+      <Modal isOpen onClose={() => {}} title="Nuevo cliente">
+        <input aria-label="Nombre" />
+        <button type="button">Guardar</button>
+      </Modal>,
+    );
+    return screen.getByRole("textbox", { name: "Nombre" });
+  }
+
+  it("lands on the first text field for a mouse", () => {
+    stubPointer({});
+
+    expect(renderForm()).toHaveFocus();
+  });
+
+  it("lands on the close control on a touch device instead of a text field", () => {
+    stubPointer({ "(pointer: coarse)": true });
+
+    const field = renderForm();
+
+    expect(field).not.toHaveFocus();
+    expect(screen.getByRole("button", { name: "Cerrar" })).toHaveFocus();
+  });
+
+  it("does not honour a text field marked as the autofocus target on a touch device", () => {
+    stubPointer({ "(pointer: coarse)": true });
+
+    render(
+      <Modal isOpen onClose={() => {}} title="Notas">
+        <button type="button">Atrás</button>
+        <textarea aria-label="Detalle" data-modal-autofocus />
+      </Modal>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Detalle" })).not.toHaveFocus();
+    expect(screen.getByRole("button", { name: "Atrás" })).not.toHaveFocus();
+    expect(screen.getByRole("button", { name: "Cerrar" })).toHaveFocus();
+  });
+
+  it("falls back to the dialog itself when it has no close control", () => {
+    stubPointer({ "(pointer: coarse)": true });
+
+    render(
+      <Modal isOpen onClose={() => {}} ariaLabel="Notas">
+        <input aria-label="Detalle" />
+      </Modal>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Detalle" })).not.toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Notas" })).toHaveFocus();
+  });
+});

@@ -17,9 +17,10 @@ export const MOBILE_TAB_BAR_LABEL = "Secciones principales";
  * tab can neither appear for a role the rail hides nor be worded differently.
  *
  * Solid `bg-card` with a hairline on top (D5: no blur), fixed to the bottom edge
- * and paying the home-indicator inset itself. `z-30` keeps the drawer's overlay
- * (z-40) able to dim it. Every tab is a plain `<Link>`: the section change is
- * Next's own client navigation, so nothing captures the page on the way.
+ * and paying the home-indicator inset itself. `z-30` keeps it under the drawer
+ * (z-50), which covers the whole screen when it opens. Every tab is a plain
+ * `<Link>`: the section change is Next's own client navigation, so nothing
+ * captures the page on the way.
  */
 export function MobileTabBar() {
   const pathname = usePathname();
