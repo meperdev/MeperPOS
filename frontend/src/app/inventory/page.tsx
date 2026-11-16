@@ -40,6 +40,15 @@ import {
 import { ProductCard } from "@/components/products/ProductCard";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
+import {
+  COLLECTION_GRID_GAP,
+  MAX_COLLECTION_PAGE_SIZE,
+  MIN_VISIBLE_ROWS,
+  PRODUCT_CARD_MIN_ROW_HEIGHT,
+  PRODUCT_CARD_MIN_WIDTH,
+  remapPageForPageSize,
+} from "@/lib/collection-grid";
 import {
   Plus,
   AlertTriangle,
@@ -56,6 +65,9 @@ import { getApiErrorMessage } from "@/lib/api";
 import { cn, formatCurrency, resolveTaxFields, toFiniteNumber } from "@/lib/utils";
 import { isService, tracksStock } from "@/lib/product-type";
 import { hasAnyRole } from "@/lib/auth";
+
+/** Table view: a dense list keeps the page it always had. */
+const TABLE_PAGE_SIZE = 10;
 
 function InventoryContent() {
   const searchParams = useSearchParams();
@@ -131,6 +143,23 @@ function InventoryContent() {
     setLowStockFilter({ urlValue: urlLowStock, enabled: !showLowStockOnly });
   };
 
+  // Table view keeps a fixed page: rows are dense, so a viewport-sized page is
+  // not a win there. Card view asks the grid how many cards actually fit.
+  const {
+    pageSize: gridPageSize,
+    containerRef: gridRef,
+    footerRef,
+  } = useResponsivePageSize({
+    minCardWidth: PRODUCT_CARD_MIN_WIDTH,
+    gap: COLLECTION_GRID_GAP,
+    rowHeight: PRODUCT_CARD_MIN_ROW_HEIGHT,
+    minRows: MIN_VISIBLE_ROWS,
+    min: TABLE_PAGE_SIZE,
+    max: MAX_COLLECTION_PAGE_SIZE,
+    enabled: viewMode === "grid",
+  });
+  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+
   // Server-side pagination: every request — filtered or not — is bounded to
   // one page of rows. Low stock and alphabetical order are resolved by the
   // backend (findAll lowStock/orderBy) so pages stay coherent.
@@ -143,7 +172,7 @@ function InventoryContent() {
     refetch: refetchProducts,
   } = useProducts({
     page: urlFilterChanged ? 1 : page,
-    limit: 10,
+    limit: pageSize,
     search: search || undefined,
     categoryId: selectedCategory || undefined,
     status: statusFilter,
@@ -168,6 +197,19 @@ function InventoryContent() {
       setPage(1);
     }
   }, [meta, page]);
+
+  // A resize changes how many cards a page holds. Re-anchor on the item the user
+  // was already looking at instead of leaving them on a page that now starts
+  // somewhere else. One settle, one request: the debounced hook reports each
+  // size once.
+  const previousPageSize = useRef(pageSize);
+  useEffect(() => {
+    const previous = previousPageSize.current;
+    if (previous === pageSize) return;
+    previousPageSize.current = pageSize;
+    const nextPage = remapPageForPageSize({ page, previousSize: previous, nextSize: pageSize });
+    if (nextPage !== page) setPage(nextPage);
+  }, [pageSize, page]);
 
   // The low-stock decision is the server's (findAll also filters in the database), so the
   // badge count reads the server-computed flag instead of re-deriving the rule here.
@@ -624,6 +666,7 @@ function InventoryContent() {
             )}
             {viewMode === "grid" ? (
               <div
+                ref={gridRef}
                 className={cn(PRODUCT_GRID_CLASSES, "flex-1 content-start justify-items-center")}
                 aria-busy={isFetching}
               >
@@ -820,14 +863,20 @@ function InventoryContent() {
             )}
 
             {meta && (
-              <Pagination
-                currentPage={page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-                totalItems={meta.total}
-                itemLabel="producto"
-                isDisabled={isFetching}
-              />
+              // `contents` keeps the pager a direct flex child (its sticky
+              // bottom and mt-auto still work) while giving the sizing hook a
+              // box to measure the footer height from.
+              <div ref={footerRef} className="contents">
+                <Pagination
+                  currentPage={page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                  totalItems={meta.total}
+                  pageSize={pageSize}
+                  itemLabel="producto"
+                  isDisabled={isFetching}
+                />
+              </div>
             )}
           </>
         )}

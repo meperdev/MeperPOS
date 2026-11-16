@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useSuppliers,
@@ -35,6 +35,15 @@ import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
+import {
+  COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+  COLLECTION_CARD_MIN_WIDTH,
+  COLLECTION_GRID_GAP,
+  MAX_COLLECTION_PAGE_SIZE,
+  MIN_VISIBLE_ROWS,
+  remapPageForPageSize,
+} from "@/lib/collection-grid";
 import {
   Plus,
   Phone,
@@ -53,6 +62,9 @@ import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
+
+/** Table view: a dense list keeps the page it always had. */
+const TABLE_PAGE_SIZE = 10;
 
 function SupplierAvatar({ name }: { name: string }) {
   const initials = name
@@ -101,6 +113,34 @@ export default function SuppliersPage() {
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
   const [viewMode, setViewMode] = useEffectiveViewMode("suppliers");
 
+  // Card view fills the viewport: the grid reports how many cards fit, and the
+  // table keeps the fixed page it always had.
+  const {
+    pageSize: gridPageSize,
+    containerRef: gridRef,
+    footerRef,
+  } = useResponsivePageSize({
+    minCardWidth: COLLECTION_CARD_MIN_WIDTH,
+    gap: COLLECTION_GRID_GAP,
+    rowHeight: COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
+    minRows: MIN_VISIBLE_ROWS,
+    min: TABLE_PAGE_SIZE,
+    max: MAX_COLLECTION_PAGE_SIZE,
+    enabled: viewMode === "grid",
+  });
+  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+
+  // Re-anchor on the item the user was already looking at when a resize changes
+  // the page size, instead of leaving them on a page that now starts elsewhere.
+  const previousPageSize = useRef(pageSize);
+  useEffect(() => {
+    const previous = previousPageSize.current;
+    if (previous === pageSize) return;
+    previousPageSize.current = pageSize;
+    const nextPage = remapPageForPageSize({ page, previousSize: previous, nextSize: pageSize });
+    if (nextPage !== page) setPage(nextPage);
+  }, [pageSize, page]);
+
   const [showModal, setShowModal] = useState(false);
   const [showConfirmDeactivate, setShowConfirmDeactivate] = useState(false);
   const [supplierToDeactivate, setSupplierToDeactivate] = useState<string | null>(null);
@@ -125,7 +165,7 @@ export default function SuppliersPage() {
 
   const { data, isLoading } = useSuppliers({
     page,
-    limit: viewMode === "grid" ? 12 : 10,
+    limit: pageSize,
     search: search || undefined,
     status: statusFilter,
   });
@@ -311,7 +351,7 @@ export default function SuppliersPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
+              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
                 {suppliers.map((supplier) => {
                   const hasContactInfo = Boolean(
                     supplier.contactName ||
@@ -706,13 +746,18 @@ export default function SuppliersPage() {
             )}
 
             {meta && (
-              <Pagination
-                currentPage={page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-                totalItems={meta.total}
-                itemLabel="proveedor"
-              />
+              // `contents` keeps the pager a direct flex child (sticky bottom and
+              // mt-auto still work) while the sizing hook measures it.
+              <div ref={footerRef} className="contents">
+                <Pagination
+                  currentPage={page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                  totalItems={meta.total}
+                  pageSize={pageSize}
+                  itemLabel="proveedor"
+                />
+              </div>
             )}
           </>
         )}
