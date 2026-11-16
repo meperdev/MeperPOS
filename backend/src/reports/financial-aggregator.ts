@@ -37,6 +37,9 @@ interface ProductMargin {
 
 export interface FinancialReport {
   netIncome: string;
+  /** Net revenue of the items that carry a cost snapshot, i.e. the part of
+   * `netIncome` the margin breakdown can actually measure. */
+  attributableRevenue: string;
   tax: string;
   cogs: string;
   grossProfit: string;
@@ -141,6 +144,7 @@ export function aggregateFinancialSales(
 
   return {
     netIncome: money(netIncome),
+    attributableRevenue: money(attributableRevenue),
     tax: money(tax),
     cogs: money(cogs),
     grossProfit: money(grossProfit),
@@ -200,15 +204,20 @@ export function compareFinancialReports(
       const currentValue = new Prisma.Decimal(current[field]);
       const previousValue = new Prisma.Decimal(previous[field]);
       const absolute = currentValue.sub(previousValue);
+      // Growth is measured against the size of the previous value, never its
+      // sign: dividing by a negative baseline would invert every delta. Without
+      // a baseline (previous = 0) there is no percentage to report, and only two
+      // zero periods compare as 0% (S5.3).
+      const baseline = previousValue.abs();
       return [
         field,
         {
           absolute: money(absolute),
-          percentage: previousValue.isZero()
+          percentage: baseline.isZero()
             ? currentValue.isZero()
               ? 0
-              : 100
-            : absolute.div(previousValue).mul(100).toNumber(),
+              : null
+            : absolute.div(baseline).mul(100).toNumber(),
         },
       ];
     }),

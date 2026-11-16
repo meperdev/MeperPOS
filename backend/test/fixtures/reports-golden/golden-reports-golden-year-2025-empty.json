@@ -35,6 +35,7 @@
     "economic": {
       "current": {
         "netIncome": "0.00",
+        "attributableRevenue": "0.00",
         "tax": "0.00",
         "cogs": "0.00",
         "grossProfit": "0.00",
@@ -51,6 +52,7 @@
       },
       "previous": {
         "netIncome": "0.00",
+        "attributableRevenue": "0.00",
         "tax": "0.00",
         "cogs": "0.00",
         "grossProfit": "0.00",
@@ -137,6 +139,7 @@
       "financial": {
         "current": {
           "netIncome": "0.00",
+          "attributableRevenue": "0.00",
           "tax": "0.00",
           "cogs": "0.00",
           "grossProfit": "0.00",
@@ -153,6 +156,7 @@
         },
         "previous": {
           "netIncome": "0.00",
+          "attributableRevenue": "0.00",
           "tax": "0.00",
           "cogs": "0.00",
           "grossProfit": "0.00",

@@ -103,12 +103,15 @@ describe('ReportsService financial read model', () => {
     );
 
     expect(result.current.netIncome).toBe('100.00');
+    expect(result.current.attributableRevenue).toBe('100.00');
     expect(result.current.cogs).toBe('40.00');
     expect(result.current.netProfit).toBe('50.00');
     expect(result.previous.netIncome).toBe('0.00');
+    // A zero previous period is not a baseline: the delta reports no percentage
+    // instead of a fabricated 100% (S5.3).
     expect(result.deltas.netIncome).toEqual({
       absolute: '100.00',
-      percentage: 100,
+      percentage: null,
     });
     expect(result.current.netIncome).toEqual(expect.any(String));
   });
