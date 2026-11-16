@@ -32,7 +32,8 @@ export default function DashboardPage() {
         {/* Page header */}
         <PageHeader title={`Bienvenido, ${user?.name?.split(" ")[0] ?? ""}`} />
 
-        {/* 8 KPI cards — two rows of four (day KPIs + accumulated totals) */}
+        {/* Panel metrics: today's KPI row, the low-stock alert strip and the
+            all-time totals card */}
         <TodayStats />
 
         {/* Revenue piece — shared range selector over the category chart,

@@ -37,9 +37,9 @@ type ExpenseLike = Pick<Expense, "id" | "description" | "total" | "status"> & {
 };
 
 /**
- * Two compact operational panels side by side. Low-stock now lives on the
- * "Stock crítico" KPI card in `TodayStats` (it owns the Reordenar action), so
- * it is intentionally not duplicated here.
+ * Two compact operational panels side by side. Low stock now lives in the
+ * alert strip inside `TodayStats` (that strip is the Reordenar link), so it is
+ * intentionally not duplicated here.
  */
 export function AlertPanels() {
   const router = useRouter();
