@@ -6,6 +6,7 @@ import {
   parseBogotaStartOfDay,
 } from '../common/utils/bogota-date';
 import { isLowStock } from '../products/product-type.logic';
+import { OPEN_PURCHASE_ORDER_STATUSES } from '../purchase-orders/purchase-order-status';
 
 @Injectable()
 export class DailyReportService {
@@ -94,7 +95,7 @@ export class DailyReportService {
           tx.purchaseOrder.findMany({
             where: {
               organizationId,
-              status: { in: ['PENDING', 'PARTIAL_RECEIVED'] },
+              status: { in: [...OPEN_PURCHASE_ORDER_STATUSES] },
               supplier: { organizationId },
               createdAt: { lte: cutoff },
             },

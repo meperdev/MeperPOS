@@ -170,6 +170,37 @@ describe('PurchaseOrdersService', () => {
     expect(where.createdAt.lt.toISOString()).toBe('2026-04-20T00:00:00.000Z');
   });
 
+  it('filters the open orders, pending and partially received, with status OPEN', async () => {
+    prismaMock.purchaseOrder.findMany.mockResolvedValue([]);
+    prismaMock.purchaseOrder.count.mockResolvedValue(0);
+
+    await service.findAll('org-1', { status: 'OPEN' });
+
+    const where = prismaMock.purchaseOrder.findMany.mock.calls[0][0].where as {
+      status: unknown;
+    };
+    expect(where.status).toEqual({ in: ['PENDING', 'PARTIAL_RECEIVED'] });
+    expect(prismaMock.purchaseOrder.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ['PENDING', 'PARTIAL_RECEIVED'] },
+        }),
+      }),
+    );
+  });
+
+  it('keeps filtering a single status as before', async () => {
+    prismaMock.purchaseOrder.findMany.mockResolvedValue([]);
+    prismaMock.purchaseOrder.count.mockResolvedValue(0);
+
+    await service.findAll('org-1', { status: 'PENDING' });
+
+    const where = prismaMock.purchaseOrder.findMany.mock.calls[0][0].where as {
+      status: unknown;
+    };
+    expect(where.status).toBe('PENDING');
+  });
+
   it('accepts order-number searches with the OC- prefix', async () => {
     prismaMock.purchaseOrder.findMany.mockResolvedValue([]);
     prismaMock.purchaseOrder.count.mockResolvedValue(0);

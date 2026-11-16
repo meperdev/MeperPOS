@@ -108,6 +108,7 @@
     "economic": {
       "current": {
         "netIncome": "25000.00",
+        "attributableRevenue": "25000.00",
         "tax": "1520.00",
         "cogs": "14500.00",
         "grossProfit": "10500.00",
@@ -165,6 +166,7 @@
       },
       "previous": {
         "netIncome": "0.00",
+        "attributableRevenue": "0.00",
         "tax": "0.00",
         "cogs": "0.00",
         "grossProfit": "0.00",
@@ -182,23 +184,23 @@
       "deltas": {
         "netIncome": {
           "absolute": "25000.00",
-          "percentage": 100
+          "percentage": null
         },
         "cogs": {
           "absolute": "14500.00",
-          "percentage": 100
+          "percentage": null
         },
         "grossProfit": {
           "absolute": "10500.00",
-          "percentage": 100
+          "percentage": null
         },
         "operatingExpenses": {
           "absolute": "250000.00",
-          "percentage": 100
+          "percentage": null
         },
         "netProfit": {
           "absolute": "-239500.00",
-          "percentage": 100
+          "percentage": null
         }
       },
       "appliedRange": {
@@ -254,6 +256,7 @@
           }
         ]
       },
+      "netFlow": "-220480.00",
       "appliedRange": {
         "startDate": "2026-01-01",
         "endDate": "2026-12-31",
@@ -286,6 +289,7 @@
       "financial": {
         "current": {
           "netIncome": "25000.00",
+          "attributableRevenue": "25000.00",
           "tax": "1520.00",
           "cogs": "14500.00",
           "grossProfit": "10500.00",
@@ -343,6 +347,7 @@
         },
         "previous": {
           "netIncome": "0.00",
+          "attributableRevenue": "0.00",
           "tax": "0.00",
           "cogs": "0.00",
           "grossProfit": "0.00",
@@ -360,23 +365,23 @@
         "deltas": {
           "netIncome": {
             "absolute": "25000.00",
-            "percentage": 100
+            "percentage": null
           },
           "cogs": {
             "absolute": "14500.00",
-            "percentage": 100
+            "percentage": null
           },
           "grossProfit": {
             "absolute": "10500.00",
-            "percentage": 100
+            "percentage": null
           },
           "operatingExpenses": {
             "absolute": "250000.00",
-            "percentage": 100
+            "percentage": null
           },
           "netProfit": {
             "absolute": "-239500.00",
-            "percentage": 100
+            "percentage": null
           }
         },
         "appliedRange": {
@@ -432,6 +437,7 @@
             }
           ]
         },
+        "netFlow": "-220480.00",
         "appliedRange": {
           "startDate": "2026-01-01",
           "endDate": "2026-12-31",
@@ -615,12 +621,6 @@
           "customerName": "Golden Cliente Dos",
           "totalSales": 1,
           "totalRevenue": 9520
-        },
-        {
-          "customerId": null,
-          "customerName": "Guest",
-          "totalSales": 1,
-          "totalRevenue": 9000
         }
       ],
       "appliedRange": {

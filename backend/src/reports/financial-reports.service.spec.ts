@@ -103,12 +103,15 @@ describe('ReportsService financial read model', () => {
     );
 
     expect(result.current.netIncome).toBe('100.00');
+    expect(result.current.attributableRevenue).toBe('100.00');
     expect(result.current.cogs).toBe('40.00');
     expect(result.current.netProfit).toBe('50.00');
     expect(result.previous.netIncome).toBe('0.00');
+    // A zero previous period is not a baseline: the delta reports no percentage
+    // instead of a fabricated 100% (S5.3).
     expect(result.deltas.netIncome).toEqual({
       absolute: '100.00',
-      percentage: 100,
+      percentage: null,
     });
     expect(result.current.netIncome).toEqual(expect.any(String));
   });
@@ -273,6 +276,70 @@ describe('ReportsService financial read model', () => {
       { paymentMethod: 'CARD', total: '5.75', count: 1 },
     ]);
     expect(result.expensePayments.total).toBe('3.50');
+  });
+
+  it('returns the net cash flow as the difference between collections and expense payments', async () => {
+    prismaMock.payment.groupBy.mockResolvedValue([
+      {
+        method: 'CASH',
+        _sum: { amount: decimal('100.00') },
+        _count: { method: 1 },
+      },
+    ]);
+    prismaMock.expensePayment.findMany.mockResolvedValue([
+      {
+        amount: decimal('40.00'),
+        method: 'TRANSFER',
+        date: new Date('2026-03-12'),
+      },
+    ]);
+    const service = new ReportsService(prismaMock as never, cacheMock as never);
+
+    const result = await service.getCashFlow(
+      'org-a',
+      '2026-03-10',
+      '2026-03-12',
+    );
+
+    // The server owns the number the page used to subtract in the browser (S5.6).
+    expect(result.collections.total).toBe('100.00');
+    expect(result.expensePayments.total).toBe('40.00');
+    expect(result.netFlow).toBe('60.00');
+  });
+
+  it('reports a negative net cash flow and keeps the empty period at zero', async () => {
+    prismaMock.payment.groupBy.mockResolvedValue([
+      {
+        method: 'CASH',
+        _sum: { amount: decimal('10.00') },
+        _count: { method: 1 },
+      },
+    ]);
+    prismaMock.expensePayment.findMany.mockResolvedValue([
+      {
+        amount: decimal('25.00'),
+        method: 'CASH',
+        date: new Date('2026-03-12'),
+      },
+    ]);
+    const service = new ReportsService(prismaMock as never, cacheMock as never);
+
+    const negative = await service.getCashFlow(
+      'org-a',
+      '2026-03-10',
+      '2026-03-12',
+    );
+    expect(negative.netFlow).toBe('-15.00');
+
+    prismaMock.payment.groupBy.mockResolvedValue([]);
+    prismaMock.expensePayment.findMany.mockResolvedValue([]);
+
+    const empty = await service.getCashFlow(
+      'org-a',
+      '2026-03-10',
+      '2026-03-12',
+    );
+    expect(empty.netFlow).toBe('0.00');
   });
 
   it('returns current inventory valuation and period movement quantities separately', async () => {

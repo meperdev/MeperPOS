@@ -191,6 +191,11 @@ export interface FinancialProductMargin {
 
 export interface FinancialReport {
   netIncome: string;
+  /**
+   * Revenue of the items that carry a cost snapshot. The profit lines below are
+   * computed from it, so only this revenue reconciles with `cogs`.
+   */
+  attributableRevenue: string;
   tax: string;
   cogs: string;
   grossProfit: string;
@@ -217,6 +222,11 @@ export interface FinancialOverview {
 
 export interface CashFlowReport {
   accountingBasis: string;
+  /**
+   * Collections minus expense payments, computed by the server. Optional so a
+   * response from an older deployment still renders the two totals.
+   */
+  netFlow?: string;
   collections: {
     total: string;
     byPaymentMethod: Array<{ paymentMethod: string; total: string; count: number }>;
@@ -366,6 +376,98 @@ export interface DailySale {
   subtotal: number;
   tax: number;
   count: number;
+}
+
+/** `GET /reports/users/performance` — sales per seller for one period. */
+export interface UserPerformanceRow {
+  userId: string;
+  userName: string;
+  salesCount: number;
+  revenue: number;
+  avgTicket: number;
+  uniqueCustomers: number;
+  comparison?: {
+    revenuePct: number | null;
+    salesPct: number | null;
+  };
+}
+
+export interface UserPerformanceReport {
+  data: UserPerformanceRow[];
+  appliedRange: AppliedRange;
+  comparisonRange?: AppliedRange;
+}
+
+/**
+ * `GET /reports/daily-report` — the payload the intelligence daily report sends.
+ * Prisma `Decimal` values arrive as strings; the page formats them and never
+ * re-derives an amount.
+ */
+export interface DailyReportSaleItem {
+  quantity: number;
+  unitPrice: string;
+  total: string;
+  product: { name: string; sku: string } | null;
+}
+
+export interface DailyReportSale {
+  id: string;
+  saleNumber: number;
+  createdAt: string;
+  total: string;
+  customer: { name: string; documentNumber: string } | null;
+  items: DailyReportSaleItem[];
+}
+
+export interface DailyReportExpense {
+  id: string;
+  date: string;
+  description: string;
+  total: string;
+  status: string;
+  label: { name: string } | null;
+}
+
+export interface DailyReportLowStockProduct {
+  id: string;
+  name: string;
+  sku: string;
+  type: string;
+  tracksStock: boolean;
+  stock: number;
+  minStock: number;
+}
+
+export interface DailyReportPurchaseOrder {
+  id: string;
+  orderNumber: number;
+  status: string;
+  total: string;
+  supplier: { name: string } | null;
+}
+
+export interface DailyReportLoan {
+  id: string;
+  type: string;
+  amount: string;
+  balance: string;
+  dueAt: string | null;
+  reason: string;
+  customer: string | null;
+  supplier: string | null;
+}
+
+export interface DailyReport {
+  cutoff: string;
+  date: string;
+  timezone: string;
+  salesTotal: string;
+  expenseTotal: string;
+  sales: DailyReportSale[];
+  expenses: DailyReportExpense[];
+  lowStock: DailyReportLowStockProduct[];
+  purchaseOrders: DailyReportPurchaseOrder[];
+  loans: DailyReportLoan[];
 }
 
 export interface ImportStartResponse {
@@ -557,6 +659,9 @@ export type PurchaseOrderStatus =
   | "PARTIAL_RECEIVED"
   | "RECEIVED"
   | "CANCELLED";
+
+/** A list filter: one status, or `OPEN` for every order still waiting for goods. */
+export type PurchaseOrderStatusFilter = PurchaseOrderStatus | "OPEN";
 
 export interface Supplier {
   id: string;

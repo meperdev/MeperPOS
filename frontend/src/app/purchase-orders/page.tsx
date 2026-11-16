@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { usePurchaseOrders } from "@/hooks/usePurchaseOrders";
 import { useSuppliers } from "@/hooks/useSuppliers";
@@ -38,11 +38,12 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { hasAnyRole } from "@/lib/auth";
-import type { PurchaseOrderStatus } from "@/types";
+import type { PurchaseOrderStatusFilter } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 
-const statusOptions: Array<{ value: "" | PurchaseOrderStatus; label: string }> = [
+const statusOptions: Array<{ value: "" | PurchaseOrderStatusFilter; label: string }> = [
   { value: "", label: "Todos los estados" },
+  { value: "OPEN", label: "Por recibir" },
   { value: "DRAFT", label: "Borrador" },
   { value: "PENDING", label: "Pendiente" },
   { value: "PARTIAL_RECEIVED", label: "Recibida parcialmente" },
@@ -53,14 +54,27 @@ const statusOptions: Array<{ value: "" | PurchaseOrderStatus; label: string }> =
 /** Table view: a dense list keeps the page it always had. */
 const TABLE_PAGE_SIZE = 10;
 
-export default function PurchaseOrdersPage() {
+/**
+ * A link may open the list already filtered (`?status=OPEN` from the daily
+ * report). Only a status the select offers is honoured; anything else lists
+ * every order, as before.
+ */
+function statusFromUrl(value: string | null | undefined): "" | PurchaseOrderStatusFilter {
+  const match = statusOptions.find((option) => option.value !== "" && option.value === value);
+  return match ? match.value : "";
+}
+
+function PurchaseOrdersContent() {
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { user } = useAuth();
   const canManage = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
 
   const [q, setQ] = useState("");
   const [supplierId, setSupplierId] = useState("");
-  const [status, setStatus] = useState<"" | PurchaseOrderStatus>("");
+  const [status, setStatus] = useState<"" | PurchaseOrderStatusFilter>(() =>
+    statusFromUrl(searchParams?.get("status")),
+  );
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -175,7 +189,7 @@ export default function PurchaseOrdersPage() {
                 value={status}
                 onChange={(value) => {
                   setPage(1);
-                  setStatus(value as "" | PurchaseOrderStatus);
+                  setStatus(value as "" | PurchaseOrderStatusFilter);
                 }}
                 className="w-full sm:w-44"
                 placeholder="Todos los estados"
@@ -404,5 +418,15 @@ export default function PurchaseOrdersPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function PurchaseOrdersPage() {
+  return (
+    <Suspense
+      fallback={<TableSkeleton rows={6} columns={6} label="Cargando órdenes de compra…" />}
+    >
+      <PurchaseOrdersContent />
+    </Suspense>
   );
 }

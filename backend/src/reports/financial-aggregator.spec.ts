@@ -41,6 +41,7 @@ describe('financial aggregation', () => {
     );
 
     expect(result.netIncome).toBe('90.00');
+    expect(result.attributableRevenue).toBe('90.00');
     expect(result.cogs).toBe('60.00');
     expect(result.grossProfit).toBe('30.00');
     expect(result.netProfit).toBe('15.00');
@@ -144,7 +145,48 @@ describe('financial aggregation', () => {
     });
   });
 
-  it('returns absolute and percentage deltas with zero-safe comparisons', () => {
+  it('tells how much revenue the margin breakdown can attribute', () => {
+    const result = aggregateFinancialSales([
+      {
+        subtotal: decimal('100.00'),
+        discountAmount: decimal('20.00'),
+        taxAmount: decimal('0.00'),
+        items: [
+          {
+            quantity: 1,
+            subtotal: decimal('60.00'),
+            costPriceSnapshot: decimal('25.00'),
+            discountAmount: decimal('0.00'),
+            productId: 'known',
+            productName: 'Known',
+            categoryName: 'General',
+          },
+          {
+            quantity: 1,
+            subtotal: decimal('40.00'),
+            costPriceSnapshot: null,
+            discountAmount: decimal('0.00'),
+            productId: 'unknown',
+            productName: 'Unknown',
+            categoryName: 'General',
+          },
+        ],
+      },
+    ]);
+
+    // The snapshot-backed item carries 60 of the 100 billed before the 20
+    // discount, so 48 of the 80 net income is attributable.
+    expect(result.attributableRevenue).toBe('48.00');
+    expect(result.netIncome).toBe('80.00');
+    // The breakdown adds up on its own terms: gross profit is the attributable
+    // revenue minus the cogs it was measured against.
+    expect(result.grossProfit).toBe('23.00');
+    expect(
+      new Prisma.Decimal(result.grossProfit).add(result.cogs).toFixed(2),
+    ).toBe(result.attributableRevenue);
+  });
+
+  it('returns absolute deltas and no percentage against a zero baseline', () => {
     const current = aggregateFinancialSales([
       {
         subtotal: decimal('100.00'),
@@ -155,9 +197,45 @@ describe('financial aggregation', () => {
     ]);
     const previous = aggregateFinancialSales([]);
 
+    // There is no baseline to divide by, so the report says "no percentage"
+    // instead of inventing a 100% growth (S5.3).
     expect(compareFinancialReports(current, previous).netIncome).toEqual({
       absolute: '100.00',
-      percentage: 100,
+      percentage: null,
+    });
+  });
+
+  it('keeps a zero percentage when both periods are zero', () => {
+    const empty = aggregateFinancialSales([]);
+
+    expect(compareFinancialReports(empty, empty).netIncome).toEqual({
+      absolute: '0.00',
+      percentage: 0,
+    });
+  });
+
+  it('divides by the absolute previous value so a negative baseline keeps the sign', () => {
+    const current = aggregateFinancialSales([
+      {
+        subtotal: decimal('50.00'),
+        discountAmount: decimal('0.00'),
+        taxAmount: decimal('0.00'),
+        items: [],
+      },
+    ]);
+    const previous = aggregateFinancialSales([
+      {
+        subtotal: decimal('-100.00'),
+        discountAmount: decimal('0.00'),
+        taxAmount: decimal('0.00'),
+        items: [],
+      },
+    ]);
+
+    // From -100 to 50 is a 150% improvement, not a -150% collapse.
+    expect(compareFinancialReports(current, previous).netIncome).toEqual({
+      absolute: '150.00',
+      percentage: 150,
     });
   });
 });
