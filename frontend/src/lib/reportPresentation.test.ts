@@ -73,7 +73,7 @@ describe("daily report presentation", () => {
     expect(items.map((item) => item.key)).toEqual(["lowStock", "loans"]);
     expect(items[0]).toMatchObject({
       label: "Productos con stock bajo",
-      href: "/inventory",
+      href: "/inventory?filter=lowStock",
       count: 7,
       remaining: 4,
     });
@@ -89,6 +89,28 @@ describe("daily report presentation", () => {
       remaining: 0,
     });
     expect(items[1].sample[0]).toContain("Cliente Uno");
+  });
+
+  it("links pending purchase orders to the list filtered to open orders", () => {
+    const [item] = dailyReportPendingItems(
+      dailyReportSlices({
+        purchaseOrders: [
+          {
+            id: "po-1",
+            orderNumber: 12,
+            status: "PARTIAL_RECEIVED",
+            total: "90000.00",
+            supplier: { name: "Proveedor Uno" },
+          },
+        ] as DailyReportSlices["purchaseOrders"],
+      }),
+    );
+
+    expect(item).toMatchObject({
+      key: "purchaseOrders",
+      href: "/purchase-orders?status=OPEN",
+      count: 1,
+    });
   });
 
   it("collapses a day without pending work into no rows at all", () => {

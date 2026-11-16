@@ -99,7 +99,7 @@ describe("Hoy (daily report)", () => {
     expect(within(lowStockRow!).getByText("7")).toBeInTheDocument();
     expect(within(lowStockRow!).getByRole("link", { name: /Ver/ })).toHaveAttribute(
       "href",
-      "/inventory",
+      "/inventory?filter=lowStock",
     );
     expect(within(lowStockRow!).getByText(/\+4 más/)).toBeInTheDocument();
 

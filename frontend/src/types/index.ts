@@ -660,6 +660,9 @@ export type PurchaseOrderStatus =
   | "RECEIVED"
   | "CANCELLED";
 
+/** A list filter: one status, or `OPEN` for every order still waiting for goods. */
+export type PurchaseOrderStatusFilter = PurchaseOrderStatus | "OPEN";
+
 export interface Supplier {
   id: string;
   name: string;

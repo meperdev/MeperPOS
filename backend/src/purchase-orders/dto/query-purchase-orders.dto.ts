@@ -10,6 +10,19 @@ import {
   IsDateString,
 } from 'class-validator';
 
+/** One status, or `OPEN` for every order still waiting for goods. */
+const PURCHASE_ORDER_STATUS_FILTERS = [
+  'DRAFT',
+  'PENDING',
+  'PARTIAL_RECEIVED',
+  'RECEIVED',
+  'CANCELLED',
+  'OPEN',
+] as const;
+
+export type PurchaseOrderStatusFilter =
+  (typeof PURCHASE_ORDER_STATUS_FILTERS)[number];
+
 export class QueryPurchaseOrdersDto {
   @ApiProperty({ required: false, example: 1 })
   @IsOptional()
@@ -32,11 +45,13 @@ export class QueryPurchaseOrdersDto {
 
   @ApiProperty({
     required: false,
-    enum: ['DRAFT', 'PENDING', 'PARTIAL_RECEIVED', 'RECEIVED', 'CANCELLED'],
+    enum: PURCHASE_ORDER_STATUS_FILTERS,
+    description:
+      'A single status, or OPEN for every order still waiting for goods (PENDING and PARTIAL_RECEIVED).',
   })
   @IsOptional()
-  @IsEnum(['DRAFT', 'PENDING', 'PARTIAL_RECEIVED', 'RECEIVED', 'CANCELLED'])
-  status?: 'DRAFT' | 'PENDING' | 'PARTIAL_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+  @IsEnum(PURCHASE_ORDER_STATUS_FILTERS)
+  status?: PurchaseOrderStatusFilter;
 
   @ApiProperty({ required: false })
   @IsOptional()

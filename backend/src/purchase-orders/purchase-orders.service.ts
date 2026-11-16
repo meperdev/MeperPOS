@@ -15,6 +15,7 @@ import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 import { CancelPurchaseOrderDto } from './dto/cancel-purchase-order.dto';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
+import { OPEN_PURCHASE_ORDER_STATUSES } from './purchase-order-status';
 import { SequenceService } from '../common/sequences/sequence.service';
 import { tracksStock } from '../products/product-type.logic';
 
@@ -226,7 +227,11 @@ export class PurchaseOrdersService {
     };
 
     if (query.supplierId) where.supplierId = query.supplierId;
-    if (query.status) where.status = query.status;
+    if (query.status === 'OPEN') {
+      where.status = { in: [...OPEN_PURCHASE_ORDER_STATUSES] };
+    } else if (query.status) {
+      where.status = query.status;
+    }
 
     if (query.dateFrom || query.dateTo) {
       const createdAt: Record<string, Date> = {};

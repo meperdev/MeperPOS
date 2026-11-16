@@ -99,13 +99,13 @@ export function dailyReportPendingItems(
     build(
       "lowStock",
       "Productos con stock bajo",
-      "/inventory",
+      "/inventory?filter=lowStock",
       report.lowStock.map((product) => `${product.name} · ${product.stock} en stock`),
     ),
     build(
       "purchaseOrders",
       "Órdenes de compra pendientes",
-      "/purchase-orders",
+      "/purchase-orders?status=OPEN",
       report.purchaseOrders.map(
         (order) => `${order.supplier?.name ?? "Sin proveedor"} · #${order.orderNumber}`,
       ),

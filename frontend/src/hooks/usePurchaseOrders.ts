@@ -5,14 +5,14 @@ import { api } from "@/lib/api";
 import type {
   PurchaseOrder,
   PaginatedResponse,
-  PurchaseOrderStatus,
+  PurchaseOrderStatusFilter,
 } from "@/types";
 
 export interface PurchaseOrderFilters {
   page?: number;
   limit?: number;
   supplierId?: string;
-  status?: PurchaseOrderStatus | "";
+  status?: PurchaseOrderStatusFilter | "";
   dateFrom?: string;
   dateTo?: string;
   q?: string;

@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-const { authState } = vi.hoisted(() => ({ authState: { role: "ADMIN" } }));
+const { authState, urlState, usePurchaseOrdersMock } = vi.hoisted(() => ({
+  authState: { role: "ADMIN" },
+  urlState: { params: new URLSearchParams() },
+  usePurchaseOrdersMock: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => urlState.params,
 }));
 
 vi.mock("next/link", () => ({
@@ -25,13 +30,16 @@ vi.mock("@/components/ui/Select", () => ({
 }));
 
 vi.mock("@/hooks/usePurchaseOrders", () => ({
-  usePurchaseOrders: () => ({
-    data: {
-      data: [],
-      meta: { total: 0, page: 1, limit: 15, totalPages: 1 },
-    },
-    isLoading: false,
-  }),
+  usePurchaseOrders: (params: unknown) => {
+    usePurchaseOrdersMock(params);
+    return {
+      data: {
+        data: [],
+        meta: { total: 0, page: 1, limit: 15, totalPages: 1 },
+      },
+      isLoading: false,
+    };
+  },
 }));
 
 vi.mock("@/hooks/useSuppliers", () => ({
@@ -112,5 +120,37 @@ describe("Purchase orders date filters on narrow screens", () => {
     for (const input of [from, to]) {
       expect(input).toHaveClass("min-w-0", "w-full");
     }
+  });
+});
+
+describe("Purchase orders status filter from the URL", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    urlState.params = new URLSearchParams();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("opens already filtered to the open orders when the link asks for status=OPEN", () => {
+    urlState.params = new URLSearchParams("status=OPEN");
+
+    render(<PurchaseOrdersPage />);
+
+    expect(usePurchaseOrdersMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "OPEN", page: 1 }),
+    );
+    expect(screen.getByRole("button", { name: /limpiar/i })).toBeTruthy();
+  });
+
+  it("ignores an unknown status in the URL and lists every order as before", () => {
+    urlState.params = new URLSearchParams("status=NOPE");
+
+    render(<PurchaseOrdersPage />);
+
+    expect(usePurchaseOrdersMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: undefined }),
+    );
   });
 });
