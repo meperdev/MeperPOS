@@ -63,7 +63,11 @@ describe("delivery groups", () => {
 
   it("does not merge a different reason or status", () => {
     const groups = groupDeliveries([
-      delivery({ id: "c", status: "FAILED", failureReason: "provider_rejected" }),
+      delivery({
+        id: "c",
+        status: "FAILED",
+        failureReason: "provider_rejected",
+      }),
       delivery({ id: "b", status: "FAILED", failureReason: "no_recipient" }),
       delivery({ id: "a", status: "SENT", failureReason: null }),
     ]);
@@ -128,5 +132,57 @@ describe("delivery groups", () => {
 
   it("has nothing to show for an empty history", () => {
     expect(groupDeliveries([])).toEqual([]);
+  });
+  it("never puts a sent attempt inside a failure group and keeps the newest group first", () => {
+    const groups = groupDeliveries([
+      delivery({
+        id: "1",
+        reportDate: "2026-03-06T00:00:00.000Z",
+        failureReason: "send_failed",
+      }),
+      delivery({
+        id: "2",
+        reportDate: "2026-03-05T00:00:00.000Z",
+        failureReason: "send_failed",
+      }),
+      delivery({
+        id: "3",
+        reportDate: "2026-03-04T00:00:00.000Z",
+        kind: "ON_DEMAND",
+        status: "SENT",
+        failureReason: null,
+      }),
+      delivery({
+        id: "4",
+        reportDate: "2026-03-03T00:00:00.000Z",
+        failureReason: "provider_rejected",
+      }),
+      delivery({
+        id: "5",
+        reportDate: "2026-03-02T00:00:00.000Z",
+        failureReason: "provider_rejected",
+      }),
+      delivery({
+        id: "6",
+        reportDate: "2026-03-02T00:00:00.000Z",
+        status: "SENT",
+        failureReason: null,
+      }),
+    ]);
+
+    for (const group of groups) {
+      for (const member of group.members)
+        expect(member.status).toBe(group.status);
+    }
+    expect(groups.flatMap((g) => g.members.map((m) => m.id)).sort()).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+    ]);
+    expect(groups.map((g) => g.members.length)).toEqual([2, 1, 2, 1]);
+    expect(groupHeadline(groups[0])).toBe("Falló 2 días seguidos");
   });
 });

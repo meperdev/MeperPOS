@@ -243,4 +243,95 @@ describe('WhatsApp automatic report (real PostgreSQL)', () => {
     ]);
     expect(kinds.filter((row) => row.status === 'SENT')).toHaveLength(2);
   });
+  it('sends exactly once when a day first skipped later gets a number and runs race', async () => {
+    await identitiesFor(false);
+    await expect(service.scheduled(connectionId, DAY)).resolves.toEqual({
+      status: 'no_identity',
+    });
+    expect(
+      await prisma.whatsAppDelivery.count({ where: { connectionId } }),
+    ).toBe(0);
+    expect(sendFile).not.toHaveBeenCalled();
+
+    await identitiesFor(true);
+    const outcomes = await Promise.all([
+      service.scheduled(connectionId, DAY),
+      service.scheduled(connectionId, DAY),
+      service.scheduled(connectionId, DAY),
+    ]);
+    expect(outcomes.filter((o) => o.status === 'sent')).toHaveLength(1);
+    expect(
+      outcomes.filter((o) => o.status === 'already_attempted'),
+    ).toHaveLength(2);
+    expect(sendFile).toHaveBeenCalledTimes(1);
+    expect(
+      await prisma.whatsAppDelivery.count({ where: { connectionId } }),
+    ).toBe(1);
+  });
+
+  it('leaves every stored row unchanged while paused', async () => {
+    sendFile.mockRejectedValue(new Error('provider down'));
+    for (let i = 0; i < MAX_CONSECUTIVE_SCHEDULED_FAILURES; i += 1) {
+      await service.scheduled(connectionId, dayAfter(DAY, i));
+    }
+    const snapshot = async () =>
+      JSON.stringify(
+        await prisma.whatsAppDelivery.findMany({
+          where: { connectionId },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }),
+      );
+    const before = await snapshot();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(
+        service.scheduled(
+          connectionId,
+          dayAfter(DAY, MAX_CONSECUTIVE_SCHEDULED_FAILURES),
+        ),
+      ).resolves.toEqual({ status: 'paused' });
+    }
+    expect(await snapshot()).toBe(before);
+    expect(sendFile).toHaveBeenCalledTimes(MAX_CONSECUTIVE_SCHEDULED_FAILURES);
+  });
+
+  it('does not resume on a failed manual send nor on a success older than the failures', async () => {
+    sendFile.mockRejectedValue(new Error('provider down'));
+    for (let i = 0; i < MAX_CONSECUTIVE_SCHEDULED_FAILURES; i += 1) {
+      await service.scheduled(connectionId, dayAfter(DAY, i));
+    }
+    await expect(
+      service.onDemand({ organizationId, phone }),
+    ).resolves.toMatchObject({ status: 'failed' });
+    await expect(
+      service.scheduled(
+        connectionId,
+        dayAfter(DAY, MAX_CONSECUTIVE_SCHEDULED_FAILURES),
+      ),
+    ).resolves.toEqual({ status: 'paused' });
+
+    await prisma.whatsAppDelivery.deleteMany({ where: { connectionId } });
+    const old = new Date('2026-01-01T00:00:00.000Z');
+    const sent = await prisma.whatsAppDelivery.create({
+      data: {
+        connectionId,
+        kind: 'ON_DEMAND',
+        reportDate: DAY,
+        status: 'SENT',
+        sentAt: old,
+      },
+    });
+    await prisma.whatsAppDelivery.update({
+      where: { id: sent.id },
+      data: { createdAt: old },
+    });
+    for (let i = 0; i < MAX_CONSECUTIVE_SCHEDULED_FAILURES; i += 1) {
+      await service.scheduled(connectionId, dayAfter(DAY, i));
+    }
+    await expect(
+      service.scheduled(
+        connectionId,
+        dayAfter(DAY, MAX_CONSECUTIVE_SCHEDULED_FAILURES),
+      ),
+    ).resolves.toEqual({ status: 'paused' });
+  });
 });
