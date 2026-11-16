@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { Select } from "@/components/ui/Select";
 
 const baseOptions = [
@@ -199,8 +199,7 @@ describe("Select", () => {
       spy.mockRestore();
     });
 
-    it("uses the 44px touch row height below sm, so a menu that fits at 36px opens upwards", () => {
-      // 170px below the trigger: 4 rows at 36px + padding (156) fits, at 44px (188) does not.
+    it("opens the list as a sheet below sm, so no dropdown estimate is needed there", () => {
       rects.set("scroller", { top: 0, bottom: 400 });
       rects.set("select", { top: 190, bottom: 230 });
       const spy = mockRects();
@@ -213,8 +212,9 @@ describe("Select", () => {
 
       fireEvent.click(screen.getByRole("button"));
 
-      const menu = screen.getByText("Opción A").closest(".absolute")!;
-      expect(menu.className).toContain("bottom-full");
+      // No absolute menu: the options live in their own bottom sheet.
+      expect(screen.getByText("Opción A").closest(".absolute")).toBeNull();
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
       expect(matchMedia).toHaveBeenCalledWith("(min-width: 640px)");
       spy.mockRestore();
       restoreMatchMedia();
@@ -300,6 +300,84 @@ describe("Select", () => {
 
     fireEvent.click(screen.getByRole("button"));
     fireEvent.click(screen.getByRole("option", { name: "Opción B" }));
+
+    expect(onChange).toHaveBeenCalledWith("b");
+  });
+});
+
+describe("Select bottom sheet below sm", () => {
+  afterEach(restoreMatchMedia);
+
+  it("renders the options in a bottom sheet titled by the label", () => {
+    stubSmBreakpoint(false);
+    render(<Select value="" label="Categoría" options={baseOptions} onChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Categoría" }));
+
+    const sheet = screen.getByRole("dialog", { name: "Categoría" });
+    expect(sheet.closest("[data-select-sheet]")).not.toBeNull();
+    expect(sheet.className).toContain("rounded-t-2xl");
+    expect(sheet.className).toContain("pb-[var(--safe-bottom)]");
+
+    const row = within(sheet).getByRole("option", { name: "Opción A" });
+    expect(row.className).toContain("min-h-11");
+    expect(row).toHaveAttribute("aria-selected", "false");
+    expect(within(sheet).getByRole("listbox")).toBeInTheDocument();
+  });
+
+  it("reports the chosen value and closes the sheet", () => {
+    stubSmBreakpoint(false);
+    const onChange = vi.fn();
+    render(<Select value="" label="Categoría" options={baseOptions} onChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Categoría" }));
+    fireEvent.click(screen.getByRole("option", { name: "Opción B" }));
+
+    expect(onChange).toHaveBeenCalledWith("b");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("focuses the current option and returns focus to the trigger on Escape", () => {
+    stubSmBreakpoint(false);
+    render(<Select value="b" label="Categoría" options={baseOptions} onChange={vi.fn()} />);
+
+    const trigger = screen.getByRole("button", { name: "Categoría" });
+    fireEvent.click(trigger);
+
+    const option = screen.getByRole("option", { name: "Opción B" });
+    expect(option).toHaveFocus();
+    expect(fireEvent.keyDown(option, { key: "Escape" })).toBe(false);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("closes the sheet when the overlay is tapped", () => {
+    stubSmBreakpoint(false);
+    render(<Select value="" label="Categoría" options={baseOptions} onChange={vi.fn()} />);
+
+    const trigger = screen.getByRole("button", { name: "Categoría" });
+    fireEvent.click(trigger);
+
+    fireEvent.click(document.querySelector("[data-select-sheet-overlay]")!);
+
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("keeps the hidden native select driving the same value while the sheet is open", () => {
+    stubSmBreakpoint(false);
+    const onChange = vi.fn();
+    render(<Select value="a" label="Método" name="method" options={baseOptions} onChange={onChange} />);
+
+    const trigger = screen.getByRole("button", { name: "Método" });
+    fireEvent.click(trigger);
+
+    const select = trigger.parentElement!.querySelector("select")!;
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    expect(select).toHaveValue("a");
+    expect(select).toHaveAttribute("aria-hidden", "true");
+
+    fireEvent.change(select, { target: { value: "b" } });
 
     expect(onChange).toHaveBeenCalledWith("b");
   });
