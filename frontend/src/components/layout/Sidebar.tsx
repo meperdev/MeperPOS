@@ -30,7 +30,6 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { cn, safeGetItem, safeSetItem } from "@/lib/utils";
 import { APP_NAME, RAIL_FLYOUT_GAP } from "@/lib/constants";
 import { hasAnyRole } from "@/lib/auth";
-import { startRouteTransition, navigateWithRouteTransition } from "@/lib/viewTransition";
 import {
   filterNavItems,
   isNavItemActive,
@@ -250,7 +249,7 @@ export function Sidebar() {
       icon: <UserIcon className="h-3.5 w-3.5" aria-hidden="true" />,
       onSelect: () => {
         closeMobileMenu();
-        startRouteTransition(() => router.push("/profile"));
+        router.push("/profile");
       },
     },
     ...(canSeeSettings
@@ -260,7 +259,7 @@ export function Sidebar() {
             icon: <Settings className="h-3.5 w-3.5" aria-hidden="true" />,
             onSelect: () => {
               closeMobileMenu();
-              startRouteTransition(() => router.push("/settings"));
+              router.push("/settings");
             },
           } satisfies RowActionItem,
         ]
@@ -396,14 +395,9 @@ export function Sidebar() {
                     <Link
                       key={item.href}
                       href={item.href}
-                      onClick={(event) => {
+                      onClick={() => {
                         closeMobileMenu();
                         setHoveredTooltip(null);
-                        // Already here: the drawer closes and nothing fades.
-                        if (isActive) return;
-                        navigateWithRouteTransition(event, () =>
-                          router.push(item.href),
-                        );
                       }}
                       onMouseEnter={(e) => {
                         if (isCollapsed) {
@@ -631,8 +625,6 @@ export function Sidebar() {
           isCollapsed ? "lg:w-[72px]" : "lg:w-[320px]",
           "w-[280px] sm:w-[320px]",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
-          // Its own snapshot: the rail keeps its place while the page fades.
-          "[view-transition-name:app-sidebar]",
         )}
       >
         <div className="flex flex-col flex-1 min-h-0">

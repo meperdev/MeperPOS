@@ -312,37 +312,6 @@ h4 {
     animation: toast-progress linear both;
 }
 
-/* ─── Route transitions ────────────────────────────────── */
-/*
- * A route change cross-fades the page and nothing else: the two live images of
- * the root snapshot. Named chrome (the sidebar, the mobile top bar and the tab
- * bar, named where they are rendered) is lifted out of that snapshot, so the
- * bars hold still while the content underneath changes — the difference
- * between an app swapping a screen and a website blinking.
- *
- * Opacity only, 160ms: D6 asks for restraint, and a slide would fight the fixed
- * bars. `viewTransition.ts` decides whether the transition runs at all.
- */
-::view-transition-old(root) {
-    animation: route-fade-out 160ms ease-out both;
-}
-
-::view-transition-new(root) {
-    animation: route-fade-in 160ms ease-out both;
-}
-
-@keyframes route-fade-out {
-    to {
-        opacity: 0;
-    }
-}
-
-@keyframes route-fade-in {
-    from {
-        opacity: 0;
-    }
-}
-
 /* Motion is decoration: without it, content must still be fully visible. */
 @media (prefers-reduced-motion: reduce) {
     .animate-fade-in-up,
@@ -372,13 +341,6 @@ h4 {
     *::after {
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
-    }
-
-    /* A route change lands with no cross-fade at all. */
-    ::view-transition-group(*),
-    ::view-transition-old(*),
-    ::view-transition-new(*) {
-        animation: none !important;
     }
 }
 

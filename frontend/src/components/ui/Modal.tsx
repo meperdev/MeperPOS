@@ -53,8 +53,9 @@ export function Modal({
   // Below `sm` the dialog becomes a bottom sheet that owns the bottom edge.
   const sheet = useBelowSmViewport();
   // iOS keeps the layout viewport whole and shrinks the visual one, so the
-  // sheet has to lift itself by whatever the keyboard covers.
-  const keyboardInset = useVisualViewport();
+  // sheet has to lift itself by whatever the keyboard covers. A closed modal
+  // renders nothing, so it also listens to nothing.
+  const keyboardInset = useVisualViewport(isOpen);
   const drag = useRef<{ startY: number; startedAt: number } | null>(null);
 
   useEffect(() => {

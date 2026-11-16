@@ -8,11 +8,12 @@ import { SidebarProvider } from "@/contexts/SidebarContext";
 import { closeMobileDrawer } from "./mobile-drawer";
 
 const useAuthMock = vi.fn();
+const routerPush = vi.fn();
 let currentPathname = "/dashboard";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => currentPathname,
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push: routerPush, replace: vi.fn(), back: vi.fn() }),
 }));
 
 vi.mock("next/link", () => ({
@@ -241,12 +242,43 @@ describe("MobileTabBar placement", () => {
     }
   });
 
-  it("keeps its own snapshot, so a route change never fades the bar", () => {
-    setUser("OWNER");
-    render(<MobileTabBar />);
+});
 
-    expect(tabBar().className).toContain(
-      "[view-transition-name:mobile-tab-bar]",
-    );
+describe("MobileTabBar navigates with plain links", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, "startViewTransition");
+  });
+
+  it("leaves the click to the link: no preventDefault and no view transition", async () => {
+    setUser("OWNER");
+    const startViewTransition = vi.fn();
+    Object.defineProperty(document, "startViewTransition", {
+      value: startViewTransition,
+      configurable: true,
+      writable: true,
+    });
+    // The document sits above React's root, so it sees the event after every
+    // handler ran: whatever it reports is the final default-prevention state.
+    const defaults: boolean[] = [];
+    const record = (event: MouseEvent) => defaults.push(event.defaultPrevented);
+    document.addEventListener("click", record);
+
+    render(<MobileTabBar />);
+    const pos = within(tabBar()).getByRole("link", { name: "POS" });
+
+    try {
+      await userEvent.click(pos);
+    } finally {
+      document.removeEventListener("click", record);
+    }
+
+    // The section route is the link's own href, so Next's client navigation and
+    // its prefetch are what move the user.
+    expect(pos).toHaveAttribute("href", "/pos");
+    // A navigation the shell takes over freezes the page until the route
+    // commits: the phone cost this test exists to keep out.
+    expect(defaults).toEqual([false]);
+    expect(startViewTransition).not.toHaveBeenCalled();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 });
