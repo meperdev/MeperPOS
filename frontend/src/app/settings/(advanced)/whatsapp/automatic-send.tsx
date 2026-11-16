@@ -18,12 +18,23 @@ const STATE_COPY: Record<
   paused_failures: { label: "Pausado por fallos", dot: "bg-danger" },
 };
 
+const bogotaRunTime = new Intl.DateTimeFormat("es-CO", {
+  timeZone: "America/Bogota",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+/** The hour the server schedules the run at, so the copy cannot drift from it. */
+function runTimeOf(nextRunAt: string): string {
+  return bogotaRunTime.format(new Date(nextRunAt)).replace(/\s/g, " ");
+}
+
 /** The line under the state: what it runs on, or why it is not running. */
 function detailOf(state: WhatsAppAutomaticSend): string {
   switch (state.state) {
     case "active":
-      // The schedule is fixed; the date is what changes, in the reader's own clock.
-      return `Todos los días a las 8:00 p. m. · próximo envío ${formatDate(state.nextRunAt)}`;
+      return `Todos los días a las ${runTimeOf(state.nextRunAt)} · próximo envío ${formatDate(state.nextRunAt)}`;
     case "paused_no_recipient":
       return "No hay un número verificado que reciba el reporte.";
     case "paused_failures":

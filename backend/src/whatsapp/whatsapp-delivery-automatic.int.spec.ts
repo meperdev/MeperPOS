@@ -231,7 +231,7 @@ describe('WhatsApp automatic report (real PostgreSQL)', () => {
     // In the order the attempts happened, which is the story the streak tells.
     const kinds = await prisma.whatsAppDelivery.findMany({
       where: { connectionId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { kind: true, status: true },
     });
     expect(kinds.map((row) => row.kind)).toEqual([

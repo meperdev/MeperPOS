@@ -44,6 +44,12 @@ describe("automatic send status", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("takes the schedule hour from the server's next run, not from a fixed string", () => {
+    renderCard({ ...ACTIVE, nextRunAt: "2026-11-17T02:00:00.000Z" });
+
+    expect(screen.getByText(/Todos los días a las 9:00 p\. m\./)).toBeInTheDocument();
+  });
+
   it("marks the active dot as success, not as decoration only", () => {
     renderCard(ACTIVE);
 

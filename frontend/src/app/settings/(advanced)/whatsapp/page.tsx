@@ -56,6 +56,9 @@ import { AutomaticSendStatus } from "./automatic-send";
 /** How often the link list refreshes while a code is waiting to be sent. */
 const IDENTITY_POLL_MS = 5_000;
 
+/** How often the automatic-send state is refreshed while the page is open. */
+const AUTOMATIC_STATE_POLL_MS = 5 * 60_000;
+
 /** How many grouped rows the history shows before offering to open the rest. */
 const HISTORY_GROUPS_LIMIT = 8;
 
@@ -204,10 +207,11 @@ function WhatsAppSettings() {
 
   const deliveriesQuery = useWhatsAppDeliveries();
   const sendReport = useWhatsAppSendReport();
-  // Polled only while a code is on screen: a number verified from a phone is
-  // what turns "pausado sin número" back into "activo".
+  // The state changes on the server clock (the 20:00 run can pause it), so it is
+  // always refreshed; faster while a code is on screen, because a number verified
+  // from a phone is what turns "pausado sin número" back into "activo".
   const automaticQuery = useWhatsAppAutomaticSend(
-    linkCode ? IDENTITY_POLL_MS : undefined,
+    linkCode ? IDENTITY_POLL_MS : AUTOMATIC_STATE_POLL_MS,
   );
   const [showAllGroups, setShowAllGroups] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(

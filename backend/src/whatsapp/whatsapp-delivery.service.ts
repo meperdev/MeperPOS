@@ -203,7 +203,10 @@ export type WhatsAppAutomaticSendState =
 
 export interface WhatsAppAutomaticSend {
   state: WhatsAppAutomaticSendState;
-  /** Failed scheduled days the pause counts; 0 when the send is active. */
+  /**
+   * Failed scheduled days in the current streak (no success since). It can be
+   * 1 or 2 while the send is still active; it pauses at the limit.
+   */
   consecutiveFailures: number;
   /** ISO instant the streak reached the limit, or null when not paused. */
   pausedSince: string | null;
