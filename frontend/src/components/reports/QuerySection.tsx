@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/TableSkeleton";
+import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api";
 import { SectionShell } from "./SectionShell";
 
@@ -25,9 +26,67 @@ export function BlockNote({ children }: { children: ReactNode }) {
 }
 
 /**
- * Section frame plus the four states every analysis block repeats: skeleton,
- * error with retry, a single line when there is nothing worth a table, and the
- * content itself.
+ * The four states every analysis block repeats — skeleton, error with retry, a
+ * single line when there is nothing worth a table, and the content itself —
+ * without the section frame. A block that shares its card with another query
+ * renders this twice instead of nesting two sections.
+ */
+export function QueryBody<T>({
+  query,
+  loadingLabel,
+  loadingRows = 5,
+  loadingColumns = 3,
+  errorMessage,
+  isEmpty,
+  emptyText,
+  className,
+  children,
+}: {
+  query: ReportQuery<T>;
+  loadingLabel: string;
+  loadingRows?: number;
+  loadingColumns?: number;
+  errorMessage: string;
+  isEmpty: boolean;
+  emptyText: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  if (query.isLoading) {
+    return (
+      <div aria-busy="true" className={className}>
+        <TableSkeleton
+          rows={loadingRows}
+          columns={loadingColumns}
+          label={loadingLabel}
+          className="border-0 bg-transparent"
+        />
+      </div>
+    );
+  }
+
+  if (query.error) {
+    return (
+      <ErrorState
+        message={getApiErrorMessage(query.error, errorMessage)}
+        onRetry={() => query.refetch()}
+        retryLabel="Reintentar"
+        className={cn("min-h-[120px]", className)}
+      />
+    );
+  }
+
+  if (isEmpty) {
+    const note = <BlockNote>{emptyText}</BlockNote>;
+    return className ? <div className={className}>{note}</div> : note;
+  }
+
+  return className ? <div className={className}>{children}</div> : <>{children}</>;
+}
+
+/**
+ * Section frame plus the four states of a single query. The frame accepts a
+ * `className` so a page can stretch it to the height of the card beside it.
  */
 export function QuerySection<T>({
   query,
@@ -40,6 +99,7 @@ export function QuerySection<T>({
   errorMessage,
   isEmpty,
   emptyText,
+  className,
   bodyClassName,
   children,
 }: {
@@ -53,32 +113,29 @@ export function QuerySection<T>({
   errorMessage: string;
   isEmpty: boolean;
   emptyText: string;
+  className?: string;
   bodyClassName?: string;
   children: ReactNode;
 }) {
   return (
-    <SectionShell title={title} icon={icon} description={description} bodyClassName={bodyClassName}>
-      {query.isLoading ? (
-        <div aria-busy="true">
-          <TableSkeleton
-            rows={loadingRows}
-            columns={loadingColumns}
-            label={loadingLabel}
-            className="border-0 bg-transparent"
-          />
-        </div>
-      ) : query.error ? (
-        <ErrorState
-          message={getApiErrorMessage(query.error, errorMessage)}
-          onRetry={() => query.refetch()}
-          retryLabel="Reintentar"
-          className="min-h-[120px]"
-        />
-      ) : isEmpty ? (
-        <BlockNote>{emptyText}</BlockNote>
-      ) : (
-        children
-      )}
+    <SectionShell
+      title={title}
+      icon={icon}
+      description={description}
+      className={className}
+      bodyClassName={bodyClassName}
+    >
+      <QueryBody
+        query={query}
+        loadingLabel={loadingLabel}
+        loadingRows={loadingRows}
+        loadingColumns={loadingColumns}
+        errorMessage={errorMessage}
+        isEmpty={isEmpty}
+        emptyText={emptyText}
+      >
+        {children}
+      </QueryBody>
     </SectionShell>
   );
 }

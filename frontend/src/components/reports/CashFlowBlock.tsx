@@ -1,24 +1,24 @@
 "use client";
 
-import { Receipt } from "lucide-react";
 import { formatReportMoney, safeDecimalNumber } from "@/lib/reportPresentation";
 import { cn } from "@/lib/utils";
 import type { CashFlowReport } from "@/types";
-import { QuerySection, type ReportQuery } from "./QuerySection";
+import { QueryBody, type ReportQuery } from "./QuerySection";
 
 /**
  * Cash in and cash out for the period. The net flow is the server's number; if
  * an older response does not carry it, the row is simply absent instead of
  * being re-derived in the browser.
+ *
+ * Content only — `CashPaymentsBlock` renders it inside the shared "Caja y
+ * pagos" card, beside the payment mix, so both halves keep one frame.
  */
 export function CashFlowBlock({ query }: { query: ReportQuery<CashFlowReport> }) {
   const data = query.data;
 
   return (
-    <QuerySection
+    <QueryBody
       query={query}
-      title="Caja y pagos"
-      icon={Receipt}
       loadingLabel="Cargando caja…"
       loadingRows={2}
       loadingColumns={2}
@@ -64,6 +64,6 @@ export function CashFlowBlock({ query }: { query: ReportQuery<CashFlowReport> })
           </div>
         )}
       </div>
-    </QuerySection>
+    </QueryBody>
   );
 }

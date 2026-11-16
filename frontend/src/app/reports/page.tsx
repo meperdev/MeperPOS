@@ -3,13 +3,12 @@
 import { useState } from "react";
 import { Download, FileDown } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { CashFlowBlock } from "@/components/reports/CashFlowBlock";
+import { CashPaymentsBlock } from "@/components/reports/CashPaymentsBlock";
 import { CategoriesBlock } from "@/components/reports/CategoriesBlock";
 import { CustomersBlock } from "@/components/reports/CustomersBlock";
 import { DailyReportSection } from "@/components/reports/DailyReportSection";
 import { EconomySection } from "@/components/reports/EconomySection";
 import { InventoryBlock } from "@/components/reports/InventoryBlock";
-import { PaymentMethodsBlock } from "@/components/reports/PaymentMethodsBlock";
 import { PeriodFilter } from "@/components/reports/PeriodFilter";
 import { ProductProfitBlock } from "@/components/reports/ProductProfitBlock";
 import { SellerPerformanceBlock } from "@/components/reports/SellerPerformanceBlock";
@@ -29,7 +28,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api, getApiErrorMessage } from "@/lib/api";
-import { reportPeriodPresets } from "@/lib/reportPresentation";
+import { customerRanking, reportPeriodPresets } from "@/lib/reportPresentation";
 import { getBogotaDateInputValue } from "@/lib/utils";
 import type { AppliedRange } from "@/types";
 
@@ -72,6 +71,13 @@ export default function ReportsPage() {
   const sellers = useUserPerformance(startDate, endDate);
   const current = economic.data?.current;
   const appliedLabel = rangeLabel(economic.data?.appliedRange);
+  // A customer ranking of one row is a sentence, so it cannot share a row with
+  // the sellers table: the table takes the full width instead of pairing with a
+  // card that is not there.
+  const customersAreCard =
+    customers.isLoading ||
+    Boolean(customers.error) ||
+    customerRanking(customers.data?.topCustomers ?? []).mode === "table";
 
   const handleEconomicExport = async () => {
     setShowExporting(true);
@@ -161,28 +167,35 @@ export default function ReportsPage() {
 
           <EconomySection query={economic} />
 
-          <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-2">
-            <CashFlowBlock query={cash} />
-            <InventoryBlock query={inventory} />
-          </div>
+          {/* Money first, one card wide: cash and how it was paid. */}
+          <CashPaymentsBlock cash={cash} payments={paymentMethods} />
 
-          <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-2">
-            <TopProductsBlock query={topProducts} />
+          {/* Stock is the same kind of answer: four figures on one strip. */}
+          <InventoryBlock query={inventory} />
+
+          {/* Comparable cards share a row and stretch to the taller one. */}
+          <div className="grid items-stretch gap-4 lg:gap-5 xl:grid-cols-2">
+            <TopProductsBlock query={topProducts} className="h-full" />
             <ProductProfitBlock
               products={current?.products ?? []}
               isLoading={economic.isLoading}
+              className="h-full"
             />
           </div>
 
-          <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-2">
-            <CategoriesBlock query={categories} />
-            <PaymentMethodsBlock query={paymentMethods} />
-          </div>
+          <CategoriesBlock query={categories} />
 
-          <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-2">
-            <CustomersBlock query={customers} />
-            <SellerPerformanceBlock query={sellers} />
-          </div>
+          {customersAreCard ? (
+            <div className="grid items-stretch gap-4 lg:gap-5 xl:grid-cols-2">
+              <CustomersBlock query={customers} className="h-full" />
+              <SellerPerformanceBlock query={sellers} className="h-full" />
+            </div>
+          ) : (
+            <>
+              <CustomersBlock query={customers} />
+              <SellerPerformanceBlock query={sellers} />
+            </>
+          )}
         </div>
       </div>
     </DashboardLayout>

@@ -11,8 +11,10 @@ import { QuerySection, type ReportQuery } from "./QuerySection";
  */
 export function TopProductsBlock({
   query,
+  className,
 }: {
   query: ReportQuery<ReportEnvelope<TopSellingProduct[]>>;
+  className?: string;
 }) {
   const products = query.data?.data ?? [];
   const maxTotal = Math.max(...products.map((product) => product.total || 0), 1);
@@ -28,6 +30,7 @@ export function TopProductsBlock({
       errorMessage="No se pudieron cargar productos"
       isEmpty={products.length === 0}
       emptyText="Sin productos vendidos en el período."
+      className={className}
     >
       <div className="space-y-2">
         {products.map((product, index) => (

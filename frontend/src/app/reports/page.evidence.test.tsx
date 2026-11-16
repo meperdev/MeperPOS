@@ -349,4 +349,76 @@ describe("Reports economics-first evidence", () => {
       expect(call[1]).toBe(last7.endDate);
     }
   });
+
+  it("stacks the analysis blocks by size and pairs only cards of the same size", () => {
+    const topCustomers = [1, 2, 3].map((index) => ({
+      customerId: `c-${index}`,
+      customerName: `Cliente ${index}`,
+      totalSales: index,
+      totalRevenue: 50000 * index,
+    }));
+    useCustomerStatisticsMock.mockReturnValue({
+      data: {
+        totalCustomers: 3,
+        activeCustomers: 3,
+        topCustomers,
+        appliedRange: range,
+      },
+      isLoading: false,
+    });
+
+    render(<ReportsPage />);
+
+    const section = (name: string) =>
+      screen.getByRole("heading", { name }).closest("section") as HTMLElement;
+    const order = [
+      "Economía",
+      "Caja y pagos",
+      "Inventario actual",
+      "Productos más vendidos",
+      "Ganancia por producto",
+      "Categorías",
+      "Mejores clientes",
+      "Ventas por vendedor",
+    ].map(section);
+
+    for (let index = 1; index < order.length; index += 1) {
+      expect(
+        order[index - 1].compareDocumentPosition(order[index]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+
+    // The full-width blocks share the analysis column instead of a pair.
+    const column = order[1].parentElement!;
+    expect(order[2].parentElement).toBe(column);
+    expect(order[5].parentElement).toBe(column);
+
+    // Comparable cards sit side by side and stretch to the same height.
+    const products = order[3];
+    const profit = order[4];
+    const customersPair = order[6].parentElement!;
+    const sellersPair = order[7].parentElement!;
+    expect(profit.parentElement).toBe(products.parentElement);
+    expect(customersPair).toBe(sellersPair);
+    for (const pair of [products.parentElement!, customersPair]) {
+      expect(pair.className).toContain("xl:grid-cols-2");
+      expect(pair.className).toContain("items-stretch");
+    }
+    for (const paired of [products, profit, order[6], order[7]]) {
+      expect(paired.className).toContain("h-full");
+    }
+  });
+
+  it("gives the sellers table the whole row when the customer ranking is one line", () => {
+    render(<ReportsPage />);
+
+    // The default fixture has a single customer, so the ranking is a sentence.
+    expect(screen.queryByRole("heading", { name: "Mejores clientes" })).toBeNull();
+    const sellers = screen
+      .getByRole("heading", { name: "Ventas por vendedor" })
+      .closest("section") as HTMLElement;
+
+    expect(sellers.parentElement!.className).not.toContain("xl:grid-cols-2");
+  });
 });

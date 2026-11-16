@@ -21,14 +21,21 @@ import { SectionShell } from "./SectionShell";
 export function ProductProfitBlock({
   products,
   isLoading = false,
+  className,
 }: {
   products: FinancialProductMargin[];
   isLoading?: boolean;
+  className?: string;
 }) {
   const rows = topProductsByGrossProfit(products);
 
   return (
-    <SectionShell title="Ganancia por producto" icon={TrendingUp} bodyClassName="p-0">
+    <SectionShell
+      title="Ganancia por producto"
+      icon={TrendingUp}
+      className={className}
+      bodyClassName="p-0"
+    >
       {isLoading ? (
         <div aria-busy="true" className="p-4">
           <TableSkeleton

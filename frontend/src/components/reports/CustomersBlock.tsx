@@ -17,14 +17,21 @@ import type { ReportQuery } from "./QuerySection";
  */
 export function CustomersBlock({
   query,
+  className,
 }: {
   query: ReportQuery<CustomerStatistics>;
+  className?: string;
 }) {
   const ranking = customerRanking(query.data?.topCustomers ?? []);
 
   if (query.isLoading) {
     return (
-      <SectionShell title="Mejores clientes" icon={Users} bodyClassName="p-4">
+      <SectionShell
+        title="Mejores clientes"
+        icon={Users}
+        className={className}
+        bodyClassName="p-4"
+      >
         <div aria-busy="true">
           <TableSkeleton
             rows={5}
@@ -39,7 +46,12 @@ export function CustomersBlock({
 
   if (query.error) {
     return (
-      <SectionShell title="Mejores clientes" icon={Users} bodyClassName="p-4">
+      <SectionShell
+        title="Mejores clientes"
+        icon={Users}
+        className={className}
+        bodyClassName="p-4"
+      >
         <ErrorState
           message={getApiErrorMessage(query.error, "No se pudieron cargar clientes")}
           onRetry={() => query.refetch()}
@@ -71,7 +83,12 @@ export function CustomersBlock({
   }
 
   return (
-    <SectionShell title="Mejores clientes" icon={Users} bodyClassName="p-0">
+    <SectionShell
+      title="Mejores clientes"
+      icon={Users}
+      className={className}
+      bodyClassName="p-0"
+    >
       <div className="overflow-x-auto">
         <Table className="min-w-[420px]">
           <TableHeader>

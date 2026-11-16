@@ -14,8 +14,10 @@ const SELLER_ROWS = 5;
  */
 export function SellerPerformanceBlock({
   query,
+  className,
 }: {
   query: ReportQuery<UserPerformanceReport>;
+  className?: string;
 }) {
   const rows = query.data?.data ?? [];
   const visible = rows.slice(0, SELLER_ROWS);
@@ -32,6 +34,7 @@ export function SellerPerformanceBlock({
       errorMessage="No se pudieron cargar las ventas por vendedor"
       isEmpty={visible.length === 0}
       emptyText="Sin ventas por vendedor en el período."
+      className={className}
       bodyClassName="p-0"
     >
       <div className="overflow-x-auto">
