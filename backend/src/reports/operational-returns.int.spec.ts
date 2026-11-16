@@ -380,6 +380,90 @@ describe('Operational sales reports net partial returns (S5.5)', () => {
     ).toEqual(expect.objectContaining({ quantity: -1, total: -100 }));
   });
 
+  it('nets a customer return registered inside the period even when the sale predates it', async () => {
+    const prisma = fixture.prisma;
+    const customer = await prisma.customer.create({
+      data: {
+        name: 'S5.5 Cliente que devuelve despues',
+        documentType: 'CC',
+        documentNumber: '55555599',
+        organizationId: orgId,
+      },
+    });
+    const product = await prisma.product.create({
+      data: {
+        name: 'S5.5 Producto del cliente',
+        sku: 'S55-CUST-LATE',
+        costPrice: 10,
+        salePrice: 100,
+        stock: 100,
+        categoryId: snacksCategoryId,
+        organizationId: orgId,
+      },
+    });
+    const saleData = (
+      saleNumber: number,
+      createdAt: string,
+      status: 'RETURNED_PARTIAL' | 'COMPLETED',
+    ) => ({
+      saleNumber,
+      status,
+      createdAt: new Date(createdAt),
+      subtotal: 200,
+      taxAmount: 0,
+      discountAmount: 0,
+      total: 200,
+      amountPaid: 200,
+      userId,
+      customerId: customer.id,
+      organizationId: orgId,
+      items: {
+        create: {
+          productId: product.id,
+          organizationId: orgId,
+          quantity: 2,
+          unitPrice: 100,
+          costPriceSnapshot: 10,
+          taxRate: 0,
+          subtotal: 200,
+          total: 200,
+        },
+      },
+    });
+    // July sale, one unit returned in August, then a new August sale: August
+    // keeps 200 sold minus the 100 given back, the same rule as Economía.
+    const julySale = await prisma.sale.create({
+      data: saleData(90, '2026-07-10T15:00:00.000Z', 'RETURNED_PARTIAL'),
+    });
+    await prisma.inventoryMovement.create({
+      data: {
+        productId: product.id,
+        organizationId: orgId,
+        type: 'RETURN',
+        quantity: 1,
+        previousStock: 100,
+        newStock: 101,
+        reason: 'S5.5 customer return of a July sale',
+        userId,
+        saleId: julySale.id,
+        createdAt: new Date('2026-08-20T15:00:00.000Z'),
+      },
+    });
+    await prisma.sale.create({
+      data: saleData(91, '2026-08-21T15:00:00.000Z', 'COMPLETED'),
+    });
+
+    const report = await service.getCustomerStatistics(
+      orgId,
+      PERIOD.startDate,
+      PERIOD.endDate,
+    );
+
+    expect(
+      report.topCustomers.find((entry) => entry.customerId === customer.id),
+    ).toEqual(expect.objectContaining({ totalSales: 1, totalRevenue: 100 }));
+  });
+
   it('leaves a fully returned sale out of the ranking instead of showing an empty row', async () => {
     const prisma = fixture.prisma;
     const fullyReturnedProduct = await prisma.product.create({

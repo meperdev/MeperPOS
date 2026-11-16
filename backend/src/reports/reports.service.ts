@@ -529,15 +529,12 @@ function expandPartialReturnItems(
 /**
  * The part of a partially returned sale's billed total that the period's RETURN
  * movements gave back, kept on the `Sale.total` basis the customer report sums.
+ *
+ * A return is dated by its own movement, like Economía does, so it lowers the
+ * period it happened in even when the sale itself belongs to an earlier one.
+ * `findPartiallyReturnedSales` already loads only the period's movements.
  */
-function returnedSaleRevenue(
-  sale: PartiallyReturnedSale,
-  dateFilter: DateFilter,
-): Prisma.Decimal {
-  if (!isInDateFilter(sale.createdAt, dateFilter)) {
-    return new Prisma.Decimal(0);
-  }
-
+function returnedSaleRevenue(sale: PartiallyReturnedSale): Prisma.Decimal {
   const itemTotal = sale.items.reduce(
     (sum, item) => sum.add(item.total),
     new Prisma.Decimal(0),
@@ -1461,7 +1458,7 @@ export class ReportsService {
     // customer kept (S5.5).
     const returnedRevenue = new Map<string | null, Prisma.Decimal>();
     for (const sale of partiallyReturnedSales) {
-      const returned = returnedSaleRevenue(sale, dateFilter ?? {});
+      const returned = returnedSaleRevenue(sale);
       if (returned.isZero()) continue;
       returnedRevenue.set(
         sale.customerId,
