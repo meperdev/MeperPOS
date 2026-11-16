@@ -21,8 +21,17 @@
  *
  *   DATABASE_URL=postgresql://... npx jest --runInBand \
  *     src/loans/loans.pos-fiscal.int.spec.ts
+ *
+ * CI runs the whole backend suite with parallel workers against one shared
+ * database, so a foreign suite can abort this suite's Serializable transactions.
+ * The two success-path operations below therefore retry the service's documented
+ * concurrency 409 with the same request key, exactly as a real client must.
  */
-import { ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import {
   DianTaxCode,
   OrgRole,
@@ -54,6 +63,37 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
   const money = (value: string) => new Prisma.Decimal(value);
   const nextTag = () => `${tag}-${randomUUID()}`;
 
+  /**
+   * CI runs the whole backend suite with parallel Jest workers against a single
+   * shared database, so an unrelated suite can abort one of this suite's
+   * Serializable transactions with Prisma P2034/P2002 — even though this suite
+   * itself is sequential and creates only its own rows. `completePosSale` and
+   * `mutate` map those codes to a 409 whose documented client contract is to
+   * retry with the same request key, so the helpers below apply that contract
+   * instead of failing on a conflict this suite did not cause. Only that exact
+   * conflict is retried; every other failure surfaces on the first attempt.
+   */
+  const concurrentConflictMessage =
+    'Operación concurrente; reintente con la misma clave de solicitud';
+  const concurrentAttempts = 3;
+
+  const isConcurrentConflict = (error: unknown): boolean =>
+    error instanceof ConflictException &&
+    error.message === concurrentConflictMessage;
+
+  const retryingConcurrency = async <T>(run: () => Promise<T>): Promise<T> => {
+    let lastConflict: unknown;
+    for (let attempt = 1; attempt <= concurrentAttempts; attempt += 1) {
+      try {
+        return await run();
+      } catch (error) {
+        if (!isConcurrentConflict(error)) throw error;
+        lastConflict = error;
+      }
+    }
+    throw lastConflict;
+  };
+
   const actorOf = (fixture: Fixture): RequestUser => ({
     userId: fixture.userId,
     email: `${fixture.userId}@t4i.test`,
@@ -62,6 +102,29 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     isSuperAdmin: false,
     tokenVersion: 0,
   });
+
+  /**
+   * Completion is the financed sale's single Serializable write, so a foreign
+   * suite's interference reaches this suite as the documented 409. The request
+   * key is minted once and reused by every attempt, which is what the service
+   * asks of a client: replays are recognised by that key, not by a new one. The
+   * `service` parameter defaults to the real one and exists only so the retry
+   * contract can be proved against a stub.
+   */
+  const completeWithRetry = (
+    loanId: string,
+    requestKey: string,
+    fixture: Fixture,
+    service: LoansService = loans,
+  ) =>
+    retryingConcurrency(() =>
+      service.completePosSale(
+        loanId,
+        { requestKey },
+        fixture.organizationId,
+        actorOf(fixture),
+      ),
+    );
 
   const makeFixture = async (
     label: string,
@@ -150,12 +213,17 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
   });
 
   const collectEverything = async (fixture: Fixture, loanId: string) => {
-    await loans.mutate(
-      loanId,
-      'COLLECTED',
-      { requestKey: nextTag(), amount: 178.5, method: 'CASH' },
-      fixture.userId,
-      fixture.organizationId,
+    // `mutate` maps the same Serializable conflict to the same 409, so the key is
+    // minted once and reused by every attempt.
+    const requestKey = nextTag();
+    await retryingConcurrency(() =>
+      loans.mutate(
+        loanId,
+        'COLLECTED',
+        { requestKey, amount: 178.5, method: 'CASH' },
+        fixture.userId,
+        fixture.organizationId,
+      ),
     );
   };
 
@@ -291,12 +359,7 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     const loanId = String(result.loanId);
     await collectEverything(active, loanId);
 
-    const completed = await loans.completePosSale(
-      loanId,
-      { requestKey: nextTag() },
-      active.organizationId,
-      actorOf(active),
-    );
+    const completed = await completeWithRetry(loanId, nextTag(), active);
 
     const sale = await prisma.sale.findFirstOrThrow({
       where: {
@@ -347,12 +410,7 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     const loanId = String(result.loanId);
     await collectEverything(inactive, loanId);
 
-    const completed = await loans.completePosSale(
-      loanId,
-      { requestKey: nextTag() },
-      inactive.organizationId,
-      actorOf(inactive),
-    );
+    const completed = await completeWithRetry(loanId, nextTag(), inactive);
 
     const sale = await prisma.sale.findFirstOrThrow({
       where: {
@@ -470,5 +528,67 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
         actorOf(active),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  /**
+   * A real serialization race cannot be scheduled deterministically, so the
+   * retry contract above is proved against a stubbed completion: the conflict is
+   * raised exactly where `completePosSale` would raise it, and the helper's own
+   * observable effects (attempt count, key reuse, what it rethrows) are asserted
+   * through its public call, without touching the database.
+   */
+  it('retries the concurrent conflict with the same request key and returns the result', async () => {
+    const conflict = new ConflictException(concurrentConflictMessage);
+    const completePosSale = jest
+      .fn()
+      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce(conflict)
+      .mockResolvedValueOnce({ saleId: 'sale-on-third-attempt' });
+    const service = { completePosSale } as unknown as LoansService;
+
+    const completed = await completeWithRetry(
+      'loan-retry',
+      'retried-key',
+      active,
+      service,
+    );
+
+    expect(completed).toEqual({ saleId: 'sale-on-third-attempt' });
+    expect(completePosSale).toHaveBeenCalledTimes(3);
+    expect(
+      completePosSale.mock.calls.map(
+        ([, dto]) => (dto as { requestKey: string }).requestKey,
+      ),
+    ).toEqual(['retried-key', 'retried-key', 'retried-key']);
+  });
+
+  it('rethrows the last conflict once the three attempts are exhausted', async () => {
+    const conflicts = [1, 2, 3].map(
+      () => new ConflictException(concurrentConflictMessage),
+    );
+    const completePosSale = jest
+      .fn()
+      .mockRejectedValueOnce(conflicts[0])
+      .mockRejectedValueOnce(conflicts[1])
+      .mockRejectedValueOnce(conflicts[2]);
+    const service = { completePosSale } as unknown as LoansService;
+
+    await expect(
+      completeWithRetry('loan-exhausted', 'exhausted-key', active, service),
+    ).rejects.toBe(conflicts[2]);
+    expect(completePosSale).toHaveBeenCalledTimes(3);
+  });
+
+  it('rethrows a non-conflict failure on the first attempt', async () => {
+    const failure = new BadRequestException(
+      'Solicitud de finalización inválida',
+    );
+    const completePosSale = jest.fn().mockRejectedValue(failure);
+    const service = { completePosSale } as unknown as LoansService;
+
+    await expect(
+      completeWithRetry('loan-failing', 'no-retry-key', active, service),
+    ).rejects.toBe(failure);
+    expect(completePosSale).toHaveBeenCalledTimes(1);
   });
 });
