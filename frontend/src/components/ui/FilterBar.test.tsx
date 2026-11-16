@@ -77,3 +77,36 @@ describe("FilterGroup track", () => {
     expect(renderGroup().className).toContain("overflow-x-auto");
   });
 });
+
+describe("FilterGroup horizontal scroller (S3.3)", () => {
+  function renderGroup() {
+    render(
+      <FilterGroup label="Segmento">
+        <FilterOptionButton active>Todos</FilterOptionButton>
+        <FilterOptionButton>Frecuente</FilterOptionButton>
+        <FilterOptionButton>Ocasional</FilterOptionButton>
+        <FilterOptionButton>Inactivo</FilterOptionButton>
+      </FilterGroup>,
+    );
+    return screen.getByText("Todos").parentElement as HTMLElement;
+  }
+
+  it("scrolls by whole chips with no visible scrollbar", () => {
+    const track = renderGroup();
+
+    expect(track.className).toContain("snap-x");
+    expect(track.className).toContain("snap-mandatory");
+    expect(track.className).toContain("scrollbar-hide");
+    // The last chip must be reachable past the track's own padding.
+    expect(track.className).toContain("scroll-px-1");
+  });
+
+  it("never squeezes a chip's text to fit the track", () => {
+    renderGroup();
+
+    for (const name of ["Todos", "Frecuente", "Ocasional", "Inactivo"]) {
+      expect(screen.getByRole("button", { name }).className).toContain("shrink-0");
+      expect(screen.getByRole("button", { name }).className).toContain("snap-start");
+    }
+  });
+});

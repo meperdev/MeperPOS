@@ -34,7 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import {
   Plus,
   Phone,
@@ -99,7 +99,7 @@ export default function SuppliersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
-  const [viewMode, setViewMode] = usePersistedViewMode("suppliers");
+  const [viewMode, setViewMode] = useEffectiveViewMode("suppliers");
 
   const [showModal, setShowModal] = useState(false);
   const [showConfirmDeactivate, setShowConfirmDeactivate] = useState(false);
@@ -329,7 +329,7 @@ export default function SuppliersPage() {
                     <div
                       key={supplier.id}
                       className={cn(
-                        "group relative flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border",
+                        "group relative flex flex-col rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border active:bg-muted/60",
                         canManage && "cursor-pointer",
                         !supplier.active && "opacity-70",
                       )}
@@ -340,7 +340,7 @@ export default function SuppliersPage() {
                           type="button"
                           aria-label={`Editar ${supplier.name}`}
                           onClick={() => handleEdit(supplier)}
-                          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] transition-colors duration-150 active:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                         />
                       )}
                       <div>
@@ -371,7 +371,7 @@ export default function SuppliersPage() {
                         </div>
 
                         {/* Contact Details */}
-                        <div className="mt-3 border-t border-border/50 pt-2.5 min-h-[4.25rem]">
+                        <div className="mt-3 border-t border-border/50 pt-2.5">
                           {!hasContactInfo ? (
                             <p className="text-xs text-muted-foreground/50">
                               Sin datos de contacto adicionales

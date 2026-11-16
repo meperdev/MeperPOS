@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/FilterBar";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import { cn } from "@/lib/utils";
 import {
   Plus,
@@ -79,7 +79,7 @@ export default function CustomersPage() {
   const canEdit = hasAnyRole(user?.role, ["ADMIN"]);
   const [search, setSearch] = useState("");
   const [segment, setSegment] = useState("");
-  const [viewMode, setViewMode] = usePersistedViewMode("customers");
+  const [viewMode, setViewMode] = useEffectiveViewMode("customers");
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -250,7 +250,9 @@ export default function CustomersPage() {
                     <div
                       key={customer.id}
                       className={cn(
-                        "group relative flex min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150",
+                        // Content-flow card: no justify-between and no reserved contact
+                        // height, so the details never stretch into a gap.
+                        "group relative flex min-w-0 flex-col rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors duration-150 active:bg-muted/60",
                         "hover:border-border",
                         canEdit && "cursor-pointer",
                       )}
@@ -261,7 +263,7 @@ export default function CustomersPage() {
                           type="button"
                           aria-label={`Editar ${customer.name}`}
                           onClick={() => handleEdit(customer)}
-                          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                          className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] transition-colors duration-150 active:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                         />
                       )}
                       <div>
@@ -288,7 +290,7 @@ export default function CustomersPage() {
                         </div>
 
                         {/* Details */}
-                        <div className="mt-3 border-t border-border/50 pt-2.5 min-h-[4.25rem]">
+                        <div className="mt-3 border-t border-border/50 pt-2.5">
                           {!hasOptionalContact ? (
                             <p className="text-xs text-muted-foreground/70">
                               Sin datos de contacto adicionales
@@ -406,7 +408,7 @@ export default function CustomersPage() {
                           <TableRow
                             key={customer.id}
                             onClick={canEdit ? () => handleEdit(customer) : undefined}
-                            className={cn(canEdit && "cursor-pointer")}
+                            className={cn(canEdit && "cursor-pointer active:bg-muted/40")}
                           >
                             <TableCell>
                               <div className="flex items-center gap-2 min-w-0">

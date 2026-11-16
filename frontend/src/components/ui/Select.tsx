@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useBelowSmViewport } from "@/hooks/useVisualViewport";
 
 export interface SelectOption {
   value: string;
@@ -69,16 +71,22 @@ export function Select({
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [openUpwards, setOpenUpwards] = useState(false);
+  // Below `sm` the list is a sheet in a body portal instead of a dropdown.
+  const belowSm = useBelowSmViewport();
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const triggerId = useId();
   const listboxId = useId();
+  const sheetTitleId = useId();
   const errorId = useId();
 
   const selectedOption = options.find((opt) => opt.value === value);
+  const sheet = isOpen && belowSm;
 
   useEffect(() => {
+    // The sheet carries its own overlay; a mousedown inside it is not "outside".
+    if (!isOpen || belowSm) return;
     const handleClickOutside = (event: MouseEvent) => {
       if (
         containerRef.current &&
@@ -88,13 +96,11 @@ export function Select({
       }
     };
 
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isOpen]);
+  }, [isOpen, belowSm]);
 
   // Keyboard users land on the current choice when the list opens.
   useEffect(() => {
@@ -103,7 +109,7 @@ export function Select({
       listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]') ??
       listRef.current?.querySelector<HTMLElement>('[role="option"]');
     current?.focus();
-  }, [isOpen]);
+  }, [isOpen, belowSm]);
 
   const toggleOpen = () => {
     if (disabled) return;
@@ -161,6 +167,66 @@ export function Select({
     items[(index + step + items.length) % items.length]?.focus();
   };
 
+  // The sheet wraps the list, so it owns the keys before the Modal behind it
+  // sees them: Escape must close the options, never the dialog that opened them.
+  const handleSheetKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeToTrigger();
+      return;
+    }
+    if (event.key === "Tab") {
+      triggerRef.current?.focus();
+      setIsOpen(false);
+      return;
+    }
+    handleListKeyDown(event);
+  };
+
+  const optionRow = (option: SelectOption) => {
+    const isSelected = option.value === value;
+    return (
+      <button
+        key={option.value}
+        type="button"
+        role="option"
+        aria-selected={isSelected}
+        onClick={() => handleSelect(option.value)}
+        className={cn(
+          "flex w-full items-center justify-between px-3 py-2 min-h-11 sm:min-h-9 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+          isSelected
+            ? "bg-primary-light text-primary-text font-bold"
+            : "text-foreground hover:bg-muted/70"
+        )}
+      >
+        <div className="flex items-center gap-2 truncate">
+          {option.icon && (
+            <span className="shrink-0">{option.icon}</span>
+          )}
+          <span className="truncate">{option.label}</span>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {option.badge && (
+            <span
+              className={cn(
+                "text-xs font-medium px-2 py-0.5 rounded-md",
+                option.badgeClass ||
+                  "bg-muted text-muted-foreground"
+              )}
+            >
+              {option.badge}
+            </span>
+          )}
+          {isSelected && (
+            <Check aria-hidden="true" className="w-3.5 h-3.5 text-primary-text stroke-[3]" />
+          )}
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div className={cn("relative w-full", className)} ref={containerRef}>
       {label && (
@@ -196,6 +262,7 @@ export function Select({
         type="button"
         disabled={disabled}
         onClick={toggleOpen}
+        data-select-trigger
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={isOpen ? listboxId : undefined}
@@ -230,8 +297,54 @@ export function Select({
         />
       </button>
 
-      {/* Floating Menu */}
-      {isOpen && (
+      {/* Options: a bottom sheet below sm, the floating menu from sm up. */}
+      {sheet &&
+        createPortal(
+          <div className="fixed inset-0 z-[60] flex flex-col justify-end" data-select-sheet>
+            <div
+              data-select-sheet-overlay
+              aria-hidden="true"
+              className="absolute inset-0 bg-black/40 dark:bg-black/60"
+              onClick={closeToTrigger}
+            />
+
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={sheetTitleId}
+              onKeyDown={handleSheetKeyDown}
+              className={cn(
+                "relative flex w-full flex-col rounded-t-2xl border border-border border-x-0 border-b-0 bg-card pb-[var(--safe-bottom)]",
+                "shadow-lg shadow-black/10 animate-sheet-up",
+                "max-h-[min(calc(100dvh-var(--safe-top)-0.75rem),100%)]",
+              )}
+            >
+              <div aria-hidden="true" className="flex shrink-0 justify-center pb-1 pt-2.5">
+                <span className="h-1 w-10 rounded-full bg-border" />
+              </div>
+
+              <h2
+                id={sheetTitleId}
+                className="shrink-0 border-b border-border/60 px-4 pb-2.5 text-xs font-medium text-muted-foreground"
+              >
+                {label ?? placeholder}
+              </h2>
+
+              <div
+                ref={listRef}
+                id={listboxId}
+                role="listbox"
+                aria-label={label ?? placeholder}
+                className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto scrollbar-app p-1.5"
+              >
+                {options.map((option) => optionRow(option))}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {isOpen && !belowSm && (
         <div
           ref={listRef}
           id={listboxId}
@@ -245,49 +358,7 @@ export function Select({
             openUpwards ? "bottom-full mb-1.5" : "top-full mt-1.5"
           )}
         >
-          {options.map((option) => {
-            const isSelected = option.value === value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => handleSelect(option.value)}
-                className={cn(
-                  "flex w-full items-center justify-between px-3 py-2 min-h-11 sm:min-h-9 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                  isSelected
-                    ? "bg-primary-light text-primary-text font-bold"
-                    : "text-foreground hover:bg-muted/70"
-                )}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  {option.icon && (
-                    <span className="shrink-0">{option.icon}</span>
-                  )}
-                  <span className="truncate">{option.label}</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                  {option.badge && (
-                    <span
-                      className={cn(
-                        "text-xs font-medium px-2 py-0.5 rounded-md",
-                        option.badgeClass ||
-                          "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {option.badge}
-                    </span>
-                  )}
-                  {isSelected && (
-                    <Check aria-hidden="true" className="w-3.5 h-3.5 text-primary-text stroke-[3]" />
-                  )}
-                </div>
-              </button>
-            );
-          })}
+          {options.map((option) => optionRow(option))}
         </div>
       )}
 

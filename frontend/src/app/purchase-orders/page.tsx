@@ -19,7 +19,7 @@ import { Select } from "@/components/ui/Select";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import {
   Plus,
   Eye,
@@ -52,7 +52,7 @@ export default function PurchaseOrdersPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
-  const [viewMode, setViewMode] = usePersistedViewMode("purchase-orders");
+  const [viewMode, setViewMode] = useEffectiveViewMode("purchase-orders");
 
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
   const { data, isLoading, isError, refetch } = usePurchaseOrders({
@@ -228,7 +228,7 @@ export default function PurchaseOrdersPage() {
                       {orders.map((order) => (
                         <TableRow
                           key={order.id}
-                          className="cursor-pointer"
+                          className="cursor-pointer active:bg-muted/40"
                           onClick={() =>
                             router.push(`/purchase-orders/${order.id}`)
                           }
@@ -284,7 +284,7 @@ export default function PurchaseOrdersPage() {
                 {orders.map((order) => (
                   <div
                     key={order.id}
-                    className="group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border cursor-pointer"
+                    className="group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border active:bg-muted/60 cursor-pointer"
                     onClick={() => router.push(`/purchase-orders/${order.id}`)}
                   >
                     <div>

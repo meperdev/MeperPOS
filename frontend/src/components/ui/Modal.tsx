@@ -3,6 +3,13 @@
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useBelowSmViewport, useVisualViewport } from "@/hooks/useVisualViewport";
+
+/** Drag distance that commits a sheet dismissal. */
+const SHEET_DISMISS_PX = 100;
+/** A quick flick counts below that distance: distance alone reads as stuck. */
+const SHEET_FLICK_PX = 40;
+const SHEET_FLICK_MS = 300;
 
 interface ModalProps {
   isOpen: boolean;
@@ -15,8 +22,11 @@ interface ModalProps {
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   /** Opt out only when the consumer measures and fits its content to the viewport. */
   scrollContent?: boolean;
+  /** Set false when the step must be answered: the sheet cannot be dragged away. */
+  dismissible?: boolean;
   className?: string;
 }
+
 
 const sizes = {
   sm: "max-w-md",
@@ -35,10 +45,17 @@ export function Modal({
   footer,
   size = "md",
   scrollContent = true,
+  dismissible = true,
   className,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Below `sm` the dialog becomes a bottom sheet that owns the bottom edge.
+  const sheet = useBelowSmViewport();
+  // iOS keeps the layout viewport whole and shrinks the visual one, so the
+  // sheet has to lift itself by whatever the keyboard covers.
+  const keyboardInset = useVisualViewport();
+  const drag = useRef<{ startY: number; startedAt: number } | null>(null);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? "hidden" : "unset";
@@ -76,7 +93,8 @@ export function Modal({
       );
 
     // The first field wins over the close button: opening a form should land on
-    // the form, not on the way out of it.
+    // the form, not on the way out of it. A consumer can name the control that
+    // should receive focus, so a destructive action is never the default.
     const initialTarget = () => {
       const body = panel?.querySelector<HTMLElement>("[data-modal-content]");
       const inBody = body
@@ -91,6 +109,8 @@ export function Modal({
               !(element as HTMLButtonElement).disabled,
           )
         : [];
+      const marked = body?.querySelector<HTMLElement>("[data-modal-autofocus]");
+      if (marked && isReachable(marked) && marked.tabIndex >= 0) return marked;
       return inBody[0] ?? focusables()[0] ?? null;
     };
 
@@ -105,9 +125,18 @@ export function Modal({
     // Programmatic focus can escape a dialog; bring it back instead of leaving
     // the keyboard user on the page behind it.
     const handleFocusIn = (event: FocusEvent) => {
-      if (event.target instanceof Node && panel && !panel.contains(event.target)) {
-        (initialTarget() ?? panel)?.focus();
+      if (!(event.target instanceof Node) || !panel) return;
+      if (panel.contains(event.target)) return;
+      // A Select inside the dialog opens its own sheet in a body portal below
+      // `sm`; while it is open the options own focus, and yanking it back would
+      // also send Escape to the dialog instead of the list.
+      const nested = event.target instanceof Element
+        ? event.target.closest("[data-select-sheet]")
+        : null;
+      if (nested && panel.querySelector('[data-select-trigger][aria-expanded="true"]')) {
+        return;
       }
+      (initialTarget() ?? panel)?.focus();
     };
 
     const handleTab = (event: KeyboardEvent) => {
@@ -148,10 +177,74 @@ export function Modal({
     return () => window.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
 
+  // Dragging the handle (or the header behind it) moves the sheet with the
+  // finger; letting go past the threshold dismisses it and anything shorter
+  // snaps back. Nothing here runs at `sm` and up, where the panel is centred.
+  const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
+    if (!sheet || !dismissible) return;
+    // A press on the close button is a tap, not a drag.
+    if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+    drag.current = { startY: event.clientY, startedAt: Date.now() };
+  };
+
+  const moveDrag = (event: React.PointerEvent<HTMLElement>) => {
+    const current = drag.current;
+    const panel = panelRef.current;
+    if (!current || !panel) return;
+    const offset = Math.max(0, event.clientY - current.startY);
+    panel.style.transition = "none";
+    panel.style.transform = `translateY(${offset}px)`;
+  };
+
+  const snapBack = () => {
+    drag.current = null;
+    const panel = panelRef.current;
+    if (!panel) return;
+    panel.style.transition = "";
+    panel.style.transform = "";
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLElement>) => {
+    const current = drag.current;
+    const panel = panelRef.current;
+    if (!current) return;
+    if (!panel) {
+      drag.current = null;
+      return;
+    }
+    const offset = Math.max(0, event.clientY - current.startY);
+    const flicked =
+      Date.now() - current.startedAt < SHEET_FLICK_MS && offset > SHEET_FLICK_PX;
+    if (offset > SHEET_DISMISS_PX || flicked) {
+      drag.current = null;
+      // Leave the sheet where the finger left it; it unmounts from here.
+      onClose();
+      return;
+    }
+    snapBack();
+  };
+
+  const dragHandlers = sheet
+    ? {
+        onPointerDown: beginDrag,
+        onPointerMove: moveDrag,
+        onPointerUp: endDrag,
+        onPointerCancel: snapBack,
+      }
+    : {};
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-[max(0.75rem,var(--safe-top))_max(0.75rem,var(--safe-right))_max(0.75rem,var(--safe-bottom))_max(0.75rem,var(--safe-left))] sm:p-6 md:p-8">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex",
+        sheet
+          ? "flex-col justify-end"
+          : "items-center justify-center p-[max(0.75rem,var(--safe-top))_max(0.75rem,var(--safe-right))_max(0.75rem,var(--safe-bottom))_max(0.75rem,var(--safe-left))] sm:p-6 md:p-8",
+      )}
+      style={sheet && keyboardInset > 0 ? { bottom: keyboardInset } : undefined}
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40 dark:bg-black/60"
@@ -166,17 +259,45 @@ export function Modal({
         aria-labelledby={title ? titleId : undefined}
         aria-label={!title ? ariaLabel : undefined}
         tabIndex={-1}
+        data-presentation={sheet ? "sheet" : "dialog"}
+        style={
+          sheet
+            ? // The `min()` keeps the cap honest while the keyboard lifts the
+              // sheet: a 100dvh sheet would otherwise grow past the visible part.
+              { maxHeight: "min(calc(100dvh - var(--safe-top) - 0.75rem), 100%)" }
+            : undefined
+        }
         className={cn(
-          "relative w-full rounded-xl sm:rounded-2xl border border-border",
-          "bg-card shadow-lg shadow-black/10",
-          "animate-fade-in flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-4rem)]",
-          sizes[size],
+          "relative w-full border border-border bg-card shadow-lg shadow-black/10 flex flex-col",
+          sheet
+            ? "rounded-t-2xl border-x-0 border-b-0 animate-sheet-up transition-transform duration-200 pb-[var(--safe-bottom)]"
+            : "rounded-xl sm:rounded-2xl animate-fade-in max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-4rem)]",
+          !sheet && sizes[size],
           className,
+          sheet && "max-w-none",
         )}
       >
+        {/* Drag handle: decorative, the whole header is the drag surface too. */}
+        {sheet && (
+          <div
+            data-sheet-handle
+            aria-hidden="true"
+            className="flex shrink-0 cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing"
+            {...dragHandlers}
+          >
+            <span className="h-1 w-10 rounded-full bg-border" />
+          </div>
+        )}
+
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 sm:px-6 sm:py-4 shrink-0">
+          <div
+            className={cn(
+              "flex items-center justify-between border-b border-border/60 px-4 py-3 sm:px-6 sm:py-4 shrink-0",
+              sheet && "touch-none",
+            )}
+            {...dragHandlers}
+          >
             <h2 id={titleId} className={cn("text-base font-semibold text-foreground pr-2", scrollContent ? "truncate" : "min-w-0 [overflow-wrap:anywhere]")}>{title}</h2>
             <button
               type="button"
@@ -199,7 +320,7 @@ export function Modal({
 
         {/* Footer */}
         {footer && (
-          <div className="border-t border-border/60 px-4 py-3 sm:px-6 sm:py-3.5 bg-muted/10 shrink-0 rounded-b-xl sm:rounded-b-2xl">
+          <div className={cn("border-t border-border/60 px-4 py-3 sm:px-6 sm:py-3.5 bg-muted/10 shrink-0", sheet ? "rounded-none" : "rounded-b-xl sm:rounded-b-2xl")}>
             {footer}
           </div>
         )}

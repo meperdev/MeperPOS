@@ -1,80 +1,130 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
-
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { HAPTIC_PATTERNS } from "@/lib/haptics";
 import { ConfirmDialog } from "./ConfirmDialog";
 
-vi.mock("./Modal", () => ({
-  Modal: ({
-    isOpen,
-    ariaLabel,
-    children,
-  }: {
-    isOpen: boolean;
-    ariaLabel?: string;
-    children: ReactNode;
-  }) => (isOpen ? <div role="dialog" aria-label={ariaLabel}>{children}</div> : null),
-}));
+afterEach(cleanup);
 
-const vibrate = vi.fn(() => true);
-
-beforeEach(() => {
-  Object.defineProperty(navigator, "vibrate", {
+/** Pretend the viewport is below (false) or at/above (true) Tailwind's `sm` breakpoint (640px). */
+const stubSmBreakpoint = (matches: boolean) => {
+  Object.defineProperty(window, "matchMedia", {
+    value: vi.fn((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
     configurable: true,
     writable: true,
-    value: vibrate,
   });
-});
+};
 
-afterEach(() => {
-  cleanup();
-  vibrate.mockClear();
-  delete (navigator as unknown as Record<string, unknown>).vibrate;
-});
+const restoreMatchMedia = () => Reflect.deleteProperty(window, "matchMedia");
 
-function renderDialog(overrides: Partial<Parameters<typeof ConfirmDialog>[0]> = {}) {
-  const onClose = vi.fn();
-  const onConfirm = vi.fn();
+const renderDialog = () =>
   render(
     <ConfirmDialog
       isOpen
-      onClose={onClose}
-      onConfirm={onConfirm}
-      title="Eliminar producto"
-      message="Esta acción no se puede deshacer."
-      {...overrides}
+      onClose={vi.fn()}
+      onConfirm={vi.fn()}
+      title="Eliminar cliente"
+      message="¿Estás seguro? Esta acción no se puede deshacer."
+      confirmText="Eliminar"
+      cancelText="Cancelar"
     />,
   );
-  return { onClose, onConfirm };
-}
 
 describe("ConfirmDialog", () => {
-  it("confirms the destructive action and closes", async () => {
-    const { onClose, onConfirm } = renderDialog();
+  afterEach(restoreMatchMedia);
 
-    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
-
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("closes without acting when the user backs out", async () => {
-    const { onClose, onConfirm } = renderDialog();
-
-    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-
-    expect(onConfirm).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(vibrate).not.toHaveBeenCalled();
-  });
-
-  it("buzzes the warning pattern when the deletion is confirmed", async () => {
+  it("stacks the actions as an action sheet below sm: confirm first, cancel last", () => {
+    stubSmBreakpoint(false);
     renderDialog();
 
-    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    const actions = screen.getAllByRole("button");
+    expect(actions.map((action) => action.textContent)).toEqual(["Eliminar", "Cancelar"]);
+    // 44px touch targets, full width, one per row.
+    expect(actions[0].className).toContain("h-11");
+    expect(actions[0].className).toContain("w-full");
+    expect(actions[1].className).toContain("h-11");
+    expect(actions[1].className).toContain("w-full");
+    expect(actions[0].parentElement?.className).toContain("flex-col");
+    // The confirm action keeps its destructive styling.
+    expect(actions[0].className).toContain("bg-danger");
+  });
+
+  it("keeps the side-by-side layout from sm up", () => {
+    stubSmBreakpoint(true);
+    renderDialog();
+
+    const actions = screen.getAllByRole("button");
+    expect(actions.map((action) => action.textContent)).toEqual(["Cancelar", "Eliminar"]);
+    expect(actions[0].className).toContain("flex-1");
+    expect(actions[0].parentElement?.className).not.toContain("flex-col");
+  });
+
+  it("starts the action sheet on cancel instead of arming the destructive action", () => {
+    stubSmBreakpoint(false);
+    renderDialog();
+
+    expect(screen.getByRole("button", { name: "Cancelar" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Eliminar" })).not.toHaveFocus();
+  });
+
+  it("confirms from the sheet with the same handler", () => {
+    stubSmBreakpoint(false);
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <ConfirmDialog
+        isOpen
+        onClose={onClose}
+        onConfirm={onConfirm}
+        title="Eliminar cliente"
+        message="¿Estás seguro?"
+        confirmText="Eliminar"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ConfirmDialog haptics", () => {
+  const vibrate = vi.fn(() => true);
+
+  beforeEach(() => {
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      writable: true,
+      value: vibrate,
+    });
+  });
+
+  afterEach(() => {
+    vibrate.mockClear();
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  it("buzzes the warning pattern when the action is confirmed", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
 
     expect(vibrate).toHaveBeenCalledWith(HAPTIC_PATTERNS.warning);
+  });
+
+  it("stays silent when the user backs out", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(vibrate).not.toHaveBeenCalled();
   });
 });

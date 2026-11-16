@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/Table";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import {
   Plus,
   AlertTriangle,
@@ -82,7 +82,7 @@ function InventoryContent() {
     setPage(1);
   }
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [viewMode, setViewMode] = usePersistedViewMode("inventory");
+  const [viewMode, setViewMode] = useEffectiveViewMode("inventory");
   const [showModal, setShowModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showReactivateModal, setShowReactivateModal] = useState(false);
@@ -699,7 +699,7 @@ function InventoryContent() {
                               canManageInventory ? () => handleEdit(product) : undefined
                             }
                             className={cn(
-                              canManageInventory && "cursor-pointer",
+                              canManageInventory && "cursor-pointer active:bg-muted/40",
                               product.active === false && "opacity-60",
                             )}
                           >

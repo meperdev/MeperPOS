@@ -456,8 +456,10 @@ describe("ProductCard — offer badge and strikethrough (#74)", () => {
       />,
     );
 
-    expect(screen.getByText(/Oferta/)).toBeInTheDocument();
+    // The overlay badge stays for pointer widths; the phone tile shows the same
+    // discount compactly at the end of the stock line.
     expect(screen.getByText(/Oferta/).textContent).toContain("-15%");
+    expect(screen.getByTestId("offer-compact").textContent).toContain("-15%");
     expect(screen.getByTestId("offer-list-price").textContent).toContain(
       formatCurrency(19900),
     );
@@ -1081,5 +1083,91 @@ describe("ProductCard — theme tokens only", () => {
       .filter((token) => LITERAL_COLOR.test(token));
 
     expect(offending).toEqual([]);
+  });
+});
+
+describe("ProductCard — compact POS card on phones (S3.3)", () => {
+  it("keeps the add-to-cart target labelled and gives it a pressed state", () => {
+    render(<ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} onToggleFavorite={vi.fn()} />);
+
+    const add = screen.getByRole("button", { name: `Agregar al carrito: ${baseProduct.name}` });
+    // The aria-label is the documented contract every POS screen reader path uses.
+    expect(add.getAttribute("aria-label")).toBe(`Agregar al carrito: ${baseProduct.name}`);
+    expect(add.className).toContain("active:bg-muted/20");
+  });
+
+  it("shrinks to a phone-sized card while the desktop shape stays as it was", () => {
+    render(<ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} onToggleFavorite={vi.fn()} />);
+
+    const card = screen
+      .getByRole("button", { name: `Agregar al carrito: ${baseProduct.name}` })
+      .parentElement as HTMLElement;
+
+    // Phone: a short card. Wider viewports keep the 4/5 poster shape.
+    expect(card.className).toContain("max-sm:min-h-[7rem]");
+    expect(card.className).toContain("max-sm:aspect-auto");
+    expect(card.className).toContain("aspect-[4/5]");
+  });
+
+  it("hides the media strip so the tile starts at the name", () => {
+    render(<ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} onToggleFavorite={vi.fn()} />);
+
+    const add = screen.getByRole("button", { name: `Agregar al carrito: ${baseProduct.name}` });
+    const card = add.parentElement as HTMLElement;
+
+    // No grey well and no divider line above the name on a phone tile: the whole
+    // media layer stays unpainted and the sheet carries the tile from its top edge.
+    expect(screen.getByTestId("product-media").className).toContain("max-sm:hidden");
+    const sheet = screen.getByTestId("product-sheet");
+    expect(sheet.className).toContain("max-sm:border-t-0");
+    expect(sheet.className).toContain("max-sm:mt-0");
+    // The sheet owns the whole tile, so name, stock and price spread instead of
+    // leaving a dead band under the price.
+    expect(sheet.className).toContain("max-sm:h-full");
+    expect(sheet.className).toContain("max-sm:justify-between");
+    expect(card.className).toContain("max-sm:bg-card");
+  });
+
+  it("keeps the name full width, the stock under it and the star in the price row", () => {
+    render(<ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} onToggleFavorite={vi.fn()} />);
+
+    const name = screen.getByRole("heading", { name: baseProduct.name });
+    // Two lines of the tile's full width, broken between words only.
+    expect(name.className).toContain("line-clamp-2");
+    expect(name.className).toContain("break-words");
+    expect(name.className).not.toContain("break-all");
+    expect(name.className).not.toContain("pr-11");
+
+    // The stock count starts its own line under the name.
+    const stock = screen.getByTestId("product-stock");
+    expect(stock.className).toContain("max-sm:ml-0");
+
+    // The price owns the left of the bottom row and yields the star's disc on the right.
+    const priceRow = screen.getByTestId("product-price-row");
+    expect(priceRow.className).toContain("max-sm:pr-8");
+    expect(priceRow.className).toContain("max-sm:min-h-11");
+    expect(priceRow.className).toContain("max-sm:items-center");
+
+    // One favourite control, still a 44px target, drawn as a small disc in the
+    // tile's bottom corner so it cannot sit on the price or the name.
+    const favorite = screen.getByRole("button", { name: /agregar a favoritos/i });
+    expect(favorite.className).toContain("h-11");
+    expect(favorite.className).toContain("w-11");
+    const rail = favorite.parentElement as HTMLElement;
+    expect(rail.className).toContain("max-sm:top-auto");
+    expect(rail.className).toContain("max-sm:bottom-1.5");
+    expect(favorite.firstElementChild?.className).toContain("max-sm:h-6");
+    expect(favorite.firstElementChild?.className).toContain("max-sm:w-6");
+  });
+
+  it("shows name, price and stock on a phone", () => {
+    render(<ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} onToggleFavorite={vi.fn()} />);
+
+    const name = screen.getByRole("heading", { name: baseProduct.name });
+    expect(name.className).toContain("line-clamp-2");
+    expect(name.className).toContain("max-sm:text-xs");
+
+    expect(screen.getByTestId("product-stock")).toBeInTheDocument();
+    expect(screen.getByTestId("product-price-panel")).toBeInTheDocument();
   });
 });

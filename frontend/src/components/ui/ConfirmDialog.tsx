@@ -5,6 +5,8 @@ import { AlertTriangle } from "lucide-react";
 import { haptic } from "@/lib/haptics";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
+import { cn } from "@/lib/utils";
+import { useBelowSmViewport } from "@/hooks/useVisualViewport";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -26,6 +28,8 @@ export function ConfirmDialog({
   cancelText = "Cancelar",
 }: ConfirmDialogProps) {
   const [isConfirming, setIsConfirming] = useState(false);
+  // Below `sm` the two actions stack as an action sheet, the way iOS orders them.
+  const actionSheet = useBelowSmViewport();
 
   const handleConfirm = async () => {
     // Every use of this dialog removes something, so the confirm is the one
@@ -39,6 +43,35 @@ export function ConfirmDialog({
       setIsConfirming(false);
     }
   };
+
+  const confirmAction = (
+    <Button
+      key="confirm"
+      variant="danger"
+      onClick={handleConfirm}
+      loading={isConfirming}
+      className={actionSheet ? "h-11 w-full" : "flex-1"}
+      size="md"
+    >
+      {confirmText}
+    </Button>
+  );
+
+  const cancelAction = (
+    <Button
+      key="cancel"
+      variant="secondary"
+      onClick={onClose}
+      disabled={isConfirming}
+      // Opening a confirmation must not arm the destructive action: focus lands
+      // here, so Enter or a screen-reader double-tap cannot delete by reflex.
+      data-modal-autofocus
+      className={actionSheet ? "h-11 w-full" : "flex-1"}
+      size="md"
+    >
+      {cancelText}
+    </Button>
+  );
 
   return (
     <Modal
@@ -57,25 +90,10 @@ export function ConfirmDialog({
           <p className="mt-1 text-xs text-muted-foreground">{message}</p>
         </div>
 
-        <div className="flex gap-2 pt-1">
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            disabled={isConfirming}
-            className="flex-1"
-            size="md"
-          >
-            {cancelText}
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleConfirm}
-            loading={isConfirming}
-            className="flex-1"
-            size="md"
-          >
-            {confirmText}
-          </Button>
+        <div className={cn("gap-2 pt-1", actionSheet ? "flex flex-col" : "flex")}>
+          {/* The sheet leads with the decision, the way a native action sheet does;
+              the desktop dialog keeps cancel on the left. */}
+          {actionSheet ? [confirmAction, cancelAction] : [cancelAction, confirmAction]}
         </div>
       </div>
     </Modal>

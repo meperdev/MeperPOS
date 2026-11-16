@@ -20,7 +20,7 @@ import { RowActions } from "@/components/ui/RowActions";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployees } from "@/hooks/useEmployees";
 import { cn } from "@/lib/utils";
@@ -81,7 +81,7 @@ export default function PayrollPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<PayrollFilter>("all");
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const [viewMode, setViewMode] = usePersistedViewMode("payroll");
+  const [viewMode, setViewMode] = useEffectiveViewMode("payroll");
   const [page, setPage] = useState(1);
   const pageSize = viewMode === "table" ? 10 : 9;
 
