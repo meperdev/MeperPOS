@@ -236,7 +236,9 @@ export function AlertCenter({
               "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg shadow-black/10",
               coords
                 ? "w-[22rem]"
-                : "inset-x-3 top-16 max-h-[calc(100dvh-5rem)]",
+                : // Pinned under the mobile header and inside the side insets, never
+                  // taller than the space that header leaves.
+                  "left-[max(0.75rem,var(--safe-left))] right-[max(0.75rem,var(--safe-right))] top-[calc(var(--mobile-header)+var(--safe-top)+0.5rem)] max-h-[calc(100dvh-var(--mobile-header)-var(--safe-top)-0.5rem-var(--safe-bottom))]",
             )}
           >
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5">

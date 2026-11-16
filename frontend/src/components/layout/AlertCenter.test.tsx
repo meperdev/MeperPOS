@@ -151,3 +151,35 @@ describe("AlertCenter", () => {
     expect(screen.getByText("Todo en orden")).toBeInTheDocument();
   });
 });
+
+describe("AlertCenter mobile panel", () => {
+  afterEach(() => {
+    cleanup();
+    Object.defineProperty(window, "innerWidth", {
+      value: 1024,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("opens below the mobile header and pays the side insets", () => {
+    Object.defineProperty(window, "innerWidth", {
+      value: 390,
+      configurable: true,
+      writable: true,
+    });
+    alertsState.current = twoAlerts;
+    localStorage.clear();
+    render(<AlertCenter />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+
+    const panel = screen.getByRole("dialog", { name: "Alertas" });
+    expect(panel.className).toContain("var(--mobile-header)");
+    expect(panel.className).toContain("var(--safe-top)");
+    expect(panel.className).toContain("var(--safe-left)");
+    expect(panel.className).toContain("var(--safe-right)");
+    // Never taller than the viewport it is pinned into.
+    expect(panel.className).toContain("100dvh");
+  });
+});
