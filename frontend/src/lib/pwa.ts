@@ -10,8 +10,12 @@ import { APP_DESCRIPTION, APP_NAME } from "@/lib/constants";
  * describe a file the build does not ship.
  */
 
-/** Matches the `--background` token of the light theme in `globals.css`. */
-export const PWA_THEME_COLOR_LIGHT = "#FAF8FF";
+/**
+ * Matches the light `--background` token (`:root` in `globals.css`), so the
+ * status bar and the app paint the same surface. `pwa.test.ts` reads the token
+ * back out of the stylesheet and fails the moment the two drift apart.
+ */
+export const PWA_THEME_COLOR_LIGHT = "#FAFAF9";
 
 /** Matches the `--background` token of the dark theme in `globals.css`. */
 export const PWA_THEME_COLOR_DARK = "#111114";

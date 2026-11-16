@@ -94,7 +94,14 @@ export default function SaleDetailPage() {
           title="Detalle de venta"
           subtitle="Resumen completo de la transacción"
           actions={
-            <Button variant="secondary" size="sm" onClick={() => router.push("/sales")}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => router.push("/sales")}
+              // S1.2: below lg the fixed top bar carries the back chevron, so this
+              // copy is hidden there and kept for the desktop rail layout.
+              className="hidden lg:inline-flex"
+            >
               <ArrowLeft className="w-3.5 h-3.5" /> Volver
             </Button>
           }

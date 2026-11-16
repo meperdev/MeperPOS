@@ -974,10 +974,16 @@ export default function POSPage() {
   return (
     <DashboardLayout>
       <h1 className="sr-only">Punto de venta</h1>
-      <div className={cn("flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_22rem] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
+      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_22rem] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
-        <div className="flex min-h-0 flex-col lg:h-full">
-          <div className="flex h-[calc(100dvh-8rem)] min-h-[580px] flex-col rounded-2xl border border-border/70 bg-card sm:min-h-[500px] lg:h-full">
+        <div className="flex min-h-0 flex-1 flex-col lg:h-full">
+          {/*
+            Below lg the panel fills the shell's content box exactly — the space
+            between the fixed top bar and the tab bar (L3: the document scrolls,
+            so a panel that guessed its own `dvh` offset pushed a second
+            scrollbar onto the page). `lg:h-full` keeps the desktop split.
+          */}
+          <div data-testid="pos-products-panel" className="flex h-full min-h-0 flex-col rounded-2xl border border-border/70 bg-card">
             {/* Products Header */}
             <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-border/60">
               <h2 className="text-sm font-semibold tracking-tight text-foreground">
@@ -1066,8 +1072,8 @@ export default function POSPage() {
             </div>
 
             {/* Product Grid */}
-            {/* Below lg the panel is a fixed dvh height, so this area scrolls and the pager stays put. */}
-            <div ref={capacityAreaRef} data-testid="pos-capacity-area" className="min-h-[280px] flex-1 overflow-y-auto p-4 lg:overflow-visible">
+            {/* Below lg the panel is exactly the shell's content box, so this area scrolls and the pager stays put. */}
+            <div ref={capacityAreaRef} data-testid="pos-capacity-area" className="min-h-0 flex-1 overflow-y-auto p-4 lg:overflow-visible">
               <div
                 ref={productGridRef}
                 style={{ gridTemplateColumns: POS_GRID_TEMPLATE_COLUMNS }}

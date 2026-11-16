@@ -124,7 +124,12 @@ export default function PurchaseOrderDetailPage() {
           <div className="flex items-start gap-3">
             <Link
               href="/purchase-orders"
-              className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border hover:bg-muted hover:text-foreground mt-0.5"
+              // S1.2: below lg the fixed top bar carries the back chevron, so this
+              // copy is hidden there and kept for the desktop rail layout.
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border hover:bg-muted hover:text-foreground mt-0.5",
+                "hidden lg:inline-flex",
+              )}
             >
               <ArrowLeft className="w-3.5 h-3.5" /> Volver
             </Link>

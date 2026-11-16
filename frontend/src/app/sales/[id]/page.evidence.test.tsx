@@ -27,8 +27,16 @@ vi.mock("@/components/ui/Badge", () => ({
 }));
 
 vi.mock("@/components/ui/Button", () => ({
-  Button: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>
+  Button: ({
+    children,
+    onClick,
+    className,
+  }: {
+    children: ReactNode;
+    onClick?: () => void;
+    className?: string;
+  }) => (
+    <button type="button" onClick={onClick} className={className}>
       {children}
     </button>
   ),
@@ -164,5 +172,21 @@ describe("Recent-sales drill-down detail outcomes (#15)", () => {
     expect(screen.getByText("No se pudo abrir la venta")).toBeTruthy();
     expect(screen.getByText("No tienes permisos para ver esta venta.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Volver" })).toBeTruthy();
+  });
+
+  // S1.2: below lg the fixed top bar carries the back chevron, so the in-content
+  // copy is hidden there and kept for the desktop rail layout.
+  it("leaves the in-content back button to the mobile top bar", () => {
+    useSaleMock.mockReturnValue({
+      data: makeSale(),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<SaleDetailPage />);
+
+    const back = screen.getByRole("button", { name: "Volver" });
+    expect(back).toHaveClass("hidden");
+    expect(back).toHaveClass("lg:inline-flex");
   });
 });

@@ -18,6 +18,7 @@ interface PaginationProps {
   /**
    * Pages pin the footer to the bottom of their flex column (the page root fills
    * the viewport, see DashboardLayout). Inline callers, such as modals, opt out.
+   * Below `lg` the footer parks above the fixed tab bar instead of under it.
    */
   pinned?: boolean;
   className?: string;
@@ -61,7 +62,7 @@ export function Pagination({
       className={cn(
         "@container flex flex-wrap items-center justify-between gap-3 text-xs",
         pinned &&
-          "mt-auto sticky bottom-0 z-10 bg-background border-t border-border pt-3 pb-[max(0.75rem,var(--safe-bottom))]",
+          "mt-auto sticky bottom-[calc(var(--mobile-tabbar)+var(--safe-bottom))] lg:bottom-0 z-10 bg-background border-t border-border pt-3 pb-[max(0.75rem,var(--safe-bottom))]",
         className,
       )}
     >

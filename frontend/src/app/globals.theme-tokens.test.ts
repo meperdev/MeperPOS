@@ -86,6 +86,32 @@ describe("slice 1: layout font swap Manrope -> Geist (ADR-1)", () => {
   });
 });
 
+describe("mobile shell geometry tokens (S1.3)", () => {
+  it("defines the tab bar height next to the mobile header", () => {
+    expect(globalsCss).toContain("--mobile-tabbar:");
+    expect(globalsCss).toContain("--mobile-header:");
+    expect(globalsCss).toContain("--mobile-header-gap:");
+  });
+
+  it("derives the mobile content box from the fixed bars instead of a magic number", () => {
+    const derived = globalsCss.match(/--mobile-content-height:\s*calc\(([^;]+)\);/);
+    expect(derived).not.toBeNull();
+
+    // Every bar the content box subtracts is a token: change a bar and the
+    // pages that size themselves to the box follow it.
+    for (const token of [
+      "--mobile-header",
+      "--mobile-header-gap",
+      "--mobile-tabbar",
+      "--safe-top",
+      "--safe-bottom",
+      "--mobile-content-bottom-gap",
+    ]) {
+      expect(derived![1]).toContain(token);
+    }
+  });
+});
+
 describe("categorical chart scale (S14): --chart-1..8 for category series", () => {
   const light = [
     "--chart-1: var(--primary);",

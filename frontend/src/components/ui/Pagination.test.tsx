@@ -15,7 +15,11 @@ describe("Pagination placement", () => {
     const footer = screen.getByText(/Mostrando/).closest<HTMLElement>("div")!;
     expect(footer.className).toContain("mt-auto");
     expect(footer.className).toContain("sticky");
-    expect(footer.className).toContain("bottom-0");
+    // S1.3: below lg the bar parks above the fixed tab bar instead of under it.
+    expect(footer.className).toContain(
+      "bottom-[calc(var(--mobile-tabbar)+var(--safe-bottom))]",
+    );
+    expect(footer.className).toContain("lg:bottom-0");
     expect(footer.className).toContain("z-10");
     expect(footer.className).toContain("bg-background");
     expect(footer.className).toContain("border-t");
@@ -63,6 +67,18 @@ describe("Pagination pinned safe area", () => {
       <Pagination currentPage={1} totalPages={3} onPageChange={vi.fn()} totalItems={30} pageSize={10} pinned={false} />,
     );
     expect(screen.getByText(/Mostrando/).closest("div")).not.toHaveClass("pb-[max(0.75rem,var(--safe-bottom))]");
+  });
+
+  it("keeps the desktop bar flush with the viewport bottom", () => {
+    render(
+      <Pagination currentPage={1} totalPages={3} onPageChange={vi.fn()} totalItems={30} pageSize={10} />,
+    );
+
+    const pinned = screen.getByText(/Mostrando/).closest<HTMLElement>("div")!;
+    // `lg:bottom-0` restores the desktop position; the mobile offset is the
+    // only one that knows about the tab bar.
+    expect(pinned.className).toContain("lg:bottom-0");
+    expect(pinned.className).not.toMatch(/(^|\s)bottom-0(\s|$)/);
   });
 });
 

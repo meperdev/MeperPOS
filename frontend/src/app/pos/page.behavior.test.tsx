@@ -547,6 +547,43 @@ describe("POS capacity attachment across auth readiness", () => {
   });
 });
 
+describe("POS panel sizing (S1.3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(cleanup);
+
+  it("sizes the panel to the shell's mobile content box instead of a dvh guess", () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [], meta: { total: 0, totalPages: 1 } },
+      isLoading: false,
+    });
+    render(<POSPage />);
+
+    const page = screen.getByTestId("pos-page-root");
+    // The box between the fixed top bar and the tab bar, derived from tokens.
+    expect(page.className).toContain("h-[var(--mobile-content-height)]");
+    // Desktop keeps its own height; only the mobile one changed.
+    expect(page.className).toContain("lg:h-[calc(100dvh-6rem)]");
+    expect(page.className).toContain("lg:grid");
+
+    const panel = screen.getByTestId("pos-products-panel");
+    // The old `h-[calc(100dvh-8rem)] min-h-[580px]` forced a second scrollbar on
+    // phones: the panel outgrew the space the shell actually had.
+    expect(panel.className).not.toContain("580");
+    expect(panel.className).not.toContain("8rem");
+    expect(panel.className).toContain("h-full");
+    expect(panel.className).toContain("min-h-0");
+
+    // The grid area shrinks with the panel instead of keeping a floor that would
+    // push the pager out of the card on a short phone.
+    const area = screen.getByTestId("pos-capacity-area");
+    expect(area.className).toContain("min-h-0");
+    expect(area.className).not.toContain("min-h-[280px]");
+  });
+});
+
 describe("POS behavior evidence (#19, #18)", () => {
   beforeEach(() => {
     vi.clearAllMocks();

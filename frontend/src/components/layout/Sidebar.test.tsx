@@ -823,3 +823,78 @@ describe("Sidebar", () => {
   });
 });
 
+// S1.2: the drawer is the "everything else" surface. The four sections the tab
+// bar already offers leave it below lg, and a group whose whole list is tabs
+// loses its heading too. jsdom resolves no media query, so the responsive
+// contract is pinned by the classes: `hidden lg:flex` on a row, `hidden lg:block`
+// on a group, and a plain `flex` on a row that stays.
+describe("drawer offers only what the tab bar does not", () => {
+  function renderAs(role: string) {
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "user-1",
+        name: "Ana Perez",
+        role,
+        active: true,
+        organizationId: "org-a",
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [] },
+    });
+    return render(<Sidebar />, { wrapper });
+  }
+
+  it("drops every section an owner already has as a tab", () => {
+    renderAs("OWNER");
+
+    for (const name of ["Panel", "POS", "Ventas", "Inventario"]) {
+      const row = screen.getByRole("link", { name });
+      expect(row).toHaveClass("hidden");
+      expect(row).toHaveClass("lg:flex");
+      // tailwind-merge must have dropped the bare `flex`, or display:none loses.
+      expect(row).not.toHaveClass("flex");
+    }
+
+    const kept = screen.getByRole("link", { name: "Clientes" });
+    expect(kept).toHaveClass("flex");
+    expect(kept).not.toHaveClass("hidden");
+  });
+
+  it("keeps the rows a cashier's tabs do not cover", () => {
+    renderAs("CASHIER");
+
+    for (const name of ["POS", "Ventas", "Inventario"]) {
+      expect(screen.getByRole("link", { name })).toHaveClass("hidden");
+    }
+    // Clientes and Préstamos have no tab, so their rows stay in the drawer.
+    expect(screen.getByRole("link", { name: "Clientes" })).toHaveClass("flex");
+    expect(screen.getByRole("link", { name: "Préstamos" })).toHaveClass("flex");
+    // Panel is not a cashier section at all: the role filter, not the tab rule.
+    expect(screen.queryByRole("link", { name: "Panel" })).toBeNull();
+  });
+
+  it("removes a group heading whose whole list is tabs", () => {
+    const { container } = renderAs("CASHIER");
+
+    const inventoryGroup = container.querySelector('[data-nav-group="Inventario"]');
+    expect(inventoryGroup?.className).toContain("hidden");
+    expect(inventoryGroup?.className).toContain("lg:block");
+
+    const operationsGroup = container.querySelector('[data-nav-group="Operación"]');
+    expect(operationsGroup?.className).not.toContain("hidden");
+  });
+
+  it("removes Operación for an inventory user, whose only row there is a tab", () => {
+    const { container } = renderAs("INVENTORY_USER");
+
+    const operationsGroup = container.querySelector('[data-nav-group="Operación"]');
+    expect(operationsGroup?.className).toContain("hidden");
+    expect(operationsGroup?.className).toContain("lg:block");
+
+    const inventoryGroup = container.querySelector('[data-nav-group="Inventario"]');
+    expect(inventoryGroup?.className).not.toContain("hidden");
+  });
+});

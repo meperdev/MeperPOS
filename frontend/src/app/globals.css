@@ -393,6 +393,25 @@ h4 {
     --mobile-header: 3.5rem;
     /* Gap between that header and the first content row. */
     --mobile-header-gap: 1.5rem;
+    /*
+     * Height of the fixed mobile tab bar, excluding the home-indicator inset it
+     * pays on top. Every fixed surface that shares the bottom edge below `lg`
+     * (the bar itself, the POS cart bar, a pinned paginator) offsets from this
+     * value, so nothing can end up parked behind the bar.
+     */
+    --mobile-tabbar: 3.75rem;
+    /* Air between the content and the tab bar, matching the header gap's role. */
+    --mobile-content-bottom-gap: 1.5rem;
+    /*
+     * The content box the authenticated shell hands a page below `lg`: the
+     * viewport minus the fixed top bar, the fixed tab bar and their insets. A
+     * page that must fit a phone exactly (POS) sizes to this instead of guessing
+     * a `dvh` offset, which is how the second scrollbar used to appear.
+     */
+    --mobile-content-height: calc(
+        100dvh - var(--mobile-header) - var(--mobile-header-gap) - var(--safe-top) -
+            var(--mobile-tabbar) - var(--safe-bottom) - var(--mobile-content-bottom-gap)
+    );
 }
 
 /* ─── Installed app shell ──────────────────────────────── */
