@@ -12,30 +12,16 @@ import { applyOrganizationScope } from "@/lib/organizationScope";
 export { applyOrganizationScope };
 import { SELECTED_ORGANIZATION_KEY } from "@/lib/session";
 import {
-  LayoutDashboard,
-  ShoppingBasket,
-  Package,
-  Users,
-  Shield,
-  TrendingUp,
-  FolderTree,
-  Receipt,
   Settings,
   LogOut,
   Moon,
   Sun,
   User as UserIcon,
-  Menu,
-  X,
-  ClipboardList,
-  Truck,
-  Wallet,
-  Banknote,
   Building2,
   ChevronsLeft,
   ChevronsRight,
-  HandCoins,
   MoreVertical,
+  X,
 } from "lucide-react";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { formatSidebarClock } from "@/components/layout/sidebar-clock";
@@ -43,132 +29,19 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn, safeGetItem, safeSetItem } from "@/lib/utils";
 import { APP_NAME, RAIL_FLYOUT_GAP } from "@/lib/constants";
-import { hasAnyRole, type AppRole } from "@/lib/auth";
+import { hasAnyRole } from "@/lib/auth";
+import {
+  filterNavItems,
+  isNavItemActive,
+  mobileTabsFor,
+  type NavItem,
+} from "@/components/layout/nav-routes";
+import { useMobileDrawer } from "@/components/layout/mobile-drawer";
+import { MobileTopBar } from "@/components/layout/MobileTopBar";
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
 /** Rail scroll offset, kept across the session shell remounting around it. */
 export const SIDEBAR_SCROLL_KEY = "meper_sidebar_scroll_top";
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: React.ReactNode;
-  roles?: AppRole[];
-  /** Section header shown above the item when the rail is expanded. */
-  group: string;
-}
-
-const navItems: NavItem[] = [
-  {
-    label: "Panel",
-    href: "/dashboard",
-    icon: <LayoutDashboard className="w-4 h-4" />,
-    roles: ["ADMIN", "INVENTORY_USER"],
-    group: "Operación",
-  },
-  {
-    label: "POS",
-    href: "/pos",
-    icon: <ShoppingBasket className="w-4 h-4" />,
-    roles: ["ADMIN", "CASHIER"],
-    group: "Operación",
-  },
-  {
-    label: "Ventas",
-    href: "/sales",
-    icon: <Receipt className="w-4 h-4" />,
-    roles: ["ADMIN", "CASHIER"],
-    group: "Operación",
-  },
-  {
-    label: "Clientes",
-    href: "/customers",
-    icon: <Users className="w-4 h-4" />,
-    roles: ["ADMIN", "CASHIER"],
-    group: "Operación",
-  },
-  {
-    label: "Inventario",
-    href: "/inventory",
-    icon: <Package className="w-4 h-4" />,
-    roles: ["ADMIN", "CASHIER", "INVENTORY_USER"],
-    group: "Inventario",
-  },
-  {
-    label: "Categorías",
-    href: "/categories",
-    icon: <FolderTree className="w-4 h-4" />,
-    roles: ["ADMIN", "INVENTORY_USER"],
-    group: "Inventario",
-  },
-  {
-    label: "Proveedores",
-    href: "/suppliers",
-    icon: <Truck className="w-4 h-4" />,
-    roles: ["ADMIN", "INVENTORY_USER"],
-    group: "Inventario",
-  },
-  {
-    label: "Compras",
-    href: "/purchase-orders",
-    icon: <ClipboardList className="w-4 h-4" />,
-    roles: ["ADMIN", "INVENTORY_USER"],
-    group: "Inventario",
-  },
-  {
-    label: "Salidas",
-    href: "/expenses",
-    icon: <Wallet className="w-4 h-4" />,
-    roles: ["ADMIN"],
-    group: "Finanzas",
-  },
-  {
-    label: "Reportes",
-    href: "/reports",
-    icon: <TrendingUp className="w-4 h-4" />,
-    roles: ["ADMIN"],
-    group: "Finanzas",
-  },
-  {
-    label: "Préstamos",
-    href: "/loans",
-    icon: <HandCoins className="w-4 h-4" />,
-    roles: ["ADMIN", "CASHIER"],
-    group: "Finanzas",
-  },
-  {
-    label: "Empleados",
-    href: "/employees",
-    icon: <Users className="w-4 h-4" />,
-    roles: ["ADMIN"],
-    group: "Equipo",
-  },
-  {
-    label: "Nómina",
-    href: "/payroll",
-    icon: <Banknote className="w-4 h-4" />,
-    roles: ["ADMIN"],
-    group: "Equipo",
-  },
-  {
-    label: "Tareas",
-    href: "/tasks",
-    icon: <ClipboardList className="w-4 h-4" />,
-    roles: ["ADMIN", "CASHIER", "INVENTORY_USER"],
-    group: "Equipo",
-  },
-  {
-    label: "SuperAdmin",
-    href: "/admin",
-    icon: <Shield className="w-4 h-4" />,
-    roles: ["SUPER_ADMIN"],
-    group: "Administración",
-  },
-];
-
-// Owners and administrators only. These routes are checked by identity instead of
-// the inherited role list, so a SUPER_ADMIN scope never reaches tenant payroll.
-const OWNER_ADMIN_ONLY_ROUTES = ["/employees", "/payroll"];
 
 const roleLabels: Record<string, string> = {
   OWNER: "Propietario",
@@ -209,7 +82,9 @@ export function Sidebar() {
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(() => {
     return safeGetItem(SELECTED_ORGANIZATION_KEY);
   });
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // The drawer's open state is shared: the tab bar's "Más" opens the drawer this
+  // component renders, so neither can own the other's state.
+  const { isOpen: isMobileMenuOpen, close: closeMobileMenu } = useMobileDrawer();
   const [hoveredTooltip, setHoveredTooltip] = useState<{
     label: string;
     top: number;
@@ -220,28 +95,42 @@ export function Sidebar() {
   const scrollFrameRef = useRef<number | null>(null);
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
 
-  const filteredItems = navItems.filter(
-    (item) => OWNER_ADMIN_ONLY_ROUTES.includes(item.href)
-      ? user?.role === "OWNER" || user?.role === "ADMIN"
-      : !item.roles || (user && hasAnyRole(user.role, item.roles))
-  );
+  const filteredItems = filterNavItems(user?.role);
+
+  // The tab bar already offers four sections on a phone, so the drawer — which
+  // is the "everything else" surface there — drops their rows below `lg` and
+  // keeps every row at `lg`, where it is the rail. One rule for both, read from
+  // the same list the tab bar renders, so a tab and its row can never disagree.
+  const mobileTabHrefs = new Set(mobileTabsFor(user?.role).map((tab) => tab.href));
 
   // Consecutive items sharing a group collapse into one labelled block, so the
   // approved operational order survives while the rail gains a scannable spine.
   const navGroups = filteredItems.reduce<
-    Array<{ label: string; items: NavItem[] }>
+    Array<{ label: string; items: NavItem[]; hiddenBelowLg: boolean }>
   >((groups, item) => {
     const last = groups[groups.length - 1];
     if (last && last.label === item.group) {
       last.items.push(item);
     } else {
-      groups.push({ label: item.group, items: [item] });
+      groups.push({ label: item.group, items: [item], hiddenBelowLg: false });
     }
     return groups;
-  }, []);
+  }, []).map((group) => ({
+    ...group,
+    // A heading with nothing under it at phone width is noise: the whole block
+    // leaves the drawer and comes back with the rail.
+    hiddenBelowLg: group.items.every((item) => mobileTabHrefs.has(item.href)),
+  }));
 
-  const toggleMobileMenu = useCallback(() => setIsMobileMenuOpen((p) => !p), []);
-  const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
+  // Escape is the keyboard way out of a drawer that owns the left edge.
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMobileMenu();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isMobileMenuOpen, closeMobileMenu]);
 
   useEffect(() => {
     if (isMobileMenuOpen) {
@@ -402,17 +291,25 @@ export function Sidebar() {
 
   const sidebarContent = (
     <>
-      {/* Block 1: Brand - logo and wordmark sized to read as one lockup */}
+      {/* Block 1: Brand - logo and wordmark sized to read as one lockup. The
+          drawer is 280px wide and now spends 44 of them on its close control,
+          so the lockup steps down a size below lg and keeps its full size on
+          the 320px rail. */}
       <div
         data-testid="sidebar-brand"
         className={cn(
           "border-b border-border/70 shrink-0",
           isCollapsed
             ? "px-2 py-4 flex flex-col items-center gap-3"
-            : "px-5 py-5 flex items-center justify-between gap-3"
+            : "px-4 py-4 lg:px-5 lg:py-5 flex items-center justify-between gap-2 lg:gap-3"
         )}
       >
-        <div className={cn("flex items-center gap-3.5 min-w-0", isCollapsed && "justify-center")}>
+        <div
+          className={cn(
+            "flex items-center gap-3 min-w-0 lg:gap-3.5",
+            isCollapsed && "justify-center"
+          )}
+        >
           <Image
             src="/brand/icon-192.png"
             alt={`${APP_NAME} logo`}
@@ -420,12 +317,12 @@ export function Sidebar() {
             height={192}
             className={cn(
               "shrink-0 object-contain drop-shadow-xs",
-              isCollapsed ? "w-11 h-11" : "w-14 h-14"
+              isCollapsed ? "w-11 h-11" : "w-10 h-10 lg:w-14 lg:h-14"
             )}
           />
           <p
             className={cn(
-              "text-[30px] font-bold text-foreground truncate leading-none tracking-tight",
+              "text-2xl lg:text-[30px] font-bold text-foreground truncate leading-none tracking-tight",
               isCollapsed ? "sr-only" : "min-w-0"
             )}
           >
@@ -449,6 +346,16 @@ export function Sidebar() {
             <ChevronsLeft className="w-4 h-4" />
           )}
         </button>
+        {/* The drawer's own way out. The tab bar's "Más" opens it, and the
+            overlay, a link or Escape close it, but a control the thumb can
+            reach belongs at the top of a surface that covers 280 of 390px. */}
+        <button
+          type="button"
+          onClick={closeMobileMenu}
+          className="lg:hidden -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted"
+          aria-label="Cerrar menú"
+        >          <X className="h-5 w-5" aria-hidden="true" />
+        </button>
       </div>
 
       {/* Block 2: Navigation - role-filtered, active styling, edge-faded scroll */}
@@ -464,7 +371,11 @@ export function Sidebar() {
           {navGroups.map((group, groupIndex) => (
             <div
               key={group.label}
-              className={groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined}
+              data-nav-group={group.label}
+              className={cn(
+                groupIndex > 0 ? (isCollapsed ? "mt-2" : "mt-4") : undefined,
+                group.hiddenBelowLg && "hidden lg:block"
+              )}
             >
               {!isCollapsed && (
                 <p className="mb-1.5 px-2 text-xs font-medium text-muted-foreground">
@@ -478,10 +389,7 @@ export function Sidebar() {
                 )}
               >
                 {group.items.map((item) => {
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== "/dashboard" &&
-                      pathname.startsWith(`${item.href}/`));
+                  const isActive = isNavItemActive(pathname, item.href);
   
                   return (
                     <Link
@@ -506,6 +414,10 @@ export function Sidebar() {
                         isCollapsed
                           ? "mx-auto h-9 w-9 justify-center"
                           : "h-11 w-full gap-2 px-2 lg:h-9",
+                        // A row the tab bar already offers leaves the drawer but
+                        // comes back with the rail; tailwind-merge drops the bare
+                        // `flex` so `hidden` actually wins below lg.
+                        mobileTabHrefs.has(item.href) && "hidden lg:flex",
                         isActive
                           ? "active bg-muted/70 text-foreground"
                           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -686,46 +598,9 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile Header */}
-      {/*
-        Height grows by the top inset instead of letting the notch sit on the
-        controls, and the drawer below starts exactly where this ends.
-      */}
-      <header
-        className={cn(
-          "lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between",
-          "bg-card border-b border-border",
-          "h-[calc(var(--mobile-header)+var(--safe-top))] pt-[var(--safe-top)]",
-          "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]"
-        )}
-      >
-        <div className="flex min-w-0 items-center gap-1.5">
-          <button
-            onClick={toggleMobileMenu}
-            className="-ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={isMobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
-            aria-expanded={isMobileMenuOpen}
-          >
-            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-          <Image
-            src="/brand/icon-192.png"
-            alt={`${APP_NAME} logo`}
-            width={192}
-            height={192}
-            className="w-9 h-9 shrink-0 object-contain drop-shadow-xs"
-          />
-          <span className="truncate text-lg font-bold tracking-tight text-foreground">
-            Meper
-            <span className="text-[#B45309] underline decoration-[#B45309] decoration-2 underline-offset-4 dark:text-[#FF9933] dark:decoration-[#FF9933]">
-              POS
-            </span>
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <AlertCenter className="lg:hidden" />
-        </div>
-      </header>
+      {/* Mobile top bar: section title, back chevron and the bell. The drawer is
+          opened from the tab bar's "Más", so no hamburger lives here. */}
+      <MobileTopBar />
 
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
@@ -738,6 +613,8 @@ export function Sidebar() {
       {/* Sidebar (Fixed Desktop / Responsive Drawer Mobile) */}
       <aside
         data-sidebar-root
+        id="mobile-nav-drawer"
+        data-state={isMobileMenuOpen ? "open" : "closed"}
         className={cn(
           "fixed bottom-0 left-0 lg:top-0 lg:bottom-auto lg:h-screen flex flex-col z-50",
           "top-[calc(var(--mobile-header)+var(--safe-top))]",

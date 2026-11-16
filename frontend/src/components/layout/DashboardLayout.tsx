@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, memo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { AppShellSkeleton } from "@/components/layout/AppShellSkeleton";
 import { PlanLimitBanner } from "@/components/billing/PlanLimitBanner";
 import { ConnectionStatus } from "@/components/pwa/ConnectionStatus";
@@ -90,21 +91,23 @@ export const DashboardLayout = memo(function DashboardLayout({
   if (!loading && !isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-background" data-org-status={organizationStatus}>
+    <div className="min-h-dvh bg-background" data-org-status={organizationStatus}>
       {loading ? (
         <AppShellSkeleton isCollapsed={isCollapsed} />
       ) : (
         <>
           <Sidebar />
+          <MobileTabBar />
           <main
             className={cn(
               // Full-height flex column: a page root that grows to fill it can pin its paginator to the bottom.
-              "flex min-h-screen flex-col",
+              "flex min-h-dvh flex-col",
               // Derived, not magic: the mobile header is `--mobile-header`, the gap
-              // below it is `--mobile-header-gap`, and the notch inset is added on
-              // top. Changing the header height moves this column with it. `lg:`
-              // keeps the desktop column as it was; physical insets are zero there.
-              "pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]",
+              // below it is `--mobile-header-gap`, the bottom edge belongs to the
+              // tab bar (`--mobile-tabbar` plus its inset) and the notch insets are
+              // added on top. Changing a bar moves this column with it. `lg:` keeps
+              // the desktop column as it was; physical insets are zero there.
+              "pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))] pb-[calc(var(--mobile-tabbar)+var(--safe-bottom)+var(--mobile-content-bottom-gap))]",
               "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]",
               "lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
               isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"

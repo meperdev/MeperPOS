@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ArrowLeft, Plus, Trash2, ClipboardList } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import type { Product } from "@/types";
@@ -138,7 +138,12 @@ export default function NewPurchaseOrderPage() {
         <div className="space-y-3">
           <Link
             href="/purchase-orders"
-            className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+            // S1.2: below lg the fixed top bar carries the back chevron, so this
+            // copy is hidden there and kept for the desktop rail layout.
+            className={cn(
+              "inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+              "hidden lg:inline-flex",
+            )}
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Volver
           </Link>

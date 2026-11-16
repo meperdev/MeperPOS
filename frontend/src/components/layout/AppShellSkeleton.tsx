@@ -13,11 +13,29 @@ const pulse = "animate-pulse motion-reduce:animate-none";
 export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
   return (
     <div className="contents" data-testid="app-shell-skeleton">
-      {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-50 flex items-center gap-3 px-4 bg-card border-b border-border">
-        <div className={cn("h-9 w-9 rounded-lg bg-muted", pulse)} />
+      {/* Mobile top bar — same height token as MobileTopBar */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 flex h-[calc(var(--mobile-header)+var(--safe-top))] items-center gap-3 border-b border-border bg-card pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))] pt-[var(--safe-top)]">
         <div className={cn("h-5 w-28 rounded bg-muted", pulse)} />
+        <div className={cn("ml-auto h-5 w-5 rounded bg-muted", pulse)} />
       </header>
+
+      {/* Mobile tab bar — the strip the real shell pins to the bottom edge */}
+      <div
+        aria-hidden="true"
+        data-testid="app-shell-skeleton-tabbar"
+        className="lg:hidden fixed inset-x-0 bottom-0 z-30 flex h-[calc(var(--mobile-tabbar)+var(--safe-bottom))] items-stretch gap-2 border-t border-border bg-card pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] pt-2"
+      >
+        {[0, 1, 2, 3, 4].map((slot) => (
+          <div
+            key={slot}
+            className={cn("flex flex-1 flex-col items-center justify-center gap-1.5", pulse)}
+            style={{ animationDelay: `${slot * 60}ms` }}
+          >
+            <div className="h-5 w-5 rounded bg-muted" />
+            <div className="h-2 w-10 rounded bg-muted/70" />
+          </div>
+        ))}
+      </div>
 
       {/* Desktop rail */}
       <aside
@@ -130,7 +148,7 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
       {/* Content */}
       <main
         className={cn(
-          "px-4 pb-6 pt-20 lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
+          "min-h-dvh px-4 pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))] pb-[calc(var(--mobile-tabbar)+var(--safe-bottom)+var(--mobile-content-bottom-gap))] lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
           isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
         )}
       >

@@ -116,6 +116,27 @@ describe("theme color single source of truth", () => {
     ]);
   });
 
+  // The status bar and the app background must be the same surface. When the
+  // constant drifts from the token the installed app paints a band that does
+  // not belong to the palette, which is exactly what happened before.
+  it("keeps both constants identical to their --background token", () => {
+    const globalsCss = readFileSync(
+      path.resolve(process.cwd(), "src/app/globals.css"),
+      "utf8",
+    );
+    const lightBlock = globalsCss.slice(
+      globalsCss.indexOf(":root {"),
+      globalsCss.indexOf(".dark {"),
+    );
+    const darkBlock = globalsCss.slice(globalsCss.indexOf(".dark {"));
+
+    const token = (block: string): string | undefined =>
+      block.match(/--background:\s*(#[0-9A-Fa-f]{6});/)?.[1];
+
+    expect(PWA_THEME_COLOR_LIGHT).toBe(token(lightBlock));
+    expect(PWA_THEME_COLOR_DARK).toBe(token(darkBlock));
+  });
+
   it("hardcodes no color literals in the root layout", () => {
     const layout = readFileSync(
       path.resolve(process.cwd(), "src/app/layout.tsx"),

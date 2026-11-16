@@ -20,7 +20,9 @@ export function MobileCartFloatingBar({
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 p-3 bg-card border-t border-border/80 shadow-lg shadow-black/10 pb-[calc(0.75rem+env(safe-area-inset-bottom))] animate-slide-in-bottom">
+    // The tab bar owns the bottom edge below lg, so the bar sits on top of it:
+    // same token, no magic number, and no need to re-pay the home indicator.
+    <div className="lg:hidden fixed bottom-[calc(var(--mobile-tabbar)+var(--safe-bottom))] left-0 right-0 z-40 p-3 bg-card border-t border-border/80 shadow-lg shadow-black/10 animate-slide-in-bottom">
       <button
         type="button"
         onClick={onClick}

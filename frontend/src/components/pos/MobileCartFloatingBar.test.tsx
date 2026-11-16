@@ -62,4 +62,23 @@ describe("MobileCartFloatingBar", () => {
     await user.click(barButton);
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
+
+  // S1.3: the tab bar owns the bottom edge below lg, so the cart bar parks on
+  // top of it. Its offset is derived from the same token the tab bar uses.
+  it("sits above the mobile tab bar instead of behind it", async () => {
+    render(
+      <MobileCartFloatingBar
+        cart={[mockCartItem]}
+        total={105000}
+        onClick={vi.fn()}
+      />,
+    );
+
+    const bar = screen.getByRole("button", { name: /Ver carrito/i })
+      .parentElement!;
+    expect(bar.className).toContain(
+      "bottom-[calc(var(--mobile-tabbar)+var(--safe-bottom))]",
+    );
+    expect(bar.className).toContain("lg:hidden");
+  });
 });

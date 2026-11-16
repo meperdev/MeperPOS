@@ -20,8 +20,17 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ children, href }: { children: ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
+  default: ({
+    children,
+    href,
+    ...props
+  }: {
+    children: ReactNode;
+    href: string;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
   ),
 }));
 
@@ -173,6 +182,22 @@ describe("Purchase order detail page behavior", () => {
       screen.getByText("La orden de compra no existe o fue eliminada."),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /Ir a órdenes/i })).toBeTruthy();
+  });
+
+  // S1.2: below lg the fixed top bar carries the back chevron, so the in-content
+  // copy is hidden there and kept for the desktop rail layout.
+  it("leaves the in-content back link to the mobile top bar", () => {
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder(),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    const back = screen.getByRole("link", { name: "Volver" });
+    expect(back).toHaveClass("hidden");
+    expect(back).toHaveClass("lg:inline-flex");
   });
 
   it("shows the items table only from the @2xl container breakpoint", () => {

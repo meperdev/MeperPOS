@@ -22,6 +22,23 @@ vi.mock("./Sidebar", () => ({
   Sidebar: () => null,
 }));
 
+// The tab bar is the shell's other navigation surface; it renders real links,
+// and this suite is about the shell's geometry and gating, not Next's router.
+vi.mock("next/link", () => ({
+  default: ({
+    children,
+    href,
+    ...props
+  }: {
+    children: React.ReactNode;
+    href: string;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock("@/components/billing/PlanLimitBanner", () => ({
   PlanLimitBanner: () => null,
 }));
@@ -239,7 +256,10 @@ describe("DashboardLayout route gating for /expenses", () => {
     const mainElement = container.querySelector("main")!;
     expect(mainElement.className).toMatch(/\bflex\b/);
     expect(mainElement.className).toContain("flex-col");
-    expect(mainElement.className).toContain("min-h-screen");
+    // dvh, not screen: an installed PWA has no collapsing browser chrome, and
+    // 100vh is the height the URL bar covers.
+    expect(mainElement.className).toContain("min-h-dvh");
+    expect(mainElement.className).not.toContain("min-h-screen");
 
     const column = mainElement.firstElementChild as HTMLElement;
     expect(column.className).toContain("flex-1");
@@ -247,7 +267,7 @@ describe("DashboardLayout route gating for /expenses", () => {
     expect(column.querySelector("p")!.parentElement).toBe(column);
   });
 
-  it("keeps the content column clear of the notch and the home indicator", () => {
+  it("keeps the content column clear of the notch, the home indicator and the tab bar", () => {
     setUser("ADMIN");
 
     const { container } = render(
@@ -261,7 +281,7 @@ describe("DashboardLayout route gating for /expenses", () => {
       "pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))]"
     );
     expect(mainElement?.className).toContain(
-      "pb-[calc(1.5rem+var(--safe-bottom))]"
+      "pb-[calc(var(--mobile-tabbar)+var(--safe-bottom)+var(--mobile-content-bottom-gap))]"
     );
     expect(mainElement?.className).toContain(
       "pl-[calc(1rem+var(--safe-left))]"
@@ -269,6 +289,20 @@ describe("DashboardLayout route gating for /expenses", () => {
     expect(mainElement?.className).toContain(
       "pr-[calc(1rem+var(--safe-right))]"
     );
+  });
+
+  it("renders the mobile tab bar so the sections stay one tap away", () => {
+    setUser("OWNER");
+
+    render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    expect(
+      screen.getByRole("navigation", { name: "Secciones principales" })
+    ).toBeInTheDocument();
   });
 
   it("mounts the connection warning on every authenticated route", () => {
