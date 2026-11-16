@@ -2273,3 +2273,69 @@ describe("POS add-to-cart haptics (S4.2)", () => {
     expect(vibrate).not.toHaveBeenCalled();
   });
 });
+
+// The scanner field is what a USB/Bluetooth barcode reader types into, so a
+// desktop POS focuses it as soon as the page is ready. On a phone that same
+// focus pops the software keyboard over the product grid, which is exactly the
+// thing the app must not do by itself.
+describe("POS search autofocus follows the pointer", () => {
+  const SEARCH_PLACEHOLDER = "Escanear o buscar por nombre, SKU o código...";
+
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(window, "matchMedia");
+  });
+
+  function stubMediaQuery(answers: Record<string, boolean>) {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn((query: string) => ({
+        matches: answers[query] ?? false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useProductsMock.mockReturnValue({
+      data: {
+        data: [makeProduct("p1", "Cafe molido")],
+        meta: { total: 1, totalPages: 1 },
+      },
+      isLoading: false,
+    });
+  });
+
+  it("keeps the search field focused on a mouse, where the scanner types", async () => {
+    stubMediaQuery({ "(pointer: coarse)": false });
+
+    render(<POSPage />);
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).toHaveFocus(),
+    );
+  });
+
+  it("never opens the keyboard by itself on a touch device", async () => {
+    stubMediaQuery({ "(pointer: coarse)": true });
+
+    render(<POSPage />);
+
+    await screen.findByPlaceholderText(SEARCH_PLACEHOLDER);
+    // The focus was scheduled on a frame; give it that frame before asserting.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
+  });
+});

@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { shouldAutoFocusTextInput } from "@/lib/input-focus";
 import { useBelowSmViewport, useVisualViewport } from "@/hooks/useVisualViewport";
 
 /** Drag distance that commits a sheet dismissal. */
@@ -115,8 +116,16 @@ export function Modal({
       return inBody[0] ?? focusables()[0] ?? null;
     };
 
+    // A touch device must not receive its keyboard the moment a dialog opens:
+    // the way out (or the dialog itself) takes the focus instead, so the reader
+    // sees the form before deciding to type in it.
+    const defaultFocusTarget = () =>
+      shouldAutoFocusTextInput()
+        ? (initialTarget() ?? panel)
+        : (panel?.querySelector<HTMLElement>("[data-modal-close]") ?? panel);
+
     const focusInitial = () => {
-      (initialTarget() ?? panel)?.focus();
+      defaultFocusTarget()?.focus();
     };
     // Focus immediately for deterministic behaviour, then again after layout so
     // a field that mounts late still receives it.
@@ -137,7 +146,7 @@ export function Modal({
       if (nested && panel.querySelector('[data-select-trigger][aria-expanded="true"]')) {
         return;
       }
-      (initialTarget() ?? panel)?.focus();
+      defaultFocusTarget()?.focus();
     };
 
     const handleTab = (event: KeyboardEvent) => {
@@ -303,6 +312,7 @@ export function Modal({
             <button
               type="button"
               onClick={onClose}
+              data-modal-close
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background sm:h-9 sm:w-9"
               aria-label="Cerrar"
             >

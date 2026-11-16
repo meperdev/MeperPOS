@@ -1,6 +1,7 @@
 import { InputHTMLAttributes, forwardRef, useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { shouldAutoFocusTextInput } from "@/lib/input-focus";
 
 /**
  * Numeric fields keep the text the user sees. Native number inputs re-render
@@ -39,6 +40,9 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
     const isNumber = !textarea && type === "number";
     const focusedRef = useRef(false);
     const [numericText, setNumericText] = useState<string | null>(null);
+    // `autoFocus` travels through `...props`, so this is the one place every
+    // text field built on `Input` asks whether it may grab the focus by itself.
+    const autoFocusAllowed = shouldAutoFocusTextInput();
 
     useEffect(() => {
       // Leaving the field hands control back to the prop.
@@ -123,6 +127,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
               readOnly={readOnly}
               className={cn(commonClasses, "resize-none")}
               {...(props as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
+              autoFocus={autoFocusAllowed && Boolean(props.autoFocus)}
             />
           ) : (
             <input
@@ -140,6 +145,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
               className={commonClasses}
               {...props}
               value={shownValue}
+              autoFocus={autoFocusAllowed && Boolean(props.autoFocus)}
               onFocus={(event) => {
                 focusedRef.current = true;
                 props.onFocus?.(event as React.FocusEvent<HTMLInputElement>);
