@@ -282,20 +282,26 @@ describe('ExpensesService', () => {
   });
 
   describe('findAll', () => {
-    it('provides active report expenses with organization and event-date isolation', async () => {
+    it('provides active report expenses with organization and calendar-day isolation', async () => {
       prismaMock.expense.findMany.mockResolvedValue([
         { total: new Prisma.Decimal('25.00'), purchaseOrderId: null },
       ]);
 
       const start = new Date('2026-08-01T05:00:00.000Z');
-      const end = new Date('2026-08-31T04:59:59.999Z');
+      const end = new Date('2026-09-01T04:59:59.999Z');
       const result = await service.findForReports(orgId, start, end);
 
       expect(prismaMock.expense.findMany).toHaveBeenCalledWith({
         where: {
           organizationId: orgId,
           active: true,
-          date: { gte: start, lte: end },
+          // The column stores the calendar day at UTC midnight, so the same
+          // Bogotá days are compared as stored days (S5.1). A timestamp window
+          // would drop 2026-08-01 and include 2026-09-01.
+          date: {
+            gte: new Date('2026-08-01T00:00:00.000Z'),
+            lte: new Date('2026-08-31T23:59:59.999Z'),
+          },
         },
         select: {
           total: true,

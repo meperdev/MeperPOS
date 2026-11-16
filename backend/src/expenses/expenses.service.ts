@@ -23,6 +23,37 @@ export function deriveExpensePaymentStatus(
   return paymentsSum.gte(total) ? 'PAID' : 'PARTIAL';
 }
 
+export interface CalendarDayFilter {
+  gte?: Date;
+  lte?: Date;
+}
+
+/**
+ * Inclusive filter for a DateTime column that stores a calendar day.
+ *
+ * `Expense.date` and `ExpensePayment.date` carry a date-only input, which the
+ * API persists with `new Date('YYYY-MM-DD')` as UTC midnight. The Bogotá
+ * timestamp window used for real instants (`gte` 05:00 UTC of the first day,
+ * `lte` 04:59:59.999 UTC of the day after the last one) can never match that
+ * shape: it drops the whole first requested day and pulls in the day after the
+ * last one. This recovers the same calendar days from the Bogotá bounds, keeping
+ * UTC midnight rows and, through the end of the last stored day, rows that still
+ * carry a time of day inside the period.
+ */
+export function buildStoredDateWindow(
+  filter: CalendarDayFilter,
+): CalendarDayFilter {
+  const atStartOfStoredDay = (value: Date) =>
+    new Date(`${formatDateInBogota(value)}T00:00:00.000Z`);
+  const atEndOfStoredDay = (value: Date) =>
+    new Date(`${formatDateInBogota(value)}T23:59:59.999Z`);
+
+  return {
+    gte: filter.gte ? atStartOfStoredDay(filter.gte) : undefined,
+    lte: filter.lte ? atEndOfStoredDay(filter.lte) : undefined,
+  };
+}
+
 @Injectable()
 export class ExpensesService {
   constructor(
@@ -363,7 +394,8 @@ export class ExpensesService {
       where: {
         organizationId: this.requireOrganizationId(organizationId),
         active: true,
-        date: { gte: start, lte: end },
+        // The column stores the calendar day, not an instant (S5.1).
+        date: buildStoredDateWindow({ gte: start, lte: end }),
       },
       select: {
         total: true,

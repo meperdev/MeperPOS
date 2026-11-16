@@ -7,7 +7,7 @@ import {
   parseBogotaEndOfDay,
   parseBogotaStartOfDay,
 } from '../common/utils/bogota-date';
-import { ExpensesService } from '../expenses/expenses.service';
+import { ExpensesService, buildStoredDateWindow } from '../expenses/expenses.service';
 import { normalizeStock } from '../products/product-type.logic';
 import {
   aggregateFinancialSales,
@@ -525,7 +525,9 @@ export class ReportsService {
       this.prisma.expensePayment.findMany({
         where: {
           organizationId: orgId,
-          date: period.current,
+          // Expense payments store the calendar day the money left, so they use
+          // the same day-aligned window as the expenses themselves (S5.1).
+          date: buildStoredDateWindow(period.current),
           // A payroll obligation's generated expense mirrors cash that its
           // PayrollCashOutflow rows already report on the outflows aggregate
           // below. Counting the mirror too would count the same payroll cash
@@ -534,6 +536,9 @@ export class ReportsService {
           // behaviour.
           expense: { payrollObligationExpense: { is: null } },
         },
+        // The per-method breakdown keeps first-seen order, so the rows need a
+        // stable order or the breakdown follows whatever plan the database picks.
+        orderBy: [{ date: 'asc' }, { id: 'asc' }],
         select: { amount: true, method: true },
       }),
       // Payroll cash is cash even when completion generated no expense at all
@@ -541,6 +546,7 @@ export class ReportsService {
       // they happened, and are merged into the same aggregate.
       this.prisma.payrollCashOutflow.findMany({
         where: { organizationId: orgId, date: payrollCashDayWindow },
+        orderBy: [{ date: 'asc' }, { id: 'asc' }],
         select: { amount: true, method: true },
       }),
       this.prisma.payrollCashReturn.findMany({
@@ -755,7 +761,8 @@ export class ReportsService {
       where: {
         organizationId,
         active: true,
-        date: { gte: dateFilter.gte, lte: dateFilter.lte },
+        // Same day-aligned window as `ExpensesService.findForReports` (S5.1).
+        date: buildStoredDateWindow(dateFilter),
       },
       select: { total: true, purchaseOrderId: true },
     });
