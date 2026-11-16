@@ -75,6 +75,12 @@ function fakeDeliveries() {
     }),
     scheduled: jest.fn(),
     findScheduled: jest.fn(),
+    automaticState: jest.fn().mockResolvedValue({
+      state: 'active',
+      consecutiveFailures: 0,
+      pausedSince: null,
+      nextRunAt: '2026-02-11T01:00:00.000Z',
+    }),
   };
 }
 
@@ -117,6 +123,7 @@ const auth = (
 
 const ROUTES = [
   { method: 'get' as const, path: '/whatsapp/deliveries' },
+  { method: 'get' as const, path: '/whatsapp/deliveries/automatic' },
   { method: 'post' as const, path: '/whatsapp/deliveries/report' },
 ];
 
@@ -297,6 +304,96 @@ describe('WhatsApp delivery boundary', () => {
     }
   });
 
+  it('reports the automatic send state from the service, scoped to the token organization', async () => {
+    const deliveries = fakeDeliveries();
+    deliveries.automaticState.mockResolvedValue({
+      state: 'paused_failures',
+      consecutiveFailures: 3,
+      pausedSince: '2026-02-11T01:05:00.000Z',
+      nextRunAt: '2026-02-12T01:00:00.000Z',
+    });
+    const { app, prisma } = await build(
+      fakePrisma(),
+      fakeIdentities([VERIFIED_ADMIN]),
+      deliveries,
+    );
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/whatsapp/deliveries/automatic')
+        .set(auth('ADMIN', 'org-a', { 'x-organization-id': 'org-b' }));
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        state: 'paused_failures',
+        consecutiveFailures: 3,
+        pausedSince: '2026-02-11T01:05:00.000Z',
+        nextRunAt: '2026-02-12T01:00:00.000Z',
+      });
+      expect(deliveries.automaticState).toHaveBeenCalledWith('org-a');
+      // Read-only: the state never reads or writes a delivery row through here.
+      expect(prisma.whatsAppDelivery.findMany).not.toHaveBeenCalled();
+      expect(deliveries.onDemand).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('keeps the history response shape untouched by the automatic state route', async () => {
+    const prisma = fakePrisma();
+    prisma.whatsAppConnection.findMany.mockResolvedValue([{ id: 'conn-a' }]);
+    prisma.whatsAppDelivery.findMany.mockResolvedValue([
+      {
+        id: 'delivery-1',
+        kind: 'SCHEDULED',
+        reportDate: DAY,
+        status: 'FAILED',
+        failureReason: 'no_recipient',
+        sentAt: null,
+        attempts: 1,
+      },
+    ]);
+    const { app } = await build(prisma);
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/whatsapp/deliveries')
+        .set(auth('ADMIN', 'org-a'));
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([
+        {
+          id: 'delivery-1',
+          kind: 'SCHEDULED',
+          reportDate: DAY.toISOString(),
+          status: 'FAILED',
+          failureReason: 'no_recipient',
+          sentAt: null,
+          attempts: 1,
+        },
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects a caller without an organization on the automatic state route', async () => {
+    const deliveries = fakeDeliveries();
+    const { app } = await build(
+      fakePrisma(),
+      fakeIdentities([VERIFIED_ADMIN]),
+      deliveries,
+    );
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/whatsapp/deliveries/automatic')
+        .set(auth('SUPER_ADMIN'));
+
+      expect(response.status).toBe(403);
+      expect(deliveries.automaticState).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
   it('sends the report to the caller own verified identity and returns the service outcome', async () => {
     const prisma = fakePrisma();
     const identities = fakeIdentities([
@@ -469,13 +566,16 @@ describe('WhatsApp delivery boundary', () => {
     }
   });
 
-  it('requires authentication on both routes', async () => {
+  it('requires authentication on every route', async () => {
     const { app } = await build();
     const server = app.getHttpServer();
     try {
       expect((await request(server).get('/whatsapp/deliveries')).status).toBe(
         401,
       );
+      expect(
+        (await request(server).get('/whatsapp/deliveries/automatic')).status,
+      ).toBe(401);
       expect(
         (await request(server).post('/whatsapp/deliveries/report')).status,
       ).toBe(401);

@@ -2,29 +2,23 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { WhatsAppConnectionsService } from './whatsapp-connections.service';
 import {
+  DAILY_REPORT_HOUR,
+  DAILY_REPORT_TIMEZONE,
+  bogotaHourOf,
   bogotaReportDay,
   WhatsAppDeliveryService,
+  type WhatsAppDeliveryOutcome,
 } from './whatsapp-delivery.service';
 
 /**
  * The closing report the administrator asked for: every day at 20:00 in
  * America/Bogota (S1, S4). The cut-off is the same instant, because the report is
- * built when it is sent and not from an earlier snapshot.
+ * built when it is sent and not from an earlier snapshot. The hour and the zone
+ * live in `WhatsAppDeliveryService` — which computes the next run for the screen —
+ * and are re-exported here, where the cron is wired.
  */
 export const DAILY_REPORT_CRON = '0 20 * * *';
-export const DAILY_REPORT_TIMEZONE = 'America/Bogota';
-export const DAILY_REPORT_HOUR = 20;
-
-const bogotaHourFormat = new Intl.DateTimeFormat('en-GB', {
-  timeZone: DAILY_REPORT_TIMEZONE,
-  hour: '2-digit',
-  hourCycle: 'h23',
-});
-
-/** Hour of the day in America/Bogota, 0-23, for a given instant. */
-export function bogotaHourOf(instant: Date): number {
-  return Number(bogotaHourFormat.format(instant));
-}
+export { DAILY_REPORT_HOUR, DAILY_REPORT_TIMEZONE, bogotaHourOf };
 
 /**
  * Drives the once-a-day report for the central INTELLIGENCE connection.
@@ -40,10 +34,13 @@ export function bogotaHourOf(instant: Date): number {
  *    though `scheduled()` would refuse a second claim anyway.
  *
  * Neither entry point may throw. A failed delivery is already recorded on its own
- * row with a fixed reason code by `WhatsAppDeliveryService`; anything else that
- * breaks (the provider being down, the database being unreachable, a missing
- * connection) is reported here as one fixed log line and swallowed. A scheduler
- * that throws is a scheduler the host disables.
+ * row with a fixed reason code by `WhatsAppDeliveryService`; a skipped day (no
+ * recipient, or the failure-streak pause) answers `paused` / `no_identity` and
+ * leaves no row at all, so the catch-up is free to try again after a restart once
+ * the recipient exists. Anything else that breaks (the provider being down, the
+ * database being unreachable, a missing connection) is reported here as one fixed
+ * log line and swallowed. A scheduler that throws is a scheduler the host
+ * disables.
  */
 @Injectable()
 export class WhatsAppDeliveryScheduler implements OnApplicationBootstrap {
@@ -89,10 +86,7 @@ export class WhatsAppDeliveryScheduler implements OnApplicationBootstrap {
       }
 
       const outcome = await this.delivery.scheduled(connection.id, day);
-      this.logger.log({
-        event: 'whatsapp_delivery',
-        outcome: `catch_up_${outcome.status}`,
-      });
+      this.logOutcome('catch_up', outcome);
     } catch (error) {
       this.logger.error({
         event: 'whatsapp_delivery',
@@ -109,10 +103,7 @@ export class WhatsAppDeliveryScheduler implements OnApplicationBootstrap {
         connection.id,
         bogotaReportDay(new Date()),
       );
-      this.logger.log({
-        event: 'whatsapp_delivery',
-        outcome: `${trigger}_${outcome.status}`,
-      });
+      this.logOutcome(trigger, outcome);
     } catch (error) {
       this.logger.error({
         event: 'whatsapp_delivery',
@@ -120,5 +111,24 @@ export class WhatsAppDeliveryScheduler implements OnApplicationBootstrap {
         reason: error instanceof Error ? error.name : 'unknown',
       });
     }
+  }
+
+  /**
+   * One line per outcome, and every outcome names itself. `paused` is the
+   * failure-streak skip: no row was written and nothing was attempted, so it is a
+   * decision to report, not a failure to retry — the next successful send (the
+   * manual report, or a later day once a number is linked) resumes it.
+   */
+  private logOutcome(
+    trigger: 'cron' | 'catch_up',
+    outcome: WhatsAppDeliveryOutcome,
+  ): void {
+    this.logger.log({
+      event: 'whatsapp_delivery',
+      outcome: `${trigger}_${outcome.status}`,
+      ...(outcome.status === 'paused'
+        ? { reason: 'consecutive_failures' }
+        : {}),
+    });
   }
 }

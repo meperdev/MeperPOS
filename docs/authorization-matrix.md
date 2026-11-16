@@ -71,6 +71,7 @@ with a 409 instead of an error.
 | /api/whatsapp/identity/challenge | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/identity/:id | DELETE | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-identity.controller.spec.ts |
 | /api/whatsapp/deliveries | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-delivery.controller.spec.ts |
+| /api/whatsapp/deliveries/automatic | GET | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-delivery.controller.spec.ts |
 | /api/whatsapp/deliveries/report | POST | ADMIN (OWNER inherits) | org-scoped | backend/src/whatsapp/whatsapp-delivery.controller.spec.ts |
 | /api/whatsapp/webhook | POST | WAHA HMAC | provider-hmac | backend/src/whatsapp/whatsapp-webhook.spec.ts |
 

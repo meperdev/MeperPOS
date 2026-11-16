@@ -86,6 +86,28 @@ describe('WhatsAppDeliveryScheduler', () => {
       );
     });
 
+    it('reports a paused send as a decision, not a failure', async () => {
+      const spies = spyOnLogger();
+      try {
+        // 20:30 in Bogota on 2026-03-03.
+        jest
+          .useFakeTimers()
+          .setSystemTime(new Date('2026-03-04T01:30:00.000Z'));
+        const { scheduler, delivery } = setup({
+          scheduled: jest.fn().mockResolvedValue({ status: 'paused' }),
+        });
+
+        await expect(scheduler.handleDailyReport()).resolves.toBeUndefined();
+
+        expect(delivery.scheduled).toHaveBeenCalled();
+        const logged = stringified(spies);
+        expect(logged).toContain('cron_paused');
+        expect(logged).toContain('consecutive_failures');
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+      }
+    });
+
     it('does not throw when the delivery fails', async () => {
       const spies = spyOnLogger();
       try {
@@ -200,6 +222,30 @@ describe('WhatsAppDeliveryScheduler', () => {
 
         expect(stringified(spies)).toContain('catch_up_failed');
         expect(stringified(spies)).not.toContain('secret-db-dsn');
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+      }
+    });
+
+    it('reports a paused day and leaves today attemptable', async () => {
+      const spies = spyOnLogger();
+      try {
+        const { scheduler, delivery } = setup({
+          scheduled: jest.fn().mockResolvedValue({ status: 'paused' }),
+        });
+
+        // 21:00 in Bogota on 2026-03-03.
+        await expect(
+          scheduler.catchUp(new Date('2026-03-04T02:00:00.000Z')),
+        ).resolves.toBeUndefined();
+
+        // No row was written for the day, so the pause is re-checked on the next
+        // start; the log says why nothing was sent.
+        expect(delivery.scheduled).toHaveBeenCalledWith(
+          CENTRAL_CONNECTION_ID,
+          new Date('2026-03-03T00:00:00.000Z'),
+        );
+        expect(stringified(spies)).toContain('catch_up_paused');
       } finally {
         spies.forEach((spy) => spy.mockRestore());
       }
