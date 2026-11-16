@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import {
@@ -146,6 +146,11 @@ vi.mock("next/dynamic", () => {
   };
 });
 
+// The scanner field can reach the DOM after the page effect that asks for its
+// focus has already run; one test delays the mount on purpose to reproduce that
+// race. The default is an immediate mount, as on a rendered POS.
+const inputMountState = vi.hoisted(() => ({ delayMs: 0 }));
+
 vi.mock("@/components/ui/Input", () => {
   const MockInput = forwardRef<
     HTMLInputElement,
@@ -157,9 +162,24 @@ vi.mock("@/components/ui/Input", () => {
       disabled?: boolean;
     }
   >(function MockInput({ value, onChange, onKeyDown, placeholder, disabled }, ref) {
+    const [mounted, setMounted] = useState(inputMountState.delayMs === 0);
+
+    useEffect(() => {
+      if (mounted || inputMountState.delayMs === 0) return;
+      const timer = setTimeout(() => setMounted(true), inputMountState.delayMs);
+      return () => clearTimeout(timer);
+    }, [mounted]);
+
+    if (!mounted) return null;
+
+    // Mirrors the real `Input`: an inline ref callback, so React detaches and
+    // re-attaches the node on every render of this field.
     return (
       <input
-        ref={ref}
+        ref={(node) => {
+          if (typeof ref === "function") ref(node);
+          else if (ref) (ref as { current: HTMLInputElement | null }).current = node;
+        }}
         value={value}
         onChange={onChange}
         onKeyDown={onKeyDown}
@@ -2284,7 +2304,26 @@ describe("POS search autofocus follows the pointer", () => {
   afterEach(() => {
     cleanup();
     Reflect.deleteProperty(window, "matchMedia");
+    authState.loading = false;
+    inputMountState.delayMs = 0;
+    vi.restoreAllMocks();
   });
+
+  // A hard load can end its mount frame before the layout has produced the
+  // grid: the page scheduled one frame, that frame found no field, and nothing
+  // schedules another. Holding the frames lets each test order that race.
+  function holdAnimationFrames() {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    return () => {
+      act(() => {
+        for (const callback of frames.splice(0)) callback(0);
+      });
+    };
+  }
 
   function stubMediaQuery(answers: Record<string, boolean>) {
     Object.defineProperty(window, "matchMedia", {
@@ -2337,5 +2376,93 @@ describe("POS search autofocus follows the pointer", () => {
 
     expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).not.toHaveFocus();
     expect(document.body).toHaveFocus();
+  });
+
+  // A hard load mounts the page inside the layout shell, so the effect that
+  // hands the scanner its focus runs while the grid — and the field — does not
+  // exist yet. The focus has to survive that and land when the field appears.
+  it("takes the scanner focus when the grid mounts after the page is ready", async () => {
+    stubMediaQuery({ "(pointer: coarse)": false });
+    const flushFrames = holdAnimationFrames();
+    authState.loading = true;
+
+    const { rerender } = render(<POSPage />);
+    expect(screen.queryByPlaceholderText(SEARCH_PLACEHOLDER)).toBeNull();
+    // The page's own frame arrives while nothing is mounted to receive it.
+    flushFrames();
+    expect(screen.queryByPlaceholderText(SEARCH_PLACEHOLDER)).toBeNull();
+
+    authState.loading = false;
+    rerender(<POSPage />);
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).toHaveFocus(),
+    );
+  });
+
+  it("leaves the keyboard closed when the grid mounts late on a touch device", async () => {
+    stubMediaQuery({ "(pointer: coarse)": true });
+    const flushFrames = holdAnimationFrames();
+    authState.loading = true;
+
+    const { rerender } = render(<POSPage />);
+    flushFrames();
+
+    authState.loading = false;
+    rerender(<POSPage />);
+
+    await screen.findByPlaceholderText(SEARCH_PLACEHOLDER);
+    flushFrames();
+
+    expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
+  });
+
+  it("does not pull the focus out of a dialog that is open when the scanner mounts", async () => {
+    stubMediaQuery({ "(pointer: coarse)": false });
+    const flushFrames = holdAnimationFrames();
+    // The field itself is late here, so it appears after the reader already
+    // opened the customer dialog.
+    inputMountState.delayMs = 40;
+
+    render(<POSPage />);
+    expect(screen.queryByPlaceholderText(SEARCH_PLACEHOLDER)).toBeNull();
+    flushFrames();
+
+    const customerTrigger = screen.getByRole("button", { name: /sin cliente/i });
+    await userEvent.click(customerTrigger);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    });
+    flushFrames();
+
+    const scanner = screen.getByPlaceholderText(SEARCH_PLACEHOLDER);
+    expect(scanner).not.toHaveFocus();
+    expect(customerTrigger).toHaveFocus();
+  });
+
+  // Re-focusing the scanner on every render would pull the cursor out of
+  // whatever the reader just picked — a filter, a cart field, the search in a
+  // dialog. The page answers its own request once and then leaves the focus
+  // alone.
+  it("keeps the focus where the reader put it when the scanner re-renders", async () => {
+    stubMediaQuery({ "(pointer: coarse)": false });
+
+    render(<POSPage />);
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).toHaveFocus(),
+    );
+
+    const favorites = screen.getByRole("button", { name: /favoritos/i });
+    await userEvent.click(favorites);
+    expect(favorites).toHaveFocus();
+
+    // Adds a line to the cart, which re-renders the scanner field with the
+    // focus untouched (fireEvent moves no focus, unlike a real click).
+    fireEvent.click(screen.getByRole("button", { name: /cafe molido/i }));
+
+    expect(favorites).toHaveFocus();
+    expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).not.toHaveFocus();
   });
 });

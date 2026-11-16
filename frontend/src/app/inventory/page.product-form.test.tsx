@@ -572,3 +572,58 @@ describe("inventory product modal", () => {
     })));
   });
 });
+
+// Opening the create form is the app giving the focus away by itself, not the
+// reader asking to type: on a phone that focus raises the software keyboard
+// over the form before they have looked at it. Same rule as the shared Modal
+// and Input: only a pointer that can type gets the field focused.
+describe("inventory product form autofocus follows the pointer", () => {
+  function stubPointer(coarse: boolean) {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn((query: string) => ({
+        matches: query === "(pointer: coarse)" ? coarse : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  }
+
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(window, "matchMedia");
+  });
+
+  it("keeps the keyboard closed when a phone opens the create form", async () => {
+    stubPointer(true);
+
+    render(<InventoryPage />);
+    const dialog = openCreate();
+
+    // The autofocus is scheduled on a frame; give it that frame.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    expect(within(dialog).getByLabelText("Código de Barras")).not.toHaveFocus();
+    expect(within(dialog).getByLabelText("Nombre")).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
+  });
+
+  it("still puts the cursor in the barcode field on a desktop", async () => {
+    stubPointer(false);
+
+    render(<InventoryPage />);
+    const dialog = openCreate();
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Código de Barras")).toHaveFocus(),
+    );
+  });
+});
