@@ -308,6 +308,8 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | /api/purchase-orders/:id | GET | ADMIN, MEMBER | org-scoped | backend/src/purchase-orders/purchase-orders.service.int.spec.ts |
 | /api/purchase-orders/:id | PATCH | ADMIN, MEMBER | org-scoped | backend/src/purchase-orders/purchase-orders.service.int.spec.ts |
 | /api/purchase-orders/:id/confirm | POST | ADMIN, MEMBER | org-scoped | backend/src/purchase-orders/purchase-orders.service.int.spec.ts |
+| /api/purchase-orders/:id/send | POST | ADMIN, MEMBER | org-scoped | backend/src/purchase-orders/document/purchase-order-documents.int.spec.ts |
+| /api/purchase-orders/:id/pdf | GET | ADMIN, MEMBER | org-scoped | backend/src/purchase-orders/document/purchase-order-documents.int.spec.ts |
 | /api/purchase-orders/:id/receive | POST | ADMIN, MEMBER | org-scoped | backend/src/purchase-orders/purchase-orders.service.int.spec.ts |
 | /api/purchase-orders/:id/cancel | POST | ADMIN, MEMBER | org-scoped | backend/src/purchase-orders/purchase-orders.service.int.spec.ts |
 

@@ -6,11 +6,14 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PurchaseOrdersService } from './purchase-orders.service';
+import { PurchaseOrderDocumentsService } from './document/purchase-order-documents.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
@@ -32,7 +35,10 @@ import { OrgRole } from '@prisma/client';
 @UseInterceptors(AdminOrganizationInterceptor)
 @ApiBearerAuth()
 export class PurchaseOrdersController {
-  constructor(private purchaseOrdersService: PurchaseOrdersService) {}
+  constructor(
+    private purchaseOrdersService: PurchaseOrdersService,
+    private purchaseOrderDocumentsService: PurchaseOrderDocumentsService,
+  ) {}
 
   @Post()
   @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
@@ -85,6 +91,34 @@ export class PurchaseOrdersController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.purchaseOrdersService.confirm(id, user.organizationId, dto);
+  }
+
+  @Post(':id/send')
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @ApiOperation({
+    summary:
+      'Registrar el envío de la orden al proveedor (el primer envío fija el documento)',
+  })
+  send(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.purchaseOrderDocumentsService.send(id, user.organizationId);
+  }
+
+  @Get(':id/pdf')
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @ApiOperation({ summary: 'Descargar el PDF de la orden de compra' })
+  async downloadPdf(
+    @Param('id') id: string,
+    @Res() res: Response,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const { buffer, filename } =
+      await this.purchaseOrderDocumentsService.generatePdf(
+        id,
+        user.organizationId,
+      );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(buffer);
   }
 
   @Post(':id/receive')
