@@ -25,6 +25,17 @@ Entorno: Postgres del compose local + backend `npm run start:dev` con `JWT_SECRE
 
 Cobertura adicional de FASE 1 estática: `RolesGuard.getInheritedRoles` leído completo; `users.service.update/toggleActive/remove/resetPassword` leídos; `multi-sheet-import.service.canImportUsersSheet` leído.
 
+## FASE 2 — Aislamiento multi-tenant (completada, 2026-11-18)
+
+**Veredicto: el aislamiento aguanta.** Sin hallazgo cross-tenant explotable por usuarios de organización.
+
+- **Dinámico (2 orgs ficticias A/B, localhost):** batería IDOR 12/12 en 404 (producto, categoría, cliente, supplier, venta — lectura, modificación y borrado por id ajeno); relays 3/3 bloqueados (venta con productId ajeno, tarea con userId ajeno, PO con supplier+productId ajenos → 404); `x-organization-id` ajeno ignorado para usuarios normales; `findBySaleNumber` scoping correcto por clave compuesta (aunque responde 200-null en vez de 404).
+- **Estático (barrido delegado, 32 controladores):** patrón fallback `...(organizationId ? ...)` inventariado completo (~30 sitios en products/sales/reports/exports/categories/customers/suppliers/purchase-orders/cash-registers/users) — alcanzable con org indefinida **solo por SUPER_ADMIN** (guard + estrategia + interceptor verificados); modo plataforma global confirmado dinámicamente (SUPER_ADMIN sin header lista productos de todas las orgs; con header, solo la elegida). Writes check-then-write (~20 sitios) precedidos de lectura org-scoped; TOCTOU no alcanzable vía API. SQL crudo 100% parametrizado y org-constrained. Mass assignment bloqueado por ValidationPipe global.
+- **SEC-002 recalificado:** ALTA → MEDIA, estado "verificado, no explotable por usuarios"; mina latente documentada con remediación recomendada (fail-closed + org en el where de los writes).
+- **Datos ficticios limpiados** (0 filas en User/Org/Product/Sale de prueba), servidor apagado.
+
+No cubierto aún (cola para FASE 2b/3): receipts, fiscal-document, whatsapp ingestion/delivery, business-modules, employee-shifts, settings logo.
+
 ## FASE 7 (parcial) — Remediación autorizada y ejecutada (2026-11-18)
 
 El dueño autorizó («SI») la remediación mínima de SEC-001 y SEC-005. Ambos quedaron **corregidos y verificados dinámicamente** en el worktree (rama `audit/security`, sin push):

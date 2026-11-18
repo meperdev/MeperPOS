@@ -32,26 +32,31 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 
 ---
 
-## SEC-002 — Aislamiento multi-tenant con fallbacks sin scoping y writes por id a secas
+## SEC-002 — Fallbacks de aislamiento multi-tenant sin scoping (riesgo latente, no explotable hoy)
 
-**Severidad:** ALTA
-**Estado:** potencial (patrones verificados en código; explotabilidad práctica por vía SUPER_ADMIN o paths con org indefinida, pendiente de PoC FASE 2)
+**Severidad:** MEDIA (bajada de ALTA tras verificación dinámica FASE 2)
+**Estado:** verificado (FASE 2, 2026-11-18): **no explotable por usuarios de organización**; patrón confirmado y cross-tenant pero alcanzable solo por SUPER_ADMIN (modo plataforma documentado)
 
 **Ubicación:** fallback `...(organizationId ? { organizationId } : {})` en `backend/src/products/products.service.ts:332,450,789,835`; `backend/src/sales/sales.service.ts:511,598`; `backend/src/reports/reports.service.ts:922`. Writes post-check `where: { id }` sin org: `sales.service.ts:786-789,840-846`; `products.service.ts:1036-1038`; `users.service.ts:128,192,221`.
 
 **Descripción:** (a) Cuando `organizationId` llega indefinido, las consultas listan/leen **toda la tabla** sin filtro de tenant. La ruta normal lo impide con `OrganizationRequiredGuard`, pero ese guard hace bypass para SUPER_ADMIN (`organization-required.guard.ts:17-19`) y `AdminOrganizationInterceptor` sobrescribe la org desde header/query del cliente (`admin-organization.interceptor.ts:9-13`). (b) Varias mutaciones hacen "check-then-write": primero `findUnique({ where: { id, organizationId } })` y luego `update({ where: { id } })` **sin** org — una carrera entre check y write, o un path que omita el check, escribe cruzando tenants.
 
-**Evidencia:** verificado directamente: `products.service.ts:332` construye `baseWhere` con el fallback; `products.service.ts:1036-1038` actualiza imagen con `where: { id: productId }` tras un lookup previo.
+**Evidencia (FASE 2, estática + dinámica):**
+- **Batería IDOR cruzada (2 orgs ficticias, ADMIN de org A contra objetos de org B):** 12/12 bloqueadas con 404 — GET/PUT/DELETE producto, GET/DELETE categoría, GET/PUT/DELETE cliente, GET/PATCH supplier, GET/PUT venta, y búsqueda por número (`findBySaleNumber` usa clave compuesta `organizationId_saleNumber`, `sales.service.ts:626-632`).
+- **Relays (crear con ids ajenos):** venta con productId de B → 404; tarea asignada al userId de B → 404; PO con supplierId+productId de B → 404.
+- **Suplantación por header:** `x-organization-id` ajeno ignorado para usuarios normales (respuesta = datos de la org propia).
+- **Barrido estático completo:** el patrón `...(organizationId ? ...)` existe en products (`:332,450,789,835`), sales (`:511,598`), reports (14 sitios), exports (6), categories, customers, suppliers, purchase-orders, cash-registers, users — pero `OrganizationRequiredGuard` + `JwtStrategy` + `AdminOrganizationInterceptor` garantizan que org indefinida **solo** ocurre para SUPER_ADMIN; verificado dinámicamente: SUPER_ADMIN sin header lista productos de **todas** las orgs; con header lista solo la elegida.
+- **Writes check-then-write (`where: { id }` post-check):** ~20 sitios (sales, products, users, customers, suppliers, categories, cash-registers, expenses, tasks, purchase-orders), todos precedidos de lectura org-scoped; TOCTOU no alcanzable vía API hoy. Mass assignment bloqueado por ValidationPipe global.
 
-**Escenario de riesgo:** un defecto en cualquier path que deje la org indefinida (o un futuro cambio) convierte el fallback en lectura cross-tenant inmediata; las mutaciones post-check permiten escritura en objeto ajeno si el check se evita o pierde la carrera.
+**Escenario de riesgo:** es una **mina latente**, no una brecha abierta: cualquier refactor futuro que relaje el guard, un endpoint nuevo sin `OrganizationRequiredGuard`, o un bug que deje la org indefinida convierte el fallback en lectura cross-tenant inmediata. El modo SUPER_ADMIN sin org expone datos de todas las empresas en un solo endpoint; combinado con SEC-004 (credencial por defecto del seed) el radio de daño es total.
 
-**Impacto:** fuga o modificación de datos de inventario, ventas y reportes entre empresas (IDOR/BOLA, OWASP API1).
+**Impacto:** hoy: fuga cross-tenant solo con cuenta SUPER_ADMIN. Potencial: fuga/modificación masiva entre empresas si el control de entrada se debilita.
 
 **Validación (FASE 2):** con dos orgs ficticias: (1) reproducir si algún endpoint alcanzable por un usuario normal llega al fallback con org indefinida; (2) para cada write post-check, probar condición de carrera con dos requests concurrentes sobre el mismo objeto en orgs distintas y verificar que el `update` no puede tocar la org contraria.
 
-**Remediación:** eliminar el fallback — si la org es requerida, que lance, no que degenere en "todas las orgs"; llevar `organizationId` dentro del `where` de **cada** `update`/`delete` (ya existe el patrón correcto en el propio `ProductsService.update` con guard de `version`).
+**Remediación (recomendada, pendiente de autorización):** reemplazar el fallback por un throw explícito cuando la org falte en rutas de usuario (fail-closed en vez de fail-open); mantener el modo plataforma solo como opción explícita (`?allOrganizations=true`) para SUPER_ADMIN; llevar `organizationId` al `where` de cada update/delete check-then-write.
 
-**Regresión:** tests: listado con org indefinida → 403/400; `update` con id existente en otra org → 404 y sin cambios en la org contraria.
+**Regresión:** specs de integración con dos orgs: acceso cruzado por id (GET/PUT/DELETE) → 404 en todos; relay con id ajeno → 404; org indefinida en ruta de usuario → 403 (no listado global).
 
 ---
 
@@ -220,3 +225,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 - CSRF se evita para todo request `Bearer` (`cookie-csrf.guard.ts:57-62`): correcto para Bearer, pero conviene confirmar que ninguna mutación cookie-authenticated dependa de él.
 - `RefreshToken` no tiene `organizationId` obligatorio y `User` es global: revisar en FASE 2 si algún listado expone usuarios de otras orgs.
 - El POS recalcula totales en cliente (`frontend/src/app/pos/page.tsx:804-811`): según `AGENTS.md` el servidor es quien manda (`SalesService.create` recalcula y audita overrides); **verificar en FASE 4** que ningún total/descuento del body se acepta sin recálculo.
+- **FASE 2:** `GET /api/sales/number/:n` devuelve **200 con body vacío** cuando la venta no existe (`sales.service.findBySaleNumber` retorna `null` y el controller lo serializa tal cual) — debería ser 404; inconsistencia de contrato, sin fuga.
+- **FASE 2:** `users.controller.ts:104` pasa `'unknown'` como organizationId en un caso borde de SUPER_ADMIN sin org → `findUserOrThrow` responde 403 con mensaje confuso; bug funcional, no de seguridad.
+- **FASE 2:** `plan-limits` sin org devuelve shape `null` en vez de error (controlador JWT-only, sin OrganizationRequiredGuard) — robustez, revisar en FASE 3.
+- **FASE 2 (pendiente de verificación):** el barrido no cubrió a fondo: receipts, fiscal-document/electronic-invoicing, whatsapp delivery/connections/ingestion, business-modules, employee-shifts y el logo de settings — quedan como primera cola de FASE 2b/3.

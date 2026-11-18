@@ -16,7 +16,7 @@ Espacio de trabajo de la auditoría de seguridad OWASP-based de MeperPOS. **Nada
 | ID | Título | Severidad | Estado |
 |---|---|---|---|
 | SEC-001 | ADMIN crea usuarios OWNER y resetea contraseñas de cualquier cuenta | CRÍTICA | **corregido** (verificado) |
-| SEC-002 | Fallbacks Prisma sin scoping de tenant + writes post-check | ALTA | potencial |
+| SEC-002 | Fallbacks Prisma sin scoping de tenant + writes post-check | MEDIA (bajada) | verificado: no explotable por usuarios; solo SUPER_ADMIN |
 | SEC-003 | Path traversal en borrado de imágenes; uploads sin validar | ALTA | potencial |
 | SEC-004 | Credenciales por defecto (seed/compose) + Postgres expuesto | ALTA | confirmado (estático) |
 | SEC-005 | Refresh sobrevive al logout (grace window) + sin CSRF | ALTA | **corregido** (verificado) |
