@@ -345,3 +345,22 @@ Pasos exactos para confirmar si el seed corrió alguna vez en un entorno real, S
 4. **Repetir en cada entorno no-dev que exista** (staging incluido).
 
 Ninguno de estos pasos imprime secretos; el SQL se ejecuta desde el panel de Railway con tu sesión de dueño.
+
+---
+
+## SEC-016 — Rutas sensibles sin `Cache-Control: no-store`
+
+**Severidad:** MEDIA
+**Estado:** confirmado (estático FASE 5)
+
+**Ubicación:** `frontend/next.config.ts` — `AUTHENTICATED_ROUTE_PREFIXES` omite `alerts`, `employees`, `loans`, `payroll`, que sí existen como rutas autenticadas en `frontend/src/app/`.
+
+**Descripción:** el mecanismo de `no-store` (que correctamente cubre admin, pos, sales, reports, etc.) no cubre cuatro rutas con datos sensibles: `payroll` y `employees` (datos personales y salarios), `loans` (datos financieros de clientes), `alerts` (feed operativo del negocio). El HTML renderizado de esas páginas puede quedar en la caché del navegador compartido o de un proxy/CDN.
+
+**Escenario de riesgo:** en un equipo/ordenador compartido o un proxy corporativo, la nómina queda recuperable de caché tras cerrar sesión.
+
+**Remediación (pendiente de autorización, cambio de 4 líneas):** agregar `alerts`, `employees`, `loans`, `payroll` a `AUTHENTICATED_ROUTE_PREFIXES`.
+
+**Regresión:** `curl -I` de las cuatro rutas en build de producción devuelve `Cache-Control: no-store`.
+
+**Nota positiva FASE 5:** el service worker (`frontend/public/sw.js`) es explícitamente shell-only ("Cache Storage never sees a product, customer or money value", documentado y cubierto por `src/lib/pwa.test.ts`) — sin riesgo de fuga por SW. Tokens en memoria, sin sinks XSS y una sola variable pública ya estaban verificados desde FASE 0.

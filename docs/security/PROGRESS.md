@@ -101,3 +101,8 @@ Al abrir una nueva sesión: leer `README.md` → `PROGRESS.md` → `FINDINGS.md`
 **Sanos:** totales/impuestos/cambio no seteables por cliente; CAS de stock completo; saleNumber con lock; override auditado; financiamiento con total congelado; pagos parciales bloqueados.
 
 Pendiente: decisión del dueño sobre SEC-013/015 (semántica contable) y autorización para remediar SEC-012/014.
+
+## FASE 5 — Frontend (completada, 2026-11-18)
+
+- Verificado sano: tokens (memoria), sinks XSS (ninguno), env pública (una), SW shell-only con test que lo enforcement, protección de rutas display-only (backend manda), CSP (SEC-006 mitigado en FASE 7).
+- **SEC-016 nuevo (MEDIA):** `alerts/employees/loans/payroll` sin `no-store` — remediación de 4 líneas pendiente de autorización del dueño.
