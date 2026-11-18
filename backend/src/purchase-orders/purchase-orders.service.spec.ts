@@ -558,4 +558,117 @@ describe('PurchaseOrdersService', () => {
       expect.objectContaining({ where: { id: 'poi-1' } }),
     );
   });
+
+  describe('expected delivery date and overdue orders', () => {
+    // 2026-11-18 03:00 UTC is still 2026-11-17 in Bogotá (UTC-5).
+    const NOW = new Date('2026-11-18T03:00:00.000Z');
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate'] });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    const draftWithItem = () =>
+      buildOrder({
+        status: 'DRAFT',
+        confirmedAt: null,
+        supplier: { id: 'supplier-1', active: true },
+      });
+
+    it('confirm stores the expected delivery date as a calendar day', async () => {
+      prismaMock.purchaseOrder.findFirst
+        .mockResolvedValueOnce(draftWithItem())
+        .mockResolvedValueOnce(buildOrder());
+
+      await service.confirm('po-1', 'org-1', {
+        expectedDeliveryDate: '2026-11-25',
+      });
+
+      expect(prismaMock.purchaseOrder.update).toHaveBeenCalledWith({
+        where: { id: 'po-1' },
+        data: {
+          status: 'PENDING',
+          confirmedAt: expect.any(Date),
+          expectedDeliveryDate: new Date('2026-11-25T00:00:00.000Z'),
+        },
+      });
+    });
+
+    it('confirm without a date keeps confirming as before', async () => {
+      prismaMock.purchaseOrder.findFirst
+        .mockResolvedValueOnce(draftWithItem())
+        .mockResolvedValueOnce(buildOrder());
+
+      await service.confirm('po-1', 'org-1');
+
+      expect(prismaMock.purchaseOrder.update).toHaveBeenCalledWith({
+        where: { id: 'po-1' },
+        data: { status: 'PENDING', confirmedAt: expect.any(Date) },
+      });
+    });
+
+    it.each([
+      ['PENDING', '2026-11-16', true],
+      ['PARTIAL_RECEIVED', '2026-11-16', true],
+      ['PENDING', '2026-11-17', false],
+      ['PENDING', null, false],
+      ['RECEIVED', '2026-11-16', false],
+      ['CANCELLED', '2026-11-16', false],
+      ['DRAFT', '2026-11-16', false],
+    ])(
+      'findOne marks a %s order expected on %s as overdue=%s',
+      async (status, expected, overdue) => {
+        prismaMock.purchaseOrder.findFirst.mockResolvedValue(
+          buildOrder({
+            status,
+            expectedDeliveryDate: expected
+              ? new Date(`${expected}T00:00:00.000Z`)
+              : null,
+          }),
+        );
+
+        const result = await service.findOne('po-1', 'org-1');
+
+        expect(result.overdue).toBe(overdue);
+      },
+    );
+
+    it('findAll marks every listed order', async () => {
+      prismaMock.purchaseOrder.findMany.mockResolvedValue([
+        buildOrder({
+          id: 'late',
+          expectedDeliveryDate: new Date('2026-11-10T00:00:00.000Z'),
+        }),
+        buildOrder({ id: 'on-time', expectedDeliveryDate: null }),
+      ]);
+      prismaMock.purchaseOrder.count.mockResolvedValue(2);
+
+      const result = await service.findAll('org-1', {});
+
+      expect(result.data.map((order) => [order.id, order.overdue])).toEqual([
+        ['late', true],
+        ['on-time', false],
+      ]);
+    });
+
+    it('filters the overdue orders with status OVERDUE', async () => {
+      prismaMock.purchaseOrder.findMany.mockResolvedValue([]);
+      prismaMock.purchaseOrder.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { status: 'OVERDUE' });
+
+      const where = prismaMock.purchaseOrder.findMany.mock.calls[0][0]
+        .where as Record<string, unknown>;
+      expect(where.status).toEqual({ in: ['PENDING', 'PARTIAL_RECEIVED'] });
+      expect(where.expectedDeliveryDate).toEqual({
+        lt: new Date('2026-11-17T00:00:00.000Z'),
+      });
+      expect(prismaMock.purchaseOrder.count).toHaveBeenCalledWith({
+        where,
+      });
+    });
+  });
 });

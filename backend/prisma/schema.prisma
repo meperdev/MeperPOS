@@ -794,6 +794,14 @@ model PurchaseOrder {
   receivedAt     DateTime?
   cancelledAt    DateTime?
   cancelReason   String?
+  /// Calendar day the supplier is expected to deliver; drives the overdue flag.
+  expectedDeliveryDate DateTime?                @db.Date
+  /// First time the order document went to the supplier; re-sending keeps it.
+  sentAt               DateTime?
+  sentVia              PurchaseOrderSendChannel?
+  /// Business, supplier and template data frozen at the first send, so a
+  /// re-downloaded PDF is the document the supplier received.
+  documentSnapshot     Json?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   organizationId String
@@ -1336,6 +1344,12 @@ enum PurchaseOrderStatus {
   PARTIAL_RECEIVED
   RECEIVED
   CANCELLED
+}
+
+/// How a purchase order reached the supplier. WHATSAPP is reserved for Meper Intelligence.
+enum PurchaseOrderSendChannel {
+  PDF
+  WHATSAPP
 }
 
 /// Provider session bound to one channel. COMMERCIAL belongs to one

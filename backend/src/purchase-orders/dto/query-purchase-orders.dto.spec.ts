@@ -13,6 +13,10 @@ describe('QueryPurchaseOrdersDto status', () => {
     expect(await statusErrors('OPEN')).toHaveLength(0);
   });
 
+  it('accepts OVERDUE, the open orders whose expected day has passed', async () => {
+    expect(await statusErrors('OVERDUE')).toHaveLength(0);
+  });
+
   it('still accepts a single status', async () => {
     expect(await statusErrors('PARTIAL_RECEIVED')).toHaveLength(0);
   });
