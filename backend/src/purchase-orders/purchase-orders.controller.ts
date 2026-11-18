@@ -20,6 +20,7 @@ import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 import { CancelPurchaseOrderDto } from './dto/cancel-purchase-order.dto';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
 import { ConfirmPurchaseOrderDto } from './dto/confirm-purchase-order.dto';
+import { DuplicatePurchaseOrderDto } from './dto/duplicate-purchase-order.dto';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -91,6 +92,25 @@ export class PurchaseOrdersController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.purchaseOrdersService.confirm(id, user.organizationId, dto);
+  }
+
+  @Post(':id/duplicate')
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @ApiOperation({
+    summary:
+      'Repetir pedido: crea un borrador con los productos y cantidades de la orden',
+  })
+  duplicate(
+    @Param('id') id: string,
+    @Body() dto: DuplicatePurchaseOrderDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.purchaseOrdersService.duplicate(
+      id,
+      dto,
+      user.userId,
+      user.organizationId,
+    );
   }
 
   @Post(':id/send')
