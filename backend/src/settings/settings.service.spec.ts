@@ -83,6 +83,12 @@ describe('SettingsService', () => {
           printFooter: 'Gracias por su compra',
         },
         receipt: { prefix: 'ACME' },
+        purchaseOrder: {
+          deliveryAddress: '',
+          paymentTerms: '',
+          terms: '',
+          footer: '',
+        },
         locale: {
           currency: 'COP',
           locale: 'es-CO',
@@ -122,6 +128,12 @@ describe('SettingsService', () => {
         },
         invoicing: { printHeader: '', printFooter: '' },
         receipt: { prefix: null },
+        purchaseOrder: {
+          deliveryAddress: '',
+          paymentTerms: '',
+          terms: '',
+          footer: '',
+        },
         locale: {
           currency: 'COP',
           locale: 'es-CO',
@@ -544,6 +556,12 @@ describe('SettingsService', () => {
         },
         invoicing: { printHeader: '', printFooter: '' },
         receipt: { prefix: null },
+        purchaseOrder: {
+          deliveryAddress: '',
+          paymentTerms: '',
+          terms: '',
+          footer: '',
+        },
         locale: {
           currency: 'COP',
           locale: 'es-CO',
@@ -551,6 +569,91 @@ describe('SettingsService', () => {
         },
         custom: {},
       });
+    });
+  });
+
+  describe('purchase order template', () => {
+    it('hydrates the template and never surfaces it as custom', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        name: 'Acme Corp',
+        logoUrl: null,
+        settings: {
+          purchaseOrderTemplate: {
+            deliveryAddress: 'Bodega 4, Zona Franca',
+            paymentTerms: 'Crédito a 30 días',
+            terms: 'Se recibe solo mercancía con factura',
+            footer: 'Gracias',
+          },
+        },
+        settingsVersion: 1,
+      });
+      prismaMock.organizationSequence.findFirst.mockResolvedValue(null);
+
+      const result = await service.find('org-1');
+
+      expect(result.purchaseOrder).toEqual({
+        deliveryAddress: 'Bodega 4, Zona Franca',
+        paymentTerms: 'Crédito a 30 días',
+        terms: 'Se recibe solo mercancía con factura',
+        footer: 'Gracias',
+      });
+      expect(result.custom).toEqual({});
+    });
+
+    it('falls back to empty fields for invalid persisted values', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        name: 'Acme Corp',
+        logoUrl: null,
+        settings: { purchaseOrderTemplate: { paymentTerms: 30, terms: null } },
+        settingsVersion: 1,
+      });
+      prismaMock.organizationSequence.findFirst.mockResolvedValue(null);
+
+      const result = await service.find('org-1');
+
+      expect(result.purchaseOrder).toEqual({
+        deliveryAddress: '',
+        paymentTerms: '',
+        terms: '',
+        footer: '',
+      });
+    });
+
+    it('merges a partial template write field by field', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        name: 'Acme Corp',
+        logoUrl: null,
+        settings: {
+          printHeader: 'Header',
+          purchaseOrderTemplate: {
+            deliveryAddress: 'Bodega 4',
+            paymentTerms: 'Contado',
+          },
+        },
+        settingsVersion: 3,
+      });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.organizationSequence.findFirst.mockResolvedValue(null);
+
+      const result = await service.update('org-1', {
+        purchaseOrderTemplate: { paymentTerms: 'Crédito a 30 días' },
+      });
+
+      expect(prismaMock.organization.updateMany).toHaveBeenCalledWith({
+        where: { id: 'org-1', settingsVersion: 3 },
+        data: {
+          settings: {
+            printHeader: 'Header',
+            purchaseOrderTemplate: {
+              deliveryAddress: 'Bodega 4',
+              paymentTerms: 'Crédito a 30 días',
+            },
+          },
+          settingsVersion: { increment: 1 },
+        },
+      });
+      expect(result.purchaseOrder.paymentTerms).toBe('Crédito a 30 días');
+      expect(result.purchaseOrder.deliveryAddress).toBe('Bodega 4');
     });
   });
 });

@@ -15,7 +15,11 @@
 export const SYSTEM_KEYS = ['downgradeFlags', 'electronicInvoicing'] as const;
 
 /** Typed core params that live at the root of the settings JSON blob. */
-export const CORE_KEYS = ['printHeader', 'printFooter'] as const;
+export const CORE_KEYS = [
+  'printHeader',
+  'printFooter',
+  'purchaseOrderTemplate',
+] as const;
 
 export type SystemKey = (typeof SYSTEM_KEYS)[number];
 export type CoreKey = (typeof CORE_KEYS)[number];
@@ -60,6 +64,25 @@ export interface InvoicingSettings {
   printFooter: string;
 }
 
+/**
+ * The business's purchase order template: free text printed on every order
+ * document sent to a supplier. An empty delivery address means the business
+ * address.
+ */
+export interface PurchaseOrderTemplateSettings {
+  deliveryAddress: string;
+  paymentTerms: string;
+  terms: string;
+  footer: string;
+}
+
+export const PURCHASE_ORDER_TEMPLATE_FIELDS = [
+  'deliveryAddress',
+  'paymentTerms',
+  'terms',
+  'footer',
+] as const satisfies readonly (keyof PurchaseOrderTemplateSettings)[];
+
 export interface LocaleSettings {
   currency: string;
   locale: string;
@@ -79,6 +102,7 @@ export interface SettingsView {
   receipt: {
     prefix: string | null;
   };
+  purchaseOrder: PurchaseOrderTemplateSettings;
   locale: LocaleSettings;
   custom: Record<string, unknown>;
 }
