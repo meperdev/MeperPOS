@@ -244,3 +244,85 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 **Descripción:** durante la remediación de SEC-006, `npm run build` se detuvo con el mecanismo oficial de upgrade de Next: la versión instalada está afectada por una vulnerabilidad conocida y exige reintento manual. El advisory/CVE específico y la versión corregida quedan para FASE 6 (`npm audit next`).
 
 **Remediación:** identificar el advisory exacto, evaluar la exposición real según el CVE y planear el upgrade de `next` como trabajo propio (separado de la auditoría).
+
+---
+
+## SEC-012 — Conflictos de concurrencia del create de ventas reportados como 500
+
+**Severidad:** MEDIA
+**Estado:** confirmado (PoC dinámico FASE 4 + estático)
+
+**Ubicación:** `backend/src/sales/sales.service.ts:483-491` (solo mapea `P2028`); transacción Serializable `:474-479`.
+
+**Descripción:** dos ventas concurrentes por la última unidad: la integridad aguanta (CAS + Serializable, sin sobreventa, stock nunca negativo — verificado dinámicamente), pero el perdedor recibe **500** por `PrismaClientKnownRequestError 40001/P2034` sin mapear, en lugar de un 409 limpio o reintento. Lo mismo aplica a `P2002` de la secuencia `saleNumber` (única por org, `schema.prisma:624`).
+
+**Escenario de riesgo:** en horas pico el POS muestra "Error interno" en ventas perfectamente válidas; el cajero reintenta y duplica (ver SEC-014).
+
+**Impacto:** confiabilidad del punto de venta; sin pérdida de integridad de datos.
+
+**Remediación:** mapear `P2034`/`P2002` a `ConflictException` con retry acotado (1 reintentó) en el create de ventas.
+
+**Regresión:** test de concurrencia: N requests simultáneos por la última unidad → exactamente 1×201 y (N-1)×409, jamás 500.
+
+---
+
+## SEC-013 — `RETURNED_PARTIAL` es un flip de estado pelado (sin restock ni transacción)
+
+**Severidad:** MEDIA
+**Estado:** confirmado (estático FASE 4; comportamiento pinnado por test existente, aparentemente intencional)
+
+**Ubicación:** `backend/src/sales/sales.service.ts:784-787`.
+
+**Descripción:** marcar una devolución parcial solo hace `sale.update({status})` — sin transacción, sin claim atómico del estado (a diferencia de CANCEL `:705-717`), sin `InventoryMovement`, sin reposición de stock, sin auditoría de línea. Una devolución parcial queda registrada en el estado de la venta pero el inventario ignora los ítems devueltos.
+
+**Escenario de riesgo:** divergencia sistemática entre ventas/inventario: la mercancía devuelta sigue "vendida" para el stock y el reporte de inventario valorizado queda distorsionado.
+
+**Impacto:** integridad contable de inventario; no es explotable de forma remota.
+
+**Remediación (requiere decisión de producto):** si la devolución parcial debe reponer stock, replicar el flujo de CANCEL (claim atómico + restock con guard de versión + `InventoryMovement`); si no, deshabilitar el estado hasta implementarlo.
+
+**Regresión:** devolución parcial → stock del ítem devuelto se incrementa exactamente en la cantidad devuelta y existe el `InventoryMovement` correspondiente.
+
+---
+
+## SEC-014 — `POST /api/sales` sin idempotencia (duplicado exacto = doble venta + doble descuento de stock)
+
+**Severidad:** MEDIA
+**Estado:** confirmado (PoC dinámico FASE 4: misma carga 2 veces → 2×201)
+
+**Ubicación:** `backend/src/sales/sales.service.ts:145-172`.
+
+**Descripción:** ninguna clave de idempotencia en el create; contraste: el financiamiento sí la tiene (`loans.service.ts:648-661`, replay key + sha256). Un doble click, retry de red o el escenario SEC-012 generan dos ventas completas con números distintos y doble decremento de stock.
+
+**Impacto:** doble cobro al cliente y descuadre de inventario.
+
+**Remediación:** aceptar un `requestKey` opcional con unique por org+usuario+ventana (como el módulo de loans) y devolver la venta original en replay.
+
+**Regresión:** misma carga con el mismo `requestKey` → una sola venta (segunda respuesta = misma saleNumber).
+
+---
+
+## SEC-015 — Semántica de descuentos inconsistente + sobrepago no-efectivo sin reembolso
+
+**Severidad:** BAJA
+**Estado:** confirmado (estático FASE 4)
+
+**Ubicación:** descuento por ítem pre-impuesto y clamped (`sale-pricing.ts:90-102`); descuento de venta **post-impuesto y sin clamp superior** (`sales.service.ts:225-228`); sobrepago `:236-245`.
+
+**Descripción:** el mismo peso de descuento tributa distinto según se aplique por ítem o por venta (base gravable distinta), y el descuento global puede comerse el impuesto sin límite superior; en orgs con facturación electrónica activada esto falla cerrado por reconciliación (`:414-430`), pero el resto no. Además, un sobrepago con CARD/TRANSFER se persiste (`amountPaid > total`, `change=null`) sin camino de reembolso.
+
+**Impacto:** inconsistencia de IVA y caja en reportes; requiere decisión contable del dueño, no es explotable.
+
+**Remediación (decisión de producto):** unificar base de descuento (recomendado: pre-impuesto) y clamp `discountAmount <= subtotal`; registrar reembolso/ajuste para sobrepagos no-efectivos.
+
+---
+
+## Controles verificados sanos (FASE 4, para el registro)
+
+- Totales/impuestos/cambio: **no** seteables por el cliente (DTO sin campos + `forbidNonWhitelisted`); recalculados por línea con `resolveEffectiveTaxRate`.
+- Stock: CAS completo (versión + `stock >= reservedStock + qty`) en transacción Serializable; sin camino a stock negativo; CANCEL repone con guard.
+- `saleNumber`: `FOR UPDATE` + recuperación por máximo + unique por org.
+- Override de precio: roles ADMIN/OWNER/CASHIER/SUPER_ADMIN, tolerancia 0.01, auditado dentro de la transacción (`SALE_PRICE_OVERRIDE` verificado en DB); MEMBER → 403.
+- Financiamiento: total congelado al iniciar; la compleción no acepta total del cliente.
+- Pagos parciales: bloqueados; `change` computado solo para CASH.
+- BFLA: CASHIER no puede cambiar estado (`PUT /:id` es ADMIN); MEMBER no puede `force-close` (403 dinámico).

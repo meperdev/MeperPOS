@@ -91,3 +91,13 @@ SEC-001 y SEC-005 están confirmados con PoC y afectan la integridad de la autor
 ## Regla de continuidad
 
 Al abrir una nueva sesión: leer `README.md` → `PROGRESS.md` → `FINDINGS.md` → verificar si el código citado en hallazgos pendientes cambió (comparar líneas) → continuar desde "Próximas acciones".
+
+## FASE 4 — Integridad comercial (completada, 2026-11-18)
+
+**Veredicto: el servidor manda en los números.** Batería dinámica (2 orgs ficticias + CASHIER/MEMBER de prueba, limpiado a 0 filas): descuento > subtotal → 400; pago insuficiente → 400; cantidad > stock → 409; carrera por la última unidad → sin sobreventa, stock 0 final; unitPrice negativo → 400; MEMBER override → 403; CASHIER override → 201 recalculado + audited; MEMBER force-close → 403; duplicado exacto → 2×201 (hallazgo).
+
+**Hallazgos nuevos:** SEC-012 (P2034/P2002 sin mapear → 500 en conflictos de concurrencia legítimos), SEC-013 (RETURNED_PARTIAL sin restock/tx/movimiento — aparentemente intencional, requiere decisión), SEC-014 (sin idempotencia en POST /sales; loans sí la tiene), SEC-015 (descuento por ítem pre-impuesto vs global post-impuesto sin clamp; sobrepago no-efectivo sin reembolso), más el gap de receive de PO (qtyReceived sin guard, tx sin aislamiento — registrado dentro de SEC-012/013 como observación de auditoría de compras).
+
+**Sanos:** totales/impuestos/cambio no seteables por cliente; CAS de stock completo; saleNumber con lock; override auditado; financiamiento con total congelado; pagos parciales bloqueados.
+
+Pendiente: decisión del dueño sobre SEC-013/015 (semántica contable) y autorización para remediar SEC-012/014.
