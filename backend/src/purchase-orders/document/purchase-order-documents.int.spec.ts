@@ -178,10 +178,19 @@ describe('Purchase order documents — Integration', () => {
     expect(foreign.documentSnapshot).toBeNull();
   });
 
-  it('cannot download an order of another organization', async () => {
+  it('cannot download or repeat an order of another organization', async () => {
     await expect(
       documents.generatePdf(foreignOrderId, fixture.orgAId),
     ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      orders.duplicate(foreignOrderId, {}, fixture.userAId, fixture.orgAId),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(
+      await prisma.purchaseOrder.count({
+        where: { organizationId: fixture.orgAId },
+      }),
+    ).toBe(3);
   });
 
   it('freezes the document at the first send; later changes do not alter it', async () => {

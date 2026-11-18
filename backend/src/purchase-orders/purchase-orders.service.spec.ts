@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -557,6 +558,173 @@ describe('PurchaseOrdersService', () => {
     expect(txMock.purchaseOrderItem.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'poi-1' } }),
     );
+  });
+
+  describe('duplicate (repeat order)', () => {
+    const product = (overrides: Record<string, unknown> = {}) => ({
+      id: 'prod-1',
+      name: 'Café',
+      active: true,
+      type: 'PRODUCT',
+      tracksStock: true,
+      costPrice: '120',
+      taxRate: '19',
+      ...overrides,
+    });
+
+    const source = (items: Array<Record<string, unknown>>) =>
+      buildOrder({ status: 'RECEIVED', notes: 'Entregar temprano', items });
+
+    let createSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({ id: 'po-new' } as never);
+    });
+
+    it('creates a draft through create() with the same supplier, products, quantities and current cost', async () => {
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue(
+        source([
+          {
+            id: 'poi-1',
+            productId: 'prod-1',
+            qtyOrdered: 5,
+            unitCost: 100,
+            product: product(),
+          },
+          {
+            id: 'poi-2',
+            productId: 'prod-2',
+            qtyOrdered: 2,
+            unitCost: 80,
+            product: product({
+              id: 'prod-2',
+              name: 'Azúcar',
+              costPrice: '90.5',
+            }),
+          },
+        ]),
+      );
+
+      const result = await service.duplicate('po-1', {}, 'user-1', 'org-1');
+
+      expect(prismaMock.purchaseOrder.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'po-1', organizationId: 'org-1' },
+        }),
+      );
+      // No taxRate: create() takes the product's rate, as for any new order.
+      expect(createSpy).toHaveBeenCalledWith(
+        {
+          supplierId: 'supplier-1',
+          items: [
+            { productId: 'prod-1', qtyOrdered: 5, unitCost: 120 },
+            { productId: 'prod-2', qtyOrdered: 2, unitCost: 90.5 },
+          ],
+        },
+        'user-1',
+        'org-1',
+      );
+      expect(result).toEqual({ order: { id: 'po-new' }, skippedItems: [] });
+    });
+
+    it('creates the draft for another supplier when one is chosen', async () => {
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue(
+        source([
+          {
+            id: 'poi-1',
+            productId: 'prod-1',
+            qtyOrdered: 5,
+            product: product(),
+          },
+        ]),
+      );
+
+      await service.duplicate(
+        'po-1',
+        { supplierId: 'supplier-2' },
+        'user-1',
+        'org-1',
+      );
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ supplierId: 'supplier-2' }),
+        'user-1',
+        'org-1',
+      );
+    });
+
+    it('leaves out inactive products and services and reports them', async () => {
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue(
+        source([
+          {
+            id: 'poi-1',
+            productId: 'prod-1',
+            qtyOrdered: 5,
+            product: product(),
+          },
+          {
+            id: 'poi-2',
+            productId: 'prod-2',
+            qtyOrdered: 1,
+            product: product({ id: 'prod-2', name: 'Viejo', active: false }),
+          },
+          {
+            id: 'poi-3',
+            productId: 'prod-3',
+            qtyOrdered: 1,
+            product: product({
+              id: 'prod-3',
+              name: 'Instalación',
+              type: 'SERVICE',
+              tracksStock: false,
+            }),
+          },
+        ]),
+      );
+
+      const result = await service.duplicate('po-1', {}, 'user-1', 'org-1');
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: [{ productId: 'prod-1', qtyOrdered: 5, unitCost: 120 }],
+        }),
+        'user-1',
+        'org-1',
+      );
+      expect(result.skippedItems).toEqual([
+        { productId: 'prod-2', name: 'Viejo', reason: 'INACTIVE' },
+        { productId: 'prod-3', name: 'Instalación', reason: 'NOT_STOCKED' },
+      ]);
+    });
+
+    it('refuses when no product can be ordered again, without creating anything', async () => {
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue(
+        source([
+          {
+            id: 'poi-1',
+            productId: 'prod-1',
+            qtyOrdered: 5,
+            product: product({ active: false }),
+          },
+        ]),
+      );
+
+      await expect(
+        service.duplicate('po-1', {}, 'user-1', 'org-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(createSpy).not.toHaveBeenCalled();
+    });
+
+    it('answers 404 for an order of another organization', async () => {
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.duplicate('po-1', {}, 'user-1', 'org-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(createSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('expected delivery date and overdue orders', () => {

@@ -16,6 +16,7 @@ import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 import { CancelPurchaseOrderDto } from './dto/cancel-purchase-order.dto';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
 import { ConfirmPurchaseOrderDto } from './dto/confirm-purchase-order.dto';
+import { DuplicatePurchaseOrderDto } from './dto/duplicate-purchase-order.dto';
 import {
   OPEN_PURCHASE_ORDER_STATUSES,
   bogotaToday,
@@ -32,6 +33,13 @@ interface ComputedItem {
   taxRate: number;
   subtotal: number;
   taxAmount: number;
+}
+
+/** A line of a repeated order that cannot be ordered again. */
+export interface SkippedDuplicateItem {
+  productId: string;
+  name: string;
+  reason: 'INACTIVE' | 'NOT_STOCKED';
 }
 
 interface NormalizedReceiveItem {
@@ -223,6 +231,72 @@ export class PurchaseOrdersService {
       }
       throw error;
     }
+  }
+
+  /**
+   * "Repetir pedido": builds a new draft from any order through `create()`, so
+   * the new order is validated, numbered and priced like any other. Each line
+   * keeps its product and ordered quantity and takes the product's current
+   * cost; the tax rate is left to `create()`, which uses the product's. Lines
+   * whose product is inactive or does not track stock are left out and
+   * reported.
+   */
+  async duplicate(
+    id: string,
+    dto: DuplicatePurchaseOrderDto,
+    userId: string,
+    organizationId: string | undefined,
+  ) {
+    if (!organizationId) {
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
+    }
+    const source = await this.prisma.purchaseOrder.findFirst({
+      where: { id, organizationId },
+      include: { items: { include: { product: true } } },
+    });
+    if (!source) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    const items: CreatePurchaseOrderItemDto[] = [];
+    const skippedItems: SkippedDuplicateItem[] = [];
+    for (const item of source.items) {
+      const { product } = item;
+      if (!product.active) {
+        skippedItems.push({
+          productId: product.id,
+          name: product.name,
+          reason: 'INACTIVE',
+        });
+      } else if (!tracksStock(product)) {
+        skippedItems.push({
+          productId: product.id,
+          name: product.name,
+          reason: 'NOT_STOCKED',
+        });
+      } else {
+        items.push({
+          productId: product.id,
+          qtyOrdered: item.qtyOrdered,
+          unitCost: Number(product.costPrice),
+        });
+      }
+    }
+
+    if (items.length === 0) {
+      throw new BadRequestException(
+        'Ningún producto de esta orden se puede volver a pedir',
+      );
+    }
+
+    const order = await this.create(
+      { supplierId: dto.supplierId ?? source.supplierId, items },
+      userId,
+      organizationId,
+    );
+    return { order, skippedItems };
   }
 
   async findAll(
