@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-const { authState, urlState, usePurchaseOrdersMock } = vi.hoisted(() => ({
+const { authState, urlState, listState, usePurchaseOrdersMock } = vi.hoisted(() => ({
   authState: { role: "ADMIN" },
   urlState: { params: new URLSearchParams() },
+  listState: { orders: [] as unknown[] },
   usePurchaseOrdersMock: vi.fn(),
 }));
 
@@ -34,8 +35,13 @@ vi.mock("@/hooks/usePurchaseOrders", () => ({
     usePurchaseOrdersMock(params);
     return {
       data: {
-        data: [],
-        meta: { total: 0, page: 1, limit: 15, totalPages: 1 },
+        data: listState.orders,
+        meta: {
+          total: listState.orders.length,
+          page: 1,
+          limit: 15,
+          totalPages: 1,
+        },
       },
       isLoading: false,
     };
@@ -142,6 +148,42 @@ describe("Purchase orders status filter from the URL", () => {
       expect.objectContaining({ status: "OPEN", page: 1 }),
     );
     expect(screen.getByRole("button", { name: /limpiar/i })).toBeTruthy();
+  });
+
+  it("opens filtered to the overdue orders when the link asks for status=OVERDUE", () => {
+    urlState.params = new URLSearchParams("status=OVERDUE");
+
+    render(<PurchaseOrdersPage />);
+
+    expect(usePurchaseOrdersMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "OVERDUE", page: 1 }),
+    );
+  });
+
+  it("marks a sent order as sent and an overdue one as overdue", () => {
+    urlState.params = new URLSearchParams();
+    const base = {
+      supplierId: "s-1",
+      supplier: { id: "s-1", name: "Proveedor Andino" },
+      createdById: "u-1",
+      status: "PENDING",
+      subtotal: 100,
+      taxAmount: 19,
+      total: 119,
+      createdAt: "2026-04-19T09:00:00.000Z",
+      updatedAt: "2026-04-19T09:00:00.000Z",
+    };
+    listState.orders = [
+      { ...base, id: "po-1", orderNumber: 1, sentAt: "2026-04-19T10:00:00.000Z", overdue: true },
+      { ...base, id: "po-2", orderNumber: 2, sentAt: null, overdue: false },
+    ];
+
+    render(<PurchaseOrdersPage />);
+    listState.orders = [];
+
+    expect(screen.getAllByText("Enviada").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Atrasada").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Pendiente").length).toBeGreaterThan(0);
   });
 
   it("ignores an unknown status in the URL and lists every order as before", () => {

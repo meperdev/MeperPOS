@@ -37,6 +37,19 @@ export function formatDate(date: string | Date) {
   }).format(new Date(date));
 }
 
+/**
+ * Formats a calendar day stored as midnight UTC (a `@db.Date` column) as that
+ * same day, whatever the browser's time zone.
+ */
+export function formatCalendarDay(date: string | Date) {
+  return new Intl.DateTimeFormat(LOCALE, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(date));
+}
+
 export function formatDateTime(date: string | Date) {
   return new Intl.DateTimeFormat(LOCALE, {
     year: "numeric",

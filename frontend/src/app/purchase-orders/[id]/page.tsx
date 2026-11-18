@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   usePurchaseOrder,
-  useConfirmPurchaseOrder,
+  downloadPurchaseOrderPdf,
 } from "@/hooks/usePurchaseOrders";
 import { Button } from "@/components/ui/Button";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
@@ -16,6 +16,7 @@ import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ReceiveItemsModal } from "@/components/purchase-orders/ReceiveItemsModal";
 import { CancelPurchaseOrderModal } from "@/components/purchase-orders/CancelPurchaseOrderModal";
 import { EditDraftModal } from "@/components/purchase-orders/EditDraftModal";
+import { ConfirmSendModal } from "@/components/purchase-orders/ConfirmSendModal";
 import {
   ArrowLeft,
   ClipboardList,
@@ -27,8 +28,16 @@ import {
   CalendarDays,
   UserRound,
   Pencil,
+  Send,
+  FileDown,
+  Truck,
 } from "lucide-react";
-import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDateTime,
+  formatCalendarDay,
+  cn,
+} from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
@@ -43,11 +52,12 @@ export default function PurchaseOrderDetailPage() {
   const canManage = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
 
   const { data: order, isLoading, error } = usePurchaseOrder(id ?? "");
-  const confirmOrder = useConfirmPurchaseOrder();
 
   const [showReceive, setShowReceive] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showConfirmSend, setShowConfirmSend] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const errorMessage = useMemo(() => {
     if (!error) {
@@ -67,13 +77,15 @@ export default function PurchaseOrderDetailPage() {
     return getApiErrorMessage(error, "No se pudo cargar la orden de compra.");
   }, [error]);
 
-  const handleConfirm = async () => {
+  const handleDownload = async () => {
     if (!order) return;
+    setIsDownloading(true);
     try {
-      await confirmOrder.mutateAsync(order.id);
-      toast.success(`OC-${order.orderNumber} confirmada`);
+      await downloadPurchaseOrderPdf(order);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "No se pudo confirmar la orden"));
+      toast.error(getApiErrorMessage(error, "No se pudo descargar el PDF"));
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -116,6 +128,10 @@ export default function PurchaseOrderDetailPage() {
   const canReceive = canManage && (isPending || isPartial);
   const canConfirm = canManage && isDraft;
   const canCancel = canManage && (isDraft || isPending);
+  // A confirmed order that never reached the supplier still offers Enviar; once
+  // sent, or once cancelled, the document can only be downloaded again.
+  const canSend = canManage && !isDraft && !isCancelled && !order.sentAt;
+  const canDownload = !isDraft && !canSend;
 
   return (
     <DashboardLayout>
@@ -138,7 +154,11 @@ export default function PurchaseOrderDetailPage() {
                 <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight tabular-nums">
                   OC-{order.orderNumber}
                 </h1>
-                <PurchaseOrderStatusBadge status={order.status} />
+                <PurchaseOrderStatusBadge
+                  status={order.status}
+                  sent={Boolean(order.sentAt)}
+                  overdue={Boolean(order.overdue)}
+                />
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Detalle y seguimiento de la orden de compra
@@ -154,11 +174,13 @@ export default function PurchaseOrderDetailPage() {
                 </Button>
               )}
               {canConfirm && (
-                <Button
-                  onClick={handleConfirm}
-                  loading={confirmOrder.isPending}
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Confirmar OC
+                <Button onClick={() => setShowConfirmSend(true)}>
+                  <CheckCircle2 className="w-4 h-4" /> Confirmar y enviar
+                </Button>
+              )}
+              {canSend && (
+                <Button onClick={() => setShowConfirmSend(true)}>
+                  <Send className="w-4 h-4" /> Enviar al proveedor
                 </Button>
               )}
               {canReceive && (
@@ -167,12 +189,30 @@ export default function PurchaseOrderDetailPage() {
                   {isPartial ? "Recibir pendientes" : "Recibir productos"}
                 </Button>
               )}
+              {canDownload && (
+                <Button
+                  variant="secondary"
+                  onClick={handleDownload}
+                  loading={isDownloading}
+                >
+                  <FileDown className="w-4 h-4" /> Descargar PDF
+                </Button>
+              )}
               {canCancel && (
                 <Button variant="danger" onClick={() => setShowCancel(true)}>
                   <XCircle className="w-4 h-4" /> Cancelar OC
                 </Button>
               )}
             </div>
+          )}
+          {!canManage && canDownload && (
+            <Button
+              variant="secondary"
+              onClick={handleDownload}
+              loading={isDownloading}
+            >
+              <FileDown className="w-4 h-4" /> Descargar PDF
+            </Button>
           )}
         </div>
 
@@ -204,6 +244,22 @@ export default function PurchaseOrderDetailPage() {
                     icon={<CheckCircle2 className="w-3.5 h-3.5 text-success-text" />}
                     label="Confirmada"
                     value={formatDateTime(order.confirmedAt)}
+                    isDate
+                  />
+                )}
+                {order.expectedDeliveryDate && (
+                  <InfoField
+                    icon={<Truck className="w-3.5 h-3.5" />}
+                    label="Entrega esperada"
+                    value={formatCalendarDay(order.expectedDeliveryDate)}
+                    isDate
+                  />
+                )}
+                {order.sentAt && (
+                  <InfoField
+                    icon={<Send className="w-3.5 h-3.5 text-primary" />}
+                    label="Enviada al proveedor"
+                    value={formatDateTime(order.sentAt)}
                     isDate
                   />
                 )}
@@ -387,6 +443,13 @@ export default function PurchaseOrderDetailPage() {
           order={order}
           isOpen={showEdit}
           onClose={() => setShowEdit(false)}
+        />
+      ) : null}
+      {(canConfirm || canSend) && showConfirmSend ? (
+        <ConfirmSendModal
+          order={order}
+          isOpen={showConfirmSend}
+          onClose={() => setShowConfirmSend(false)}
         />
       ) : null}
       {canCancel && showCancel ? (

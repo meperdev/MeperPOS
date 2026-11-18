@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import type { PurchaseOrder } from "@/types";
 
 const pushMock = vi.fn();
 const usePurchaseOrderMock = vi.fn();
-const useConfirmPurchaseOrderMock = vi.fn();
+const downloadPurchaseOrderPdfMock = vi.fn();
 const axiosIsAxiosErrorMock = vi.fn();
 
 vi.mock("axios", () => ({
@@ -55,8 +56,27 @@ vi.mock("@/components/ui/Button", () => ({
 }));
 
 vi.mock("@/components/purchase-orders/PurchaseOrderStatusBadge", () => ({
-  PurchaseOrderStatusBadge: ({ status }: { status: string }) => <span>{status}</span>,
+  PurchaseOrderStatusBadge: ({
+    status,
+    sent,
+    overdue,
+  }: {
+    status: string;
+    sent?: boolean;
+    overdue?: boolean;
+  }) => (
+    <span data-testid="status-badge">
+      {[status, sent ? "sent" : null, overdue ? "overdue" : null]
+        .filter(Boolean)
+        .join(" ")}
+    </span>
+  ),
 }));
+
+vi.mock("@/components/purchase-orders/ConfirmSendModal", () => ({
+  ConfirmSendModal: () => <div>confirm send modal</div>,
+}));
+
 
 vi.mock("@/components/purchase-orders/ReceiveItemsModal", () => ({
   ReceiveItemsModal: () => <div>receive modal</div>,
@@ -72,7 +92,8 @@ vi.mock("@/components/purchase-orders/EditDraftModal", () => ({
 
 vi.mock("@/hooks/usePurchaseOrders", () => ({
   usePurchaseOrder: (id: string) => usePurchaseOrderMock(id),
-  useConfirmPurchaseOrder: () => useConfirmPurchaseOrderMock(),
+  downloadPurchaseOrderPdf: (order: unknown) =>
+    downloadPurchaseOrderPdfMock(order),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
@@ -143,10 +164,7 @@ describe("Purchase order detail page behavior", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     axiosIsAxiosErrorMock.mockReturnValue(false);
-    useConfirmPurchaseOrderMock.mockReturnValue({
-      mutateAsync: vi.fn(),
-      isPending: false,
-    });
+    downloadPurchaseOrderPdfMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -164,6 +182,77 @@ describe("Purchase order detail page behavior", () => {
 
     expect(screen.queryByRole("button", { name: /Cancelar OC/i })).toBeNull();
     expect(screen.getByRole("button", { name: /Recibir pendientes/i })).toBeTruthy();
+  });
+
+  it("opens confirm and send in one place for a draft", async () => {
+    const user = userEvent.setup();
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder({ status: "DRAFT", confirmedAt: null }),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.queryByText("confirm send modal")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Descargar PDF/i })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Confirmar y enviar/i }));
+
+    expect(screen.getByText("confirm send modal")).toBeTruthy();
+  });
+
+  it("offers Enviar on a confirmed order that was not sent", async () => {
+    const user = userEvent.setup();
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder({ sentAt: null }),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.queryByRole("button", { name: /Confirmar y enviar/i })).toBeNull();
+    expect(screen.getByTestId("status-badge").textContent).toBe("PENDING");
+    await user.click(screen.getByRole("button", { name: /Enviar al proveedor/i }));
+
+    expect(screen.getByText("confirm send modal")).toBeTruthy();
+  });
+
+  it("shows a sent order as sent and downloads its PDF again", async () => {
+    const user = userEvent.setup();
+    const order = makeOrder({ sentAt: "2026-04-19T11:00:00.000Z", sentVia: "PDF" });
+    usePurchaseOrderMock.mockReturnValue({
+      data: order,
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.getByTestId("status-badge").textContent).toBe("PENDING sent");
+    expect(screen.getByText("Enviada al proveedor")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Enviar al proveedor/i })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Descargar PDF/i }));
+
+    expect(downloadPurchaseOrderPdfMock).toHaveBeenCalledWith(order);
+  });
+
+  it("shows the expected delivery day as stored and flags an overdue order", () => {
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder({
+        expectedDeliveryDate: "2026-04-25T00:00:00.000Z",
+        overdue: true,
+      }),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.getByText("Entrega esperada")).toBeTruthy();
+    expect(screen.getByText("25 de abril de 2026")).toBeTruthy();
+    expect(screen.getByTestId("status-badge").textContent).toBe("PENDING overdue");
   });
 
   it("shows a clean unavailable state on 404 errors", () => {

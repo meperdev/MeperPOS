@@ -104,15 +104,54 @@ export function useUpdatePurchaseOrder() {
   });
 }
 
+export interface ConfirmPurchaseOrderPayload {
+  id: string;
+  /** Calendar day `YYYY-MM-DD` the supplier is expected to deliver. */
+  expectedDeliveryDate?: string;
+}
+
 export function useConfirmPurchaseOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedDeliveryDate }: ConfirmPurchaseOrderPayload) =>
+      api
+        .post<PurchaseOrder>(
+          `/purchase-orders/${id}/confirm`,
+          expectedDeliveryDate ? { expectedDeliveryDate } : {},
+        )
+        .then((res) => res.data),
+    onSuccess: (_data, vars) => invalidateAll(queryClient, vars.id),
+  });
+}
+
+/** Records the send; the first one freezes the document the supplier receives. */
+export function useSendPurchaseOrder() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
       api
-        .post<PurchaseOrder>(`/purchase-orders/${id}/confirm`)
+        .post<PurchaseOrder>(`/purchase-orders/${id}/send`)
         .then((res) => res.data),
     onSuccess: (_data, id) => invalidateAll(queryClient, id),
   });
+}
+
+/** Downloads the order document the backend renders. */
+export async function downloadPurchaseOrderPdf(
+  order: Pick<PurchaseOrder, "id" | "orderNumber">,
+): Promise<void> {
+  const { blob, filename } = await api.getBlob(
+    `/purchase-orders/${order.id}/pdf`,
+  );
+  api.saveBlob(
+    blob.type === "application/pdf"
+      ? blob
+      : new Blob([blob], { type: "application/pdf" }),
+    // Keep a meaningful name when a proxy strips Content-Disposition.
+    filename.startsWith("export_")
+      ? `orden_compra_OC-${order.orderNumber}.pdf`
+      : filename,
+  );
 }
 
 export function useReceivePurchaseOrder() {
