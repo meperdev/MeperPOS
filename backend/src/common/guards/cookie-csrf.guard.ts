@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
 import { CSRF_TOKEN_COOKIE } from '../../auth/cookies.helper';
+import { resolveAllowedOrigins } from '../../config/allowed-origins';
 
 /**
  * Entry points that run before a session exists (or authenticate via a
@@ -15,16 +16,19 @@ import { CSRF_TOKEN_COOKIE } from '../../auth/cookies.helper';
  * request body, not with browser-held credentials.
  */
 const CSRF_EXEMPT_PATHS = new Set([
-  '/api/auth/login',
+  // SEC-007: login/register are NOT blindly exempt anymore — they go through
+  // the pre-auth Origin check in this guard (see isPreAuthOriginAllowed).
   '/api/auth/register',
-  // SEC-005: refresh is NO LONGER exempt. It authenticates purely via the
-  // httpOnly refresh cookie (the Bearer skip above does not apply without an
-  // access token), so a cross-site form could otherwise ride it. The frontend
-  // already sends the double-submit x-csrf-token header on every POST,
-  // including refresh, and the csrf cookie is minted at login.
   // select-organization stays exempt: it authenticates with the short-lived
   // preAuthToken in the request body, not with browser-held credentials.
   '/api/auth/select-organization',
+]);
+
+/** Pre-auth entry points that must pass the Origin allowlist instead of a
+ * CSRF token (no session cookie exists yet to double-submit against). */
+const PRE_AUTH_ORIGIN_CHECKED_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/register',
 ]);
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -64,6 +68,13 @@ export class CookieCsrfGuard implements CanActivate {
     if (method === 'POST' && path === '/api/whatsapp/webhook') {
       return true;
     }
+    if (
+      method === 'POST' &&
+      PRE_AUTH_ORIGIN_CHECKED_PATHS.has(path)
+    ) {
+      return this.isPreAuthOriginAllowed(request);
+    }
+
     if (CSRF_EXEMPT_PATHS.has(path)) {
       return true;
     }
@@ -90,5 +101,29 @@ export class CookieCsrfGuard implements CanActivate {
       return withoutQuery.replace(/\/+$/, '');
     }
     return withoutQuery;
+  }
+
+  /**
+   * SEC-007: cross-site login (and register) CSRF defence. A browser always
+   * attaches Origin to cross-origin POSTs, so an Origin outside the
+   * deployment allowlist means a third-party site is trying to log the
+   * victim into an attacker-controlled session. Absent Origin (native
+   * clients) is allowed: without ambient cookies there is nothing to ride.
+   */
+  private isPreAuthOriginAllowed(request: {
+    headers?: Record<string, unknown>;
+  }): boolean {
+    const origin: unknown = request.headers?.origin;
+
+    if (typeof origin !== 'string' || origin.length === 0) {
+      return true;
+    }
+
+    const allowed = resolveAllowedOrigins(process.env);
+    if (allowed.includes(origin)) {
+      return true;
+    }
+
+    throw new ForbiddenException('Cross-origin login rejected');
   }
 }

@@ -34,14 +34,45 @@ describe('CookieCsrfGuard', () => {
     },
   );
 
-  it('allows exempt login path for cookie-authenticated mutations', () => {
+  it('allows login from an allowed origin (same-site frontend)', () => {
+    const request = {
+      ...baseRequest,
+      path: '/api/auth/login',
+      headers: { origin: 'http://localhost:3000' },
+    };
+
+    expect(guard.canActivate(makeContext(request))).toBe(true);
+  });
+
+  it('allows login without an Origin header (native client, not a CSRF vector)', () => {
+    const request = { ...baseRequest, path: '/api/auth/login' };
+
+    expect(guard.canActivate(makeContext(request))).toBe(true);
+  });
+
+  it('rejects cross-site login with a foreign Origin (SEC-007)', () => {
+    const request = {
+      ...baseRequest,
+      path: '/api/auth/login',
+      headers: { origin: 'https://evil.example' },
+    };
+
+    expect(() => guard.canActivate(makeContext(request))).toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('rejects cross-site login even when a foreign csrf cookie pair is presented (SEC-007)', () => {
     const request = {
       ...baseRequest,
       path: '/api/auth/login',
       cookies: { csrf_token: 'abc' },
+      headers: { origin: 'https://evil.example', 'x-csrf-token': 'abc' },
     };
 
-    expect(guard.canActivate(makeContext(request))).toBe(true);
+    expect(() => guard.canActivate(makeContext(request))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('allows exempt register path', () => {
