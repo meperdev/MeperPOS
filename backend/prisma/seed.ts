@@ -2,6 +2,7 @@ import { PrismaClient, Prisma, OrgRole, PlanType, OrgStatus, BillingStatus } fro
 import * as bcrypt from 'bcryptjs';
 import { faker } from '@faker-js/faker';
 import { DEFAULT_EXPENSE_TAXONOMY } from '../src/expenses/default-expense-categories';
+import { resolveSuperAdminPassword } from '../src/config/super-admin-credentials';
 
 const prisma = new PrismaClient();
 
@@ -31,7 +32,15 @@ async function ensureSuperAdmin(): Promise<void> {
     return;
   }
 
-  const hashedPassword = await bcrypt.hash('admin123', 10);
+  // SEC-004: never invent or print a credential. Fail-closed without
+  // SUPER_ADMIN_PASSWORD; the value is only ever hashed.
+  const resolved = resolveSuperAdminPassword(process.env);
+  if (!resolved.ok) {
+    console.warn(`  ⚠️  ${resolved.reason}`);
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(resolved.password as string, 10);
 
   await prisma.user.create({
     data: {
@@ -43,7 +52,7 @@ async function ensureSuperAdmin(): Promise<void> {
     },
   });
 
-  console.log('  ✅ SuperAdmin creado: admin@sistema.com / admin123');
+  console.log(`  ✅ SuperAdmin creado: ${email} (contraseña tomada de SUPER_ADMIN_PASSWORD; nunca se imprime)`);
 }
 
 // ─── Demo Data Builders ─────────────────────────────────────────────────────

@@ -44,6 +44,7 @@ Backend requires a `.env` file in `/backend/`:
 ```
 DATABASE_URL="postgresql://admin:admin123@localhost:5432/inventario_db"
 JWT_SECRET="your-jwt-secret"
+SUPER_ADMIN_PASSWORD=""  # seed-only: SUPER_ADMIN bootstrap requires an explicit >=10-char password (never defaulted or printed)
 PORT=3001
 CORS_ORIGIN="http://localhost:3000"
 CLOUDINARY_CLOUD_NAME=...

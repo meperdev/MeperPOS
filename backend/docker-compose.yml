@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: admin123
       POSTGRES_DB: inventario_db
     ports:
-      - "5432:5432"
+      # SEC-004: bind to loopback only — the dev database must not be
+      # reachable from other hosts on the network.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 volumes:
