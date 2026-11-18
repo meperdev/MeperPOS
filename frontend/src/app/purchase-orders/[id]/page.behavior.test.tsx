@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import type { PurchaseOrder } from "@/types";
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
+let searchParams = new URLSearchParams();
 const usePurchaseOrderMock = vi.fn();
 const downloadPurchaseOrderPdfMock = vi.fn();
 const axiosIsAxiosErrorMock = vi.fn();
@@ -16,8 +18,9 @@ vi.mock("axios", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
   useParams: () => ({ id: "po-1" }),
+  useSearchParams: () => searchParams,
 }));
 
 vi.mock("next/link", () => ({
@@ -77,6 +80,9 @@ vi.mock("@/components/purchase-orders/ConfirmSendModal", () => ({
   ConfirmSendModal: () => <div>confirm send modal</div>,
 }));
 
+vi.mock("@/components/purchase-orders/RepeatOrderModal", () => ({
+  RepeatOrderModal: () => <div>repeat order modal</div>,
+}));
 
 vi.mock("@/components/purchase-orders/ReceiveItemsModal", () => ({
   ReceiveItemsModal: () => <div>receive modal</div>,
@@ -87,7 +93,14 @@ vi.mock("@/components/purchase-orders/CancelPurchaseOrderModal", () => ({
 }));
 
 vi.mock("@/components/purchase-orders/EditDraftModal", () => ({
-  EditDraftModal: () => <div>edit modal</div>,
+  EditDraftModal: ({ onClose }: { onClose: () => void }) => (
+    <div>
+      edit modal
+      <button type="button" onClick={onClose}>
+        close edit
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/hooks/usePurchaseOrders", () => ({
@@ -165,6 +178,7 @@ describe("Purchase order detail page behavior", () => {
     vi.clearAllMocks();
     axiosIsAxiosErrorMock.mockReturnValue(false);
     downloadPurchaseOrderPdfMock.mockResolvedValue(undefined);
+    searchParams = new URLSearchParams();
   });
 
   afterEach(() => {
@@ -253,6 +267,52 @@ describe("Purchase order detail page behavior", () => {
     expect(screen.getByText("Entrega esperada")).toBeTruthy();
     expect(screen.getByText("25 de abril de 2026")).toBeTruthy();
     expect(screen.getByTestId("status-badge").textContent).toBe("PENDING overdue");
+  });
+
+  it("offers Repetir pedido on any order, including a cancelled one", async () => {
+    const user = userEvent.setup();
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder({ status: "CANCELLED", cancelledAt: "2026-04-20T00:00:00.000Z" }),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    await user.click(screen.getByRole("button", { name: /Repetir pedido/i }));
+
+    expect(screen.getByText("repeat order modal")).toBeTruthy();
+  });
+
+  it("opens a repeated draft with the editor, and drops the flag on close", async () => {
+    const user = userEvent.setup();
+    searchParams = new URLSearchParams("edit=1");
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder({ status: "DRAFT", confirmedAt: null }),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.getByText("edit modal")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "close edit" }));
+
+    expect(screen.queryByText("edit modal")).toBeNull();
+    expect(replaceMock).toHaveBeenCalledWith("/purchase-orders/po-1");
+  });
+
+  it("ignores the editor flag on an order that is no longer a draft", () => {
+    searchParams = new URLSearchParams("edit=1");
+    usePurchaseOrderMock.mockReturnValue({
+      data: makeOrder(),
+      isLoading: false,
+      error: null,
+    });
+
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.queryByText("edit modal")).toBeNull();
   });
 
   it("shows a clean unavailable state on 404 errors", () => {
