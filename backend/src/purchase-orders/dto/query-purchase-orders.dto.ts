@@ -10,7 +10,10 @@ import {
   IsDateString,
 } from 'class-validator';
 
-/** One status, or `OPEN` for every order still waiting for goods. */
+/**
+ * One status, `OPEN` for every order still waiting for goods, or `OVERDUE` for
+ * the open orders whose expected delivery day has passed.
+ */
 const PURCHASE_ORDER_STATUS_FILTERS = [
   'DRAFT',
   'PENDING',
@@ -18,6 +21,7 @@ const PURCHASE_ORDER_STATUS_FILTERS = [
   'RECEIVED',
   'CANCELLED',
   'OPEN',
+  'OVERDUE',
 ] as const;
 
 export type PurchaseOrderStatusFilter =
@@ -47,7 +51,7 @@ export class QueryPurchaseOrdersDto {
     required: false,
     enum: PURCHASE_ORDER_STATUS_FILTERS,
     description:
-      'A single status, or OPEN for every order still waiting for goods (PENDING and PARTIAL_RECEIVED).',
+      'A single status, OPEN for every order still waiting for goods (PENDING and PARTIAL_RECEIVED), or OVERDUE for the open orders whose expected delivery day has passed.',
   })
   @IsOptional()
   @IsEnum(PURCHASE_ORDER_STATUS_FILTERS)

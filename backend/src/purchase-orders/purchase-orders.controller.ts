@@ -16,6 +16,7 @@ import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 import { CancelPurchaseOrderDto } from './dto/cancel-purchase-order.dto';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
+import { ConfirmPurchaseOrderDto } from './dto/confirm-purchase-order.dto';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -78,8 +79,12 @@ export class PurchaseOrdersController {
   @Post(':id/confirm')
   @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
   @ApiOperation({ summary: 'Confirmar una orden de compra (DRAFT → PENDING)' })
-  confirm(@Param('id') id: string, @CurrentUser() user: RequestUser) {
-    return this.purchaseOrdersService.confirm(id, user.organizationId);
+  confirm(
+    @Param('id') id: string,
+    @Body() dto: ConfirmPurchaseOrderDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.purchaseOrdersService.confirm(id, user.organizationId, dto);
   }
 
   @Post(':id/receive')

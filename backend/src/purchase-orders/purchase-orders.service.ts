@@ -15,7 +15,13 @@ import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 import { CancelPurchaseOrderDto } from './dto/cancel-purchase-order.dto';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
-import { OPEN_PURCHASE_ORDER_STATUSES } from './purchase-order-status';
+import { ConfirmPurchaseOrderDto } from './dto/confirm-purchase-order.dto';
+import {
+  OPEN_PURCHASE_ORDER_STATUSES,
+  bogotaToday,
+  isPurchaseOrderOverdue,
+  toCalendarDay,
+} from './purchase-order-status';
 import { SequenceService } from '../common/sequences/sequence.service';
 import { tracksStock } from '../products/product-type.logic';
 
@@ -138,7 +144,9 @@ export class PurchaseOrdersService {
     organizationId: string | undefined,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const supplier = await this.prisma.supplier.findFirst({
       where: { id: dto.supplierId, organizationId },
@@ -217,7 +225,10 @@ export class PurchaseOrdersService {
     }
   }
 
-  async findAll(organizationId: string | undefined, query: QueryPurchaseOrdersDto) {
+  async findAll(
+    organizationId: string | undefined,
+    query: QueryPurchaseOrdersDto,
+  ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
@@ -229,6 +240,9 @@ export class PurchaseOrdersService {
     if (query.supplierId) where.supplierId = query.supplierId;
     if (query.status === 'OPEN') {
       where.status = { in: [...OPEN_PURCHASE_ORDER_STATUSES] };
+    } else if (query.status === 'OVERDUE') {
+      where.status = { in: [...OPEN_PURCHASE_ORDER_STATUSES] };
+      where.expectedDeliveryDate = { lt: bogotaToday() };
     } else if (query.status) {
       where.status = query.status;
     }
@@ -277,8 +291,9 @@ export class PurchaseOrdersService {
       this.prisma.purchaseOrder.count({ where: where as never }),
     ]);
 
+    const today = bogotaToday();
     return {
-      data,
+      data: data.map((order) => this.withDerivedFields(order, today)),
       meta: {
         total,
         page,
@@ -300,7 +315,14 @@ export class PurchaseOrdersService {
     if (!order) {
       throw new NotFoundException('Orden de compra no encontrada');
     }
-    return order;
+    return this.withDerivedFields(order);
+  }
+
+  /** Server-owned fields every read returns, so the list and the detail agree. */
+  private withDerivedFields<
+    T extends { status: string; expectedDeliveryDate?: Date | null },
+  >(order: T, today: Date = bogotaToday()): T & { overdue: boolean } {
+    return { ...order, overdue: isPurchaseOrderOverdue(order, today) };
   }
 
   async update(
@@ -309,7 +331,9 @@ export class PurchaseOrdersService {
     organizationId: string | undefined,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const existing = await this.prisma.purchaseOrder.findFirst({
       where: { id, organizationId },
@@ -385,9 +409,15 @@ export class PurchaseOrdersService {
     return this.findOne(id, organizationId);
   }
 
-  async confirm(id: string, organizationId: string | undefined) {
+  async confirm(
+    id: string,
+    organizationId: string | undefined,
+    dto: ConfirmPurchaseOrderDto = {},
+  ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { id, organizationId },
@@ -415,6 +445,9 @@ export class PurchaseOrdersService {
       data: {
         status: 'PENDING',
         confirmedAt: new Date(),
+        ...(dto.expectedDeliveryDate
+          ? { expectedDeliveryDate: toCalendarDay(dto.expectedDeliveryDate) }
+          : {}),
       },
     });
 
@@ -428,7 +461,9 @@ export class PurchaseOrdersService {
     organizationId: string | undefined,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { id, organizationId },
@@ -576,7 +611,9 @@ export class PurchaseOrdersService {
     organizationId: string | undefined,
   ) {
     if (!organizationId) {
-      throw new BadRequestException('Organization ID is required for this operation');
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
     }
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { id, organizationId },
