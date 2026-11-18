@@ -239,17 +239,17 @@ export default function NewPurchaseOrderPage() {
                   subtitle="Haz clic en “Agregar producto” para incorporar productos a la orden"
                 />
               ) : (
-                <div className="overflow-x-auto"><Table className="min-w-[560px]">
+                <div className="overflow-x-auto"><Table className="min-w-[680px]">
                   <TableHeader>
                     <TableRow>
                       <TableCell as="th">Producto</TableCell>
-                      <TableCell as="th" className="text-right w-24">
+                      <TableCell as="th" className="text-right w-32">
                         Cant.
                       </TableCell>
                       <TableCell as="th" className="text-right w-36">
                         Costo unit.
                       </TableCell>
-                      <TableCell as="th" className="text-right w-24">
+                      <TableCell as="th" className="text-right w-32">
                         IVA %
                       </TableCell>
                       <TableCell as="th" className="text-right w-32">

@@ -735,6 +735,13 @@ export interface PurchaseOrder {
   items?: PurchaseOrderItem[];
 }
 
+/** A line of a repeated order that could not be ordered again. */
+export interface SkippedDuplicateItem {
+  productId: string;
+  name: string;
+  reason: "INACTIVE" | "NOT_STOCKED";
+}
+
 export interface PlanLimit {
   type: "users" | "products" | "customers" | "cashRegisters";
   current: number;

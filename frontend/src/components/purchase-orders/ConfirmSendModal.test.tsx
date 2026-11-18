@@ -57,6 +57,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { ConfirmSendModal } from "./ConfirmSendModal";
+import { getBogotaDateInputValue } from "@/lib/utils";
 
 function makeOrder(overrides: Partial<PurchaseOrder> = {}): PurchaseOrder {
   return {
@@ -138,6 +139,22 @@ describe("ConfirmSendModal", () => {
     expect(confirmButton()).toBeDisabled();
     expect(sendButton()).toBeEnabled();
     expect(screen.getByLabelText(/fecha de entrega esperada/i)).toBeDisabled();
+  });
+
+  it("fills today's date with Hoy", async () => {
+    const user = userEvent.setup();
+    confirmMutateAsyncMock.mockResolvedValue(makeOrder({ status: "PENDING" }));
+    render(<ConfirmSendModal order={makeOrder()} isOpen onClose={onCloseMock} />);
+
+    await user.click(screen.getByRole("button", { name: "Hoy" }));
+    const today = getBogotaDateInputValue();
+    expect(screen.getByLabelText(/fecha de entrega esperada/i)).toHaveValue(today);
+
+    await user.click(confirmButton());
+    expect(confirmMutateAsyncMock).toHaveBeenCalledWith({
+      id: "po-1",
+      expectedDeliveryDate: today,
+    });
   });
 
   it("confirms without a date when none is chosen", async () => {

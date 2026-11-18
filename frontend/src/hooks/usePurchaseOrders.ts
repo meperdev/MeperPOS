@@ -6,6 +6,7 @@ import type {
   PurchaseOrder,
   PaginatedResponse,
   PurchaseOrderStatusFilter,
+  SkippedDuplicateItem,
 } from "@/types";
 
 export interface PurchaseOrderFilters {
@@ -152,6 +153,26 @@ export async function downloadPurchaseOrderPdf(
       ? `orden_compra_OC-${order.orderNumber}.pdf`
       : filename,
   );
+}
+
+export interface DuplicatePurchaseOrderResult {
+  order: PurchaseOrder;
+  skippedItems: SkippedDuplicateItem[];
+}
+
+/** "Repetir pedido": a new draft with the same products and quantities. */
+export function useDuplicatePurchaseOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, supplierId }: { id: string; supplierId?: string }) =>
+      api
+        .post<DuplicatePurchaseOrderResult>(
+          `/purchase-orders/${id}/duplicate`,
+          supplierId ? { supplierId } : {},
+        )
+        .then((res) => res.data),
+    onSuccess: () => invalidateAll(queryClient),
+  });
 }
 
 export function useReceivePurchaseOrder() {

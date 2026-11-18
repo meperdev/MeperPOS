@@ -3,7 +3,7 @@
 import axios from "axios";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   usePurchaseOrder,
@@ -17,6 +17,7 @@ import { ReceiveItemsModal } from "@/components/purchase-orders/ReceiveItemsModa
 import { CancelPurchaseOrderModal } from "@/components/purchase-orders/CancelPurchaseOrderModal";
 import { EditDraftModal } from "@/components/purchase-orders/EditDraftModal";
 import { ConfirmSendModal } from "@/components/purchase-orders/ConfirmSendModal";
+import { RepeatOrderModal } from "@/components/purchase-orders/RepeatOrderModal";
 import {
   ArrowLeft,
   ClipboardList,
@@ -30,6 +31,7 @@ import {
   Pencil,
   Send,
   FileDown,
+  Repeat2,
   Truck,
 } from "lucide-react";
 import {
@@ -55,8 +57,13 @@ export default function PurchaseOrderDetailPage() {
 
   const [showReceive, setShowReceive] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
-  const [showEdit, setShowEdit] = useState(false);
+  // "Repetir pedido" lands here with `?edit=1`: the new draft opens in the editor.
+  const searchParams = useSearchParams();
+  const [showEdit, setShowEdit] = useState(
+    () => searchParams?.get("edit") === "1",
+  );
   const [showConfirmSend, setShowConfirmSend] = useState(false);
+  const [showRepeat, setShowRepeat] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   const errorMessage = useMemo(() => {
@@ -198,6 +205,9 @@ export default function PurchaseOrderDetailPage() {
                   <FileDown className="w-4 h-4" /> Descargar PDF
                 </Button>
               )}
+              <Button variant="secondary" onClick={() => setShowRepeat(true)}>
+                <Repeat2 className="w-4 h-4" /> Repetir pedido
+              </Button>
               {canCancel && (
                 <Button variant="danger" onClick={() => setShowCancel(true)}>
                   <XCircle className="w-4 h-4" /> Cancelar OC
@@ -442,7 +452,12 @@ export default function PurchaseOrderDetailPage() {
         <EditDraftModal
           order={order}
           isOpen={showEdit}
-          onClose={() => setShowEdit(false)}
+          onClose={() => {
+            setShowEdit(false);
+            if (searchParams?.get("edit") === "1") {
+              router.replace(`/purchase-orders/${order.id}`);
+            }
+          }}
         />
       ) : null}
       {(canConfirm || canSend) && showConfirmSend ? (
@@ -450,6 +465,13 @@ export default function PurchaseOrderDetailPage() {
           order={order}
           isOpen={showConfirmSend}
           onClose={() => setShowConfirmSend(false)}
+        />
+      ) : null}
+      {canManage && showRepeat ? (
+        <RepeatOrderModal
+          order={order}
+          isOpen={showRepeat}
+          onClose={() => setShowRepeat(false)}
         />
       ) : null}
       {canCancel && showCancel ? (
