@@ -424,6 +424,10 @@ model RefreshToken {
   organizationId String?
   expiresAt      DateTime
   revokedAt      DateTime?
+  /// Why the row was revoked. 'rotated' keeps the concurrent-tab grace
+  /// window alive; 'logout' and 'revoke-all' are explicit session ends and
+  /// must never refill (SEC-005).
+  revocationCause String?
   ipAddress      String?
   userAgent      String?
   createdAt      DateTime  @default(now())

@@ -17,7 +17,13 @@ import { CSRF_TOKEN_COOKIE } from '../../auth/cookies.helper';
 const CSRF_EXEMPT_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/register',
-  '/api/auth/refresh',
+  // SEC-005: refresh is NO LONGER exempt. It authenticates purely via the
+  // httpOnly refresh cookie (the Bearer skip above does not apply without an
+  // access token), so a cross-site form could otherwise ride it. The frontend
+  // already sends the double-submit x-csrf-token header on every POST,
+  // including refresh, and the csrf cookie is minted at login.
+  // select-organization stays exempt: it authenticates with the short-lived
+  // preAuthToken in the request body, not with browser-held credentials.
   '/api/auth/select-organization',
 ]);
 

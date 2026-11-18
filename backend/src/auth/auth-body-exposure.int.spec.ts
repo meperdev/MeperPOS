@@ -125,9 +125,18 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     );
     expect(refreshCookie).toBeDefined();
 
+    // SEC-005: refresh is no longer CSRF-exempt; the real frontend sends the
+    // double-submit header minted at login alongside the refresh cookie.
+    const csrfCookie = findCookie(login.headers['set-cookie'], 'csrf_token');
+    expect(csrfCookie).toBeDefined();
+    const csrfValue = (csrfCookie as string)
+      .split(';')[0]
+      .split('=')[1];
+
     const res = await request(app.getHttpServer())
       .post('/api/auth/refresh')
-      .set('Cookie', refreshCookie as string)
+      .set('Cookie', `${refreshCookie}; ${csrfCookie}`)
+      .set('x-csrf-token', csrfValue)
       .send({});
 
     expect(res.status).toBe(201);
