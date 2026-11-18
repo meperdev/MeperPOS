@@ -1,5 +1,6 @@
 import {
   Building2,
+  ClipboardList,
   CreditCard,
   Database,
   MessageCircle,
@@ -27,6 +28,12 @@ export const settingsSections: SettingsSection[] = [
     label: "Facturación y recibos",
     href: "/settings/invoicing",
     icon: Receipt,
+  },
+  {
+    key: "purchase-orders",
+    label: "Órdenes de compra",
+    href: "/settings/purchase-orders",
+    icon: ClipboardList,
   },
   {
     key: "team",

@@ -6,6 +6,7 @@ describe("settings sections registry", () => {
     expect(settingsSections.map((section) => section.key)).toEqual([
       "general",
       "invoicing",
+      "purchase-orders",
       "team",
       "whatsapp",
       "data",

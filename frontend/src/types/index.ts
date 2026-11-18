@@ -137,6 +137,13 @@ export interface InventoryMovement {
   createdAt: string;
 }
 
+export interface PurchaseOrderTemplate {
+  deliveryAddress: string;
+  paymentTerms: string;
+  terms: string;
+  footer: string;
+}
+
 export interface Settings {
   organization: {
     name: string;
@@ -152,6 +159,8 @@ export interface Settings {
   receipt: {
     prefix: string | null;
   };
+  /** The business's purchase order template; an empty delivery address means the business address. */
+  purchaseOrder: PurchaseOrderTemplate;
   locale: {
     currency: string;
     locale: string;
