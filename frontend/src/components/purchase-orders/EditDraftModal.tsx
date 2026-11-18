@@ -259,19 +259,19 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
           )}
           <div className="@container">
           <div className="hidden @2xl:block overflow-x-auto">
-            <table className="w-full min-w-[560px]">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="bg-muted/35 border-b border-border/60">
                   <th scope="col" className="text-left py-2.5 px-3 text-xs font-medium text-muted-foreground">
                     Producto
                   </th>
-                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
+                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-32">
                     Cant.
                   </th>
                   <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-28">
                     Costo
                   </th>
-                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-20">
+                  <th scope="col" className="text-right py-2.5 px-2 text-xs font-medium text-muted-foreground w-32">
                     IVA %
                   </th>
                   <th scope="col" className="w-10"><span className="sr-only">Acciones</span></th>

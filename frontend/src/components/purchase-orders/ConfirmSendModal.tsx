@@ -91,6 +91,7 @@ export function ConfirmSendModal({ order, isOpen, onClose }: ConfirmSendModalPro
       onClose={onClose}
       title={`Confirmar y enviar OC-${order.orderNumber}`}
       size="sm"
+      className="max-w-lg"
     >
       <div className="space-y-4">
         <ol className="space-y-1.5 text-xs text-muted-foreground">
@@ -103,14 +104,25 @@ export function ConfirmSendModal({ order, isOpen, onClose }: ConfirmSendModalPro
           </li>
         </ol>
 
-        <Input
-          label="Fecha de entrega esperada (opcional)"
-          type="date"
-          value={expectedDate}
-          min={getBogotaDateInputValue()}
-          onChange={(event) => setExpectedDate(event.target.value)}
-          disabled={confirmed}
-        />
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <Input
+              label="Fecha de entrega esperada (opcional)"
+              type="date"
+              value={expectedDate}
+              min={getBogotaDateInputValue()}
+              onChange={(event) => setExpectedDate(event.target.value)}
+              disabled={confirmed}
+            />
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => setExpectedDate(getBogotaDateInputValue())}
+            disabled={confirmed}
+          >
+            Hoy
+          </Button>
+        </div>
 
         <div
           role="group"
