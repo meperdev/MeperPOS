@@ -8,9 +8,19 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateSettingsDto } from './dto/settings.dto';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
-import { CORE_KEY_SET, SYSTEM_KEY_SET, type SettingsView } from './schema';
-import { DEFAULT_INVOICING, DEFAULT_LOCALE } from './defaults';
-import { validateInvoicing } from './validator';
+import {
+  DEFAULT_INVOICING,
+  DEFAULT_LOCALE,
+  DEFAULT_PURCHASE_ORDER_TEMPLATE,
+} from './defaults';
+import { validateInvoicing, validatePurchaseOrderTemplate } from './validator';
+import {
+  CORE_KEY_SET,
+  PURCHASE_ORDER_TEMPLATE_FIELDS,
+  SYSTEM_KEY_SET,
+  type PurchaseOrderTemplateSettings,
+  type SettingsView,
+} from './schema';
 
 /** Type guard for plain objects (Prisma `Json` values come back as objects). */
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -43,6 +53,8 @@ export function extractCustom(
  *
  * - system keys (`downgradeFlags`) are copied through untouched;
  * - typed core params (`printHeader`, `printFooter`) are overlaid from `incoming`;
+ * - `purchaseOrderTemplate` is overlaid field by field, so a partial write
+ *   keeps the fields it did not send;
  * - `custom` is merged key-by-key;
  * - unknown persisted root keys are normalized into `custom` (no data loss).
  */
@@ -69,6 +81,17 @@ export function mergeSettingsJson(
     next.printHeader = incoming.printHeader;
   if (incoming.printFooter !== undefined)
     next.printFooter = incoming.printFooter;
+  if (incoming.purchaseOrderTemplate !== undefined) {
+    const stored = isRecord(next.purchaseOrderTemplate)
+      ? next.purchaseOrderTemplate
+      : {};
+    const template: Partial<PurchaseOrderTemplateSettings> = {};
+    for (const field of PURCHASE_ORDER_TEMPLATE_FIELDS) {
+      const value = incoming.purchaseOrderTemplate[field] ?? stored[field];
+      if (typeof value === 'string') template[field] = value;
+    }
+    next.purchaseOrderTemplate = template;
+  }
   if (incoming.custom !== undefined && isRecord(incoming.custom)) {
     Object.assign(custom, incoming.custom);
   }
@@ -336,6 +359,7 @@ export class SettingsService {
       },
       invoicing: validateInvoicing(settings),
       receipt: { prefix },
+      purchaseOrder: validatePurchaseOrderTemplate(settings),
       locale: { ...DEFAULT_LOCALE },
       custom: extractCustom(settings),
     };
@@ -352,6 +376,7 @@ export class SettingsService {
       },
       invoicing: { ...DEFAULT_INVOICING },
       receipt: { prefix: null },
+      purchaseOrder: { ...DEFAULT_PURCHASE_ORDER_TEMPLATE },
       locale: { ...DEFAULT_LOCALE },
       custom: {},
     };
