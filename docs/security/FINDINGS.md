@@ -326,3 +326,22 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 - Financiamiento: total congelado al iniciar; la compleción no acepta total del cliente.
 - Pagos parciales: bloqueados; `change` computado solo para CASH.
 - BFLA: CASHIER no puede cambiar estado (`PUT /:id` es ADMIN); MEMBER no puede `force-close` (403 dinámico).
+
+---
+
+## SEC-004 — Apéndice: guía de verificación para el dueño (decisión "no sé cómo verificarlo")
+
+Pasos exactos para confirmar si el seed corrió alguna vez en un entorno real, SIN exponer credenciales:
+
+1. **Railway → servicio de Postgres → pestaña "Data" (o abrir la consola `psql` desde el panel)** y ejecutar:
+   ```sql
+   SELECT email, "isSuperAdmin", "createdAt" FROM "User" WHERE email = 'admin@sistema.com';
+   ```
+2. **Si devuelve 0 filas:** el seed no creó el super-admin ahí → no hay nada que rotar; cerrá la acción pendiente en `PROGRESS.md`.
+3. **Si devuelve 1 fila:** ese entorno tiene la credencial por defecto del repo activa. Rotación (en orden):
+   a. `UPDATE "User" SET "tokenVersion" = "tokenVersion" + 1 WHERE email = 'admin@sistema.com';` (mata todas sus sesiones — el `JWT_SECRET` distinto del local ya invalida los tokens locales, pero por las dudas).
+   b. O mejor: `DELETE FROM "User" WHERE email = 'admin@sistema.com';` y recrear el super-admin real por el mecanismo nuevo (`SUPER_ADMIN_PASSWORD` fuerte y única).
+   c. Rotar también `DATABASE_URL` de Railway si comparte la credencial del compose.
+4. **Repetir en cada entorno no-dev que exista** (staging incluido).
+
+Ninguno de estos pasos imprime secretos; el SQL se ejecuta desde el panel de Railway con tu sesión de dueño.
