@@ -43,9 +43,13 @@ const STATUS_META: Record<StatusDomain, Record<string, StatusMeta>> = {
   "purchase-order": {
     DRAFT: { label: "Borrador", tone: "default" },
     PENDING: { label: "Pendiente", tone: "primary" },
+    // A pending order that already reached the supplier: no status of its own,
+    // only a send instant, so the badge tells it apart.
+    SENT: { label: "Enviada", tone: "primary" },
     PARTIAL_RECEIVED: { label: "Recibida parcial", tone: "warning" },
     RECEIVED: { label: "Recibida", tone: "success" },
     CANCELLED: { label: "Cancelada", tone: "danger" },
+    OVERDUE: { label: "Atrasada", tone: "danger" },
   },
   loan: {
     OPEN: { label: "Abierto", tone: "primary" },

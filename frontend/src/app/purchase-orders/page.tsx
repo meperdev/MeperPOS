@@ -44,6 +44,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const statusOptions: Array<{ value: "" | PurchaseOrderStatusFilter; label: string }> = [
   { value: "", label: "Todos los estados" },
   { value: "OPEN", label: "Por recibir" },
+  { value: "OVERDUE", label: "Atrasadas" },
   { value: "DRAFT", label: "Borrador" },
   { value: "PENDING", label: "Pendiente" },
   { value: "PARTIAL_RECEIVED", label: "Recibida parcialmente" },
@@ -303,7 +304,11 @@ function PurchaseOrdersContent() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <PurchaseOrderStatusBadge status={order.status} />
+                            <PurchaseOrderStatusBadge
+                              status={order.status}
+                              sent={Boolean(order.sentAt)}
+                              overdue={Boolean(order.overdue)}
+                            />
                           </TableCell>
                           <TableCell className="text-right">
                             <span className="text-xs font-semibold text-foreground tabular-nums">
@@ -347,7 +352,11 @@ function PurchaseOrdersContent() {
                         <span className="text-xs font-semibold text-foreground tracking-tight tabular-nums">
                           OC-{order.orderNumber}
                         </span>
-                        <PurchaseOrderStatusBadge status={order.status} />
+                        <PurchaseOrderStatusBadge
+                          status={order.status}
+                          sent={Boolean(order.sentAt)}
+                          overdue={Boolean(order.overdue)}
+                        />
                       </div>
 
                       {/* Supplier and Date */}

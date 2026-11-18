@@ -286,6 +286,19 @@ export class ApiClient {
     this.downloadBlobResponse(response.data, response.headers);
   }
 
+  /** GET twin of `fetchBlob`, for documents read without side effects. */
+  async getBlob(url: string): Promise<{ blob: Blob; filename: string }> {
+    const response = await this.client.get(url, { responseType: "blob" });
+
+    return {
+      blob: response.data as Blob,
+      filename: this.filenameFromHeaders(
+        response.headers,
+        `export_${Date.now()}`
+      ),
+    };
+  }
+
   /** Fetches a binary response without downloading it (preview flows). */
   async fetchBlob(
     url: string,

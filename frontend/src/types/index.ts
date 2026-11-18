@@ -669,8 +669,14 @@ export type PurchaseOrderStatus =
   | "RECEIVED"
   | "CANCELLED";
 
-/** A list filter: one status, or `OPEN` for every order still waiting for goods. */
-export type PurchaseOrderStatusFilter = PurchaseOrderStatus | "OPEN";
+/**
+ * A list filter: one status, `OPEN` for every order still waiting for goods, or
+ * `OVERDUE` for the open orders whose expected delivery day has passed.
+ */
+export type PurchaseOrderStatusFilter = PurchaseOrderStatus | "OPEN" | "OVERDUE";
+
+/** How the order reached the supplier; `WHATSAPP` is reserved for Meper Intelligence. */
+export type PurchaseOrderSendChannel = "PDF" | "WHATSAPP";
 
 export interface Supplier {
   id: string;
@@ -717,6 +723,13 @@ export interface PurchaseOrder {
   receivedAt?: string | null;
   cancelledAt?: string | null;
   cancelReason?: string | null;
+  /** Calendar day (`YYYY-MM-DDT00:00:00.000Z`): format it with `formatCalendarDay`. */
+  expectedDeliveryDate?: string | null;
+  /** First time the document went to the supplier; re-sending keeps it. */
+  sentAt?: string | null;
+  sentVia?: PurchaseOrderSendChannel | null;
+  /** Server-computed: still waiting for goods and the expected day has passed. */
+  overdue?: boolean;
   createdAt: string;
   updatedAt: string;
   items?: PurchaseOrderItem[];
