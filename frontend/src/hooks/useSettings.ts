@@ -2,11 +2,18 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { Settings, InventoryMovement, PaginatedResponse } from "@/types";
+import type {
+  Settings,
+  InventoryMovement,
+  PaginatedResponse,
+  PurchaseOrderTemplate,
+} from "@/types";
 
 export interface UpdateSettingsInput {
   printHeader?: string;
   printFooter?: string;
+  /** A partial write: only the fields sent are replaced. */
+  purchaseOrderTemplate?: Partial<PurchaseOrderTemplate>;
   custom?: Record<string, unknown>;
 }
 
