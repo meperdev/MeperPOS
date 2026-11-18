@@ -60,24 +60,26 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 
 ---
 
-## SEC-003 — Path traversal en borrado de imágenes locales y uploads sin validar
+## SEC-003 — Borrado de imágenes con `path.join` inseguro; logo de settings sin validar
 
-**Severidad:** ALTA
-**Estado:** potencial (código verificado; cadena completa pendiente de PoC FASE 3)
+**Severidad:** MEDIA (bajada de ALTA tras verificación dinámica FASE 3)
+**Estado:** parcialmente confirmado — logo de settings **confirmado (PoC dinámico)**; path traversal **potencial, no alcanzable hoy** (defense-in-depth)
 
-**Ubicación:** `backend/src/cloudinary/cloudinary.service.ts:118-125` (`deleteImage` con `path.join(this.localUploadPath, relativePath)` sobre `imageUrl` saneado solo con `replace('/uploads/', '')`); DTOs que aceptan `imageUrl` del cliente: `backend/src/products/dto/product.dto.ts:122,224`; `settings.controller.ts:66-72` (logo sin `ParseFilePipe`, sin límite ni validación de MIME); `imports.controller.ts:79-83` (solo `maxSize`).
+**Ubicación:** `backend/src/cloudinary/cloudinary.service.ts:118-131` (`deleteImage`: `path.join(this.localUploadPath, relativePath)` sobre `imageUrl.replace('/uploads/','')`, sin normalizar ni chequear prefijo); `backend/src/settings/settings.controller.ts:66-76` (logo sin `ParseFilePipe`); `backend/src/cloudinary/cloudinary.service.ts:97-113` (extensión del archivo tomada de `path.extname(file.originalname)` — controlada por el cliente); DTOs con `imageUrl?: string` sin restricción de formato: `products/dto/product.dto.ts:122,224`. Imports: solo `maxSize` (`imports.controller.ts:79-83`).
 
 **Descripción:** (a) `deleteImage` construye la ruta con `path.join` sobre el string recibido sin normalizar; un `imageUrl` tipo `/uploads/../../.env` escapa del directorio de uploads y `fs.unlinkSync` borra un archivo arbitrario dentro del proceso (Railway). El `imageUrl` puede llegar de un DTO cliente-controlable guardado en DB. (b) El upload de logo de settings no valida tamaño, extensión ni MIME; el fallback local guarda `uuid + path.extname(file.originalname)` (`cloudinary.service.ts:97-113`) — extensión controlada por el cliente.
 
-**Evidencia:** verificado directamente: `path.join` sin normalización previa ni chequeo de prefijo; `settings.controller.ts:66-72` sin `ParseFilePipe`; `product.dto.ts:122,224` con `imageUrl?: string` sin restricción de formato.
+**Evidencia (FASE 3, dinámica):**
+- **Logo confirmado:** `POST /api/settings/logo` con un archivo `text/plain` (.txt) → **201**, guardado como `/uploads/logos/<uuid>.txt`. Sin validación de tipo, sin límite de tamaño, extensión derivada del nombre del archivo del cliente. Un ADMIN puede escribir archivos con extensión y contenido elegidos dentro del árbol de almacenamiento del servidor.
+- **Traversal no alcanzable hoy (verificado):** la cadena del producto pasa por `extractPublicId` (`products.service.ts:1027-1030`), cuyo output (`carpeta/archivo`) no contiene `/uploads/` → cae en la rama Cloudinary; el único caller con URL cruda es `expenses.service.ts:786` (`existing.receiptUrl`), y **ningún DTO acepta `receiptUrl`** (verificado) → el valor en DB solo puede provenir de uploads del servidor. El `imageUrl` del DTO de producto sí llega a DB, pero el flujo de borrado lo desarma antes de `deleteImage`. Nota honesta: un intento anterior de PoC reportó "confirmado" por un comando mal formado; se re-verificó con cadena limpia y el marcador **no** se borró.
 
-**Escenario de riesgo:** ADMIN/OWNER (o quien pueda setear `imageUrl`) borra archivos del servidor de aplicación; upload sin validar permite escribir archivos con extensión elegida dentro del árbol servido o consumir memoria (sin límite en el logo).
+**Escenario de riesgo:** el logo permite hoy a un ADMIN escribir archivos con extensión controlada en el servidor (superficie de plantado + consumo de disco sin límite). El traversal queda como mina latente: cualquier caller futuro que pase una URL cruda con `/uploads/` controlable por cliente (o un DTO que acepte `receiptUrl`) lo activa de inmediato.
 
 **Impacto:** integridad del filesystem del backend (borrado arbitrario), DoS de disco/memoria, posible plantado de archivos con extensión peligrosa.
 
 **Validación (FASE 3, no destructiva):** en entorno local con datos ficticios: setear `imageUrl = '/uploads/../../../tmp/marker.txt'` a un producto de prueba, llamar al path que dispara el borrado, verificar si `marker.txt` desaparece; revertir todo.
 
-**Remediación:** resolver la ruta, calcular `path.resolve` y verificar que empieza con `path.resolve(localUploadPath)` antes de unlink; validar `imageUrl` con whitelist de formato; añadir `ParseFilePipe` con límite + MIME whitelist al logo de settings; validar extensión/MIME en imports.
+**Remediación (logo ya es prioritario):** (1) `ParseFilePipe` con límite + whitelist MIME/regex en `settings.controller.ts:66-76`; (2) en `deleteImage`, resolver con `path.resolve` y exigir que el resultado empiece con `path.resolve(localUploadPath)` antes de unlink; (3) validar formato de `imageUrl`/`receiptUrl` en DTOs (URL http(s) o ruta `/uploads/...` sin `..`).
 
 **Regresión:** unit test de `deleteImage` con `../` → lanza BadRequest y no toca fs; integración de upload de logo rechaza >5 MB o MIME no imagen.
 
@@ -171,16 +173,16 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 
 ---
 
-## SEC-008 — Uploads de imports sin validación de tipo (solo tamaño)
+## SEC-008 — Imports sin whitelist de tipo (solo tamaño)
 
-**Severidad:** MEDIA
-**Estado:** confirmado (estático)
+**Severidad:** BAJA (bajada de MEDIA tras PoC FASE 3: el parser falla cerrado)
+**Estado:** confirmado (estático) + verificado dinámicamente que el parser rechaza limpiamente
 
-**Ubicación:** `backend/src/imports/imports.controller.ts:79-83,124-125` (solo `maxSize`); parsers `saxes`/`exceljs` consumen el buffer.
+**Ubicación:** `backend/src/imports/imports.controller.ts:79-83,124-125` (solo `maxSize`); parsers `exceljs`/`saxes`.
 
 **Descripción:** el importador multi-hoja acepta cualquier extensión/MIME dentro del límite de tamaño y lo entrega al parser.
 
-**Impacto:** superficie para parser exploits (XXE en XML via `saxes`, ZIP bombs en xlsx) y DoS de CPU/memoria del worker.
+**Evidencia:** PoC dinámico: `.xlsx` que en realidad era texto plano → **422** `{"The import file could not be processed"}` — manejo de error correcto, sin crash ni fuga. El residual es la superficie del parser sobre entrada hostil (zip-bomb xlsx, XML hostil vía `saxes`) y consumo de CPU/memoria del worker, no un crash reproducible.
 
 **Remediación:** whitelist estricta de extensión+MIME+magic bytes antes de parsear; límite de filas por hoja.
 
@@ -188,18 +190,18 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 
 ---
 
-## SEC-009 — Sin límite observable de tamaño de body
+## SEC-009 — Límite de body implícito; `PayloadTooLargeError` se reporta como 500
 
-**Severidad:** MEDIA
-**Estado:** no verificado (no se encontró configuración de `bodyParser`/limit; confirmar en FASE 3 con prueba local)
+**Severidad:** BAJA (corregido: sí existe límite)
+**Estado:** verificado dinámicamente (FASE 3)
 
-**Ubicación:** `backend/src/main.ts` / `app-configuration.ts` — no se encontró `bodyParser limit` ni equivalente Nest.
+**Ubicación:** límite implícito de `body-parser` (default); `common/filters/http-exception.filter.ts` no mapea `PayloadTooLargeError` a 413.
 
-**Descripción:** sin límite de body, requests JSON enormes consumen memoria antes del ValidationPipe. El throttler limita frecuencia, no tamaño.
+**Descripción (corregida):** la hipótesis FASE 0 "sin límite observable" era incorrecta: Express aplica su límite por defecto y un body de ~12MB fue rechazado por `raw-body`. El defecto real es de contrato/observabilidad: el rechazo sale como **HTTP 500** (`Unexpected failure`) en lugar de **413**, lo que rompe clientes y ensucia alertas.
 
-**Remediación:** `NestFactory.create(AppModule, { bodyParser: true })` con `express.json({ limit: '1mb' })` o `app.useBodyParser('json', { limit })`.
+**Evidencia:** log del servidor: `PayloadTooLargeError: request entity too large` en `raw-body` → respuesta final `HTTP 500` con código `INTERNAL_SERVER_ERROR`.
 
-**Regresión:** POST con body > límite → 413.
+**Remediación:** mapear `PayloadTooLargeError` a 413 en el `HttpExceptionFilter`; opcionalmente fijar un límite explícito de JSON acorde al producto (p. ej. 1MB) en `NestFactory.create`.
 
 ---
 

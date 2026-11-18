@@ -25,6 +25,16 @@ Entorno: Postgres del compose local + backend `npm run start:dev` con `JWT_SECRE
 
 Cobertura adicional de FASE 1 estática: `RolesGuard.getInheritedRoles` leído completo; `users.service.update/toggleActive/remove/resetPassword` leídos; `multi-sheet-import.service.canImportUsersSheet` leído.
 
+## FASE 3 — Backend y API (principal completada, 2026-11-18)
+
+- **SEC-003 (logo) CONFIRMADO:** `POST /api/settings/logo` aceptó un archivo `text/plain` (.txt) → 201, guardado como `/uploads/logos/<uuid>.txt`: sin validación de tipo, sin límite, extensión del cliente. Un ADMIN escribe archivos con extensión elegida en el servidor.
+- **SEC-003 (traversal) NO alcanzable hoy (verificado con cadena limpia):** el flujo de producto desarma la URL vía `extractPublicId` antes de `deleteImage`; el único caller con URL cruda (`expenses.service.ts:786`) usa `receiptUrl` generado por el servidor y ningún DTO acepta `receiptUrl`. Queda como mina latente + el logo como puerta de plantado. (Nota de integridad: un PoC anterior reportó falsamente "confirmado" por un comando malformado; se re-verificó.)
+- **SEC-009 CORREGIDO:** la hipótesis FASE 0 era incorrecta — sí hay límite de body (default Express); el defecto real es que `PayloadTooLargeError` sale como **500** en vez de **413** (contrato/observabilidad). Baja a BAJA.
+- **SEC-008 VERIFICADO:** `.xlsx` falso (texto plano) → **422** limpio "The import file could not be processed": el parser falla cerrado; residual = superficie del parser sobre entrada hostil. Baja a BAJA.
+- **SEC-010 VERIFICADO en runtime:** throttle de login operativo (429 tras el 4º login del minuto); persiste la limitación multi-instancia sin `REDIS_URL`.
+- **Datos ficticios y archivos de PoC limpiados** (uploads/logos y uploads/products del PoC, marcadores, org y usuarios de prueba); servidor apagado.
+- Pendiente de FASE 3b: SSRF (revisión de URLs salientes), manejo de errores en exports/receipts, cola FASE 2b (receipts, fiscal-document, whatsapp ingestion, business-modules, employee-shifts, settings logo ya cubierto).
+
 ## FASE 2 — Aislamiento multi-tenant (completada, 2026-11-18)
 
 **Veredicto: el aislamiento aguanta.** Sin hallazgo cross-tenant explotable por usuarios de organización.

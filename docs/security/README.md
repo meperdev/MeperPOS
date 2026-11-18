@@ -17,13 +17,13 @@ Espacio de trabajo de la auditoría de seguridad OWASP-based de MeperPOS. **Nada
 |---|---|---|---|
 | SEC-001 | ADMIN crea usuarios OWNER y resetea contraseñas de cualquier cuenta | CRÍTICA | **corregido** (verificado) |
 | SEC-002 | Fallbacks Prisma sin scoping de tenant + writes post-check | MEDIA (bajada) | verificado: no explotable por usuarios; solo SUPER_ADMIN |
-| SEC-003 | Path traversal en borrado de imágenes; uploads sin validar | ALTA | potencial |
+| SEC-003 | Logo sin validar (confirmado) + path.join inseguro (latente) | MEDIA (bajada) | logo confirmado; traversal potencial |
 | SEC-004 | Credenciales por defecto (seed/compose) + Postgres expuesto | ALTA | confirmado (estático) |
 | SEC-005 | Refresh sobrevive al logout (grace window) + sin CSRF | ALTA | **corregido** (verificado) |
 | SEC-006 | CSP inoperante (unsafe-inline en producción) | MEDIA | confirmado (estático) |
 | SEC-007 | Login CSRF / fijación de sesión | MEDIA | confirmado (dinámico parcial) |
-| SEC-008 | Imports sin validación de tipo | MEDIA | confirmado (estático) |
-| SEC-009 | Sin límite observable de tamaño de body | MEDIA | no verificado |
+| SEC-008 | Imports sin whitelist de tipo (parser falla cerrado) | BAJA (bajada) | confirmado + verificado |
+| SEC-009 | PayloadTooLarge reportado como 500 (límite sí existe) | BAJA (corregido) | verificado |
 | SEC-010 | Throttler en memoria sin Redis | BAJA | confirmado (estático) |
 
 ## Reglas de la auditoría (resumen)
