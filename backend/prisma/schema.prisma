@@ -611,6 +611,10 @@ model Sale {
   cancelReason       String?
   cancelledAt        DateTime?
   cancelledById      String?
+  /// SHA-256 of the normalized creation request (SEC-014). NULL on every sale
+  /// registered without an idempotency key. A replay of the same key and
+  /// payload replays this sale instead of charging the customer twice.
+  requestKeyHash     String?             @db.VarChar(64)
   organizationId     String
   inventoryMovements InventoryMovement[]
   payments           Payment[]
@@ -626,6 +630,9 @@ model Sale {
   /// fiscal document's organization and its sale's organization the same one.
   @@unique([id, organizationId])
   @@unique([organizationId, saleNumber])
+  /// The idempotency key of `POST /api/sales`, scoped to the organization.
+  /// PostgreSQL allows many NULLs, so sales created without a key are unaffected.
+  @@unique([organizationId, requestKeyHash])
   @@index([organizationId, createdAt, status])
   @@index([organizationId, userId])
   @@index([organizationId, customerId])
