@@ -250,7 +250,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 ## SEC-012 — Conflictos de concurrencia del create de ventas reportados como 500
 
 **Severidad:** MEDIA
-**Estado:** confirmado (PoC dinámico FASE 4 + estático)
+**Estado:** CORREGIDO (FASE 7, re-PoC: carrera 3-ventas por la última unidad -> 1x201 + 2x409, cero 500)
 
 **Ubicación:** `backend/src/sales/sales.service.ts:483-491` (solo mapea `P2028`); transacción Serializable `:474-479`.
 
@@ -269,7 +269,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 ## SEC-013 — `RETURNED_PARTIAL` es un flip de estado pelado (sin restock ni transacción)
 
 **Severidad:** MEDIA
-**Estado:** confirmado (estático FASE 4; comportamiento pinnado por test existente, aparentemente intencional)
+**Estado:** CORREGIDO (FASE 7, decisión del dueño: deshabilitado; PUT /:id responde 400; rama muerta eliminada; re-PoC 400)
 
 **Ubicación:** `backend/src/sales/sales.service.ts:784-787`.
 
@@ -288,7 +288,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 ## SEC-014 — `POST /api/sales` sin idempotencia (duplicado exacto = doble venta + doble descuento de stock)
 
 **Severidad:** MEDIA
-**Estado:** confirmado (PoC dinámico FASE 4: misma carga 2 veces → 2×201)
+**Estado:** CORREGIDO (FASE 7: requestKey opcional + Sale.requestKeyHash único por org; re-PoC: replay devuelve la venta original, 1 sola fila)
 
 **Ubicación:** `backend/src/sales/sales.service.ts:145-172`.
 
@@ -305,7 +305,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 ## SEC-015 — Semántica de descuentos inconsistente + sobrepago no-efectivo sin reembolso
 
 **Severidad:** BAJA
-**Estado:** confirmado (estático FASE 4)
+**Estado:** CORREGIDO la parte autorizada (FASE 7, decisión del dueño: pre-IVA + clamp; re-PoC: 10000+19%−1000 → IVA 1710, total 10710). Sobrepago no-efectivo sigue documentado como decisión contable pendiente.
 
 **Ubicación:** descuento por ítem pre-impuesto y clamped (`sale-pricing.ts:90-102`); descuento de venta **post-impuesto y sin clamp superior** (`sales.service.ts:225-228`); sobrepago `:236-245`.
 
@@ -377,3 +377,9 @@ Ninguno de estos pasos imprime secretos; el SQL se ejecuta desde el panel de Rai
 **Escenario de riesgo:** axios se usa en el frontend (SSRF local del navegador del usuario); `uuid`/exceljs en parsing del backend. Ninguna explotación confirmada en el flujo de MeperPOS; clasificadas por exposición teórica.
 
 **Remediación (requiere autorización, es cambio de dependencias):** (1) `npm audit fix` en frontend (mayoría no-breaking; `next@16.4.6` y zod fuera de rango declarada → actualizar `package.json` conscientemente); (2) backend: audit fix no-breaking + revisar el caso `exceljs/uuid` por separado (el fix automático es downgrade a exceljs@3.4.0 — riesgo funcional en el importador). Recomendación: hacer esto como trabajo propio de mantenimiento, no dentro de la rama de auditoría.
+
+---
+
+## Observación post-remediación SEC-015 (frontend, pendiente de autorización)
+
+El preview del POS (`frontend/src/app/pos/page.tsx:805-811`) sigue descontando el descuento global DESPUÉS del impuesto: con descuento de venta, el total en pantalla puede superar el cobrado por el servidor (el servidor manda y cobra bien; es la vista la que miente). Un pago CARD/TRANSFER por el monto del preview genera el sobrepago ya documentado. Fix propuesto: replicar en el preview la distribución pre-IVA de `allocateSaleDiscount`. También cosmético: `frontend/src/app/sales/page.tsx:257` sigue ofreciendo el filtro RETURNED_PARTIAL.
