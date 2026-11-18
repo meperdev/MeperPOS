@@ -29,9 +29,18 @@ const DEV_API_ORIGINS = [
 
 const isProduction = process.env.NODE_ENV === "production";
 
-/** Opt-in phase-2 collection; default OFF so production headers are unchanged. */
+/**
+ * Phase-2 collection is ON by default (SEC-006 remediation, security audit):
+ * the strict no-`unsafe-inline` policy ships Report-Only so real browsers
+ * surface any violation it would cause (console) before someone dares to
+ * enforce it. Enforcing today is blocked by the documented phase-1
+ * constraint: prerendered `/login` embeds inline scripts that cannot carry
+ * a nonce without dynamic rendering (S3 forbids that in phase 1). Opt out
+ * explicitly with CSP_REPORT_ONLY=false|0.
+ */
 const isReportOnlyEnabled =
-  process.env.CSP_REPORT_ONLY === "true" || process.env.CSP_REPORT_ONLY === "1";
+  process.env.CSP_REPORT_ONLY !== "false" &&
+  process.env.CSP_REPORT_ONLY !== "0";
 
 /**
  * Dev-only same-origin API proxy.

@@ -88,7 +88,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 ## SEC-004 — Credenciales por defecto hardcodeadas y Postgres expuesto en todas las interfaces
 
 **Severidad:** ALTA (CRÍTICA si el seed corre en producción)
-**Estado:** confirmado (estático; presencia en despliegue real no verificable desde el repo)
+**Estado:** CORREGIDO en el código (FASE 7: seed fail-closed + loopback). **Acción de despliegue pendiente del dueño:** si el seed ya corrió en algún entorno real, la credencial por defecto publicada debe rotarse ahí.
 
 **Ubicación:** `backend/prisma/seed.ts:26-50` (super-admin con email y contraseña fijos, impresos en consola); `backend/docker-compose.yml:6-11` (credenciales literales de Postgres y `"5432:5432"` publicado en todas las interfaces).
 
@@ -102,7 +102,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 
 **Validación (FASE 6):** confirmar con el dueño si el seed corre en producción (no accesible desde el repo); localmente, `db:up` y verificar exposición con `ss -tlnp` (5432 en 0.0.0.0).
 
-**Remediación:** (1) el seed debe exigir la contraseña por env var y negarse a crear super-admin con valor por defecto; (2) `ports: "127.0.0.1:5432:5432"`; (3) rotar la credencial de Postgres y del super-admin si ya se sembró en algún entorno real.
+**Remediación (aplicada):** (1) `prisma/seed.ts` resuelve la credencial vía `src/config/super-admin-credentials.ts`: sin `SUPER_ADMIN_PASSWORD` sana (≥10, denylist) **salta** la cuenta (fail-closed) y nunca imprime la contraseña; specs cubren los caminos (ausente/vacía/corta/histórica). (2) `docker-compose.yml` bindea Postgres a `127.0.0.1` solamente. (3) `AGENTS.md` documenta la variable.
 
 **Regresión:** test de seed: sin `SUPER_ADMIN_PASSWORD` → aborta con error; verificación de que el compose bindea solo loopback.
 
@@ -157,7 +157,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 ## SEC-007 — Login CSRF (fijación de sesión a cuenta del atacante)
 
 **Severidad:** MEDIA
-**Estado:** CONFIRMADO (dinámico parcial, FASE 1: el servidor acepta login cross-origin sin token CSRF)
+**Estado:** CORREGIDO (FASE 7: Origin allowlist; re-PoC dinámico: Origin ajeno → 403, Origin permitido → 201)
 
 **Evidencia:** PoC dinámico: `POST /api/auth/login` con `Origin: https://evil.example`, sin ningún token CSRF → **HTTP 201** con sesión emitida. En producción las cookies viajan `SameSite=None` (`cookies.helper.ts:37-41`), así que un form cross-site autentica al navegador de la víctima en la cuenta del atacante (login CSRF clásico).
 
@@ -167,7 +167,7 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 
 **Impacto:** confusión de usuario + posible exposición de datos que la víctima introduce creyendo estar en su cuenta.
 
-**Remediación:** exigir `x-csrf-token` también en login (el flujo ya lee la cookie CSRF pre-login o puede recibirla en la misma respuesta de pre-auth), o bloquear cross-site con `SameSite=Lax` para las cookies pre-auth.
+**Remediación (aplicada):** `login`/`register` ya no están exentos a ciegas: el guard exige `Origin` ausente (cliente nativo, no vector CSRF) o `Origin` dentro del allowlist compartido con CORS (`src/config/allowed-origins.ts`, única fuente de verdad usada también por `main.ts`). Sin cambio de frontend: el navegador legítimo siempre manda un Origin permitido.
 
 **Regresión:** login sin header CSRF cross-site → 403.
 
@@ -231,3 +231,16 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 - **FASE 2:** `users.controller.ts:104` pasa `'unknown'` como organizationId en un caso borde de SUPER_ADMIN sin org → `findUserOrThrow` responde 403 con mensaje confuso; bug funcional, no de seguridad.
 - **FASE 2:** `plan-limits` sin org devuelve shape `null` en vez de error (controlador JWT-only, sin OrganizationRequiredGuard) — robustez, revisar en FASE 3.
 - **FASE 2 (pendiente de verificación):** el barrido no cubrió a fondo: receipts, fiscal-document/electronic-invoicing, whatsapp delivery/connections/ingestion, business-modules, employee-shifts y el logo de settings — quedan como primera cola de FASE 2b/3.
+
+---
+
+## SEC-011 — Next.js 16.4.2 afectado por vulnerabilidad conocida (declarado por su propio build)
+
+**Severidad:** MEDIA (hasta identificar el advisory concreto)
+**Estado:** confirmado (el comando oficial `next build` abortó con `SecurityFatalError`: "Your version of Next.js is affected by a known security vulnerability")
+
+**Ubicación:** `frontend/package.json` (next 16.4.2).
+
+**Descripción:** durante la remediación de SEC-006, `npm run build` se detuvo con el mecanismo oficial de upgrade de Next: la versión instalada está afectada por una vulnerabilidad conocida y exige reintento manual. El advisory/CVE específico y la versión corregida quedan para FASE 6 (`npm audit next`).
+
+**Remediación:** identificar el advisory exacto, evaluar la exposición real según el CVE y planear el upgrade de `next` como trabajo propio (separado de la auditoría).
