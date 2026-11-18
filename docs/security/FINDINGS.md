@@ -351,7 +351,7 @@ Ninguno de estos pasos imprime secretos; el SQL se ejecuta desde el panel de Rai
 ## SEC-016 — Rutas sensibles sin `Cache-Control: no-store`
 
 **Severidad:** MEDIA
-**Estado:** confirmado (estático FASE 5)
+**Estado:** CORREGIDO (FASE 7: los cuatro prefijos agregados; spec espejo actualizado y en verde; build OK)
 
 **Ubicación:** `frontend/next.config.ts` — `AUTHENTICATED_ROUTE_PREFIXES` omite `alerts`, `employees`, `loans`, `payroll`, que sí existen como rutas autenticadas en `frontend/src/app/`.
 
@@ -359,7 +359,7 @@ Ninguno de estos pasos imprime secretos; el SQL se ejecuta desde el panel de Rai
 
 **Escenario de riesgo:** en un equipo/ordenador compartido o un proxy corporativo, la nómina queda recuperable de caché tras cerrar sesión.
 
-**Remediación (pendiente de autorización, cambio de 4 líneas):** agregar `alerts`, `employees`, `loans`, `payroll` a `AUTHENTICATED_ROUTE_PREFIXES`.
+**Remediación (aplicada):** `alerts`, `employees`, `loans`, `payroll` agregados a `AUTHENTICATED_ROUTE_PREFIXES` (+ spec espejo `next-headers.test.ts` actualizado, 1621 tests frontend en verde).
 
 **Regresión:** `curl -I` de las cuatro rutas en build de producción devuelve `Cache-Control: no-store`.
 
@@ -380,6 +380,8 @@ Ninguno de estos pasos imprime secretos; el SQL se ejecuta desde el panel de Rai
 
 ---
 
-## Observación post-remediación SEC-015 (frontend, pendiente de autorización)
+## Observación post-remediación SEC-015 (frontend) — CORREGIDA
 
 El preview del POS (`frontend/src/app/pos/page.tsx:805-811`) sigue descontando el descuento global DESPUÉS del impuesto: con descuento de venta, el total en pantalla puede superar el cobrado por el servidor (el servidor manda y cobra bien; es la vista la que miente). Un pago CARD/TRANSFER por el monto del preview genera el sobrepago ya documentado. Fix propuesto: replicar en el preview la distribución pre-IVA de `allocateSaleDiscount`. También cosmético: `frontend/src/app/sales/page.tsx:257` sigue ofreciendo el filtro RETURNED_PARTIAL.
+
+- El preview del POS y el filtro de ventas ya replican el comportamiento nuevo del servidor (commit 0d81c48): preview pre-IVA con clamp y última línea absorbiendo el resto; filtro RETURNED_PARTIAL eliminado.
