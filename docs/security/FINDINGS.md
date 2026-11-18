@@ -236,8 +236,8 @@ Los valores de credenciales por defecto **no se reproducen** en este documento: 
 
 ## SEC-011 — Next.js 16.4.2 afectado por vulnerabilidad conocida (declarado por su propio build)
 
-**Severidad:** MEDIA (hasta identificar el advisory concreto)
-**Estado:** confirmado (el comando oficial `next build` abortó con `SecurityFatalError`: "Your version of Next.js is affected by a known security vulnerability")
+**Severidad:** BAJA (advisories moderados identificados; **exposición no aplicable** en MeperPOS)
+**Estado:** confirmado y evaluado (FASE 6): GHSA-mfr8-8qww-v76h y GHSA-vc7v-qv4w-wrv8 — fuga de caché entre valores de root params en funciones `'use cache'`/`unstable_cache()` (next 16.2.0-16.4.4, fix en 16.4.6). Verificado: el frontend **no usa** `'use cache'` ni `unstable_cache` en ningún archivo → sin camino de explotación. Upgrade recomendado como higiene (npm audit fix --force instala next@16.4.6).
 
 **Ubicación:** `frontend/package.json` (next 16.4.2).
 
@@ -364,3 +364,16 @@ Ninguno de estos pasos imprime secretos; el SQL se ejecuta desde el panel de Rai
 **Regresión:** `curl -I` de las cuatro rutas en build de producción devuelve `Cache-Control: no-store`.
 
 **Nota positiva FASE 5:** el service worker (`frontend/public/sw.js`) es explícitamente shell-only ("Cache Storage never sees a product, customer or money value", documentado y cubierto por `src/lib/pwa.test.ts`) — sin riesgo de fuga por SW. Tokens en memoria, sin sinks XSS y una sola variable pública ya estaban verificados desde FASE 0.
+
+---
+
+## SEC-017 — Dependencias con vulnerabilidades conocidas (npm audit, frontend + backend)
+
+**Severidad:** MEDIA
+**Estado:** confirmado (FASE 6, `npm audit`)
+
+**Resumen:** frontend: 23 vulnerabilidades (12 moderadas, 11 altas) — destacan `axios` 1.x con **alto**: bypass de NO_PROXY con SSRF (GHSA-3p68-rc4w-qgx5), gadgets de prototype pollution en `validateStatus`/`parseReviver`, `zod` alto (agotamiento de memoria en colecciones sobredimensionadas), más vitest/vite/launch-editor (mayormente toolchain de dev). Backend (deps de producción): 24 (6 moderadas, 18 altas) — `uuid` vía `exceljs` (bounds check) y otras; `exceljs` requiere downgrade para el fix automático.
+
+**Escenario de riesgo:** axios se usa en el frontend (SSRF local del navegador del usuario); `uuid`/exceljs en parsing del backend. Ninguna explotación confirmada en el flujo de MeperPOS; clasificadas por exposición teórica.
+
+**Remediación (requiere autorización, es cambio de dependencias):** (1) `npm audit fix` en frontend (mayoría no-breaking; `next@16.4.6` y zod fuera de rango declarada → actualizar `package.json` conscientemente); (2) backend: audit fix no-breaking + revisar el caso `exceljs/uuid` por separado (el fix automático es downgrade a exceljs@3.4.0 — riesgo funcional en el importador). Recomendación: hacer esto como trabajo propio de mantenimiento, no dentro de la rama de auditoría.

@@ -106,3 +106,9 @@ Pendiente: decisión del dueño sobre SEC-013/015 (semántica contable) y autori
 
 - Verificado sano: tokens (memoria), sinks XSS (ninguno), env pública (una), SW shell-only con test que lo enforcement, protección de rutas display-only (backend manda), CSP (SEC-006 mitigado en FASE 7).
 - **SEC-016 nuevo (MEDIA):** `alerts/employees/loans/payroll` sin `no-store` — remediación de 4 líneas pendiente de autorización del dueño.
+
+## FASE 6 — Infra y dependencias (parcial, 2026-11-18)
+
+- **SEC-011 evaluado:** advisories de next identificados (fuga de caché en `use cache`/`unstable_cache`) pero **no aplicables** — el frontend no usa esas APIs; severity BAJA, upgrade por higiene.
+- **SEC-017 nuevo (MEDIA):** npm audit frontend 23 vulns (axios alto: SSRF NO_PROXY bypass + prototype pollution), backend prod 24 (uuid vía exceljs). Fix propuesto como trabajo de mantenimiento separado (dependencias = decisión del dueño).
+- **Pendiente de FASE 6:** drift de migraciones ya documentado (ver FASE 7 nota); Railway/Vercel reales (requieren acceso del dueño); `REDIS_URL` en producción (SEC-010); guía SEC-004 entregada para que el dueño verifique el super-admin en Railway.
