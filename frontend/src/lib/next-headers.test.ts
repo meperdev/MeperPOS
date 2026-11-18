@@ -57,11 +57,15 @@ const PRODUCTION_CSP =
 /** Authenticated app-route prefixes derived from frontend/src/app/. */
 const AUTHENTICATED_ROUTE_PREFIXES = [
   "admin",
+  "alerts",
   "categories",
   "customers",
   "dashboard",
+  "employees",
   "expenses",
   "inventory",
+  "loans",
+  "payroll",
   "pos",
   "profile",
   "purchase-orders",
@@ -287,8 +291,21 @@ describe("CSP phase 2 report-only variant (spec S3, task T2)", () => {
     vi.unstubAllEnvs();
   });
 
-  it("is OFF by default: no report-only header in production", async () => {
+  it("is ON by default in production (SEC-006 remediation): the strict policy ships Report-Only", async () => {
     const rules = await loadRules({ NODE_ENV: "production", CSP_REPORT_ONLY: "" });
+    const reportOnly = policyOf(rules, "Content-Security-Policy-Report-Only");
+
+    expect(reportOnly).toBeDefined();
+    const scriptSrc = scriptSrcOf(reportOnly!);
+    expect(scriptSrc).toContain("'strict-dynamic'");
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+  });
+
+  it("is disabled by the explicit opt-out CSP_REPORT_ONLY=false", async () => {
+    const rules = await loadRules({
+      NODE_ENV: "production",
+      CSP_REPORT_ONLY: "false",
+    });
 
     expect(
       policyOf(rules, "Content-Security-Policy-Report-Only"),

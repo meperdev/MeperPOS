@@ -205,11 +205,18 @@ const securityHeaders = [
  */
 const AUTHENTICATED_ROUTE_PREFIXES = [
   "admin",
+  // SEC-016 remediation: alerts, employees, loans and payroll carry
+  // sensitive per-user data (alerts feed, personal/payroll data, customer
+  // finances) and must never be cacheable.
+  "alerts",
   "categories",
   "customers",
   "dashboard",
+  "employees",
   "expenses",
   "inventory",
+  "loans",
+  "payroll",
   "pos",
   "profile",
   "purchase-orders",
