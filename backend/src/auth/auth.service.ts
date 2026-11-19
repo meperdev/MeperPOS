@@ -310,6 +310,15 @@ export class AuthService {
       // active row for the same user was created within the grace window,
       // rotate from that row instead of killing the tab with 401. Beyond the
       // window this is a genuine reuse signal.
+      //
+      // SEC-005: the grace applies ONLY to revocations caused by rotation.
+      // A token revoked by logout or by a global revocation is an explicit
+      // session end: replaying it must never mint a new session, even while
+      // another active row of the same user is still fresh.
+      if (refreshToken.revocationCause !== 'rotated') {
+        throw new UnauthorizedException('Refresh token revoked');
+      }
+
       const replacement = await this.prisma.refreshToken.findFirst({
         where: {
           userId: refreshToken.userId,
@@ -356,7 +365,7 @@ export class AuthService {
       // Revocar token anterior
       await this.prisma.refreshToken.update({
         where: { id: refreshToken.id },
-        data: { revokedAt: new Date() },
+        data: { revokedAt: new Date(), revocationCause: 'rotated' },
       });
 
       return this.generateTokenPair(refreshToken.user, {
@@ -369,7 +378,7 @@ export class AuthService {
     // after the org-binding migration carry the session's selected org, so a
     // refresh cannot silently flip a multi-org user back to their first-joined
     // organization. Legacy/null rows fall back to first-joined membership.
-    let orgUser =
+    const orgUser =
       refreshToken.organizationId !== null
         ? await this.prisma.organizationUser.findFirst({
             where: {
@@ -403,7 +412,7 @@ export class AuthService {
     // Revocar token anterior
     await this.prisma.refreshToken.update({
       where: { id: refreshToken.id },
-      data: { revokedAt: new Date() },
+      data: { revokedAt: new Date(), revocationCause: 'rotated' },
     });
 
     return this.generateTokenPair(refreshToken.user, orgUser);
@@ -426,7 +435,7 @@ export class AuthService {
 
     await this.prisma.refreshToken.updateMany({
       where: { token: tokenHash, revokedAt: null },
-      data: { revokedAt: new Date() },
+      data: { revokedAt: new Date(), revocationCause: 'logout' },
     });
   }
 
@@ -438,7 +447,7 @@ export class AuthService {
 
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
+      data: { revokedAt: new Date(), revocationCause: 'revoke-all' },
     });
 
     return updatedUser;
@@ -505,7 +514,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.refreshToken.updateMany({
         where: { userId: { in: userIds }, revokedAt: null },
-        data: { revokedAt: new Date() },
+        data: { revokedAt: new Date(), revocationCause: 'revoke-all' },
       }),
       this.prisma.user.updateMany({
         where: { id: { in: userIds } },

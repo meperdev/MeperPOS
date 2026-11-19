@@ -86,6 +86,7 @@ Next.js App Router under `frontend/src/`:
 
 ## Key Conventions
 
+- **Every authenticated, organization-scoped route MUST carry `@UseGuards(..., OrganizationRequiredGuard)` (plus `JwtAuthGuard` + `@Roles`).** This guard is the tenant boundary: without it, `user.organizationId` can arrive `undefined` and the Prisma fallback pattern `...(organizationId ? { organizationId } : {})` silently degrades into a **cross-tenant, all-organizations query** (see `docs/security/FINDINGS.md`, SEC-002). Only platform `SUPER_ADMIN` routes (`admin/*`, `whatsapp/intelligence`) and pre-auth routes (`auth/*`, WAHA webhook, health) may omit it. If you add a controller or endpoint, include the guard or there must be an explicit, commented reason; new services must scope every read AND every write (`where: { id, organizationId }`), never a conditional-org fallback. See `AGENTS.md` for the full convention set.
 - `cn()` from `lib/utils.ts` for conditional Tailwind class merging — always use this instead of string concatenation
 - `formatCurrency(amount)` for COP formatting; `formatDate/formatDateTime` for es-CO locale
 - `getApiErrorMessage(error, fallback)` for extracting user-facing error messages from Axios errors

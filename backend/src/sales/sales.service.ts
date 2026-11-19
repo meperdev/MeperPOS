@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto, UpdateSaleDto } from './dto/sales.dto';
@@ -18,12 +19,13 @@ import { CacheService } from '../common/services/cache.service';
 import { SettingsService } from '../settings/settings.service';
 import { computeSkipTake } from '../common/utils/pagination';
 import {
+  allocateSaleDiscount,
   canOverrideSalePrice,
   resolveSaleItemPricing,
   saleLinesReconcile,
   toPersistedLineTax,
+  type PricedSaleItem,
 } from './sale-pricing';
-import type { DianTaxCode } from '../common/utils/tax.util';
 import { tracksStock } from '../products/product-type.logic';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { SequenceService } from '../common/sequences/sequence.service';
@@ -43,6 +45,88 @@ function withFinancedFlag<
 >(sale: T): Omit<T, 'posLoanSaleIntent'> & { financed: boolean } {
   const { posLoanSaleIntent, ...rest } = sale;
   return { ...rest, financed: Boolean(posLoanSaleIntent) };
+}
+
+/**
+ * The idempotency key of `POST /api/sales` (SEC-014), stored the way the loans
+ * module stores its own: only the SHA-256 of the normalized request reaches the
+ * database. The actor is part of the hashed request, so one user's key can never
+ * replay another user's sale even though the unique index is per organization.
+ * The request key itself is part of the digest: two different keys with an
+ * identical payload are two deliberate sales, not one replay.
+ */
+function saleRequestKeyHash(dto: CreateSaleDto, userId: string): string | null {
+  if (!dto.requestKey) return null;
+  const money = (value: number) => new Prisma.Decimal(value).toString();
+  const items = Array.isArray(dto.items) ? dto.items : [];
+  const payments = Array.isArray(dto.payments) ? dto.payments : [];
+  const payload = {
+    userId,
+    requestKey: dto.requestKey,
+    customerId: dto.customerId ?? null,
+    discountAmount: money(dto.discountAmount ?? 0),
+    items: items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice:
+        item.unitPrice === undefined || item.unitPrice === null
+          ? null
+          : money(item.unitPrice),
+      discountAmount: money(item.discountAmount ?? 0),
+    })),
+    payments: payments.map((payment) => ({
+      method: payment.method,
+      amount: money(payment.amount),
+    })),
+  };
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+/** PostgreSQL codes that mean the transaction lost a concurrency race. */
+const SERIALIZATION_PG_CODES = ['40001', '40P01'];
+
+/** Prisma codes that mean another transaction got there first. */
+function isConcurrentSaleConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+  if (error.code === 'P2034' || error.code === 'P2002') {
+    return true;
+  }
+  // The sequence's `SELECT ... FOR UPDATE` runs through `$queryRaw`, and Prisma
+  // reports PostgreSQL's 40001 there as P2010 with the database code in `meta`
+  // instead of P2034. This is the variant a concurrent point of sale actually
+  // hits, so it must map to the same bounded retry.
+  if (error.code === 'P2010') {
+    const databaseCode = (error.meta as { code?: unknown } | undefined)?.code;
+    if (
+      typeof databaseCode === 'string' &&
+      SERIALIZATION_PG_CODES.includes(databaseCode)
+    ) {
+      return true;
+    }
+    return SERIALIZATION_PG_CODES.some((code) =>
+      error.message.includes(`Code: \`${code}\``),
+    );
+  }
+  return false;
+}
+
+/** Whether a unique violation is the sale idempotency index. */
+function isRequestKeyCollision(error: unknown): boolean {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== 'P2002'
+  ) {
+    return false;
+  }
+  const target = error.meta?.target;
+  const fields = Array.isArray(target) ? target : [target];
+  return fields.some(
+    (field) =>
+      typeof field === 'string' &&
+      field.toLowerCase().includes('requestkeyhash'),
+  );
 }
 
 @Injectable()
@@ -160,22 +244,22 @@ export class SalesService {
       );
     }
 
+    // SEC-014: the idempotency key is hashed from the normalized request. A
+    // replay returns the sale it already registered, before pricing, numbering
+    // or stock are touched.
+    const requestKeyHash = saleRequestKeyHash(createSaleDto, userId);
+    if (requestKeyHash) {
+      const replayId = await this.findSaleIdByRequestKey(
+        organizationId,
+        requestKeyHash,
+      );
+      if (replayId) {
+        return this.findOne(replayId, organizationId);
+      }
+    }
+
     let subtotal = 0;
-    let totalTax = 0;
-    const saleItems: Array<{
-      productId: string;
-      productType: ProductType;
-      productTracksStock: boolean;
-      quantity: number;
-      unitPrice: number;
-      costPriceSnapshot: Prisma.Decimal;
-      taxRate: number;
-      taxCode: DianTaxCode | null;
-      taxAmount: number | null;
-      discountAmount: number;
-      subtotal: number;
-      total: number;
-    }> = [];
+    const pricedItems: PricedSaleItem[] = [];
 
     // Manager-approved price overrides awaiting their audit rows. Collected
     // here so the audit is written against the persisted sale, inside the same
@@ -205,24 +289,75 @@ export class SalesService {
       }
 
       // Overrides authorize an audited POS price, not a catalog price edit.
-      const { pricedItem, taxAmount, override } = resolveSaleItemPricing(
+      const { pricedItem, override } = resolveSaleItemPricing(
         product,
         item,
         this.canOverridePrice(user),
       );
       if (override) priceOverrides.push(override);
-      // The fiscal facts are derived once, from the priced line, and enforced by
-      // `toPersistedLineTax`: a code iff the amount is greater than zero. The
-      // rounded value is what gets persisted, so the rounded value is also what
-      // accumulates: the CUFE and the invoice sum the persisted rows, and
-      // `Sale.taxAmount` has to agree with them to the cent.
-      const persistedTax = toPersistedLineTax(pricedItem.taxCode, taxAmount);
       subtotal += pricedItem.subtotal;
-      totalTax += persistedTax.taxAmount ?? 0;
-      saleItems.push({ ...pricedItem, ...persistedTax });
+      pricedItems.push(pricedItem);
     }
 
-    const total = subtotal + totalTax - discountAmount;
+    // SEC-015: the sale-wide discount is a pre-tax discount. It may never
+    // exceed the gross subtotal, and it reduces each line's taxable base before
+    // that line's tax is computed — the same peso of discount must not be taxed
+    // differently depending on whether it was entered per item or per sale.
+    //
+    // The stored `subtotal` stays gross and the whole discount stays on the
+    // header, which is what keeps the invoice identity
+    // (`subtotal + tax − discount = total`) and the line sum true; the allocated
+    // shares only move the taxable base. The subtotal is compared as the
+    // DECIMAL(10,2) it will be stored as, so a float artifact (0.7 × 3 =
+    // 2.0999999999999996) cannot reject a discount that equals it to the cent.
+    const requestedDiscount = new Prisma.Decimal(discountAmount);
+    const grossSubtotal = new Prisma.Decimal(subtotal).toDecimalPlaces(
+      2,
+      Prisma.Decimal.ROUND_HALF_UP,
+    );
+    if (requestedDiscount.gt(grossSubtotal)) {
+      throw new BadRequestException(
+        'El descuento no puede exceder el subtotal',
+      );
+    }
+    const discountShares = allocateSaleDiscount(
+      pricedItems.map((pricedItem) => pricedItem.subtotal),
+      requestedDiscount,
+    );
+
+    // The fiscal facts are derived once, from each discounted line, and enforced
+    // by `toPersistedLineTax`: a code iff the amount is greater than zero. The
+    // rounded value is what gets persisted, so the rounded value is also what
+    // accumulates: the CUFE and the invoice sum the persisted rows, and
+    // `Sale.taxAmount` has to agree with them to the cent.
+    let totalTax = 0;
+    const saleItems = pricedItems.map((pricedItem, index) => {
+      const taxableBase = new Prisma.Decimal(pricedItem.subtotal).minus(
+        discountShares[index],
+      );
+      const persistedTax = toPersistedLineTax(
+        pricedItem.taxCode,
+        taxableBase.toNumber() * (pricedItem.taxRate / 100),
+      );
+      totalTax += persistedTax.taxAmount ?? 0;
+      return {
+        ...pricedItem,
+        ...persistedTax,
+        // The line already lost its share of the sale-wide discount from the
+        // taxable base, so its total is that base plus the tax charged on it.
+        total: taxableBase.toNumber() + (persistedTax.taxAmount ?? 0),
+      };
+    });
+
+    // The sale's own money facts are the DECIMAL(10,2) values the columns store,
+    // so the payable is derived from the stored subtotal: a float artifact of a
+    // cent-exact discount (0.7 × 3) must not turn into a negative payable. The
+    // arithmetic stays in `Decimal` so a sub-cent discount keeps its exact
+    // payable (9.995), which activated organizations still refuse to invoice.
+    const total = grossSubtotal
+      .plus(new Prisma.Decimal(totalTax))
+      .minus(requestedDiscount)
+      .toNumber();
 
     if (total < 0) {
       throw new BadRequestException('Total cannot be negative');
@@ -260,8 +395,11 @@ export class SalesService {
 
     const year = new Date().getFullYear();
 
-    try {
-      const sale = await this.prisma.$transaction(
+    // The transaction is a unit: SEC-012 retries it whole. Everything that
+    // identifies the sale (number, stock claim, fiscal document) is claimed
+    // inside it, so a retry starts from a rolled-back state and re-reads them.
+    const runSaleTransaction = () =>
+      this.prisma.$transaction(
         async (tx) => {
           const { number: saleNumber } = await this.sequenceService.nextNumber(
             tx,
@@ -283,6 +421,9 @@ export class SalesService {
               status: 'COMPLETED',
               userId,
               organizationId,
+              // SEC-014: the idempotency digest travels with the sale it
+              // identifies, written in the same transaction.
+              requestKeyHash,
             },
           });
 
@@ -480,18 +621,58 @@ export class SalesService {
         },
       );
 
-      this.cache.clear('dashboard:');
+    // SEC-012: a serialization failure or a sale-number collision is a
+    // legitimate conflict of the point of sale, never an internal error. The
+    // whole transaction rolled back, so it is retried exactly once; a second
+    // failure answers 409 instead of 500.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const sale = await runSaleTransaction();
 
-      return this.findOne(sale.id, organizationId);
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2028'
-      ) {
-        throw new ServiceUnavailableException('Intente nuevamente');
+        this.cache.clear('dashboard:');
+
+        return await this.findOne(sale.id, organizationId);
+      } catch (error) {
+        // A concurrent duplicate of this same request lost the unique race on
+        // the idempotency index: the sale that already exists is the answer.
+        if (requestKeyHash && isRequestKeyCollision(error)) {
+          const replayId = await this.findSaleIdByRequestKey(
+            organizationId,
+            requestKeyHash,
+          );
+          if (replayId) {
+            return this.findOne(replayId, organizationId);
+          }
+        }
+        if (isConcurrentSaleConflict(error) && attempt === 0) {
+          continue;
+        }
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2028'
+        ) {
+          throw new ServiceUnavailableException('Intente nuevamente');
+        }
+        if (isConcurrentSaleConflict(error)) {
+          throw new ConflictException(
+            'La venta no pudo completarse por concurrencia, reintentá',
+          );
+        }
+        throw error;
       }
-      throw error;
     }
+  }
+
+  /** The sale registered for an idempotency digest, if it exists (SEC-014). */
+  private async findSaleIdByRequestKey(
+    organizationId: string,
+    requestKeyHash: string,
+  ): Promise<string | null> {
+    const sale = await this.prisma.sale.findFirst({
+      where: { organizationId, requestKeyHash },
+      select: { id: true },
+    });
+    return sale?.id ?? null;
   }
 
   async findAll(
@@ -683,10 +864,7 @@ export class SalesService {
       throw new BadRequestException('Only completed sales can be updated');
     }
 
-    if (
-      updateSaleDto.status === 'CANCELLED' ||
-      updateSaleDto.status === 'RETURNED_PARTIAL'
-    ) {
+    if (updateSaleDto.status === 'CANCELLED') {
       const intent = await this.prisma.posLoanSaleIntent.findFirst({
         where: { finalSaleId: existingSale.id, organizationId },
         select: { id: true },
@@ -779,13 +957,6 @@ export class SalesService {
       });
 
       return this.findOne(id, organizationId);
-    }
-
-    if (updateSaleDto.status === 'RETURNED_PARTIAL') {
-      return this.prisma.sale.update({
-        where: { id },
-        data: { status: updateSaleDto.status },
-      });
     }
 
     return this.findOne(id, organizationId);

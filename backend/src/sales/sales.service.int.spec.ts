@@ -520,4 +520,160 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
       ).toEqual({ status: 'ACCEPTED' });
     });
   });
+
+  // ---- FASE 7 commercial integrity (SEC-012, SEC-014, SEC-015) ----
+
+  const createProduct = async (data: {
+    name: string;
+    stock: number;
+    salePrice: number;
+    taxable?: boolean;
+    taxRate?: number;
+  }) => {
+    const category = await prisma.category.create({
+      data: {
+        name: `Sales INT ${data.name}`,
+        organizationId: fixture.orgAId,
+        active: true,
+      },
+    });
+    return prisma.product.create({
+      data: {
+        name: data.name,
+        sku: `SALES-INT-${data.name.replace(/\s+/g, '-')}-${Date.now()}`,
+        salePrice: new Prisma.Decimal(data.salePrice),
+        costPrice: new Prisma.Decimal(0),
+        taxRate: new Prisma.Decimal(data.taxRate ?? 0),
+        taxable: data.taxable ?? false,
+        taxCode: data.taxable ? 'IVA' : null,
+        stock: data.stock,
+        minStock: 1,
+        active: true,
+        categoryId: category.id,
+        organizationId: fixture.orgAId,
+      },
+    });
+  };
+
+  it('SEC-015: taxes the sale-wide discount base before per-line tax', async () => {
+    const product = await createProduct({
+      name: 'Discount Base',
+      stock: 10,
+      salePrice: 100,
+      taxable: true,
+      taxRate: 19,
+    });
+
+    const sale = await salesService.create(
+      {
+        customerId,
+        items: [{ productId: product.id, quantity: 1 }],
+        discountAmount: 20,
+        payments: [{ method: 'CASH', amount: 95.2 }],
+      },
+      fixture.userAId,
+      fixture.orgAId,
+    );
+
+    expect(Number(sale.subtotal)).toBe(100);
+    expect(Number(sale.discountAmount)).toBe(20);
+    // 80 taxable base × 19% = 15.20, not 19.00 on the undiscounted subtotal.
+    expect(Number(sale.taxAmount)).toBe(15.2);
+    expect(Number(sale.total)).toBe(95.2);
+
+    const line = await prisma.saleItem.findFirstOrThrow({
+      where: { saleId: sale.id },
+      select: { taxAmount: true, total: true },
+    });
+    expect(Number(line.taxAmount)).toBe(15.2);
+    expect(Number(line.total)).toBe(95.2);
+  });
+
+  it('SEC-014: replays the sale registered for the same requestKey', async () => {
+    const product = await createProduct({
+      name: 'Idempotent',
+      stock: 5,
+      salePrice: 1000,
+    });
+    const dto = {
+      customerId,
+      items: [{ productId: product.id, quantity: 2 }],
+      discountAmount: 0,
+      payments: [{ method: 'CASH' as const, amount: 2000 }],
+      requestKey: `idem-${Date.now()}-0001`,
+    };
+
+    const first = await salesService.create(
+      dto,
+      fixture.userAId,
+      fixture.orgAId,
+    );
+    const second = await salesService.create(
+      dto,
+      fixture.userAId,
+      fixture.orgAId,
+    );
+
+    expect(second.id).toBe(first.id);
+    expect(second.saleNumber).toBe(first.saleNumber);
+    expect(
+      await prisma.sale.count({ where: { requestKeyHash: { not: null } } }),
+    ).toBeGreaterThanOrEqual(1);
+    expect(await prisma.saleItem.count({ where: { saleId: first.id } })).toBe(
+      1,
+    );
+    const stock = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+      select: { stock: true },
+    });
+    // One sale, one stock decrement of two units.
+    expect(stock.stock).toBe(3);
+
+    const persisted = await prisma.sale.findUniqueOrThrow({
+      where: { id: first.id },
+      select: { requestKeyHash: true },
+    });
+    expect(persisted.requestKeyHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(persisted.requestKeyHash).not.toContain(dto.requestKey);
+  });
+
+  it('SEC-012: answers 409, never 500, when concurrent sales race for the last unit', async () => {
+    const product = await createProduct({
+      name: 'Last Unit',
+      stock: 1,
+      salePrice: 1000,
+    });
+    const dto = {
+      customerId,
+      items: [{ productId: product.id, quantity: 1 }],
+      payments: [{ method: 'CASH' as const, amount: 1000 }],
+    };
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 4 }, () =>
+        salesService.create(dto, fixture.userAId, fixture.orgAId),
+      ),
+    );
+
+    const fulfilled = results.filter((result) => result.status === 'fulfilled');
+    const rejected = results.filter(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(3);
+    for (const result of rejected) {
+      expect(result.reason).toBeInstanceOf(ConflictException);
+      expect((result.reason as Error).message).not.toMatch(/P20\d\d|P2034/);
+    }
+    expect(
+      await prisma.saleItem.count({
+        where: { productId: product.id },
+      }),
+    ).toBe(1);
+    const stock = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+      select: { stock: true },
+    });
+    expect(stock.stock).toBe(0);
+  });
 });

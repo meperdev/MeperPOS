@@ -78,31 +78,31 @@ type PricingCase = {
 
 const cases: PricingCase[] = [
   {
-    name: 'promotion and product tax precede category tax; order discount follows tax',
-    total: 173.5,
+    name: 'promotion and product tax precede category tax; order discount reduces the tax base',
+    total: 172.55,
   },
   {
     name: 'category tax applies when product tax is disabled',
     product: { taxable: false },
-    total: 160,
+    total: 159.5,
   },
   {
     name: 'CASHIER can raise the promotional price',
     role: 'CASHIER',
     item: { unitPrice: 120 },
-    total: 268.7,
+    total: 267.75,
   },
   {
     name: 'CASHIER can lower the promotional price',
     role: 'CASHIER',
     item: { unitPrice: 60 },
-    total: 125.9,
+    total: 124.95,
   },
   {
     name: 'ADMIN can override the promotional price',
     role: 'ADMIN',
     item: { unitPrice: 120 },
-    total: 268.7,
+    total: 267.75,
   },
   {
     name: 'missing actor cannot override even with an excessive discount',

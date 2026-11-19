@@ -6,6 +6,8 @@ import {
   IsString,
   IsNotEmpty,
   IsArray,
+  MaxLength,
+  MinLength,
   ValidateNested,
   Min,
 } from 'class-validator';
@@ -75,17 +77,29 @@ export class CreateSaleDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentDto)
   payments?: PaymentDto[];
+
+  /**
+   * Optional idempotency key (SEC-014), mirroring the loans module. Two requests
+   * with the same key and the same payload register one sale; a retry replays
+   * the first answer instead of charging the customer twice.
+   */
+  @ApiPropertyOptional({ minLength: 8, maxLength: 128 })
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  @IsOptional()
+  requestKey?: string;
 }
 
 export class UpdateSaleDto {
   @ApiProperty({
-    enum: ['COMPLETED', 'CANCELLED', 'RETURNED_PARTIAL'],
+    enum: ['COMPLETED', 'CANCELLED'],
     example: 'CANCELLED',
     required: false,
   })
-  @IsEnum(['COMPLETED', 'CANCELLED', 'RETURNED_PARTIAL'])
+  @IsEnum(['COMPLETED', 'CANCELLED'])
   @IsOptional()
-  status?: 'COMPLETED' | 'CANCELLED' | 'RETURNED_PARTIAL';
+  status?: 'COMPLETED' | 'CANCELLED';
 
   @ApiProperty({ example: 'Cliente arrepentido', required: false })
   @IsString()

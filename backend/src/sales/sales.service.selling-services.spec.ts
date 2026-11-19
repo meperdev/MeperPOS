@@ -555,7 +555,7 @@ describe('SalesService — selling services', () => {
       user: { id: 'user-1', name: 'User', email: 'user@example.com' },
     };
 
-    it.each(['CANCELLED', 'RETURNED_PARTIAL'] as const)(
+    it.each(['CANCELLED'] as const)(
       'rejects %s for a linked financed sale before any state or inventory writes',
       async (status) => {
         const intent = {
@@ -598,17 +598,9 @@ describe('SalesService — selling services', () => {
       },
     );
 
-    it('does not restock RETURNED_PARTIAL sales', async () => {
-      prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
-      prismaMock.sale.update.mockResolvedValue({ status: 'RETURNED_PARTIAL' });
-      await service.update(
-        'sale-1',
-        { status: 'RETURNED_PARTIAL' },
-        'user-1',
-        'org-1',
-      );
-      expect(prismaMock.$transaction).not.toHaveBeenCalled();
-    });
+    // SEC-013: `RETURNED_PARTIAL` is no longer part of the update contract (see
+    // `sales.dto.spec.ts` and `sales.service.hardening.spec.ts`), so the service
+    // has no bare status flip left to exercise here.
 
     it('cancels an untracked product without stock effects', async () => {
       const tx = {

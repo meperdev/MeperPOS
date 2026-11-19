@@ -34,14 +34,45 @@ describe('CookieCsrfGuard', () => {
     },
   );
 
-  it('allows exempt login path for cookie-authenticated mutations', () => {
+  it('allows login from an allowed origin (same-site frontend)', () => {
+    const request = {
+      ...baseRequest,
+      path: '/api/auth/login',
+      headers: { origin: 'http://localhost:3000' },
+    };
+
+    expect(guard.canActivate(makeContext(request))).toBe(true);
+  });
+
+  it('allows login without an Origin header (native client, not a CSRF vector)', () => {
+    const request = { ...baseRequest, path: '/api/auth/login' };
+
+    expect(guard.canActivate(makeContext(request))).toBe(true);
+  });
+
+  it('rejects cross-site login with a foreign Origin (SEC-007)', () => {
+    const request = {
+      ...baseRequest,
+      path: '/api/auth/login',
+      headers: { origin: 'https://evil.example' },
+    };
+
+    expect(() => guard.canActivate(makeContext(request))).toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('rejects cross-site login even when a foreign csrf cookie pair is presented (SEC-007)', () => {
     const request = {
       ...baseRequest,
       path: '/api/auth/login',
       cookies: { csrf_token: 'abc' },
+      headers: { origin: 'https://evil.example', 'x-csrf-token': 'abc' },
     };
 
-    expect(guard.canActivate(makeContext(request))).toBe(true);
+    expect(() => guard.canActivate(makeContext(request))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('allows exempt register path', () => {
@@ -50,14 +81,40 @@ describe('CookieCsrfGuard', () => {
     expect(guard.canActivate(makeContext(request))).toBe(true);
   });
 
-  it('allows exempt refresh path with trailing slash and query string', () => {
+  it('requires CSRF on refresh with trailing slash and query string (SEC-005)', () => {
     const request = {
       ...baseRequest,
       path: '/api/auth/refresh/',
       url: '/api/auth/refresh/?source=legacy',
+      cookies: { csrf_token: 'abc' },
+    };
+
+    expect(() => guard.canActivate(makeContext(request))).toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('allows a refresh request carrying the matching double-submit header', () => {
+    const request = {
+      ...baseRequest,
+      path: '/api/auth/refresh',
+      cookies: { csrf_token: 'abc' },
+      headers: { 'x-csrf-token': 'abc' },
     };
 
     expect(guard.canActivate(makeContext(request))).toBe(true);
+  });
+
+  it('requires a CSRF header on refresh: a cookie-only POST is rejected (SEC-005)', () => {
+    const request = {
+      ...baseRequest,
+      path: '/api/auth/refresh',
+      cookies: { csrf_token: 'abc' },
+    };
+
+    expect(() => guard.canActivate(makeContext(request))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('allows exempt select-organization path (pre-session, body-carried preAuthToken)', () => {

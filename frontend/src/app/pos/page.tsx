@@ -793,18 +793,37 @@ export default function POSPage() {
     [handleScanSubmit],
   );
 
-  const subtotal = cart.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice - item.discountAmount,
-    0,
+  // Line bases before tax, each already net of its per-item discount.
+  const lineGrossBases = cart.map(
+    (item) => item.quantity * item.unitPrice - item.discountAmount,
   );
+  const subtotal = lineGrossBases.reduce((sum, gross) => sum + gross, 0);
+
+  // Server parity (SEC-015): the sale-wide discount reduces each line's
+  // taxable base proportionally BEFORE tax, mirroring the
+  // allocateSaleDiscount() split the backend applies. The last line
+  // absorbs the rounding remainder so the shares always add up, and the
+  // discount is clamped to the gross subtotal like the server does.
+  const clampedSaleDiscount = Math.min(
+    Math.max(discountAmount, 0),
+    Math.max(subtotal, 0),
+  );
+  const sharesExceptLast = lineGrossBases.slice(0, -1).map((gross) =>
+    subtotal > 0 ? (gross * clampedSaleDiscount) / subtotal : 0,
+  );
+  const lastShare =
+    clampedSaleDiscount -
+    sharesExceptLast.reduce((sum, share) => sum + share, 0);
+  const discountShares = [...sharesExceptLast, lastShare];
+
   const taxAmount = cart.reduce(
-    (sum, item) =>
+    (sum, item, index) =>
       sum +
-      (item.quantity * item.unitPrice - item.discountAmount) *
+      (lineGrossBases[index] - discountShares[index]) *
         ((item.product.effectiveTaxRate ?? item.product.taxRate) / 100),
     0,
   );
-  const total = subtotal + taxAmount - discountAmount;
+  const total = subtotal + taxAmount - clampedSaleDiscount;
 
   const toggleFavoriteProduct = useCallback((productId: string) => {
     setFavoriteProductIds((current) =>

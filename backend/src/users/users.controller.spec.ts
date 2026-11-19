@@ -104,6 +104,9 @@ describe('UsersController', () => {
       'user-2',
       dto,
       'org-1',
+      // SEC-001: the controller forwards the acting user so the service can
+      // enforce the ADMIN-cannot-reset-OWNER guardrail.
+      user,
     );
   });
 
