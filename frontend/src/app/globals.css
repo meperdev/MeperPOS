@@ -499,6 +499,28 @@ label {
     touch-action: manipulation;
 }
 
+/* iOS Safari (and the installed PWA) draws date/time inputs with a native
+   appearance, an intrinsic min-width and its own height, so they ignore the
+   field geometry and overflow their grid track. Drop the native box and let the
+   Input component's height, padding and width rule. The picker still opens. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    max-width: 100%;
+    display: block;
+}
+
+/* WebKit centers the value and adds its own vertical margin; align it with the
+   text in every other field. */
+input::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+}
+
 /* The navigation rail paints no track: a 5px thumb over 9px icons reads as a
    hard seam. Scrollability is carried by the rail's own edge fades instead. */
 .sidebar-scroll {
