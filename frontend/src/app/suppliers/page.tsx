@@ -393,7 +393,7 @@ export default function SuppliersPage() {
                               <h3 className="text-sm font-semibold text-foreground truncate leading-snug">
                                 {supplier.name}
                               </h3>
-                              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground font-mono tabular-nums">
+                              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground id-text tabular-nums">
                                 <span>NIT</span>
                                 <span>·</span>
                                 <span className="text-foreground/90 font-medium truncate">
@@ -432,7 +432,7 @@ export default function SuppliersPage() {
                                     <span />
                                   )}
                                   {supplier.phone && (
-                                    <span className="inline-flex items-center gap-1 font-mono text-foreground/90 tabular-nums shrink-0">
+                                    <span className="inline-flex items-center gap-1 id-text text-foreground/90 tabular-nums shrink-0">
                                       <Phone className="w-3 h-3 shrink-0 text-muted-foreground/70" />
                                       {supplier.phone}
                                     </span>
@@ -470,7 +470,7 @@ export default function SuppliersPage() {
                                 {supplier.bank && (
                                   <span
                                     className={cn(
-                                      "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
+                                      "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 text-[11px] font-medium",
                                       getBankChipStyle(supplier.bank),
                                     )}
                                   >
@@ -526,15 +526,16 @@ export default function SuppliersPage() {
                         </div>
 
                         {hasBankInfo && supplier.accountNumber && (
-                          <div className="mt-0.5 flex items-center gap-1 pl-5">
-                            {/* The account number gets a full line: it is the value the user copies. */}
-                            <span className="min-w-0 flex-1 wrap-anywhere font-mono text-[11px] text-foreground/90 tabular-nums">
+                          <div className="mt-1 flex min-w-0 items-center gap-1 pl-5">
+                            {/* The account number gets its own line, indented to the bank chip,
+                                with the copy action hugging it instead of the card's edge. */}
+                            <span className="min-w-0 wrap-anywhere text-[11px] tabular-nums text-foreground/90">
                               {supplier.accountNumber}
                             </span>
                             <button
                               type="button"
                               onClick={(e) => handleCopyAccount(e, supplier)}
-                              className="relative z-10 -ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                              className="relative z-10 -my-1.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                               title="Copiar número de cuenta"
                               aria-label={`Copiar cuenta de ${supplier.name}`}
                             >
@@ -608,7 +609,7 @@ export default function SuppliersPage() {
                                   supplier.name
                                 )}
                               </p>
-                              <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                              <p className="id-text text-xs text-muted-foreground tabular-nums">
                                 NIT · {supplier.documentNumber}
                               </p>
                             </div>
@@ -626,7 +627,7 @@ export default function SuppliersPage() {
                               )}
                               <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
                                 {supplier.phone && (
-                                  <span className="font-mono tabular-nums">
+                                  <span className="id-text tabular-nums">
                                     {supplier.phone}
                                   </span>
                                 )}
@@ -660,14 +661,14 @@ export default function SuppliersPage() {
                               {supplier.bank && (
                                 <span
                                   className={cn(
-                                    "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
+                                    "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 text-[11px] font-medium",
                                     getBankChipStyle(supplier.bank),
                                   )}
                                 >
                                   {supplier.bank}
                                 </span>
                               )}
-                              <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
+                              <span className="text-muted-foreground id-text text-[11px] tabular-nums">
                                 {supplier.accountType === "SAVINGS"
                                   ? "Ahorros"
                                   : supplier.accountType === "CHECKING"

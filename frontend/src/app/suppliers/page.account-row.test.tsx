@@ -80,6 +80,8 @@ describe("Suppliers card bank account row", () => {
     expect(number.className).not.toContain("truncate");
     expect(number.className).not.toContain("line-clamp");
     expect(number.className).toContain("tabular-nums");
+    // Tabular sans, not the monospace costume the rest of the app is dropping.
+    expect(number.className).not.toContain("font-mono");
 
     const copy = screen.getByRole("button", {
       name: `Copiar cuenta de ${SUPPLIER_NAME}`,
@@ -107,6 +109,51 @@ describe("Suppliers card bank account row", () => {
       name: `Desactivar ${SUPPLIER_NAME}`,
     });
     expect(deactivate.parentElement!.parentElement).toBe(identityRow);
+  });
+
+  it("puts the copy action immediately after the number, not at the card's right edge", () => {
+    render(<SuppliersPage />);
+
+    const number = screen.getByText(ACCOUNT_NUMBER);
+    const copy = screen.getByRole("button", {
+      name: `Copiar cuenta de ${SUPPLIER_NAME}`,
+    });
+
+    // The digits must not be a flex spacer: a stretched number is what flung the
+    // copy button to the far side of the card.
+    expect(number.className).not.toContain("flex-1");
+    expect(copy.parentElement).toBe(number.parentElement);
+
+    const row = number.parentElement as HTMLElement;
+    const children = Array.from(row.children);
+    expect(children.indexOf(copy)).toBe(children.indexOf(number) + 1);
+    expect(row.className).toContain("gap-1");
+
+    // 28px target whose margin box is one text line tall, so it never pushes the
+    // card open: the hit area grows, the layout does not.
+    expect(copy.className).toContain("h-7");
+    expect(copy.className).toContain("w-7");
+    expect(copy.className).toContain("-my-1.5");
+  });
+
+  it("indents the number to the bank chip, not past it", () => {
+    render(<SuppliersPage />);
+
+    const number = screen.getByText(ACCOUNT_NUMBER);
+    const chip = screen.getByText("Davivienda");
+    const accountRow = number.parentElement as HTMLElement;
+
+    // 20px indent (pl-5) = the 14px credit-card icon plus its 6px gap, so the
+    // digits start on the chip's left edge and nowhere further in.
+    const identityContent = chip.parentElement as HTMLElement;
+    const icon = identityContent.firstElementChild as SVGElement;
+    expect(icon.getAttribute("class")).toContain("w-3.5");
+    expect(identityContent.className).toContain("gap-1.5");
+    expect(accountRow.className).toContain("pl-5");
+    expect(accountRow.className).not.toMatch(/pl-(6|7|8|9|10)/);
+
+    // Tight under the identity line: 4px, not a floating gap.
+    expect(accountRow.className).toContain("mt-1");
   });
 
   it("adds no second line to a supplier without a bank account", () => {

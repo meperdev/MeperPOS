@@ -65,12 +65,12 @@ describe("Suppliers card footer", () => {
     cleanup();
   });
 
-  it("renders the copy action frameless, like the delete action, at h-9 w-9", () => {
+  it("renders the copy action frameless, like the delete action, at h-7 w-7", () => {
     render(<SuppliersPage />);
 
     const copy = screen.getByRole("button", { name: `Copiar cuenta de ${SUPPLIER_NAME}` });
-    expect(copy.className).toContain("h-9");
-    expect(copy.className).toContain("w-9");
+    expect(copy.className).toContain("h-7");
+    expect(copy.className).toContain("w-7");
     expect(copy.className).toContain("border-transparent");
     expect(copy.className).toContain("hover:bg-muted");
     expect(copy.className).not.toContain("bg-muted/40");
