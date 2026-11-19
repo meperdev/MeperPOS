@@ -18,8 +18,8 @@ import {
   Sun,
   User as UserIcon,
   Building2,
-  ChevronsLeft,
-  ChevronsRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   History,
   MoreVertical,
   X,
@@ -346,9 +346,9 @@ export function Sidebar() {
           title={isCollapsed ? "Expandir barra lateral (Ctrl+B)" : "Colapsar barra lateral (Ctrl+B)"}
         >
           {isCollapsed ? (
-            <ChevronsRight className="w-4 h-4" />
+            <PanelLeftOpen className="w-4 h-4" />
           ) : (
-            <ChevronsLeft className="w-4 h-4" />
+            <PanelLeftClose className="w-4 h-4" />
           )}
         </button>
         {/* The drawer's own way out. The tab bar's "Más" opens it, and a link or

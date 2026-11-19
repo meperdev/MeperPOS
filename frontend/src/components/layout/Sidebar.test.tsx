@@ -640,10 +640,13 @@ describe("Sidebar", () => {
     const toggleBtn = await screen.findByTestId("sidebar-collapse-toggle");
     expect(toggleBtn).toBeInTheDocument();
     expect(toggleBtn).toHaveAttribute("aria-label", "Colapsar barra lateral");
+    // The toggle draws the panel glyph, not chevrons.
+    expect(toggleBtn.querySelector("svg.lucide-panel-left-close")).not.toBeNull();
 
     // Click to collapse
     await userEvent.click(toggleBtn);
     expect(toggleBtn).toHaveAttribute("aria-label", "Expandir barra lateral");
+    expect(toggleBtn.querySelector("svg.lucide-panel-left-open")).not.toBeNull();
     expect(safeGetItem(SIDEBAR_COLLAPSED_KEY)).toBe("true");
 
     // Click to expand again
