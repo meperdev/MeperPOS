@@ -1,8 +1,10 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Search } from "lucide-react";
 import { AlertCenter } from "@/components/layout/AlertCenter";
+import { openCommandPalette } from "@/lib/command-palette";
+import { APP_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { isNestedPath, parentPath, resolveSectionLabel } from "./nav-routes";
 
@@ -64,7 +66,20 @@ export function MobileTopBar() {
         </p>
       </div>
 
-      <AlertCenter className="shrink-0" />
+      <div className="flex shrink-0 items-center">
+        {/* Same palette as the desktop field: the phone gets the glyph, not the
+            44px-wide shortcut hint that has no keyboard to press it. */}
+        <button
+          type="button"
+          onClick={openCommandPalette}
+          aria-label={`Buscar en ${APP_NAME}`}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted active:text-foreground"
+        >
+          <Search className="h-5 w-5" aria-hidden="true" />
+        </button>
+
+        <AlertCenter className="shrink-0" />
+      </div>
     </header>
   );
 }

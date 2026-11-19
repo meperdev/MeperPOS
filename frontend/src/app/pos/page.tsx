@@ -1076,7 +1076,10 @@ export default function POSPage() {
   return (
     <DashboardLayout>
       <h1 className="sr-only">Punto de venta</h1>
-      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
+      {/* At lg this page fits the viewport exactly: the shell's own padding
+          (6rem) plus the header bar it now draws, both subtracted from `dvh` so
+          the document never scrolls behind the till. */}
+      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-var(--app-header-height)-6rem)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
         <div className="flex min-h-0 flex-1 flex-col lg:h-full">
           {/*

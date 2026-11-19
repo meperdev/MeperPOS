@@ -73,10 +73,12 @@ const TABLE_PAGE_SIZE = 10;
 function InventoryContent() {
   const searchParams = useSearchParams();
   const urlLowStock = searchParams?.get("filter") === "lowStock";
+  // The command palette links a product hit here with `?search=<sku>`.
+  const urlSearch = searchParams?.get("search") ?? "";
   const toast = useToast();
   const { user } = useAuth();
   const canManageInventory = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => urlSearch);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<
     "active" | "inactive" | "all"
@@ -87,11 +89,22 @@ function InventoryContent() {
   });
   const urlFilterChanged = lowStockFilter.urlValue !== urlLowStock;
   const showLowStockOnly = urlFilterChanged ? urlLowStock : lowStockFilter.enabled;
+  // Only the URL's value, so a manual edit of the field is never overwritten.
+  const [urlSearchState, setUrlSearchState] = useState(urlSearch);
+  const urlSearchChanged = urlSearchState !== urlSearch;
 
   // Adjust only on URL transitions: unrelated renders must preserve manual toggles.
   // Resolve the new query immediately, without fetching a stale page/filter first.
   if (urlFilterChanged) {
     setLowStockFilter({ urlValue: urlLowStock, enabled: urlLowStock });
+    setPage(1);
+  }
+
+  // Same rule for the palette's arrival: adopt `?search=` on the transition and
+  // land on the first page of it, without discarding the filters already set.
+  if (urlSearchChanged) {
+    setUrlSearchState(urlSearch);
+    setSearch(urlSearch);
     setPage(1);
   }
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -173,7 +186,7 @@ function InventoryContent() {
     error: productsError,
     refetch: refetchProducts,
   } = useProducts({
-    page: urlFilterChanged ? 1 : page,
+    page: urlFilterChanged || urlSearchChanged ? 1 : page,
     limit: pageSize,
     search: search || undefined,
     categoryId: selectedCategory || undefined,

@@ -585,8 +585,11 @@ describe("POS panel sizing (S1.3)", () => {
     const page = screen.getByTestId("pos-page-root");
     // The box between the fixed top bar and the tab bar, derived from tokens.
     expect(page.className).toContain("h-[var(--mobile-content-height)]");
-    // Desktop keeps its own height; only the mobile one changed.
-    expect(page.className).toContain("lg:h-[calc(100dvh-6rem)]");
+    // Desktop keeps its own height, less the header bar the shell now draws —
+    // derived from the shared token so the two cannot drift apart.
+    expect(page.className).toContain(
+      "lg:h-[calc(100dvh-var(--app-header-height)-6rem)]",
+    );
     expect(page.className).toContain("lg:grid");
 
     const panel = screen.getByTestId("pos-products-panel");

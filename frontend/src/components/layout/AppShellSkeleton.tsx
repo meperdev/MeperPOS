@@ -145,6 +145,27 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
         </div>
       </aside>
 
+      {/* Desktop header — the same height the real bar reserves, so the swap
+          from skeleton to shell does not move the content column. */}
+      <div
+        aria-hidden="true"
+        data-testid="app-shell-skeleton-header"
+        className={cn(
+          "hidden lg:flex sticky top-0 z-40 h-[var(--app-header-height)] items-center gap-3",
+          "border-b border-border bg-background px-8",
+          "transition-[margin] duration-300 ease-in-out",
+          isCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]"
+        )}
+      >
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3">
+          <div className="flex flex-1 justify-center">
+            <div className={cn("h-9 w-full max-w-md rounded-lg bg-muted", pulse)} />
+          </div>
+          <div className={cn("h-8 w-8 rounded-md bg-muted", pulse)} />
+          <div className={cn("h-8 w-8 rounded-full bg-muted", pulse)} />
+        </div>
+      </div>
+
       {/* Content */}
       <main
         className={cn(

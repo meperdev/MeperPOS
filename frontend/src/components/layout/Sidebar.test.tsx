@@ -117,13 +117,14 @@ describe("Sidebar", () => {
 
     render(<Sidebar />, { wrapper });
 
+    // The rail and the drawer each mount their own switcher (only one is on
+    // screen at a time); the rail's is the reference here.
+    const rail = within(screen.getByTestId("sidebar-user-rail"));
     await waitFor(() => {
-      expect(screen.getByText("Org A")).toBeInTheDocument();
+      expect(rail.getByText("Org A")).toBeInTheDocument();
     });
 
-    expect(
-      screen.getByLabelText(/Cambiar organización/i)
-    ).toBeInTheDocument();
+    expect(rail.getByLabelText(/Cambiar organización/i)).toBeInTheDocument();
   });
 
   it("hides the organization switcher for single-org users", async () => {
@@ -150,7 +151,7 @@ describe("Sidebar", () => {
     render(<Sidebar />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText("Org A")).toBeInTheDocument();
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
     });
 
     const link = screen.getByRole("link", { name: "Salidas" });
@@ -164,7 +165,7 @@ describe("Sidebar", () => {
 
     render(<Sidebar />, { wrapper });
 
-    await waitFor(() => expect(screen.getByText("Org A")).toBeInTheDocument());
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/auth/organizations"));
 
     const links = screen.getAllByRole("link").map((link) => link.textContent?.trim());
     expect(links).toEqual([
@@ -328,8 +329,10 @@ describe("Sidebar", () => {
       expect(api.get).toHaveBeenCalledWith("/admin/organizations");
     });
 
+    // Both the rail and the drawer mount a switcher; drive the rail's.
+    const rail = within(screen.getByTestId("sidebar-user-rail"));
     await userEvent.click(
-      await screen.findByRole("button", { name: "Seleccionar organización" })
+      await rail.findByRole("button", { name: "Seleccionar organización" })
     );
     await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
 
@@ -480,7 +483,7 @@ describe("Sidebar", () => {
     expect(account.querySelector("[data-slot='badge'], .rounded-xl")).toBeNull();
   });
 
-  it("puts the bell and the account menu trigger side by side in the expanded footer", async () => {
+  it("puts the bell and the account menu trigger side by side in the phone drawer footer", async () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations: [organizations[0]] },
     });
@@ -504,7 +507,51 @@ describe("Sidebar", () => {
     expect(menuTrigger).toHaveClass("h-9", "w-9", "border-transparent", "bg-transparent");
   });
 
-  it("collapses the footer to the bell, the avatar menu trigger and the org button", async () => {
+  it("hands the account chrome to the header and leaves only the scope control in the rail", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar-user-rail")).toHaveTextContent("Org A");
+    });
+
+    const rail = screen.getByTestId("sidebar-user-rail");
+    // The rail half is lg-only, and the header now owns the bell and the account.
+    expect(rail.className).toContain("hidden");
+    expect(rail.className).toContain("lg:block");
+    expect(within(rail).queryByRole("button", { name: /Alertas/ })).not.toBeInTheDocument();
+    expect(
+      within(rail).queryByRole("button", { name: "Opciones de cuenta" })
+    ).not.toBeInTheDocument();
+    expect(within(rail).queryByTestId("sidebar-clock")).not.toBeInTheDocument();
+    // What is left down there is the tenant scope, which has no other home.
+    expect(within(rail).getByLabelText(/Cambiar organización/i)).toBeInTheDocument();
+  });
+
+  it("keeps the bell, the account menu and the clock for the phone drawer", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
+    });
+
+    const drawer = screen.getByTestId("sidebar-user");
+    // The drawer is the account's only home below lg, so it loses nothing.
+    expect(drawer.className).toContain("lg:hidden");
+    expect(within(drawer).getByRole("button", { name: "Opciones de cuenta" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: /Alertas/ })).toBeInTheDocument();
+    expect(within(drawer).getByTestId("sidebar-clock")).toBeInTheDocument();
+    expect(within(drawer).getByText("Ana Perez")).toBeInTheDocument();
+  });
+
+  it("leaves the collapsed rail with no account chrome at all", async () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations: [organizations[0]] },
     });
@@ -522,21 +569,13 @@ describe("Sidebar", () => {
     // The rail starts expanded (beforeEach), so one toggle collapses it.
     await userEvent.click(await screen.findByTestId("sidebar-collapse-toggle"));
 
-    const account = screen.getByTestId("sidebar-user");
-    // No clock in the rail: the time lives in the expanded footer only.
-    expect(screen.queryByTestId("sidebar-clock")).not.toBeInTheDocument();
-    expect(account).not.toHaveTextContent("Ana Perez");
+    const rail = screen.getByTestId("sidebar-user-rail");
+    expect(rail.querySelector("button")).toBeNull();
+    expect(rail).not.toHaveTextContent("Ana Perez");
 
-    const footer = within(screen.getByTestId("sidebar-user"));
-    const bell = footer.getByRole("button", { name: /Alertas/ });
-    const avatarTrigger = footer.getByRole("button", { name: "Opciones de cuenta" });
-    expect(avatarTrigger).toHaveTextContent("AP");
-    expect(
-      bell.compareDocumentPosition(avatarTrigger) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(
-      footer.getByRole("button", { name: "Mostrar organizaciones (expandir barra)" })
-    ).toBeInTheDocument();
+    // The drawer keeps its footer regardless of the rail's width.
+    const drawer = screen.getByTestId("sidebar-user");
+    expect(within(drawer).getByRole("button", { name: "Opciones de cuenta" })).toBeInTheDocument();
   });
 
   it("separates Cerrar sesión from the rest of the account menu", async () => {
@@ -910,9 +949,9 @@ describe("drawer offers only what the tab bar does not", () => {
   });
 });
 
-// The phone gets one bell. The top bar owns it below `lg`, so the drawer's copy
-// leaves; the rail keeps its own at `lg`.
-describe("one bell on a phone (mobile shell)", () => {
+// The header owns the bell above `lg`, so the rail drops its copy entirely and
+// the drawer keeps the one a phone can reach (the top bar has its own).
+describe("one bell per surface (mobile shell)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     safeSetItem(SIDEBAR_COLLAPSED_KEY, "false");
@@ -929,48 +968,29 @@ describe("one bell on a phone (mobile shell)", () => {
     });
   });
 
-  it("hides the drawer footer's bell below lg and keeps the top bar's", () => {
+  it("keeps the bell in the phone drawer and never in the rail", () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations },
     });
 
     render(<Sidebar />, { wrapper });
 
-    const footerBell = within(screen.getByTestId("sidebar-user")).getByRole(
-      "button",
-      { name: /Alertas/ },
-    );
-    expect(footerBell.parentElement?.className).toContain("hidden");
-    expect(footerBell.parentElement?.className).toContain("lg:flex");
+    // The drawer carries it below lg…
+    const drawer = screen.getByTestId("sidebar-user");
+    expect(drawer.className).toContain("lg:hidden");
+    expect(within(drawer).getByRole("button", { name: /Alertas/ })).toBeInTheDocument();
 
-    const topBarBell = within(screen.getByRole("banner")).getByRole("button", {
-      name: /Alertas/,
-    });
-    expect(topBarBell.parentElement?.className).not.toContain("hidden");
-  });
+    // …the top bar keeps its own…
+    expect(
+      within(screen.getByRole("banner")).getByRole("button", { name: /Alertas/ }),
+    ).toBeInTheDocument();
 
-  it("keeps the collapsed rail's bell at lg only", async () => {
-    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: { organizations },
-    });
-
-    render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <SidebarProvider>
-          <Sidebar />
-        </SidebarProvider>
-      </QueryClientProvider>,
-    );
-
-    await userEvent.click(await screen.findByTestId("sidebar-collapse-toggle"));
-
-    const bell = within(screen.getByTestId("sidebar-user")).getByRole("button", {
-      name: /Alertas/,
-    });
-    expect(bell.parentElement?.className).toContain("hidden");
-    expect(bell.parentElement?.className).toContain("lg:inline-flex");
+    // …and the rail, which the desktop header now serves, has none.
+    expect(
+      within(screen.getByTestId("sidebar-user-rail")).queryByRole("button", {
+        name: /Alertas/,
+      }),
+    ).toBeNull();
   });
 });
 

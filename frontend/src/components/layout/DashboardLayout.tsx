@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, memo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AppShellSkeleton } from "@/components/layout/AppShellSkeleton";
 import { PlanLimitBanner } from "@/components/billing/PlanLimitBanner";
 import { ConnectionStatus } from "@/components/pwa/ConnectionStatus";
@@ -98,10 +100,19 @@ export const DashboardLayout = memo(function DashboardLayout({
         <>
           <Sidebar />
           <MobileTabBar />
+          {/* The desktop bar sits above the content column and right of the
+              rail; below `lg` the mobile top bar carries the same three
+              surfaces. The palette is mounted once for the whole shell. */}
+          <AppHeader isCollapsed={isCollapsed} />
+          <CommandPalette />
           <main
             className={cn(
               // Full-height flex column: a page root that grows to fill it can pin its paginator to the bottom.
               "flex min-h-dvh flex-col",
+              // At lg the sticky header owns the top `--app-header-height`, so the
+              // column fills what the bar leaves instead of adding a second
+              // viewport's worth of scroll under it.
+              "lg:min-h-[calc(100dvh-var(--app-header-height))]",
               // Derived, not magic: the mobile header is `--mobile-header`, the gap
               // below it is `--mobile-header-gap`, the bottom edge belongs to the
               // tab bar (`--mobile-tabbar` plus its inset) and the notch insets are

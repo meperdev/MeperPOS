@@ -367,3 +367,47 @@ describe("Inventory page — real pagination (S2)", () => {
     expect(screen.getByText("Arequipe").closest("[aria-busy]")).toHaveAttribute("aria-busy", "false");
   });
 });
+
+/**
+ * S4: the command palette links a product hit to `/inventory?search=<sku>`, so
+ * the page has to adopt that parameter on load — and keep working alongside the
+ * low-stock filter that already lived in the URL.
+ */
+describe("Inventory page — ?search= from the palette (S4)", () => {
+  it("prefills the field and the first query from the URL", () => {
+    urlParams = new URLSearchParams("search=ALI-002");
+    setResponse([buildProduct({ name: "Arroz 1 kg", sku: "ALI-002" })]);
+
+    render(<InventoryPage />);
+
+    expect(screen.getByPlaceholderText("Buscar por nombre, SKU...")).toHaveValue("ALI-002");
+    expect(useProductsMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ page: 1, search: "ALI-002" }),
+    );
+  });
+
+  it("combines the URL search with the low-stock filter", () => {
+    urlParams = new URLSearchParams("search=arroz&filter=lowStock");
+    setResponse([buildProduct({ name: "Arroz 1 kg", sku: "ALI-002", isLowStock: true })]);
+
+    render(<InventoryPage />);
+
+    expect(useProductsMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ page: 1, search: "arroz", lowStock: true }),
+    );
+    expect(screen.getByRole("button", { name: /^Stock bajo/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("follows a new search parameter without discarding the filters the operator set", () => {
+    const { rerender } = render(<InventoryPage />);
+    fireEvent.change(screen.getByLabelText("Todas las categorías"), { target: { value: "cat-2" } });
+
+    urlParams = new URLSearchParams("search=PAN-CRO");
+    rerender(<InventoryPage />);
+
+    expect(screen.getByPlaceholderText("Buscar por nombre, SKU...")).toHaveValue("PAN-CRO");
+    expect(lastQuery()).toEqual(
+      expect.objectContaining({ page: 1, search: "PAN-CRO", categoryId: "cat-2" }),
+    );
+  });
+});

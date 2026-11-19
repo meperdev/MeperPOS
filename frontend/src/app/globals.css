@@ -431,6 +431,14 @@ h4 {
     /* Gap between that header and the first content row. */
     --mobile-header-gap: 1.5rem;
     /*
+     * Height of the desktop header bar. One value for the four surfaces that
+     * depend on it: the bar itself, the skeleton that stands in for it, the
+     * content column that starts below it and the POS page that fits itself to
+     * the viewport. Hand-copying the number is how they drift apart, and a page
+     * that sized itself to `100dvh` without it always overflowed by the bar.
+     */
+    --app-header-height: 3.5rem;
+    /*
      * Height of the fixed mobile tab bar, excluding the home-indicator inset it
      * pays on top. Every fixed surface that shares the bottom edge below `lg`
      * (the bar itself, the POS cart bar, a pinned paginator) offsets from this

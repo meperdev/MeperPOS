@@ -17,7 +17,6 @@ import {
   Moon,
   Sun,
   User as UserIcon,
-  Building2,
   PanelLeftClose,
   PanelLeftOpen,
   History,
@@ -471,48 +470,44 @@ export function Sidebar() {
         />
       </div>
 
-      {/* Block 3: Account - clock, identity and the account menu, fused */}
+      {/* Block 3: Account. The header owns the bell and the account on a
+          desktop, so the rail keeps only the tenant scope — the one thing with
+          no other home. Below lg the drawer is the account's only surface, so it
+          keeps the whole block it always had. */}
 
       {user && (
-        <div
-          data-testid="sidebar-user"
-          className={cn(
-            "border-t border-border/70 shrink-0",
-            isCollapsed ? "px-2 py-3" : "px-3 py-3"
-          )}
-        >
-          {isCollapsed ? (
-            <div className="flex flex-col items-center gap-1">
-              <AlertCenter
-                collapsed
-                className="hidden lg:inline-flex"
-                buttonClassName={footerIconButtonClass}
-              />
+        <>
+          <div data-testid="sidebar-user-rail" className="hidden shrink-0 lg:block">
+            {!isCollapsed &&
+              (user.isSuperAdmin ? (
+                <OrganizationSwitcher
+                  className="border-t border-border/70 px-3 py-3"
+                  placement="up"
+                  currentOrganizationId={selectedOrgId}
+                  onSwitch={async (orgId) => {
+                    setSelectedOrgId(orgId);
+                    applyOrganizationScope(queryClient, orgId);
+                  }}
+                  isSuperAdmin
+                  onSelectAll={() => {
+                    setSelectedOrgId(null);
+                    applyOrganizationScope(queryClient, null);
+                  }}
+                />
+              ) : (
+                <OrganizationSwitcher
+                  className="border-t border-border/70 px-3 py-3"
+                  placement="up"
+                  currentOrganizationId={user.organizationId ?? undefined}
+                  onSwitch={switchOrganization}
+                />
+              ))}
+          </div>
 
-              <RowActions
-                label="Opciones de cuenta"
-                menuOffset={RAIL_FLYOUT_GAP}
-                preferSide="right"
-                items={accountItems}
-                triggerClassName={cn(footerIconButtonClass, "rounded-full")}
-                triggerContent={
-                  <span aria-hidden="true" className={avatarCircleClass}>
-                    {initials}
-                  </span>
-                }
-              />
-
-              <button
-                type="button"
-                onClick={toggleCollapse}
-                className={cn(footerIconButtonClass, "flex items-center justify-center")}
-                aria-label="Mostrar organizaciones (expandir barra)"
-                title="Mostrar organizaciones (expandir barra)"
-              >
-                <Building2 className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          ) : (
+          <div
+            data-testid="sidebar-user"
+            className="shrink-0 border-t border-border/70 px-3 py-3 lg:hidden"
+          >
             <div className="flex flex-col gap-2">
               {/* The time leads the footer as one quiet line; the identity row
                   and its two actions sit under it. */}
@@ -545,7 +540,7 @@ export function Sidebar() {
                 </div>
 
                 <AlertCenter
-                  className="hidden shrink-0 lg:flex"
+                  className="shrink-0"
                   buttonClassName={footerIconButtonClass}
                 />
 
@@ -583,8 +578,8 @@ export function Sidebar() {
                 />
               )}
             </div>
-          )}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Floating tooltip for collapsed rail items */}
