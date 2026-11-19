@@ -601,3 +601,50 @@ input::-webkit-date-and-time-value {
     height: 0;
     display: none;
 }
+
+/* --- AnimatedNumber (KPI odometer) ------------------------------------------ */
+/* A column that did not exist in the previous value has no digit to roll from,
+   so it fades in place instead of popping. The component already withholds the
+   motion under `prefers-reduced-motion`; the media query is the belt for a
+   preference flipped mid-session, since the class may already be painted. */
+@keyframes animated-number-column-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.35em);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Each digit column is a window onto a ten-digit strip. The ink of a digit
+   starts 14% inside its cell, so a 10% fade never touches a digit at rest; it
+   only softens the digits entering and leaving while a column rolls. */
+.animated-number-column {
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 0,
+        #000 10%,
+        #000 90%,
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 0,
+        #000 10%,
+        #000 90%,
+        transparent 100%
+    );
+}
+
+.animated-number-column-in {
+    animation: animated-number-column-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animated-number-column-in {
+        animation: none;
+    }
+}
+

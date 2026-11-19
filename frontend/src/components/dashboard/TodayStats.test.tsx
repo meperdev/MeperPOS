@@ -32,6 +32,14 @@ vi.mock("@/hooks/useExpenses", () => ({
   useExpenses: (params: unknown) => useExpensesMock(params),
 }));
 
+/**
+ * KPI values render through `AnimatedNumber`, whose aria-hidden odometer strips
+ * hold every digit 0-9. A bare `getByText("5")` would therefore also match the
+ * strip's own "5", so value queries target the sr-only node that carries the
+ * full string — the one a screen reader reads.
+ */
+const VALUE_SELECTOR = '[data-testid="animated-number"] .sr-only';
+
 function daily(date: string, total: number, count: number) {
   return {
     date,
@@ -103,17 +111,17 @@ describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
   it("shows today's real sales total, transactions count and average ticket", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 
-    expect(screen.getByText(/\$\s250\.000/)).toBeTruthy();
-    expect(screen.getByText("5")).toBeTruthy();
+    expect(screen.getByText(/\$\s250\.000/, { selector: VALUE_SELECTOR })).toBeTruthy();
+    expect(screen.getByText("5", { selector: VALUE_SELECTOR })).toBeTruthy();
     // Ticket promedio = 250000 / 5 = 50000
-    expect(screen.getByText(/\$\s50\.000/)).toBeTruthy();
+    expect(screen.getByText(/\$\s50\.000/, { selector: VALUE_SELECTOR })).toBeTruthy();
   });
 
   it("sums today's expenses for the Salidas hoy metric", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 
     expect(screen.getByText("Salidas hoy")).toBeTruthy();
-    expect(screen.getByText(/\$\s60\.000/)).toBeTruthy();
+    expect(screen.getByText(/\$\s60\.000/, { selector: VALUE_SELECTOR })).toBeTruthy();
   });
 
   it("renders the accumulated metrics as one totals card with three labelled values", () => {
@@ -122,26 +130,45 @@ describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
     const totals = within(screen.getByRole("region", { name: "Totales" }));
 
     expect(totals.getByText("Ventas completadas")).toBeTruthy();
-    expect(totals.getByText("12")).toBeTruthy();
+    expect(totals.getByText("12", { selector: VALUE_SELECTOR })).toBeTruthy();
     expect(totals.getByText("Productos totales")).toBeTruthy();
-    expect(totals.getByText("30")).toBeTruthy();
+    expect(totals.getByText("30", { selector: VALUE_SELECTOR })).toBeTruthy();
     expect(totals.getByText("Clientes totales")).toBeTruthy();
-    expect(totals.getByText("8")).toBeTruthy();
+    expect(totals.getByText("8", { selector: VALUE_SELECTOR })).toBeTruthy();
   });
 
   it("sets money KPI values in tabular sans, never mono", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 
-    // Row 1: today's sales total as money.
-    const sales = screen.getByText(/\$\s250\.000/);
+    // Row 1: today's sales total as money. The numeric classes live on the
+    // counter root — the matched node is only the sr-only copy of the string.
+    const sales = screen
+      .getByText(/\$\s250\.000/, { selector: VALUE_SELECTOR })
+      .closest('[data-testid="animated-number"]') as HTMLElement;
     expect(sales).toHaveClass("tabular-nums");
     expect(sales).not.toHaveClass("font-mono");
 
     // Totals row: a count, same rule — digits align, the face stays sans.
     const totals = within(screen.getByTestId("kpi-totals"));
-    const count = totals.getByText("30");
+    const count = totals
+      .getByText("30", { selector: VALUE_SELECTOR })
+      .closest('[data-testid="animated-number"]') as HTMLElement;
     expect(count).toHaveClass("tabular-nums");
     expect(count).not.toHaveClass("font-mono");
+  });
+
+  it("animates the four KPI values and the three totals, and only those", () => {
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    const row1 = screen.getByTestId("kpi-row-1");
+    expect(row1.querySelectorAll('[data-testid="animated-number"]')).toHaveLength(4);
+
+    const totals = screen.getByTestId("kpi-totals");
+    // Three values roll; the low-stock cell keeps its plain "2 productos" copy.
+    expect(totals.querySelectorAll('[data-testid="animated-number"]')).toHaveLength(3);
+    expect(
+      within(totals).getByText("2 productos").closest('[data-testid="animated-number"]'),
+    ).toBeNull();
   });
 
   it("formats the totals values with es-CO grouping", () => {
@@ -158,9 +185,9 @@ describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
 
     const totals = within(screen.getByTestId("kpi-totals"));
 
-    expect(totals.getByText("1.234")).toBeTruthy();
-    expect(totals.getByText("5.678")).toBeTruthy();
-    expect(totals.getByText("9")).toBeTruthy();
+    expect(totals.getByText("1.234", { selector: VALUE_SELECTOR })).toBeTruthy();
+    expect(totals.getByText("5.678", { selector: VALUE_SELECTOR })).toBeTruthy();
+    expect(totals.getByText("9", { selector: VALUE_SELECTOR })).toBeTruthy();
   });
 
   it("renders the low-stock count as a link to the low-stock inventory filter", () => {
@@ -272,7 +299,7 @@ describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
 
     render(<TodayStatsInner today="2026-08-22" />);
 
-    expect(screen.getAllByText(/\$ 0/).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("0")).toBeTruthy();
+    expect(screen.getAllByText(/\$ 0/, { selector: VALUE_SELECTOR }).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("0", { selector: VALUE_SELECTOR })).toBeTruthy();
   });
 });

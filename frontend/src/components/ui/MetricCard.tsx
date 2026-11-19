@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Area, AreaChart } from "recharts";
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 export type MetricCardTone = "primary" | "accent" | "rose" | "green" | "blue";
 
@@ -24,6 +25,11 @@ interface MetricCardProps {
   sparkline?: number[];
   /** Optional CTA rendered at the card footer (e.g. "Reordenar"). */
   action?: MetricCardAction;
+  /**
+   * Opt-in odometer roll for the value when it changes. Panel KPIs enable it;
+   * every other caller keeps the plain, static string.
+   */
+  animateValue?: boolean;
 }
 
 const toneCardClasses: Record<MetricCardTone, string> = {
@@ -111,6 +117,9 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
  * MetricCard (neutral card surface), so refactors are behavior-preserving.
  * `sparkline` and `action` are additive and optional; omitting both keeps the
  * original markup unchanged.
+ *
+ * `animateValue` is opt-in and reserved for the Panel KPIs: the value then rolls
+ * digit by digit through `AnimatedNumber` instead of swapping as text.
  */
 export function MetricCard({
   label,
@@ -120,6 +129,7 @@ export function MetricCard({
   tone,
   sparkline,
   action,
+  animateValue,
 }: MetricCardProps) {
   const percentage = delta?.percentage ?? null;
   const hasBaseline = percentage !== null;
@@ -152,7 +162,7 @@ export function MetricCard({
         )}
         title={value}
       >
-        {value}
+        {animateValue ? <AnimatedNumber value={value} /> : value}
       </p>
       {sparkline && sparkline.length > 0 && (
         <MetricSparkline

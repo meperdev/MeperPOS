@@ -110,6 +110,32 @@ describe("MetricCard (DIA-5)", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("keeps the value as plain text when the counter is not opted in", () => {
+    const { container } = render(
+      <MetricCard label="Ventas" value="$ 250.000" helper="hoy" />,
+    );
+
+    expect(container.querySelector('[data-testid="animated-number"]')).toBeNull();
+    expect(screen.getByText("$ 250.000").tagName).toBe("P");
+    expect(screen.getByText("$ 250.000")).not.toHaveClass("sr-only");
+  });
+
+  it("rolls the value through AnimatedNumber when animateValue is enabled", () => {
+    const { container } = render(
+      <MetricCard label="Ventas" value="$ 250.000" helper="hoy" animateValue />,
+    );
+
+    const counter = container.querySelector('[data-testid="animated-number"]');
+    expect(counter).toBeTruthy();
+    // The full string still reaches the reader once, from the sr-only node.
+    expect(screen.getAllByText("$ 250.000")).toHaveLength(1);
+    expect(screen.getByText("$ 250.000")).toHaveClass("sr-only");
+    expect(
+      container.querySelector('[data-testid="animated-number-strips"]'),
+    ).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector('[title="$ 250.000"]')).toBeTruthy();
+  });
+
   it("anchors the value under its label and pushes the helper footer to the bottom", () => {
     const { container } = render(
       <MetricCard label="Ventas hoy" value="$ 250.000" helper="del día" />,

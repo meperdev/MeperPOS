@@ -19,6 +19,7 @@ import {
   sumExpensesOnDate,
 } from "@/lib/dashboard";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 /**
  * KPI window: the last 7 days ending today. Yesterday — the delta baseline —
@@ -109,6 +110,7 @@ export function TodayStatsInner({ today }: { today: string }) {
           tone="green"
           sparkline={salesSeries}
           delta={computeDelta(todayMetrics.sales, yesterdayMetrics.sales)}
+          animateValue
         />
         <MetricCard
           label="Salidas hoy"
@@ -117,6 +119,7 @@ export function TodayStatsInner({ today }: { today: string }) {
           tone="rose"
           sparkline={expensesSeries}
           delta={computeDelta(expensesToday, expensesYesterday)}
+          animateValue
         />
         <MetricCard
           label="Transacciones"
@@ -125,6 +128,7 @@ export function TodayStatsInner({ today }: { today: string }) {
           tone="accent"
           sparkline={transactionsSeries}
           delta={computeDelta(todayMetrics.transactions, yesterdayMetrics.transactions)}
+          animateValue
         />
         <MetricCard
           label="Ticket promedio"
@@ -133,6 +137,7 @@ export function TodayStatsInner({ today }: { today: string }) {
           tone="blue"
           sparkline={ticketSeries}
           delta={computeDelta(todayMetrics.ticket, yesterdayMetrics.ticket)}
+          animateValue
         />
       </div>
 
@@ -157,7 +162,7 @@ export function TodayStatsInner({ today }: { today: string }) {
                 className="mt-auto pt-1 truncate text-lg font-semibold text-foreground tabular-nums"
                 title={total.value}
               >
-                {total.value}
+                <AnimatedNumber value={total.value} />
               </p>
             </div>
           ))}
