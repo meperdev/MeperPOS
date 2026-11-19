@@ -173,7 +173,7 @@ export default function UsersPage() {
         <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs">
           <div className="border-b border-border/60 px-4 py-3 flex items-center gap-2">
             <UsersIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-            <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+            <h3 className="text-sm font-semibold text-foreground">
               Listado de usuarios
             </h3>
           </div>
@@ -211,10 +211,10 @@ export default function UsersPage() {
                           </span>
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-xs sm:text-sm font-semibold text-foreground">
+                          <p className="truncate text-sm font-semibold text-foreground">
                             {user.name}
                           </p>
-                          <p className="truncate text-xs text-muted-foreground">
+                          <p className="truncate text-[13px] text-muted-foreground">
                             {user.email}
                           </p>
                         </div>
@@ -316,7 +316,7 @@ export default function UsersPage() {
           <Input label="Nombre" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
           <Input label="Correo" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
           <Input label="Contraseña" type="password" minLength={10} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required />
-          <p className="text-xs text-muted-foreground">Mínimo 10 caracteres</p>
+          <p className="text-[13px] text-muted-foreground">Mínimo 10 caracteres</p>
           <Select
             label="Rol"
             value={formData.role}
@@ -337,7 +337,7 @@ export default function UsersPage() {
       <Modal isOpen={showResetModal} onClose={() => setShowResetModal(false)} title="Restablecer contraseña" size="sm">
         {userToReset && (
           <form onSubmit={handleResetPassword} className="space-y-4">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               Usuario: <span className="font-semibold text-foreground">{userToReset.name}</span>
             </p>
             <Input
@@ -348,7 +348,7 @@ export default function UsersPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               required
             />
-            <p className="text-xs text-muted-foreground">Mínimo 10 caracteres</p>
+            <p className="text-[13px] text-muted-foreground">Mínimo 10 caracteres</p>
             <div className="flex justify-end gap-3 border-t border-border/60 pt-4">
               <Button type="button" variant="secondary" onClick={() => setShowResetModal(false)}>Cancelar</Button>
               <Button type="submit" loading={resetPassword.isPending}>Guardar</Button>

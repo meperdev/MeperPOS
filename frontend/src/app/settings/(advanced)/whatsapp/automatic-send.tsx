@@ -77,7 +77,7 @@ export function AutomaticSendStatus({
   if (!state && isError) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           No se pudo consultar el envío automático.
         </p>
         <Button size="sm" variant="ghost" onClick={onRetry}>
@@ -95,8 +95,8 @@ export function AutomaticSendStatus({
       >
         <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-muted-foreground/40" />
         <div className="min-w-0">
-          <p className="text-xs font-medium text-foreground">Envío automático</p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <p className="text-[13px] font-medium text-foreground">Envío automático</p>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             Consultando el envío automático…
           </p>
         </div>
@@ -115,13 +115,13 @@ export function AutomaticSendStatus({
           className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", copy.dot)}
         />
         <div className="min-w-0 space-y-0.5">
-          <p className="text-xs font-medium text-foreground">
+          <p className="text-[13px] font-medium text-foreground">
             Envío automático{" "}
             <span className="font-normal text-muted-foreground">
               {copy.label}
             </span>
           </p>
-          <p className="text-[11px] text-muted-foreground">{detailOf(state)}</p>
+          <p className="text-[13px] text-muted-foreground">{detailOf(state)}</p>
         </div>
       </div>
 

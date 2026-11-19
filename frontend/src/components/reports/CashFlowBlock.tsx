@@ -31,25 +31,25 @@ export function CashFlowBlock({ query }: { query: ReportQuery<CashFlowReport> })
           <div className="bg-card px-3 py-2.5">
             <div className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
-              <p className="text-[11px] text-muted-foreground">Plata que entró</p>
+              <p className="text-[13px] text-muted-foreground">Plata que entró</p>
             </div>
-            <p className="mt-1 truncate text-base font-semibold tracking-tight text-foreground tabular-nums">
+            <p className="mt-1 truncate text-lg font-semibold tracking-tight text-foreground tabular-nums">
               {formatReportMoney(data?.collections.total)}
             </p>
           </div>
           <div className="bg-card px-3 py-2.5">
             <div className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
-              <p className="text-[11px] text-muted-foreground">Plata que salió</p>
+              <p className="text-[13px] text-muted-foreground">Plata que salió</p>
             </div>
-            <p className="mt-1 truncate text-base font-semibold tracking-tight text-foreground tabular-nums">
+            <p className="mt-1 truncate text-lg font-semibold tracking-tight text-foreground tabular-nums">
               {formatReportMoney(data?.expensePayments.total)}
             </p>
           </div>
         </div>
 
         {data?.netFlow != null && (
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2.5 text-xs">
+          <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2.5 text-[13px]">
             <span className="font-medium text-muted-foreground">Flujo neto de caja</span>
             <span
               className={cn(

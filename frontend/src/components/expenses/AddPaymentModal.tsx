@@ -69,7 +69,7 @@ export function AddPaymentModal({ expense, isOpen, onClose }: Props) {
     >
       <div className="space-y-4">
         <div className="rounded-lg bg-muted/40 px-4 py-3 flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
+          <span className="text-[13px] font-medium text-muted-foreground">
             Saldo pendiente
           </span>
           <span className="text-base font-semibold text-foreground tabular-nums">
@@ -105,7 +105,7 @@ export function AddPaymentModal({ expense, isOpen, onClose }: Props) {
         />
 
         {error && (
-          <p className="text-xs font-medium text-danger-text">{error}</p>
+          <p className="text-[13px] font-medium text-danger-text">{error}</p>
         )}
 
         <div className="flex justify-end gap-2 pt-3 border-t border-border/60">

@@ -91,7 +91,7 @@ export function ShiftDialog({
             </Button>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Activa al empleado para registrar jornadas.
           </p>
         )
@@ -139,18 +139,18 @@ export function ShiftDialog({
               {list.map((shift) => (
                 <li key={shift.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-foreground">
+                    <p className="text-[13px] font-medium text-foreground">
                       {formatDate(shift.date)}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-[13px] text-muted-foreground">
                       {KIND_LABELS[shift.kind as ShiftKind] ?? shift.kind}
                     </p>
                   </div>
-                  <p className="text-xs font-semibold text-foreground tabular-nums">
+                  <p className="text-[13px] font-semibold text-foreground tabular-nums">
                     {formatCurrency(toFiniteNumber(shift.amount))}
                   </p>
                   {shift.observation && (
-                    <p className="w-full text-[11px] text-muted-foreground">
+                    <p className="w-full text-[13px] text-muted-foreground">
                       {shift.observation}
                     </p>
                   )}

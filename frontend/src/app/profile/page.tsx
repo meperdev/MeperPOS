@@ -129,7 +129,7 @@ export default function ProfilePage() {
               <h2 className="text-sm sm:text-base font-semibold text-foreground truncate">
                 {currentUser?.name}
               </h2>
-              <p className="text-xs text-muted-foreground truncate">
+              <p className="text-[13px] text-muted-foreground truncate">
                 {currentUser?.email}
               </p>
             </div>
@@ -154,11 +154,11 @@ export default function ProfilePage() {
               <div className="pb-3 border-b border-border/60">
                 <div className="flex items-center gap-2">
                   <UserIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+                  <h3 className="text-sm sm:text-sm font-semibold text-foreground">
                     Información personal
                   </h3>
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 text-[13px] text-muted-foreground">
                   Actualiza tu nombre visible y correo en el sistema
                 </p>
               </div>
@@ -203,11 +203,11 @@ export default function ProfilePage() {
               <div className="pb-3 border-b border-border/60">
                 <div className="flex items-center gap-2">
                   <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+                  <h3 className="text-sm sm:text-sm font-semibold text-foreground">
                     Seguridad y contraseña
                   </h3>
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 text-[13px] text-muted-foreground">
                   Mínimo 10 caracteres recomendados
                 </p>
               </div>

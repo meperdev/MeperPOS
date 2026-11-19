@@ -263,7 +263,7 @@ export function PurchaseOrderItemEditor({
           )}
         />
         {missing && (
-          <p className="mt-1 text-[11px] font-medium text-warning-text">
+          <p className="mt-1 text-[13px] font-medium text-warning-text">
             Falta el costo
           </p>
         )}
@@ -317,7 +317,7 @@ export function PurchaseOrderItemEditor({
       className="scrollbar-app z-[80] max-h-72 overflow-y-auto rounded-lg border border-border/70 bg-card py-1 shadow-lg shadow-black/10"
     >
       {products.length === 0 ? (
-        <li className="px-3 py-4 text-center text-xs text-muted-foreground">
+        <li className="px-3 py-4 text-center text-sm text-muted-foreground">
           Sin resultados para esa búsqueda
         </li>
       ) : (
@@ -342,14 +342,14 @@ export function PurchaseOrderItemEditor({
                 )}
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-xs font-medium text-foreground">
+                  <span className="block truncate text-sm font-medium text-foreground">
                     {product.name}
                   </span>
-                  <span className="block text-[11px] text-muted-foreground tabular-nums">
+                  <span className="block text-[13px] text-muted-foreground tabular-nums">
                     {product.sku} · Costo {formatCurrency(product.costPrice)}
                   </span>
                 </span>
-                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                <span className="shrink-0 text-[13px] font-medium text-muted-foreground">
                   {added ? (
                     <span className="inline-flex items-center gap-1 text-muted-foreground">
                       <Check className="w-3.5 h-3.5" /> Agregado
@@ -374,7 +374,7 @@ export function PurchaseOrderItemEditor({
       className="@container rounded-xl border border-border/70 bg-card shadow-2xs"
     >
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/60">
-        <h2 className="text-xs font-semibold text-foreground">
+        <h2 className="text-sm font-semibold text-foreground">
           {title}{" "}
           <span className="font-normal text-muted-foreground tabular-nums">
             ({rows.length})
@@ -448,17 +448,17 @@ export function PurchaseOrderItemEditor({
                 {rows.map((row) => (
                   <TableRow key={row.tempId}>
                     <TableCell className="pl-4">
-                      <p className="max-w-[220px] truncate text-xs font-semibold text-foreground">
+                      <p className="max-w-[260px] truncate text-sm font-semibold text-foreground">
                         {row.productName}
                       </p>
-                      <p className="text-[11px] id-text text-muted-foreground">
+                      <p className="text-[13px] id-text text-muted-foreground">
                         {row.productSku}
                       </p>
                     </TableCell>
                     <TableCell className="px-2 text-right">{qtyInput(row, "table")}</TableCell>
                     <TableCell className="px-2">{costInput(row, "table")}</TableCell>
                     <TableCell className="px-2 text-right">{taxInput(row, "table")}</TableCell>
-                    <TableCell className="whitespace-nowrap px-2 text-right text-xs font-semibold text-foreground tabular-nums">
+                    <TableCell className="whitespace-nowrap px-2 text-right text-sm font-semibold text-foreground tabular-nums">
                       {formatCurrency(lineTotal(row))}
                     </TableCell>
                     <TableCell className="pr-2 text-right">{removeButton(row)}</TableCell>
@@ -476,16 +476,16 @@ export function PurchaseOrderItemEditor({
               <div key={row.tempId} data-testid="draft-item-row" className="space-y-2.5 px-4 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="break-words text-xs font-semibold text-foreground">
+                    <p className="break-words text-sm font-semibold text-foreground">
                       {row.productName}
                     </p>
-                    <p className="text-[11px] id-text text-muted-foreground">
+                    <p className="text-[13px] id-text text-muted-foreground">
                       {row.productSku}
                     </p>
                   </div>
                   {removeButton(row)}
                 </div>
-                <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-xs">
+                <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-[13px]">
                   <div className="min-w-0 space-y-0.5">
                     <dt className="text-muted-foreground">Cant.</dt>
                     <dd>{qtyInput(row, "list")}</dd>
@@ -499,7 +499,7 @@ export function PurchaseOrderItemEditor({
                     <dd>{taxInput(row, "list")}</dd>
                   </div>
                 </dl>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[13px] text-muted-foreground">
                   Subtotal{" "}
                   <span className="font-semibold text-foreground tabular-nums">
                     {formatCurrency(lineTotal(row))}

@@ -43,7 +43,7 @@ import {
   Loader2,
   Edit3,
 } from "lucide-react";
-import { cn, formatDateTime, formatDate } from "@/lib/utils";
+import { cn, formatDateShort, formatDateTime } from "@/lib/utils";
 import type { TaskStatus } from "@/types";
 
 function getTaskStatusLabel(status: TaskStatus) {
@@ -445,7 +445,7 @@ export default function TasksPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4">
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[13px] font-medium text-muted-foreground">
                 Activas
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-foreground/70 shrink-0" />
@@ -453,14 +453,14 @@ export default function TasksPage() {
             <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {pendingTasks + inProgressTasks}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground tabular-nums">
+            <p className="mt-1 text-[13px] text-muted-foreground tabular-nums">
               {totalTasks} en total
             </p>
           </div>
 
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[13px] font-medium text-muted-foreground">
                 Pendientes
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-warning shrink-0" />
@@ -468,14 +468,14 @@ export default function TasksPage() {
             <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {pendingTasks}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               Por comenzar
             </p>
           </div>
 
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[13px] font-medium text-muted-foreground">
                 En curso
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-info shrink-0" />
@@ -483,14 +483,14 @@ export default function TasksPage() {
             <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {inProgressTasks}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               En progreso
             </p>
           </div>
 
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[13px] font-medium text-muted-foreground">
                 Completadas
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-success shrink-0" />
@@ -498,7 +498,7 @@ export default function TasksPage() {
             <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {completedTasks}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               Finalizadas
             </p>
           </div>
@@ -573,10 +573,10 @@ export default function TasksPage() {
             <Card className="overflow-hidden border-border/70 bg-card shadow-2xs">
               <div className="border-b border-border/60 px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Lista de tareas
                   </h3>
-                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
+                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
                     {filteredTasks.length}
                   </span>
                 </div>
@@ -660,7 +660,7 @@ export default function TasksPage() {
                               <div className="flex items-start justify-between gap-2">
                                 <span
                                   className={cn(
-                                    "text-xs sm:text-sm font-semibold transition-colors line-clamp-1",
+                                    "text-sm font-semibold transition-colors line-clamp-1",
                                     task.status === "COMPLETED"
                                       ? "text-muted-foreground line-through decoration-muted-foreground/60"
                                       : "text-foreground",
@@ -678,13 +678,13 @@ export default function TasksPage() {
                               </div>
 
                               {task.description && (
-                                <p className="mt-1 text-xs text-muted-foreground line-clamp-1">
+                                <p className="mt-1 text-[13px] text-muted-foreground line-clamp-1">
                                   {task.description}
                                 </p>
                               )}
 
                               {/* Metadata row */}
-                              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
                                 {task.assignedTo ? (
                                   <span className="inline-flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5 font-medium text-foreground border border-border/60">
                                     <UserIcon className="h-3 w-3 text-muted-foreground" />
@@ -700,15 +700,15 @@ export default function TasksPage() {
                                 {task.dueDate && (
                                   <Badge
                                     variant={isOverdue ? "danger" : "default"}
-                                    className="gap-1 px-2 text-[11px] font-medium tabular-nums"
+                                    className="gap-1 px-2 text-xs font-medium tabular-nums"
                                   >
                                     <Calendar className="h-3 w-3" />
-                                    {formatDate(task.dueDate)}
+                                    {formatDateShort(task.dueDate)}
                                     {isOverdue && " (Vencida)"}
                                   </Badge>
                                 )}
 
-                                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums ml-auto">
+                                <span className="inline-flex items-center gap-1 text-[13px] text-muted-foreground tabular-nums ml-auto">
                                   <Clock3 className="h-3 w-3" />
                                   {formatDateTime(task.updatedAt)}
                                 </span>
@@ -735,7 +735,7 @@ export default function TasksPage() {
                       <h2 className="text-sm sm:text-base font-semibold text-foreground break-words">
                         {selectedTask.title}
                       </h2>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-[13px] text-muted-foreground mt-0.5">
                         {selectedTask.createdBy?.name
                           ? `Creada por ${selectedTask.createdBy.name}`
                           : "Creada desde el panel"}
@@ -787,7 +787,7 @@ export default function TasksPage() {
 
                   {/* Status Transition Quick Selectors */}
                   <div className="mt-3.5 pt-3 border-t border-border/50">
-                    <span className="text-xs font-medium text-muted-foreground block mb-1.5">
+                    <span className="text-[13px] font-medium text-muted-foreground block mb-1.5">
                       Estado actual
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -885,32 +885,32 @@ export default function TasksPage() {
                   ) : (
                     <div className="space-y-2">
                       <div>
-                        <span className="text-xs font-medium text-muted-foreground block mb-1">
+                        <span className="text-[13px] font-medium text-muted-foreground block mb-1">
                           Descripción
                         </span>
-                        <p className="text-xs text-foreground leading-relaxed bg-muted/40 p-3 rounded-lg max-h-24 overflow-y-auto">
+                        <p className="text-[13px] text-foreground leading-relaxed bg-muted/40 p-3 rounded-lg max-h-24 overflow-y-auto">
                           {selectedTask.description?.trim() || "Sin descripción adicional por ahora."}
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2 text-[13px]">
                         <div className="p-2.5 rounded-lg bg-muted/40 min-w-0">
-                          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <span className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
                             <UserIcon className="h-3.5 w-3.5 shrink-0" />
                             <span>Asignado</span>
                           </span>
-                          <span className="font-semibold text-foreground text-xs truncate block mt-1">
+                          <span className="font-semibold text-foreground text-[13px] truncate block mt-1">
                             {selectedTask.assignedTo?.name ?? "Sin asignar"}
                           </span>
                         </div>
 
                         <div className="p-2.5 rounded-lg bg-muted/40 min-w-0">
-                          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <span className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
                             <Calendar className="h-3.5 w-3.5 shrink-0" />
                             <span>Fecha límite</span>
                           </span>
-                          <span className="font-semibold text-foreground text-xs tabular-nums truncate block mt-1">
-                            {selectedTask.dueDate ? formatDate(selectedTask.dueDate) : "Sin fecha"}
+                          <span className="font-semibold text-foreground text-[13px] tabular-nums truncate block mt-1">
+                            {selectedTask.dueDate ? formatDateShort(selectedTask.dueDate) : "Sin fecha"}
                           </span>
                         </div>
                       </div>
@@ -922,10 +922,10 @@ export default function TasksPage() {
                 <div className="flex flex-1 min-h-0 flex-col p-4">
                   <div className="flex items-center justify-between mb-2.5 shrink-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-semibold text-foreground">
+                      <h3 className="text-sm font-semibold text-foreground">
                         Historial
                       </h3>
-                      <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
+                      <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
                         {selectedTaskTimeline.length}
                       </span>
                     </div>
@@ -935,7 +935,7 @@ export default function TasksPage() {
                   </div>
 
                   {selectedTaskTimeline.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 p-3 text-center text-xs text-muted-foreground">
+                    <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 p-3 text-center text-[13px] text-muted-foreground">
                       Todavía no hay eventos registrados para esta tarea.
                     </div>
                   ) : (
@@ -943,26 +943,26 @@ export default function TasksPage() {
                       {selectedTaskTimeline.map((event) => (
                         <div
                           key={event.id}
-                          className="flex items-start gap-2 rounded-lg bg-muted/40 p-2.5 text-xs"
+                          className="flex items-start gap-2 rounded-lg bg-muted/40 p-2.5 text-[13px]"
                         >
                           <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
                           <div className="min-w-0 flex-1 space-y-0.5">
                             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                               <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5">
-                                <span className="whitespace-nowrap break-words font-semibold text-foreground text-xs">
+                                <span className="whitespace-nowrap break-words font-semibold text-foreground text-[13px]">
                                   {getTaskEventLabel(event.type)}
                                 </span>
                                 {event.fromStatus && event.fromStatus !== event.toStatus && (
-                                  <span className="min-w-0 break-words font-normal text-xs text-muted-foreground">
+                                  <span className="min-w-0 break-words font-normal text-[13px] text-muted-foreground">
                                     ({getTaskStatusLabel(event.fromStatus)} → {getTaskStatusLabel(event.toStatus)})
                                   </span>
                                 )}
                               </div>
-                              <span className="whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
+                              <span className="whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
                                 {formatDateTime(event.createdAt)}
                               </span>
                             </div>
-                            <p className="text-[11px] text-muted-foreground truncate">
+                            <p className="text-[13px] text-muted-foreground truncate">
                               {event.createdBy?.name ?? "Sistema"}
                               {event.note ? ` - ${event.note}` : ""}
                             </p>
@@ -978,10 +978,10 @@ export default function TasksPage() {
                 <div className="w-10 h-10 rounded-lg bg-muted/50 border border-border/60 flex items-center justify-center mx-auto mb-2.5 text-muted-foreground">
                   <ClipboardList className="w-5 h-5" />
                 </div>
-                <h4 className="text-xs sm:text-sm font-semibold text-foreground">
+                <h4 className="text-sm font-semibold text-foreground">
                   Ninguna tarea seleccionada
                 </h4>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">
                   Haz clic en una tarea de la lista para ver sus detalles, editarla o consultar su historial de cambios.
                 </p>
               </Card>

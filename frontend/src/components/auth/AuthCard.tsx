@@ -36,7 +36,7 @@ export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
               {title}
             </h1>
             {subtitle && (
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
+              <p className="text-sm text-muted-foreground">{subtitle}</p>
             )}
           </div>
 
@@ -45,7 +45,7 @@ export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
 
           {/* Footer */}
           {footer && (
-            <p className="text-center pt-4 border-t border-border/60 text-xs text-muted-foreground">
+            <p className="text-center pt-4 border-t border-border/60 text-[13px] text-muted-foreground">
               {footer.text}{" "}
               <Link
                 href={footer.href}

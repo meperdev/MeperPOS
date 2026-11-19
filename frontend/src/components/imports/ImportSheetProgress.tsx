@@ -49,7 +49,7 @@ export function ImportSheetProgress({
 
   if (sheets.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">
+      <p className="text-[13px] text-muted-foreground">
         Ninguna hoja reconocida en el archivo.
       </p>
     );
@@ -69,7 +69,7 @@ export function ImportSheetProgress({
             className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-2"
           >
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs sm:text-sm font-semibold text-foreground">
+              <span className="text-sm sm:text-sm font-semibold text-foreground">
                 {sheetLabel(sheet.sheetId)}
               </span>
               <Badge variant={statusVariant[sheet.status]} dot>
@@ -78,7 +78,7 @@ export function ImportSheetProgress({
             </div>
 
             <div>
-              <div className="flex justify-between text-xs text-muted-foreground tabular-nums mb-1">
+              <div className="flex justify-between text-[13px] text-muted-foreground tabular-nums mb-1">
                 <span>
                   {sheet.processedRows} / {sheet.totalRows} filas
                 </span>

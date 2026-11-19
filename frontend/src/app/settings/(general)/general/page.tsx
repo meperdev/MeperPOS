@@ -43,7 +43,7 @@ function SettingsRow({
         <h3 className="text-sm font-medium tracking-tight text-foreground">
           {title}
         </h3>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
           {description}
         </p>
       </div>
@@ -71,7 +71,7 @@ function ReceiptHeaderPreview({
         <h3 className="text-sm font-medium tracking-tight text-foreground">
           Vista previa del comprobante
         </h3>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
           Así se ve la cabecera de tus recibos.
         </p>
       </div>
@@ -177,7 +177,7 @@ export default function GeneralSettingsPage() {
         <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
           General
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Identidad visual y datos básicos del negocio
         </p>
       </div>
@@ -240,7 +240,7 @@ export default function GeneralSettingsPage() {
                   ) : (
                     <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
                       <ImageIcon className="h-5 w-5" aria-hidden="true" />
-                      <span className="text-[11px] font-medium">Sin logo</span>
+                      <span className="text-xs font-medium">Sin logo</span>
                     </div>
                   )}
                 </div>
@@ -264,7 +264,7 @@ export default function GeneralSettingsPage() {
                     <Upload className="w-3.5 h-3.5" aria-hidden="true" />
                     {logoUrl ? "Reemplazar logo" : "Subir logo"}
                   </Button>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
+                  <p className="text-[13px] leading-relaxed text-muted-foreground">
                     PNG, JPG o WebP. Ideal una imagen horizontal de 288 × 96 px
                     o mayor.
                   </p>

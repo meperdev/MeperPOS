@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDateTime, formatDateTimeLong } from "@/lib/utils";
+import { formatDate, formatDateTime, formatDateTimeLong, formatDateShort } from "@/lib/utils";
 
 // Local dates are built with the `Date(y, m, d, h, min)` constructor so the
 // pinned strings hold whatever time zone the runner sits in; the formatter
@@ -41,6 +41,41 @@ describe("formatDateTime (compact wording for UI rows)", () => {
 
   it("uses regular spaces even though Intl emits narrow ones in the day period", () => {
     expect(formatDateTime(new Date(2026, 10, 16, 16, 21))).not.toMatch(
+      /[\u00a0\u202f]/,
+    );
+  });
+});
+
+describe("formatDateShort (day-only cells in dense rows)", () => {
+  it("abbreviates the month and drops the 'de' the long form joins with", () => {
+    expect(formatDateShort(new Date(2026, 10, 16))).toBe("16 nov 2026");
+  });
+
+  it("takes the ISO strings the API returns", () => {
+    expect(formatDateShort(new Date(2026, 10, 16).toISOString())).toBe(
+      "16 nov 2026",
+    );
+  });
+
+  it("keeps the ICU spelling of September and leaves no period after the month", () => {
+    const formatted = formatDateShort(new Date(2026, 8, 9));
+
+    expect(formatted).toBe("9 sept 2026");
+    expect(formatted).not.toMatch(/sept?\./);
+  });
+
+  it("keeps exactly the day the long form already shows", () => {
+    // The shift from prose to a compact label is wording only; a calendar date
+    // stored as midnight UTC must not move to another day.
+    const midnightUtc = "2026-11-16T00:00:00.000Z";
+
+    expect(formatDateShort(midnightUtc)).toBe(
+      formatDate(midnightUtc).replace(" de noviembre de ", " nov "),
+    );
+  });
+
+  it("uses regular spaces even though Intl may emit narrow ones", () => {
+    expect(formatDateShort(new Date(2026, 10, 16))).not.toMatch(
       /[\u00a0\u202f]/,
     );
   });

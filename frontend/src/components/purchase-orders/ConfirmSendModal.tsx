@@ -94,7 +94,7 @@ export function ConfirmSendModal({ order, isOpen, onClose }: ConfirmSendModalPro
       className="max-w-lg"
     >
       <div className="space-y-4">
-        <ol className="space-y-1.5 text-xs text-muted-foreground">
+        <ol className="space-y-1.5 text-sm text-muted-foreground">
           <li className={cn(confirmed && "text-foreground")}>
             1. Confirma la orden: ya no se podrá editar.
           </li>

@@ -114,12 +114,12 @@ function DetailField({
 }) {
   return (
     <div className="min-w-0 rounded-lg bg-muted/40 p-3">
-      <dt className="text-xs font-medium text-muted-foreground">
+      <dt className="text-[13px] font-medium text-muted-foreground">
         {label}
       </dt>
       <dd
         data-testid={testId}
-        className="mt-1 truncate text-xs sm:text-sm font-semibold text-foreground"
+        className="mt-1 truncate text-sm font-semibold text-foreground"
       >
         {value}
       </dd>
@@ -141,16 +141,16 @@ function MoneyStat({
   return (
     <div
       className={cn(
-        "min-w-0 rounded-lg px-2.5 py-2",
+        "min-w-0 rounded-lg px-2 py-2",
         emphasis ? "bg-muted/60" : "bg-muted/40",
       )}
     >
-      <p className="text-[11px] font-medium text-muted-foreground">
+      <p className="text-[13px] font-medium text-muted-foreground">
         {label}
       </p>
       <p
         className={cn(
-          "mt-0.5 truncate text-xs font-semibold tabular-nums",
+          "mt-0.5 truncate text-[13px] font-semibold tabular-nums",
           hasBalance ? "text-warning-text" : "text-foreground",
         )}
       >
@@ -179,7 +179,7 @@ function LoanCard({ loan, onOpen }: { loan: Loan; onOpen: () => void }) {
               <p className="truncate text-sm font-semibold text-foreground leading-tight">
                 {counterpartyName(loan)}
               </p>
-              <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">
+              <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
                 {TYPE_LABELS[loan.type]}
               </p>
             </div>
@@ -188,7 +188,7 @@ function LoanCard({ loan, onOpen }: { loan: Loan; onOpen: () => void }) {
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/50 pt-3">
+      <div className="mt-3 grid grid-cols-3 gap-1.5 border-t border-border/50 pt-3">
         <MoneyStat label="Monto" value={loan.amount} />
         <MoneyStat label="Abonado" value={loan.collected} />
         <MoneyStat label="Saldo" value={loan.balance} emphasis />
@@ -431,25 +431,25 @@ export default function LoansPage() {
                         }}
                       >
                         <TableCell>
-                          <span className="text-xs font-medium text-foreground truncate">
+                          <span className="text-sm font-medium text-foreground truncate">
                             {counterpartyName(row)}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-[13px] text-muted-foreground">
                             {TYPE_LABELS[row.type]}
                           </span>
                         </TableCell>
                         <TableCell>
                           <StatusBadge domain="loan" status={row.status} />
                         </TableCell>
-                        <TableCell numeric className="text-xs text-foreground">
+                        <TableCell numeric className="text-sm text-foreground">
                           {money(row.amount)}
                         </TableCell>
-                        <TableCell numeric className="text-xs text-muted-foreground">
+                        <TableCell numeric className="text-sm text-muted-foreground">
                           {money(row.collected)}
                         </TableCell>
-                        <TableCell numeric className="text-xs font-semibold">
+                        <TableCell numeric className="text-sm font-semibold">
                           <span
                             className={
                               toFiniteNumber(row.balance) > 0
@@ -511,7 +511,7 @@ export default function LoansPage() {
           loan && loan.status === "OPEN" ? (
             <form onSubmit={handleCollect} className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-foreground">
+                <span className="text-[13px] font-semibold text-foreground">
                   Nuevo abono
                 </span>
                 {toFiniteNumber(loan.balance) > 0 && (
@@ -597,7 +597,7 @@ export default function LoansPage() {
                       isBalance ? "bg-muted/60" : "bg-muted/40",
                     )}
                   >
-                    <p className="text-xs font-medium text-muted-foreground">
+                    <p className="text-[13px] font-medium text-muted-foreground">
                       {label}
                     </p>
                     <p
@@ -615,7 +615,7 @@ export default function LoansPage() {
 
             {/* Everything the projection knows about the loan itself. */}
             <section className="space-y-2">
-              <h3 className="text-xs font-semibold text-foreground">
+              <h3 className="text-sm font-semibold text-foreground">
                 Datos del préstamo
               </h3>
               <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -664,7 +664,7 @@ export default function LoansPage() {
                 )}
               >
                 <div className="mb-0.5 flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">
+                  <span className="text-[13px] font-medium text-muted-foreground">
                     Motivo
                   </span>
                   {loan.status === "CANCELLED" ? (
@@ -681,7 +681,7 @@ export default function LoansPage() {
                     </Badge>
                   )}
                 </div>
-                <p className="text-xs sm:text-sm text-foreground">
+                <p className="text-sm text-foreground">
                   {loan.reason}
                 </p>
               </div>
@@ -701,7 +701,7 @@ export default function LoansPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-xs font-semibold text-foreground">
+                      <h3 className="text-sm font-semibold text-foreground">
                         Venta financiada asociada
                       </h3>
                       <Badge
@@ -714,7 +714,7 @@ export default function LoansPage() {
                       </Badge>
                     </div>
                     {loan.posFinancing.finalSaleId ? (
-                      <p className="mt-1.5 text-xs sm:text-sm text-muted-foreground">
+                      <p className="mt-1.5 text-sm text-muted-foreground">
                         Venta vinculada:{" "}
                         <span
                           data-testid="pos-financing-sale"
@@ -728,7 +728,7 @@ export default function LoansPage() {
                     ) : (
                       <p
                         data-testid="pos-financing-pending"
-                        className="mt-1 text-xs text-muted-foreground"
+                        className="mt-1 text-[13px] text-muted-foreground"
                       >
                         La venta aún no ha sido vinculada.
                       </p>
@@ -749,20 +749,20 @@ export default function LoansPage() {
 
             {/* Each event carries its own date and author. */}
             <section>
-              <h3 className="text-xs font-semibold text-foreground">
+              <h3 className="text-sm font-semibold text-foreground">
                 Historial
               </h3>
               {historyQuery.isLoading ? (
                 <p
                   data-testid="loan-history-loading"
-                  className="mt-2 text-xs text-muted-foreground"
+                  className="mt-2 text-[13px] text-muted-foreground"
                 >
                   Cargando historial…
                 </p>
               ) : historyQuery.isError ? (
                 <div
                   data-testid="loan-history-error"
-                  className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                  className="mt-2 flex items-center gap-2 text-[13px] text-muted-foreground"
                 >
                   <span>No se pudo cargar el historial.</span>
                   <Button
@@ -780,7 +780,7 @@ export default function LoansPage() {
                     <li
                       key={event.id}
                       data-testid="loan-history-row"
-                      className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-xs"
+                      className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-[13px]"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -788,13 +788,13 @@ export default function LoansPage() {
                             {EVENT_LABELS[event.type]}
                           </p>
                           {event.method && (
-                            <span className="rounded-md border border-border/60 bg-card px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            <span className="rounded-md border border-border/60 bg-card px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
                               {METHOD_OPTIONS.find((m) => m.value === event.method)
                                 ?.label ?? event.method}
                             </span>
                           )}
                         </div>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                        <p className="mt-0.5 text-[13px] text-muted-foreground tabular-nums">
                           <span>{formatDateTime(event.createdAt)}</span>
                           <span className="mx-1.5">·</span>
                           <span>{event.createdBy.name}</span>

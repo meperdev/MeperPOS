@@ -86,7 +86,7 @@ export default function AdvancedSettingsPage() {
         <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
           Avanzado
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Parámetros libres para integraciones y automatizaciones
         </p>
       </div>

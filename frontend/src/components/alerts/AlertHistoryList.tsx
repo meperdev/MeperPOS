@@ -52,11 +52,11 @@ export function AlertHistoryList({
             <div className="flex items-baseline justify-between gap-3 border-b border-border/60 bg-muted/35 px-4 py-2">
               <h2
                 id={headingId}
-                className="min-w-0 truncate text-[11px] font-medium text-muted-foreground"
+                className="min-w-0 truncate text-[13px] font-medium text-muted-foreground"
               >
                 {group.label}
               </h2>
-              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+              <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
                 {group.items.length}
               </span>
             </div>
@@ -91,7 +91,7 @@ function AlertHistoryRow({ item }: { item: StockAlertHistoryItem }) {
         >
           {item.product.name}
         </Link>
-        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+        <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
           <span className="id-text tabular-nums">{item.product.sku}</span>
           {" · "}
           <span className="tabular-nums">episodio {item.episode}</span>
@@ -104,13 +104,13 @@ function AlertHistoryRow({ item }: { item: StockAlertHistoryItem }) {
       <div className="flex shrink-0 flex-col items-end gap-1">
         <time
           dateTime={item.createdAt}
-          className="text-[11px] tabular-nums text-muted-foreground"
+          className="text-[13px] tabular-nums text-muted-foreground"
         >
           {formatReportClockTime(item.createdAt)}
         </time>
         <span
           data-outcome={meta.tone ?? "none"}
-          className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+          className="flex items-center gap-1.5 text-[13px] text-muted-foreground"
         >
           {meta.tone ? (
             <span

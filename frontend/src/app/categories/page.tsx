@@ -323,11 +323,11 @@ export default function CategoriesPage() {
 
                         {/* Description */}
                         {category.description ? (
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed min-h-[2rem]">
+                          <p className="text-[13px] text-muted-foreground line-clamp-2 leading-relaxed min-h-[2rem]">
                             {category.description}
                           </p>
                         ) : (
-                          <p className="text-xs text-muted-foreground/45 min-h-[2rem]">
+                          <p className="text-[13px] text-muted-foreground/45 min-h-[2rem]">
                             Sin descripción
                           </p>
                         )}
@@ -361,12 +361,12 @@ export default function CategoriesPage() {
                         </button>
 
                         {category.defaultTaxRate != null ? (
-                          <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted/50 text-foreground border border-border/70 tabular-nums">
+                          <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap px-2 py-0.5 rounded-md text-xs font-medium bg-muted/50 text-foreground border border-border/70 tabular-nums">
                             <Percent className="w-2.5 h-2.5" />
                             {category.defaultTaxRate}%
                           </span>
                         ) : (
-                          <span className="inline-flex shrink-0 items-center whitespace-nowrap px-2 py-0.5 rounded-md text-[11px] text-muted-foreground bg-muted/40 border border-border/60">
+                          <span className="inline-flex shrink-0 items-center whitespace-nowrap px-2 py-0.5 rounded-md text-xs text-muted-foreground bg-muted/40 border border-border/60">
                             Sin impuesto
                           </span>
                         )}
@@ -415,7 +415,7 @@ export default function CategoriesPage() {
                                     e.stopPropagation();
                                     handleEdit(category);
                                   }}
-                                  className="text-left text-xs font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                                  className="text-left text-sm font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
                                 >
                                   {category.name}
                                 </button>
@@ -423,11 +423,11 @@ export default function CategoriesPage() {
                         </TableCell>
                         <TableCell className="max-w-md">
                           {category.description ? (
-                            <span className="text-xs text-muted-foreground line-clamp-1">
+                            <span className="text-[13px] text-muted-foreground line-clamp-1">
                               {category.description}
                             </span>
                           ) : (
-                            <span className="text-xs text-muted-foreground/45">
+                            <span className="text-[13px] text-muted-foreground/45">
                               Sin descripción
                             </span>
                           )}
@@ -455,12 +455,12 @@ export default function CategoriesPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           {category.defaultTaxRate != null ? (
-                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted/50 text-foreground border border-border/70 tabular-nums">
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-xs font-medium bg-muted/50 text-foreground border border-border/70 tabular-nums">
                               <Percent className="w-2.5 h-2.5" />
                               {category.defaultTaxRate}%
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] text-muted-foreground bg-muted/40 border border-border/60">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs text-muted-foreground bg-muted/40 border border-border/60">
                               Sin impuesto
                             </span>
                           )}
@@ -543,7 +543,7 @@ export default function CategoriesPage() {
               onChange={(e) => setDefaultTaxRateInput(e.target.value)}
             />
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-muted-foreground mr-1">
+              <span className="text-[13px] font-medium text-muted-foreground mr-1">
                 Tasas rápidas:
               </span>
               {[
@@ -560,7 +560,7 @@ export default function CategoriesPage() {
                     type="button"
                     onClick={() => setDefaultTaxRateInput(preset.value)}
                     className={cn(
-                      "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "rounded-md border px-2 py-0.5 text-xs font-medium transition-colors tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                       isSelected
                         ? "border-primary/40 bg-primary/15 text-primary-text"
                         : "border-border/70 bg-muted/40 text-muted-foreground hover:border-border hover:text-foreground",
@@ -571,7 +571,7 @@ export default function CategoriesPage() {
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               Se aplicará a los productos de esta categoría que no definan una
               tasa propia. Si queda en &ldquo;Sin tasa&rdquo;, el producto usará
               el impuesto general del negocio.

@@ -106,12 +106,12 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
 
   const renderOwner = (ou: OrgMember) =>
     ou.isPrimaryOwner ? (
-      <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
+      <span className="inline-flex items-center gap-1.5 text-[13px] text-foreground">
         <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
         Sí
       </span>
     ) : (
-      <span className="text-xs text-muted-foreground">—</span>
+      <span className="text-[13px] text-muted-foreground">—</span>
     );
 
   const renderMemberActions = (ou: OrgMember) => (
@@ -172,7 +172,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
                 Cambiar estado
               </label>
               <Select
@@ -183,7 +183,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
                 Cambiar plan
               </label>
               <Select
@@ -221,7 +221,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <h3 className="text-sm font-medium text-foreground">
                 Usuarios de la organización
               </h3>
-              <span className="rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground tabular-nums">
+              <span className="rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[13px] text-muted-foreground tabular-nums">
                 {members.length}
               </span>
             </div>
@@ -258,8 +258,8 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                     {members.map((ou) => (
                       <TableRow key={ou.id}>
                         <TableCell>
-                          <p className="text-xs font-medium text-foreground">{ou.user.name}</p>
-                          <p className="mt-0.5 id-text text-[11px] text-muted-foreground">
+                          <p className="text-sm font-medium text-foreground">{ou.user.name}</p>
+                          <p className="mt-0.5 id-text text-[13px] text-muted-foreground">
                             {ou.user.email}
                           </p>
                         </TableCell>
@@ -279,14 +279,14 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                   <div key={ou.id} data-testid="org-member-row" className="px-4 py-3 space-y-2.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-foreground break-words">{ou.user.name}</p>
-                        <p className="mt-0.5 id-text text-[11px] text-muted-foreground break-all">
+                        <p className="text-sm font-medium text-foreground break-words">{ou.user.name}</p>
+                        <p className="mt-0.5 id-text text-[13px] text-muted-foreground break-all">
                           {ou.user.email}
                         </p>
                       </div>
                       <div className="shrink-0">{renderMemberActions(ou)}</div>
                     </div>
-                    <dl className="grid grid-cols-2 gap-3 text-xs">
+                    <dl className="grid grid-cols-2 gap-3 text-[13px]">
                       <div className="space-y-1">
                         <dt className="text-muted-foreground">Rol</dt>
                         <dd>{renderRole(ou)}</dd>
@@ -382,14 +382,14 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <p className="text-sm font-medium text-danger-text">
                 Esta acción es irreversible
               </p>
-              <p className="mt-1 text-xs text-danger-text">
+              <p className="mt-1 text-[13px] text-danger-text">
                 Todos los datos de la organización serán eliminados permanentemente,
                 incluyendo productos, ventas, clientes y usuarios.
               </p>
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             Escribe <strong className="font-semibold text-foreground">{org.name}</strong> para confirmar:
           </p>
 
@@ -495,7 +495,7 @@ function OrganizationGeneralCard({
             Guardar cambios
           </Button>
           {organization.trialEndsAt && (
-            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground tabular-nums">
+            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[13px] text-muted-foreground tabular-nums">
               Trial finaliza: {formatDate(organization.trialEndsAt)}
             </span>
           )}
@@ -504,7 +504,7 @@ function OrganizationGeneralCard({
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border/70 pt-4 sm:grid-cols-4">
           {metadata.map((item) => (
             <div key={item.label}>
-              <dt className="text-[11px] text-muted-foreground">{item.label}</dt>
+              <dt className="text-[13px] text-muted-foreground">{item.label}</dt>
               <dd className="mt-0.5 truncate text-[13px] text-foreground tabular-nums">
                 {item.value}
               </dd>

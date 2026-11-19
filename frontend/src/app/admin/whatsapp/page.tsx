@@ -140,7 +140,7 @@ export default function AdminWhatsAppPage() {
           <CardHeader className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Estado del canal</h3>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[13px] text-muted-foreground">
                 Lo que el proveedor reporta en este momento.
               </p>
             </div>
@@ -151,19 +151,19 @@ export default function AdminWhatsAppPage() {
           <CardContent className="space-y-4">
             <dl className="grid gap-3 sm:grid-cols-3">
               <div>
-                <dt className="text-xs text-muted-foreground">Número vinculado</dt>
+                <dt className="text-[13px] text-muted-foreground">Número vinculado</dt>
                 <dd className="mt-0.5 id-text text-sm text-foreground">
                   {readablePhone(session.data?.accountId ?? null) ?? "Sin vincular"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Sesión del proveedor</dt>
+                <dt className="text-[13px] text-muted-foreground">Sesión del proveedor</dt>
                 <dd className="mt-0.5 truncate id-text text-sm text-foreground">
                   {session.data?.sessionName ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Última consulta</dt>
+                <dt className="text-[13px] text-muted-foreground">Última consulta</dt>
                 <dd className="mt-0.5 text-sm text-foreground">
                   {session.data?.lastObservedAt
                     ? formatDateTime(session.data.lastObservedAt)
@@ -245,7 +245,7 @@ export default function AdminWhatsAppPage() {
           <CardHeader className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Vinculación</h3>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[13px] text-muted-foreground">
                 El código se renueva solo cada pocos segundos.
               </p>
             </div>
@@ -310,15 +310,15 @@ export default function AdminWhatsAppPage() {
             )}
 
             <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <p className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
                 <Terminal className="h-3.5 w-3.5" aria-hidden="true" />
                 Sin navegador
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-[13px] text-muted-foreground">
                 En el servidor, la misma vinculación corre sin credenciales de
                 MeperPOS:
               </p>
-              <code className="code-text mt-2 block overflow-x-auto rounded bg-background/60 px-2 py-1 text-xs text-foreground">
+              <code className="code-text mt-2 block overflow-x-auto rounded bg-background/60 px-2 py-1 text-[13px] text-foreground">
                 npm run whatsapp:link
               </code>
             </div>

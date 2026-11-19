@@ -22,7 +22,7 @@ export type ReportQuery<T> = {
 
 /** One quiet line standing in for a block whose content would be nearly empty. */
 export function BlockNote({ children }: { children: ReactNode }) {
-  return <p className="py-1 text-xs text-muted-foreground">{children}</p>;
+  return <p className="py-1 text-[13px] text-muted-foreground">{children}</p>;
 }
 
 /**

@@ -25,6 +25,13 @@ const STRIP_FALLBACK_COLUMNS = "grid-cols-2 sm:grid-cols-4";
 const CELL_CLASSES =
   "border-b border-r border-border/60 bg-card px-3 py-3";
 
+/**
+ * The label and the detail lines read as text at 13px; the month total is the
+ * one figure the cell is scanned for, so it sits a step above the group totals.
+ */
+const CELL_LABEL_CLASSES = "text-[13px] text-muted-foreground";
+const CELL_DETAIL_CLASSES = "mt-2 space-y-1 text-[13px] text-muted-foreground";
+
 export function ExpenseSummaryCards({ month, summary }: Props) {
   const groups = summary?.groups ?? [];
   const cells = 1 + groups.length;
@@ -43,11 +50,11 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
       */}
       <div className={cn("-mb-px -mr-px grid", columns)}>
         <div className={CELL_CLASSES}>
-          <p className="text-[11px] text-muted-foreground">Total del mes</p>
-          <p className="mt-1 truncate text-lg font-semibold tracking-tight text-foreground tabular-nums">
+          <p className={CELL_LABEL_CLASSES}>Total del mes</p>
+          <p className="mt-1 truncate text-xl font-semibold tracking-tight text-foreground tabular-nums">
             {formatCurrency(Number(summary?.total ?? 0))}
           </p>
-          <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+          <div className={CELL_DETAIL_CLASSES}>
             <p className="truncate tabular-nums">Período: {month ?? "—"}</p>
             <p className="tabular-nums">
               {groups.length} {groups.length === 1 ? "grupo" : "grupos"}
@@ -59,13 +66,13 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
           const labels = (group.labels ?? []).slice(0, 2);
           return (
             <div key={group.groupId} className={CELL_CLASSES}>
-              <p className="truncate text-[11px] text-muted-foreground">
+              <p className={cn("truncate", CELL_LABEL_CLASSES)}>
                 {group.name}
               </p>
-              <p className="mt-1 truncate text-sm font-semibold tracking-tight text-foreground tabular-nums">
+              <p className="mt-1 truncate text-lg font-semibold tracking-tight text-foreground tabular-nums">
                 {formatCurrency(Number(group.total ?? 0))}
               </p>
-              <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+              <div className={CELL_DETAIL_CLASSES}>
                 {labels.length === 0 ? (
                   <p className="truncate">Sin etiquetas</p>
                 ) : (

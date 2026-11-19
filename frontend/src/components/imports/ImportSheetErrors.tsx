@@ -75,7 +75,7 @@ export function ImportSheetErrors({
   return (
     <div className="rounded-xl border border-danger/30 bg-danger/5 overflow-hidden">
       <div className="px-3.5 py-2.5 border-b border-danger/20 bg-danger/10">
-        <p className="text-xs font-semibold text-danger-text">
+        <p className="text-[13px] font-semibold text-danger-text">
           Errores por hoja
         </p>
       </div>
@@ -83,7 +83,7 @@ export function ImportSheetErrors({
       <div className="divide-y divide-danger/10">
         {sheetOrder.map((sheetId) => (
           <div key={sheetId} className="p-3.5 space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground">
+            <p className="text-[13px] font-semibold text-muted-foreground">
               {sheetLabel(sheetId)}
             </p>
             {errors
@@ -99,7 +99,7 @@ export function ImportSheetErrors({
                       <Badge variant={mapErrorVariant(error.code ?? error.errorCode ?? "UNKNOWN_ERROR")}>
                         {getImportErrorCodeLabel(error.code ?? error.errorCode)}
                       </Badge>
-                      <span className="text-xs text-muted-foreground tabular-nums">
+                      <span className="text-[13px] text-muted-foreground tabular-nums">
                         Fila {error.row ?? error.rowIndex}
                       </span>
                     </div>
@@ -114,7 +114,7 @@ export function ImportSheetErrors({
                     )}
                   </div>
 
-                  <p className="text-xs sm:text-sm text-foreground">{error.message}</p>
+                  <p className="text-sm sm:text-sm text-foreground">{error.message}</p>
 
                   {editingRow === (error.row ?? error.rowIndex) && error.field && (
                     <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">

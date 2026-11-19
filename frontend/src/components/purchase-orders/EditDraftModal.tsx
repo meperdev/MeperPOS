@@ -121,7 +121,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
             {blockingReasons.map((reason) => (
               <li
                 key={reason}
-                className="flex items-start gap-1.5 text-[11px] text-warning-text"
+                className="flex items-start gap-1.5 text-[13px] text-warning-text"
               >
                 <span
                   aria-hidden="true"
@@ -134,7 +134,7 @@ export function EditDraftModal({ order, isOpen, onClose }: Props) {
         )}
 
         <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
-          <div className="text-xs text-muted-foreground">
+          <div className="text-[13px] text-muted-foreground">
             Total estimado:{" "}
             <span className="text-sm font-semibold text-foreground tabular-nums">
               {formatCurrency(totals.total)}

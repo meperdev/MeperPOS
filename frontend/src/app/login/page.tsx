@@ -149,7 +149,7 @@ export default function LoginPage() {
             <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
               Iniciar sesión
             </h1>
-            <p className="pt-0.5 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+            <p className="pt-0.5 text-sm leading-relaxed text-muted-foreground sm:text-sm">
               Ingresa tus credenciales autorizadas para comenzar tu turno.
             </p>
           </div>
@@ -158,7 +158,7 @@ export default function LoginPage() {
             {error && (
               <div
                 role="alert"
-                className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3.5 text-xs font-medium text-danger-text"
+                className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3.5 text-[13px] font-medium text-danger-text"
               >
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span className="leading-relaxed">{error}</span>
@@ -227,7 +227,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-4 text-xs">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-4 text-[13px]">
             <span className="text-muted-foreground">
               ¿Problemas para acceder a tu turno?
             </span>
@@ -244,7 +244,7 @@ export default function LoginPage() {
       </main>
 
       <footer className="pl-[max(1.5rem,var(--safe-left))] pr-[max(1.5rem,var(--safe-right))] pb-[max(1.5rem,var(--safe-bottom))] sm:pl-[max(2.5rem,var(--safe-left))] sm:pr-[max(2.5rem,var(--safe-right))] sm:pb-[max(2rem,var(--safe-bottom))]">
-        <div className="flex flex-col items-center justify-between gap-2 border-t border-border/60 pt-4 text-center text-[11px] text-muted-foreground/70 sm:flex-row sm:text-left">
+        <div className="flex flex-col items-center justify-between gap-2 border-t border-border/60 pt-4 text-center text-[13px] text-muted-foreground/70 sm:flex-row sm:text-left">
           <span>
             &copy; {new Date().getFullYear()} {APP_NAME} — Plataforma POS para negocios en Colombia.
           </span>
@@ -267,12 +267,12 @@ export default function LoginPage() {
         title="Ayuda y soporte de acceso"
         size="sm"
       >
-        <div className="space-y-4 text-xs sm:text-sm text-foreground p-1">
+        <div className="space-y-4 text-sm sm:text-sm text-foreground p-1">
           <div className="flex items-start gap-3 p-3.5 rounded-lg bg-muted/40">
             <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary-text flex items-center justify-center shrink-0 mt-0.5">
               <ShieldCheck className="w-4 h-4" />
             </div>
-            <div className="text-xs text-muted-foreground leading-relaxed">
+            <div className="text-[13px] text-muted-foreground leading-relaxed">
               <p className="font-semibold text-foreground">
                 Acceso restringido por organización
               </p>
@@ -284,11 +284,11 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <h4 className="font-semibold text-foreground flex items-center gap-1.5 text-xs sm:text-sm">
+            <h4 className="font-semibold text-foreground flex items-center gap-1.5 text-sm sm:text-sm">
               <CheckCircle2 className="w-4 h-4 text-primary-text shrink-0" />
               ¿Cómo obtengo credenciales de acceso?
             </h4>
-            <p className="text-muted-foreground text-xs leading-relaxed">
+            <p className="text-muted-foreground text-[13px] leading-relaxed">
               El registro autónomo de nuevos usuarios está deshabilitado temporalmente.
               Las cuentas son generadas internamente por el propietario o administrador de
               tu punto de venta desde la sección de <strong>Usuarios</strong>.
@@ -296,25 +296,25 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <h4 className="font-semibold text-foreground flex items-center gap-1.5 text-xs sm:text-sm">
+            <h4 className="font-semibold text-foreground flex items-center gap-1.5 text-sm sm:text-sm">
               <CheckCircle2 className="w-4 h-4 text-primary-text shrink-0" />
               ¿Olvidaste tu contraseña?
             </h4>
-            <p className="text-muted-foreground text-xs leading-relaxed">
+            <p className="text-muted-foreground text-[13px] leading-relaxed">
               Solicita al administrador de tu tienda que restablezca tu contraseña o te
               asigne una nueva clave temporal desde su panel.
             </p>
           </div>
 
-          <div className="p-3.5 rounded-lg bg-muted/40 text-xs text-muted-foreground space-y-1.5">
+          <div className="p-3.5 rounded-lg bg-muted/40 text-[13px] text-muted-foreground space-y-1.5">
             <p className="font-semibold text-foreground">
               ¿Eres propietario y requieres habilitar tu negocio?
             </p>
             <p>Escribe directamente al equipo de aprovisionamiento de MeperPOS:</p>
-            <p className="id-text text-primary-text font-semibold text-xs pt-0.5">
+            <p className="id-text text-primary-text font-semibold text-[13px] pt-0.5">
               soporte@meperpos.com
             </p>
-            <div className="pt-1.5 text-[11px] flex items-center gap-1 text-muted-foreground">
+            <div className="pt-1.5 text-[13px] flex items-center gap-1 text-muted-foreground">
               <span>Portafolio y referencias:</span>
               <a
                 href="https://folio.mepersoft.app/"

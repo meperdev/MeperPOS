@@ -14,7 +14,12 @@ import {
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, getApiErrorMessage } from "@/lib/api";
-import { cn, formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  formatDateShort,
+  getBogotaDateInputValue,
+} from "@/lib/utils";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
@@ -334,7 +339,7 @@ export default function ExpensesPage() {
         {/* Collapsible Export Section */}
         {showExportSection && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border/70 bg-card p-3.5 shadow-2xs">
-            <span className="flex-1 text-xs text-muted-foreground">
+            <span className="flex-1 text-[13px] text-muted-foreground">
               Exporta las salidas del mes seleccionado en formato Excel o CSV.
             </span>
             <div className="flex items-center gap-2">
@@ -516,12 +521,12 @@ export default function ExpensesPage() {
                                 )}
                                 className="cursor-pointer active:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
                               >
-                                <TableCell className="text-muted-foreground whitespace-nowrap text-xs tabular-nums">
-                                  {formatDate(expense.date)}
+                                <TableCell className="text-muted-foreground whitespace-nowrap text-sm tabular-nums">
+                                  {formatDateShort(expense.date)}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex flex-col max-w-[170px]">
-                                    <span className="text-xs font-semibold text-foreground truncate">
+                                    <span className="text-sm font-semibold text-foreground truncate">
                                       {expense.label?.group?.name ? `${expense.label.group.name} / ` : ""}
                                       {expense.label?.name ?? "—"}
                                     </span>
@@ -529,7 +534,7 @@ export default function ExpensesPage() {
                                 </TableCell>
                                 <TableCell className="max-w-[220px]">
                                   <div className="flex items-center gap-1.5 truncate">
-                                    <span className="text-xs text-muted-foreground truncate">
+                                    <span className="text-[13px] text-muted-foreground truncate">
                                       {expense.description ?? "—"}
                                     </span>
                                     {expense.receiptUrl && (
@@ -543,7 +548,7 @@ export default function ExpensesPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell className="max-w-[160px] truncate">
-                                  <span className="text-xs font-medium text-foreground truncate block">
+                                  <span className="text-sm font-medium text-foreground truncate block">
                                     {expense.supplier?.name ?? "—"}
                                   </span>
                                 </TableCell>
@@ -552,11 +557,11 @@ export default function ExpensesPage() {
                                 </TableCell>
                                 <TableCell numeric>
                                   <div className="flex flex-col items-end">
-                                    <span className="text-xs font-semibold text-foreground tabular-nums">
+                                    <span className="text-sm font-semibold text-foreground tabular-nums">
                                       {formatCurrency(Number(expense.total))}
                                     </span>
                                     {!isPaid && remaining > 0 && (
-                                      <span className="text-[11px] text-warning-text tabular-nums">
+                                      <span className="text-[13px] text-warning-text tabular-nums">
                                         Saldo: {formatCurrency(remaining)}
                                       </span>
                                     )}

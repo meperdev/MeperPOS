@@ -54,7 +54,7 @@ export default function AdminLayout({
               <span className="truncate text-sm font-semibold tracking-tight text-foreground">
                 MeperPOS
               </span>
-              <span className="shrink-0 rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[11px] font-medium tracking-wide text-muted-foreground">
+              <span className="shrink-0 rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-xs font-medium tracking-wide text-muted-foreground">
                 SuperAdmin
               </span>
             </Link>
@@ -82,7 +82,7 @@ export default function AdminLayout({
           </div>
 
           <div className="flex min-w-0 items-center justify-between gap-2 lg:justify-end">
-            <span className="hidden truncate id-text text-[11px] text-muted-foreground sm:block">
+            <span className="hidden truncate id-text text-[13px] text-muted-foreground sm:block">
               {user.email}
             </span>
             <div className="flex items-center gap-1.5">

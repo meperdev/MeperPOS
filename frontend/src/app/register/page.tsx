@@ -38,7 +38,7 @@ export default function RegisterPage() {
             <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
               Creación de cuentas por invitación
             </h1>
-            <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed">
+            <p className="text-muted-foreground text-sm sm:text-sm leading-relaxed">
               El registro autónomo de nuevos usuarios está en pausa. Las cuentas de
               cajero, inventario y administración son creadas exclusivamente por el
               <strong> Administrador o Propietario</strong> desde su panel de gestión en Bucaramanga y Colombia.
@@ -46,7 +46,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Callout informativo */}
-          <div className="bg-muted/40 rounded-lg p-4 text-xs text-muted-foreground space-y-1.5">
+          <div className="bg-muted/40 rounded-lg p-4 text-[13px] text-muted-foreground space-y-1.5">
             <p className="font-semibold text-foreground">
               ¿Requieres acceso para tu turno?
             </p>
@@ -56,7 +56,7 @@ export default function RegisterPage() {
                 soporte@meperpos.com
               </span>
             </p>
-            <div className="pt-1.5 border-t border-border/60 text-[11px] flex items-center gap-1 text-muted-foreground">
+            <div className="pt-1.5 border-t border-border/60 text-[13px] flex items-center gap-1 text-muted-foreground">
               <span>Portafolio y referencias:</span>
               <a
                 href="https://folio.mepersoft.app/"

@@ -51,6 +51,31 @@ export function formatCalendarDay(date: string | Date) {
 }
 
 /**
+ * The day-only label a dense row reads at a glance: "16 nov 2026".
+ *
+ * `formatDate` is the prose wording ("16 de noviembre de 2026") that belongs in
+ * a sentence or a document detail; inside a table cell it pushes the row onto a
+ * second line. Same zone semantics as `formatDate` (the value's own day, not
+ * `formatCalendarDay`'s UTC pinning), same ICU month abbreviation as
+ * `formatDateTime`, trailing period removed.
+ */
+const compactDateFormatter = new Intl.DateTimeFormat(LOCALE, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+export function formatDateShort(date: string | Date) {
+  const parts = compactDateFormatter.formatToParts(new Date(date));
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const month = pick("month").replace(/\.$/, "");
+
+  return `${pick("day")} ${month} ${pick("year")}`.trim();
+}
+
+/**
  * The compact date-time a UI row reads at a glance: "16 nov 2026, 4:21 p. m.".
  *
  * Intl joins es-CO short-month dates with " de " and separates the time with

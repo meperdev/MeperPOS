@@ -336,16 +336,16 @@ export default function OrganizationsPage() {
                       <TableRow key={org.id}>
                         <TableCell>
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-medium text-foreground">
+                            <p className="truncate text-sm font-medium text-foreground">
                               {org.name}
                             </p>
-                            <p className="mt-0.5 truncate id-text text-[11px] text-muted-foreground">
+                            <p className="mt-0.5 truncate id-text text-[13px] text-muted-foreground">
                               {org.slug}
                             </p>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
+                          <span className="inline-flex items-center gap-1.5 text-[13px] text-foreground">
                             <span
                               aria-hidden="true"
                               className={statusDot[org.status] ?? "bg-muted-foreground"}
@@ -354,16 +354,16 @@ export default function OrganizationsPage() {
                             {statusLabel(org.status)}
                           </span>
                         </TableCell>
-                        <TableCell className="text-xs text-foreground">
+                        <TableCell className="text-sm text-foreground">
                           {planLabels[org.plan] ?? org.plan}
                         </TableCell>
-                        <TableCell className={`text-xs tabular-nums ${trialToneClass[trial.tone]}`}>
+                        <TableCell className={`text-sm tabular-nums ${trialToneClass[trial.tone]}`}>
                           <span title={org.trialEndsAt ? formatDate(org.trialEndsAt) : undefined}>
                             {trial.label}
                           </span>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
-                          <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
+                          <span className="inline-flex items-center gap-1.5 text-[13px] text-foreground">
                             <span
                               aria-hidden="true"
                               className={
@@ -440,7 +440,7 @@ export default function OrganizationsPage() {
         size="sm"
       >
         <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">{editing?.name}</p>
+          <p className="text-[13px] text-muted-foreground">{editing?.name}</p>
           <Select
             label="Estado"
             value={statusDraft}
@@ -494,7 +494,7 @@ export default function OrganizationsPage() {
             options={planOptions}
             onChange={(value) => setFormData({ ...formData, plan: value })}
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             La organización arranca en periodo de prueba.
           </p>
 
@@ -537,7 +537,7 @@ export default function OrganizationsPage() {
                 onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
                 error={formErrors.adminPassword}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[13px] text-muted-foreground">
                 Si dejas este campo vacío, se generará una contraseña temporal automáticamente. Mínimo 10 caracteres.
               </p>
             </div>

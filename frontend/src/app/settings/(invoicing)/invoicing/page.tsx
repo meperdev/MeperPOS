@@ -69,13 +69,13 @@ function ReceiptPreview({
       <div className="border-b border-border/60 px-4 py-3.5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="mt-0.5 text-xs sm:text-sm font-semibold tracking-tight text-foreground">
+            <h2 className="mt-0.5 text-sm sm:text-sm font-semibold tracking-tight text-foreground">
               Comprobante / recibo de muestra
             </h2>
           </div>
           <Receipt className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
           Se actualiza en vivo. Es una muestra ilustrativa y no un documento electrónico válido.
         </p>
       </div>
@@ -108,7 +108,7 @@ function ReceiptPreview({
             <h3 className="break-words text-base font-semibold tracking-tight text-foreground">
               {organizationName || "Nombre de la organización"}
             </h3>
-            <div className="mt-1 space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            <div className="mt-1 space-y-0.5 text-xs leading-relaxed text-muted-foreground">
               {taxId ? <p>NIT {taxId}</p> : null}
               {address ? <p>{address}</p> : null}
               {phone ? <p>Tel. {phone}</p> : null}
@@ -124,7 +124,7 @@ function ReceiptPreview({
             )}
             {/* A preview of the printed receipt: it keeps the long wording the
                 document itself carries, not the compact row form. */}
-            <div className="mt-3.5 space-y-0.5 id-text text-[11px] text-muted-foreground tabular-nums">
+            <div className="mt-3.5 space-y-0.5 id-text text-xs text-muted-foreground tabular-nums">
               <p className="font-semibold text-foreground">Comprobante #{sampleNumber}</p>
               <p>{formatDateTimeLong(new Date())}</p>
             </div>
@@ -141,7 +141,7 @@ function ReceiptPreview({
                     {formatCurrency(item.quantity * item.price)}
                   </span>
                 </div>
-                <p className="mt-0.5 id-text text-[11px] text-muted-foreground tabular-nums">
+                <p className="mt-0.5 id-text text-xs text-muted-foreground tabular-nums">
                   {item.quantity} × {formatCurrency(item.price)}
                 </p>
               </div>
@@ -241,7 +241,7 @@ export default function InvoicingSettingsPage() {
         <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
           Facturación y recibos
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Personaliza los textos e identificadores de tus comprobantes
         </p>
       </div>

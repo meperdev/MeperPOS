@@ -34,11 +34,11 @@ export function SettingsCard({
             </span>
           )}
           <div className="min-w-0">
-            <h3 className="text-xs sm:text-sm font-semibold tracking-tight text-foreground">
+            <h3 className="text-sm sm:text-sm font-semibold tracking-tight text-foreground">
               {title}
             </h3>
             {description && (
-              <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+              <p className="text-[13px] text-muted-foreground mt-0.5">{description}</p>
             )}
           </div>
         </div>

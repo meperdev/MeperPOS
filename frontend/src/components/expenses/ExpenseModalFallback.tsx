@@ -30,7 +30,7 @@ export function ExpenseModalFallback() {
             aria-hidden="true"
             className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-b-transparent"
           />
-          <span className="text-xs text-muted-foreground">Cargando…</span>
+          <span className="text-[13px] text-muted-foreground">Cargando…</span>
         </div>
       </div>
     </div>

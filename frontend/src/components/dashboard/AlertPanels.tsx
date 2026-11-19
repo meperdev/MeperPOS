@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useTasks } from "@/hooks/useTasks";
 import { computePendingAmount, filterOpenTasks } from "@/lib/dashboard";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDateShort } from "@/lib/utils";
 import type { Expense } from "@/types";
 
 /** Compact cap: the panels are a peek, not a list page. */
@@ -145,7 +145,7 @@ export function AlertPanels() {
                         </Badge>
                         {task.dueDate && (
                           <span className="text-xs text-muted-foreground tabular-nums">
-                            {formatDate(task.dueDate)}
+                            {formatDateShort(task.dueDate)}
                           </span>
                         )}
                       </div>

@@ -60,7 +60,7 @@ export function PeriodFilter({
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
           <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
             <label
-              className="text-xs font-medium text-muted-foreground"
+              className="text-[13px] font-medium text-muted-foreground"
               htmlFor="reports-start"
             >
               Desde
@@ -75,7 +75,7 @@ export function PeriodFilter({
           </div>
           <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
             <label
-              className="text-xs font-medium text-muted-foreground"
+              className="text-[13px] font-medium text-muted-foreground"
               htmlFor="reports-end"
             >
               Hasta
@@ -90,7 +90,7 @@ export function PeriodFilter({
           </div>
         </div>
 
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground tabular-nums">
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground tabular-nums">
           <Calendar className="h-3 w-3 shrink-0" aria-hidden="true" />
           {appliedLabel}
         </span>

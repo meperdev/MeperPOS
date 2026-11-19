@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SettingsCard } from "../../_components/SettingsCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, formatDateShort } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import {
@@ -145,7 +145,7 @@ export default function BillingSettingsPage() {
         <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
           Suscripción
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Plan, límites de uso e historial de pagos
         </p>
       </div>
@@ -155,7 +155,7 @@ export default function BillingSettingsPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Plan</p>
+              <p className="text-[13px] font-medium text-muted-foreground">Plan</p>
               <p
                 className={cn(
                   "mt-0.5 text-base sm:text-lg font-semibold tracking-tight",
@@ -166,7 +166,7 @@ export default function BillingSettingsPage() {
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-medium text-muted-foreground">Estado</p>
+              <p className="text-[13px] font-medium text-muted-foreground">Estado</p>
               <Badge
                 variant={statusConfig[billingStatus.status].variant}
                 dot
@@ -178,7 +178,7 @@ export default function BillingSettingsPage() {
           </div>
 
           {billingStatus?.trialEndsAt && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
               <Calendar className="w-3.5 h-3.5 shrink-0" />
               <span>
                 Fin de prueba:{" "}
@@ -196,15 +196,15 @@ export default function BillingSettingsPage() {
         <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 space-y-2">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-warning-text shrink-0" />
-            <h3 className="text-xs sm:text-sm font-semibold text-warning-text">
+            <h3 className="text-sm font-semibold text-warning-text">
               Ajuste de plan requerido
             </h3>
           </div>
           <div className="space-y-2">
-            <p className="text-xs text-warning-text">
+            <p className="text-[13px] text-warning-text">
               Tu plan cambió a <span className="font-semibold">Básico</span> y algunos recursos exceden los nuevos límites:
             </p>
-            <ul className="text-xs text-warning-text space-y-1 list-disc list-inside">
+            <ul className="text-[13px] text-warning-text space-y-1 list-disc list-inside">
               {downgradeFlags.usersOverLimit && <li>Usuarios sobre el límite</li>}
               {downgradeFlags.productsOverLimit && <li>Productos sobre el límite</li>}
               {downgradeFlags.customersOverLimit && <li>Clientes sobre el límite</li>}
@@ -246,14 +246,14 @@ export default function BillingSettingsPage() {
 
               return (
                 <div key={limit.type} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-[13px]">
                     <span className="flex items-center gap-1.5 text-foreground">
                       <span className="text-muted-foreground [&_svg]:w-3.5 [&_svg]:h-3.5">
                         {typeIcons[limit.type]}
                       </span>
                       {typeLabels[limit.type]}
                     </span>
-                    <span className="text-xs tabular-nums">
+                    <span className="text-[13px] tabular-nums">
                       {isUnlimited ? (
                         <span className="text-muted-foreground">Ilimitado</span>
                       ) : (
@@ -355,7 +355,7 @@ export default function BillingSettingsPage() {
         )}
 
         {paymentsLoading ? (
-          <p className="text-xs text-muted-foreground">Cargando pagos…</p>
+          <p className="text-[13px] text-muted-foreground">Cargando pagos…</p>
         ) : isPaymentsError && !payments ? (
           <ErrorState
             message="No se pudo cargar el historial de pagos."
@@ -364,7 +364,7 @@ export default function BillingSettingsPage() {
             className="min-h-0"
           />
         ) : !payments ? null : payments.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-4">
+          <p className="text-[13px] text-muted-foreground text-center py-4">
             No hay pagos registrados.
           </p>
         ) : (
@@ -379,11 +379,11 @@ export default function BillingSettingsPage() {
                     <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-foreground tabular-nums">
+                    <p className="text-[13px] font-semibold text-foreground tabular-nums">
                       {formatCurrency(Number(payment.amount))}
                     </p>
-                    <p className="text-[11px] text-muted-foreground tabular-nums">
-                      {formatDate(payment.date)}
+                    <p className="text-[13px] text-muted-foreground tabular-nums">
+                      {formatDateShort(payment.date)}
                     </p>
                   </div>
                 </div>

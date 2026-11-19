@@ -46,7 +46,7 @@ export function ExpenseCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           {groupName && (
-            <p className="truncate text-[11px] text-muted-foreground">
+            <p className="truncate text-[13px] text-muted-foreground">
               {groupName}
             </p>
           )}
@@ -57,11 +57,11 @@ export function ExpenseCard({
         <ExpenseStatusBadge status={expense.status} />
       </div>
 
-      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+      <p className="mt-2 line-clamp-2 text-[13px] text-muted-foreground">
         {expense.description ?? "Sin descripción"}
       </p>
 
-      <dl className="mt-2 space-y-1 border-t border-border/50 pt-2 text-xs">
+      <dl className="mt-2 space-y-1 border-t border-border/50 pt-2 text-[13px]">
         <div className="flex items-center justify-between gap-2">
           <dt className="text-muted-foreground">Proveedor</dt>
           <dd className="truncate font-medium text-foreground">
@@ -84,12 +84,12 @@ export function ExpenseCard({
 
       <div className="mt-auto flex items-end justify-between gap-2 border-t border-border/60 pt-2">
         <div className="min-w-0">
-          <p className="text-[11px] text-muted-foreground">Total</p>
+          <p className="text-[13px] text-muted-foreground">Total</p>
           <p className="text-sm font-semibold text-foreground tabular-nums">
             {formatCurrency(Number(expense.total))}
           </p>
           {!isPaid && remaining > 0 && (
-            <p className="text-[11px] text-warning-text tabular-nums">
+            <p className="text-[13px] text-warning-text tabular-nums">
               Saldo: {formatCurrency(remaining)}
             </p>
           )}

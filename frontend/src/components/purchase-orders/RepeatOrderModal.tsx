@@ -69,7 +69,7 @@ export function RepeatOrderModal({ order, isOpen, onClose }: RepeatOrderModalPro
       size="sm"
     >
       <div className="space-y-4">
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           Se crea un borrador con los mismos productos y cantidades, al costo
           actual de cada producto. Podrás ajustarlo antes de confirmarlo.
         </p>
@@ -83,13 +83,13 @@ export function RepeatOrderModal({ order, isOpen, onClose }: RepeatOrderModalPro
         />
 
         {!originalActive && suppliersData ? (
-          <p className="text-xs text-warning-text">
+          <p className="text-[13px] text-warning-text">
             {order.supplier?.name ?? "El proveedor original"} ya no está activo.
             Elige otro proveedor.
           </p>
         ) : null}
         {otherSupplier ? (
-          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-text">
+          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] text-warning-text">
             Revisa los costos: son los de la última compra.
           </p>
         ) : null}

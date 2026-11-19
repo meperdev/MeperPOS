@@ -120,11 +120,11 @@ export function OrganizationSwitcher({
           aria-hidden="true"
         />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[12px] font-medium text-foreground">
+          <span className="block truncate text-[13px] font-medium text-foreground">
             {name}
           </span>
           {meta && (
-            <span className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+            <span className="mt-0.5 flex items-center gap-1 truncate text-[13px] text-muted-foreground">
               {meta}
             </span>
           )}
@@ -191,11 +191,11 @@ export function OrganizationSwitcher({
         )}
       >
         {icon}
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
           {label}
         </span>
         {meta && (
-          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+          <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">
             {meta}
           </span>
         )}
@@ -212,7 +212,7 @@ export function OrganizationSwitcher({
     return (
       <div
         className={cn(
-          "flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-[11px] text-muted-foreground",
+          "flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-[13px] text-muted-foreground",
           className
         )}
       >
@@ -226,7 +226,7 @@ export function OrganizationSwitcher({
     return (
       <div
         className={cn(
-          "rounded-md border border-danger/30 bg-danger/10 px-2 py-1.5 text-[11px] text-danger-text",
+          "rounded-md border border-danger/30 bg-danger/10 px-2 py-1.5 text-[13px] text-danger-text",
           className
         )}
       >
