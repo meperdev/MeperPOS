@@ -71,10 +71,10 @@ function Meta({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
+      <dt className="text-[13px] font-medium text-muted-foreground">{label}</dt>
       <dd
         className={cn(
-          "truncate text-xs",
+          "truncate text-[13px]",
           EMPTY_LABELS.has(value) ? "text-muted-foreground" : "text-foreground",
           mono && "tabular-nums",
         )}
@@ -141,7 +141,7 @@ function EmployeeCard({
               {employee.active ? "Activo" : "Inactivo"}
             </Badge>
           </div>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate text-[13px] text-muted-foreground">
             {employee.jobTitle ?? "Sin cargo asignado"}
           </p>
         </div>
@@ -387,11 +387,11 @@ export default function EmployeesPage() {
                           >
                             <TableCell>
                               <div className="flex items-center gap-2.5">
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/10 text-[11px] font-semibold text-primary-text">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/10 text-xs font-semibold text-primary-text">
                                   {initials(employee.name)}
                                 </span>
                                 <div className="min-w-0">
-                                  <p className="truncate text-xs font-semibold text-foreground">
+                                  <p className="truncate text-sm font-semibold text-foreground">
                                     <button
                                       type="button"
                                       aria-label={`Editar ${employee.name}`}
@@ -404,25 +404,25 @@ export default function EmployeesPage() {
                                       {employee.name}
                                     </button>
                                   </p>
-                                  <p className="truncate text-[11px] text-muted-foreground">
+                                  <p className="truncate text-[13px] text-muted-foreground">
                                     {employee.jobTitle ?? "Sin cargo"}
                                   </p>
                                 </div>
                               </div>
                             </TableCell>
                             <TableCell className="max-w-[220px]">
-                              <p className="truncate text-xs text-muted-foreground">
+                              <p className="truncate text-[13px] text-muted-foreground">
                                 {[employee.phone, employee.email].filter(Boolean).join(" · ") || "Sin registrar"}
                               </p>
                             </TableCell>
                             <TableCell>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-[13px] text-muted-foreground">
                                 {employee.remunerationModality
                                   ? MODALITY_LABELS[employee.remunerationModality]
                                   : "Sin definir"}
                               </span>
                             </TableCell>
-                            <TableCell className="text-right text-xs tabular-nums">
+                            <TableCell className="text-right text-sm tabular-nums">
                               {employee.referenceAmount !== null
                                 ? formatCurrency(toFiniteNumber(employee.referenceAmount))
                                 : "—"}

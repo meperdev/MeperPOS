@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useCreateTask,
@@ -43,7 +43,7 @@ import {
   Loader2,
   Edit3,
 } from "lucide-react";
-import { cn, formatDateTime, formatDate } from "@/lib/utils";
+import { cn, formatDateShort, formatDateTime } from "@/lib/utils";
 import type { TaskStatus } from "@/types";
 
 function getTaskStatusLabel(status: TaskStatus) {
@@ -99,6 +99,25 @@ function getTaskEventLabel(type: "CREATED" | "UPDATED" | "STATUS_CHANGED" | "DEL
   }
 }
 
+/** Strike-through draw time. The row holds its place until the line lands. */
+const STRIKE_MS = 250;
+/** Row travel time for the reorder. */
+const MOVE_MS = 300;
+/** Rectangles of every rendered row, taken before the reorder commits. */
+type FlipSnapshot = {
+  rects: Map<string, DOMRect>;
+  /** Row that owned the focused checkbox, when the toggle came from the keyboard. */
+  focusTaskId: string | null;
+};
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export default function TasksPage() {
   const toast = useToast();
   const { user: currentUser } = useAuth();
@@ -132,7 +151,7 @@ export default function TasksPage() {
 
   // Queries & Mutations
   const tasksQuery = useTasks();
-  const taskList = tasksQuery.data?.tasks ?? [];
+  const taskList = useMemo(() => tasksQuery.data?.tasks ?? [], [tasksQuery.data]);
   const assigneesQuery = useTaskAssignees();
   const assignees = assigneesQuery.data ?? [];
 
@@ -179,6 +198,186 @@ export default function TasksPage() {
       return true;
     });
   }, [visibleTaskList, scope, statusFilter, selectedAssigneeId, searchQuery, currentUser?.id]);
+
+  /*
+   * Completion motion, first half: a row that just completed keeps the slot it
+   * had in the last committed order while its strike-through draws. Holding it
+   * in an effect would be too late — the commit that paints the strike is also
+   * the commit that would move the row, and moving a node re-inserts it, which
+   * drops the CSS transition on the floor.
+   *
+   * The snapshots are state, not refs: they are read while rendering, and the
+   * render-phase updates below are the documented "adjust state when props
+   * change" pattern, which re-renders before anything is committed.
+   */
+  const [orderSnapshot, setOrderSnapshot] = useState<string[]>([]);
+  const [statusSnapshot, setStatusSnapshot] = useState<Record<string, TaskStatus>>({});
+  const [holdSlots, setHoldSlots] = useState<Record<string, number>>({});
+  const releaseTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const pendingFlip = useRef<FlipSnapshot | null>(null);
+  const previousOrderKey = useRef<string | null>(null);
+  const isMounted = useRef(true);
+
+  const nextStatuses: Record<string, TaskStatus> = {};
+  for (const task of visibleTaskList) {
+    nextStatuses[task.id] = task.status;
+  }
+
+  const statusesChanged =
+    Object.keys(nextStatuses).length !== Object.keys(statusSnapshot).length ||
+    Object.keys(nextStatuses).some((id) => statusSnapshot[id] !== nextStatuses[id]);
+
+  const newlyCompleted = statusesChanged
+    ? visibleTaskList.filter(
+        (task) =>
+          task.status === "COMPLETED" &&
+          statusSnapshot[task.id] !== undefined &&
+          statusSnapshot[task.id] !== "COMPLETED" &&
+          holdSlots[task.id] === undefined,
+      )
+    : [];
+
+  if (newlyCompleted.length > 0) {
+    setHoldSlots((current) => {
+      const next = { ...current };
+      for (const task of newlyCompleted) {
+        const index = orderSnapshot.indexOf(task.id);
+        if (index >= 0) next[task.id] = index;
+      }
+      return next;
+    });
+  }
+
+  if (statusesChanged) setStatusSnapshot(nextStatuses);
+
+  /**
+   * Completed rows sink to the end of the open list; everything still open
+   * keeps the order the server sent (`sort` is stable). Held rows are re-seated
+   * at the index they had before the status changed, so nothing jumps while
+   * its strike is still drawing.
+   */
+  const orderedTasks = useMemo(() => {
+    const statusById = new Map(filteredTasks.map((task) => [task.id, task.status]));
+    const rankOf = (id: string) =>
+      statusById.get(id) === "COMPLETED" && holdSlots[id] === undefined ? 1 : 0;
+
+    const orderedIds = filteredTasks
+      .map((task) => task.id)
+      .sort((a, b) => rankOf(a) - rankOf(b));
+
+    for (const [id, index] of Object.entries(holdSlots)) {
+      const from = orderedIds.indexOf(id);
+      if (from < 0) continue;
+      orderedIds.splice(from, 1);
+      orderedIds.splice(Math.min(index, orderedIds.length), 0, id);
+    }
+
+    const byId = new Map(filteredTasks.map((task) => [task.id, task]));
+    return orderedIds.flatMap((id) => {
+      const task = byId.get(id);
+      return task ? [task] : [];
+    });
+  }, [filteredTasks, holdSlots]);
+
+  const renderedOrder = orderedTasks.map((task) => task.id);
+  const taskOrderKey = renderedOrder.join("|");
+
+  // Remember the order that actually reached the screen: it is the reference
+  // slot for the next row that completes. Same render-phase sync pattern, so
+  // the snapshot is current before anything is committed.
+  const orderUnchanged =
+    renderedOrder.length === orderSnapshot.length &&
+    renderedOrder.every((id, index) => id === orderSnapshot[index]);
+  if (!orderUnchanged) setOrderSnapshot(renderedOrder);
+
+  // One timer per held row, released once its strike has drawn. Reduced motion
+  // draws the line instantly, so the row may travel at once.
+  useEffect(() => {
+    const held = Object.keys(holdSlots);
+    const holdMs = prefersReducedMotion() ? 0 : STRIKE_MS;
+
+    for (const id of held) {
+      if (releaseTimers.current.has(id)) continue;
+
+      releaseTimers.current.set(
+        id,
+        setTimeout(() => {
+          releaseTimers.current.delete(id);
+          if (!isMounted.current) return;
+          setHoldSlots((current) => {
+            if (current[id] === undefined) return current;
+            const next = { ...current };
+            delete next[id];
+            return next;
+          });
+        }, holdMs),
+      );
+    }
+
+    for (const [id, timer] of releaseTimers.current) {
+      if (held.includes(id)) continue;
+      clearTimeout(timer);
+      releaseTimers.current.delete(id);
+    }
+  }, [holdSlots]);
+
+  useEffect(() => {
+    isMounted.current = true;
+    const timers = releaseTimers.current;
+    return () => {
+      isMounted.current = false;
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
+
+  // Completion motion, second half (FLIP): the "before" rectangles are captured
+  // at the click and the "after" ones by the layout effect that runs on the
+  // render which finally reorders. The strike-through changes no layout, so both
+  // measurements describe the same rows.
+  const captureRowRects = () => {
+    const rects = new Map<string, DOMRect>();
+    rowRefs.current.forEach((element, id) => {
+      rects.set(id, element.getBoundingClientRect());
+    });
+    return rects;
+  };
+
+  useLayoutEffect(() => {
+    const orderChanged =
+      previousOrderKey.current !== null && previousOrderKey.current !== taskOrderKey;
+    previousOrderKey.current = taskOrderKey;
+
+    const pending = pendingFlip.current;
+    if (!pending || !orderChanged) return;
+    pendingFlip.current = null;
+
+    if (!prefersReducedMotion()) {
+      rowRefs.current.forEach((element, id) => {
+        const before = pending.rects.get(id);
+        if (!before) return;
+
+        const delta = before.top - element.getBoundingClientRect().top;
+        if (Math.abs(delta) < 1) return;
+        if (typeof element.animate !== "function") return;
+
+        element.animate(
+          [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0px)" }],
+          { duration: MOVE_MS, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+        );
+      });
+    }
+
+    // The row is the same keyed node in its new place, so focus usually rides
+    // along; restore it explicitly when the move dropped it.
+    if (pending.focusTaskId) {
+      const toggle = rowRefs.current
+        .get(pending.focusTaskId)
+        ?.querySelector<HTMLButtonElement>("[data-task-toggle]");
+      if (toggle && document.activeElement !== toggle) toggle.focus();
+    }
+  }, [taskOrderKey]);
 
   // Metrics
   const totalTasks = visibleTaskList.length;
@@ -227,9 +426,20 @@ export default function TasksPage() {
     currentStatus: TaskStatus,
   ) => {
     const nextStatus: TaskStatus = currentStatus === "COMPLETED" ? "PENDING" : "COMPLETED";
+    const toggle = rowRefs.current
+      .get(taskId)
+      ?.querySelector<HTMLButtonElement>("[data-task-toggle]");
+
+    pendingFlip.current = {
+      rects: captureRowRects(),
+      focusTaskId: toggle && document.activeElement === toggle ? taskId : null,
+    };
+
     try {
       await updateTaskStatus.mutateAsync({ id: taskId, status: nextStatus });
     } catch (error) {
+      // A rejected request leaves the row where it was: nothing to animate.
+      pendingFlip.current = null;
       toast.error(getApiErrorMessage(error, "No se pudo actualizar la tarea"));
     }
   };
@@ -238,9 +448,15 @@ export default function TasksPage() {
     taskId: string,
     status: TaskStatus,
   ) => {
+    pendingFlip.current = {
+      rects: captureRowRects(),
+      focusTaskId: null,
+    };
+
     try {
       await updateTaskStatus.mutateAsync({ id: taskId, status });
     } catch (error) {
+      pendingFlip.current = null;
       toast.error(getApiErrorMessage(error, "No se pudo actualizar la tarea"));
     }
   };
@@ -445,7 +661,7 @@ export default function TasksPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4">
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[13px] font-medium text-muted-foreground">
                 Activas
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-foreground/70 shrink-0" />
@@ -453,14 +669,14 @@ export default function TasksPage() {
             <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {pendingTasks + inProgressTasks}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground tabular-nums">
+            <p className="mt-1 text-[13px] text-muted-foreground tabular-nums">
               {totalTasks} en total
             </p>
           </div>
 
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[13px] font-medium text-muted-foreground">
                 Pendientes
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-warning shrink-0" />
@@ -468,14 +684,14 @@ export default function TasksPage() {
             <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {pendingTasks}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               Por comenzar
             </p>
           </div>
 
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[13px] font-medium text-muted-foreground">
                 En curso
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-info shrink-0" />
@@ -483,14 +699,14 @@ export default function TasksPage() {
             <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {inProgressTasks}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               En progreso
             </p>
           </div>
 
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[13px] font-medium text-muted-foreground">
                 Completadas
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-success shrink-0" />
@@ -498,7 +714,7 @@ export default function TasksPage() {
             <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
               {completedTasks}
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               Finalizadas
             </p>
           </div>
@@ -573,10 +789,10 @@ export default function TasksPage() {
             <Card className="overflow-hidden border-border/70 bg-card shadow-2xs">
               <div className="border-b border-border/60 px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs sm:text-sm font-semibold text-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Lista de tareas
                   </h3>
-                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
+                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
                     {filteredTasks.length}
                   </span>
                 </div>
@@ -615,7 +831,7 @@ export default function TasksPage() {
                   />
                 ) : (
                   <div className="space-y-1">
-                    {filteredTasks.map((task) => {
+                    {orderedTasks.map((task) => {
                       const isSelected = task.id === selectedTask?.id;
                       const isOverdue =
                         task.dueDate &&
@@ -626,6 +842,11 @@ export default function TasksPage() {
                       return (
                         <div
                           key={task.id}
+                          data-task-id={task.id}
+                          ref={(element) => {
+                            if (element) rowRefs.current.set(task.id, element);
+                            else rowRefs.current.delete(task.id);
+                          }}
                           onClick={() => {
                             setSelectedTaskId(task.id);
                             setIsEditingTask(false);
@@ -641,6 +862,7 @@ export default function TasksPage() {
                             {/* Fast Toggle Checkbox */}
                             <button
                               type="button"
+                              data-task-toggle=""
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleToggleTask(task.id, task.status);
@@ -659,10 +881,11 @@ export default function TasksPage() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
                                 <span
+                                  data-struck={task.status === "COMPLETED"}
                                   className={cn(
-                                    "text-xs sm:text-sm font-semibold transition-colors line-clamp-1",
+                                    "task-title-strike line-clamp-1 text-sm font-semibold",
                                     task.status === "COMPLETED"
-                                      ? "text-muted-foreground line-through decoration-muted-foreground/60"
+                                      ? "text-muted-foreground"
                                       : "text-foreground",
                                   )}
                                 >
@@ -678,13 +901,13 @@ export default function TasksPage() {
                               </div>
 
                               {task.description && (
-                                <p className="mt-1 text-xs text-muted-foreground line-clamp-1">
+                                <p className="mt-1 text-[13px] text-muted-foreground line-clamp-1">
                                   {task.description}
                                 </p>
                               )}
 
                               {/* Metadata row */}
-                              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
                                 {task.assignedTo ? (
                                   <span className="inline-flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5 font-medium text-foreground border border-border/60">
                                     <UserIcon className="h-3 w-3 text-muted-foreground" />
@@ -700,15 +923,15 @@ export default function TasksPage() {
                                 {task.dueDate && (
                                   <Badge
                                     variant={isOverdue ? "danger" : "default"}
-                                    className="gap-1 px-2 text-[11px] font-medium tabular-nums"
+                                    className="gap-1 px-2 text-xs font-medium tabular-nums"
                                   >
                                     <Calendar className="h-3 w-3" />
-                                    {formatDate(task.dueDate)}
+                                    {formatDateShort(task.dueDate)}
                                     {isOverdue && " (Vencida)"}
                                   </Badge>
                                 )}
 
-                                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums ml-auto">
+                                <span className="inline-flex items-center gap-1 text-[13px] text-muted-foreground tabular-nums ml-auto">
                                   <Clock3 className="h-3 w-3" />
                                   {formatDateTime(task.updatedAt)}
                                 </span>
@@ -735,7 +958,7 @@ export default function TasksPage() {
                       <h2 className="text-sm sm:text-base font-semibold text-foreground break-words">
                         {selectedTask.title}
                       </h2>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-[13px] text-muted-foreground mt-0.5">
                         {selectedTask.createdBy?.name
                           ? `Creada por ${selectedTask.createdBy.name}`
                           : "Creada desde el panel"}
@@ -787,7 +1010,7 @@ export default function TasksPage() {
 
                   {/* Status Transition Quick Selectors */}
                   <div className="mt-3.5 pt-3 border-t border-border/50">
-                    <span className="text-xs font-medium text-muted-foreground block mb-1.5">
+                    <span className="text-[13px] font-medium text-muted-foreground block mb-1.5">
                       Estado actual
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -885,32 +1108,32 @@ export default function TasksPage() {
                   ) : (
                     <div className="space-y-2">
                       <div>
-                        <span className="text-xs font-medium text-muted-foreground block mb-1">
+                        <span className="text-[13px] font-medium text-muted-foreground block mb-1">
                           Descripción
                         </span>
-                        <p className="text-xs text-foreground leading-relaxed bg-muted/40 p-3 rounded-lg max-h-24 overflow-y-auto">
+                        <p className="text-[13px] text-foreground leading-relaxed bg-muted/40 p-3 rounded-lg max-h-24 overflow-y-auto">
                           {selectedTask.description?.trim() || "Sin descripción adicional por ahora."}
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2 text-[13px]">
                         <div className="p-2.5 rounded-lg bg-muted/40 min-w-0">
-                          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <span className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
                             <UserIcon className="h-3.5 w-3.5 shrink-0" />
                             <span>Asignado</span>
                           </span>
-                          <span className="font-semibold text-foreground text-xs truncate block mt-1">
+                          <span className="font-semibold text-foreground text-[13px] truncate block mt-1">
                             {selectedTask.assignedTo?.name ?? "Sin asignar"}
                           </span>
                         </div>
 
                         <div className="p-2.5 rounded-lg bg-muted/40 min-w-0">
-                          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <span className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">
                             <Calendar className="h-3.5 w-3.5 shrink-0" />
                             <span>Fecha límite</span>
                           </span>
-                          <span className="font-semibold text-foreground text-xs tabular-nums truncate block mt-1">
-                            {selectedTask.dueDate ? formatDate(selectedTask.dueDate) : "Sin fecha"}
+                          <span className="font-semibold text-foreground text-[13px] tabular-nums truncate block mt-1">
+                            {selectedTask.dueDate ? formatDateShort(selectedTask.dueDate) : "Sin fecha"}
                           </span>
                         </div>
                       </div>
@@ -922,10 +1145,10 @@ export default function TasksPage() {
                 <div className="flex flex-1 min-h-0 flex-col p-4">
                   <div className="flex items-center justify-between mb-2.5 shrink-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-semibold text-foreground">
+                      <h3 className="text-sm font-semibold text-foreground">
                         Historial
                       </h3>
-                      <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
+                      <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
                         {selectedTaskTimeline.length}
                       </span>
                     </div>
@@ -935,7 +1158,7 @@ export default function TasksPage() {
                   </div>
 
                   {selectedTaskTimeline.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 p-3 text-center text-xs text-muted-foreground">
+                    <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 p-3 text-center text-[13px] text-muted-foreground">
                       Todavía no hay eventos registrados para esta tarea.
                     </div>
                   ) : (
@@ -943,26 +1166,26 @@ export default function TasksPage() {
                       {selectedTaskTimeline.map((event) => (
                         <div
                           key={event.id}
-                          className="flex items-start gap-2 rounded-lg bg-muted/40 p-2.5 text-xs"
+                          className="flex items-start gap-2 rounded-lg bg-muted/40 p-2.5 text-[13px]"
                         >
                           <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
                           <div className="min-w-0 flex-1 space-y-0.5">
                             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                               <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5">
-                                <span className="whitespace-nowrap break-words font-semibold text-foreground text-xs">
+                                <span className="whitespace-nowrap break-words font-semibold text-foreground text-[13px]">
                                   {getTaskEventLabel(event.type)}
                                 </span>
                                 {event.fromStatus && event.fromStatus !== event.toStatus && (
-                                  <span className="min-w-0 break-words font-normal text-xs text-muted-foreground">
+                                  <span className="min-w-0 break-words font-normal text-[13px] text-muted-foreground">
                                     ({getTaskStatusLabel(event.fromStatus)} → {getTaskStatusLabel(event.toStatus)})
                                   </span>
                                 )}
                               </div>
-                              <span className="whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
+                              <span className="whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
                                 {formatDateTime(event.createdAt)}
                               </span>
                             </div>
-                            <p className="text-[11px] text-muted-foreground truncate">
+                            <p className="text-[13px] text-muted-foreground truncate">
                               {event.createdBy?.name ?? "Sistema"}
                               {event.note ? ` - ${event.note}` : ""}
                             </p>
@@ -978,10 +1201,10 @@ export default function TasksPage() {
                 <div className="w-10 h-10 rounded-lg bg-muted/50 border border-border/60 flex items-center justify-center mx-auto mb-2.5 text-muted-foreground">
                   <ClipboardList className="w-5 h-5" />
                 </div>
-                <h4 className="text-xs sm:text-sm font-semibold text-foreground">
+                <h4 className="text-sm font-semibold text-foreground">
                   Ninguna tarea seleccionada
                 </h4>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                <p className="text-[13px] text-muted-foreground mt-1 max-w-xs mx-auto">
                   Haz clic en una tarea de la lista para ver sus detalles, editarla o consultar su historial de cambios.
                 </p>
               </Card>

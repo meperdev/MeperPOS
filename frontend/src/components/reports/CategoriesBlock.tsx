@@ -69,13 +69,13 @@ export function CategoriesBlock({
                     className="h-1.5 w-1.5 shrink-0 rounded-full"
                     style={{ backgroundColor: color }}
                   />
-                  <span className="truncate text-xs text-foreground">{slice.label}</span>
+                  <span className="truncate text-[13px] text-foreground">{slice.label}</span>
                 </span>
                 <span className="flex shrink-0 items-baseline gap-2">
-                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                  <span className="text-[13px] text-muted-foreground tabular-nums">
                     {slice.percentage}%
                   </span>
-                  <span className="text-xs font-semibold text-foreground tabular-nums">
+                  <span className="text-[13px] font-semibold text-foreground tabular-nums">
                     {formatCurrency(slice.total)}
                   </span>
                 </span>

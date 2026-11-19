@@ -44,17 +44,17 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
           "hidden lg:flex fixed top-0 bottom-0 left-0 z-50 flex-col",
           "bg-card border-r border-border/80",
           "transition-[width] duration-300 ease-in-out",
-          isCollapsed ? "w-[72px]" : "w-[320px]"
+          isCollapsed ? "w-[72px]" : "w-[256px]"
         )}
       >
         <div className="flex flex-col flex-1 min-h-0">
-          {/* Brand lockup */}
+          {/* Brand lockup — the same proportions the real rail draws at 256px */}
           <div
             className={cn(
               "shrink-0 border-b border-border/70",
               isCollapsed
                 ? "px-2 py-4 flex flex-col items-center gap-3"
-                : "px-5 py-5 flex items-center justify-between gap-3"
+                : "px-4 py-4 flex items-center justify-between gap-2"
             )}
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -62,11 +62,11 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
                 className={cn(
                   "rounded-xl bg-muted",
                   pulse,
-                  isCollapsed ? "h-11 w-11" : "h-14 w-14"
+                  isCollapsed ? "h-11 w-11" : "h-10 w-10 lg:h-11 lg:w-11"
                 )}
               />
               {!isCollapsed && (
-                <div className={cn("h-7 w-32 rounded bg-muted", pulse)} />
+                <div className={cn("h-6 w-28 rounded bg-muted", pulse)} />
               )}
             </div>
             {!isCollapsed && (
@@ -145,11 +145,32 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
         </div>
       </aside>
 
+      {/* Desktop header — the same height the real bar reserves, so the swap
+          from skeleton to shell does not move the content column. */}
+      <div
+        aria-hidden="true"
+        data-testid="app-shell-skeleton-header"
+        className={cn(
+          "hidden lg:flex sticky top-0 z-40 h-[var(--app-header-height)] items-center gap-3",
+          "border-b border-border bg-background px-8",
+          "transition-[margin] duration-300 ease-in-out",
+          isCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]"
+        )}
+      >
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3">
+          <div className="flex flex-1 justify-center">
+            <div className={cn("h-9 w-full max-w-md rounded-lg bg-muted", pulse)} />
+          </div>
+          <div className={cn("h-8 w-8 rounded-md bg-muted", pulse)} />
+          <div className={cn("h-8 w-8 rounded-full bg-muted", pulse)} />
+        </div>
+      </div>
+
       {/* Content */}
       <main
         className={cn(
           "min-h-dvh px-4 pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))] pb-[calc(var(--mobile-tabbar)+var(--safe-bottom)+var(--mobile-content-bottom-gap))] lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
-          isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
+          isCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]"
         )}
       >
         <div className="mx-auto w-full max-w-[1600px] space-y-5" aria-hidden="true">

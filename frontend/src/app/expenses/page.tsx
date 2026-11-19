@@ -14,7 +14,12 @@ import {
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, getApiErrorMessage } from "@/lib/api";
-import { cn, formatCurrency, formatDate, getBogotaDateInputValue } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  formatDateShort,
+  getBogotaDateInputValue,
+} from "@/lib/utils";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
@@ -40,12 +45,12 @@ import { ExpenseStatusBadge } from "@/components/expenses/ExpenseStatusBadge";
 import { ExpenseCard, expenseName } from "@/components/expenses/ExpenseCard";
 import { ExpenseFilters } from "@/components/expenses/ExpenseFilters";
 import { ExpenseSummaryCards } from "@/components/expenses/ExpenseSummaryCards";
-import { DynamicFallback } from "@/components/ui/DynamicFallback";
+import { ExpenseModalFallback } from "@/components/expenses/ExpenseModalFallback";
+import { activationProps } from "@/lib/activation";
 import { prefetchOnIdle } from "@/lib/prefetch";
 import {
   Copy,
   Download,
-  Eye,
   FileCheck,
   History,
   Pencil,
@@ -79,16 +84,16 @@ const loadExpenseDetailModal = () =>
   }));
 
 const ExpenseFormModal = dynamic(loadExpenseFormModal, {
-  loading: () => <DynamicFallback />,
+  loading: () => <ExpenseModalFallback />,
 });
 const AddPaymentModal = dynamic(loadAddPaymentModal, {
-  loading: () => <DynamicFallback />,
+  loading: () => <ExpenseModalFallback />,
 });
 const HistoryModal = dynamic(loadHistoryModal, {
-  loading: () => <DynamicFallback />,
+  loading: () => <ExpenseModalFallback />,
 });
 const ExpenseDetailModal = dynamic(loadExpenseDetailModal, {
-  loading: () => <DynamicFallback />,
+  loading: () => <ExpenseModalFallback />,
 });
 
 /** Table view: a dense list keeps the page it always had. */
@@ -139,6 +144,7 @@ export default function ExpensesPage() {
     pageSize: gridPageSize,
     containerRef: gridRef,
     footerRef,
+    tableRef,
   } = useResponsivePageSize({
     minCardWidth: COLLECTION_CARD_MIN_WIDTH,
     gap: COLLECTION_GRID_GAP,
@@ -148,7 +154,7 @@ export default function ExpensesPage() {
     max: MAX_COLLECTION_PAGE_SIZE,
     enabled: viewMode === "grid",
   });
-  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+  const pageSize = gridPageSize;
 
   // Re-anchor on the item the user was already looking at when a resize changes
   // the page size, instead of leaving them on a page that now starts elsewhere.
@@ -333,7 +339,7 @@ export default function ExpensesPage() {
         {/* Collapsible Export Section */}
         {showExportSection && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border/70 bg-card p-3.5 shadow-2xs">
-            <span className="flex-1 text-xs text-muted-foreground">
+            <span className="flex-1 text-[13px] text-muted-foreground">
               Exporta las salidas del mes seleccionado en formato Excel o CSV.
             </span>
             <div className="flex items-center gap-2">
@@ -455,7 +461,7 @@ export default function ExpensesPage() {
             {viewMode === "table" && (
               <div className="hidden md:block flex-1">
                 <div className="h-full rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
-                  <div className="overflow-x-auto">
+                  <div ref={tableRef} className="overflow-x-auto">
                     <Table className="min-w-[860px]">
                       <TableHeader>
                         <TableRow>
@@ -507,13 +513,20 @@ export default function ExpensesPage() {
                             const remaining = Math.max(Number(expense.total) - paidSum, 0);
 
                             return (
-                              <TableRow key={expense.id}>
-                                <TableCell className="text-muted-foreground whitespace-nowrap text-xs tabular-nums">
-                                  {formatDate(expense.date)}
+                              <TableRow
+                                key={expense.id}
+                                {...activationProps(
+                                  () => setDetailExpense(expense),
+                                  `Ver detalle de ${expenseName(expense)}`,
+                                )}
+                                className="cursor-pointer active:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+                              >
+                                <TableCell className="text-muted-foreground whitespace-nowrap text-sm tabular-nums">
+                                  {formatDateShort(expense.date)}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex flex-col max-w-[170px]">
-                                    <span className="text-xs font-semibold text-foreground truncate">
+                                    <span className="text-sm font-semibold text-foreground truncate">
                                       {expense.label?.group?.name ? `${expense.label.group.name} / ` : ""}
                                       {expense.label?.name ?? "—"}
                                     </span>
@@ -521,7 +534,7 @@ export default function ExpensesPage() {
                                 </TableCell>
                                 <TableCell className="max-w-[220px]">
                                   <div className="flex items-center gap-1.5 truncate">
-                                    <span className="text-xs text-muted-foreground truncate">
+                                    <span className="text-[13px] text-muted-foreground truncate">
                                       {expense.description ?? "—"}
                                     </span>
                                     {expense.receiptUrl && (
@@ -535,7 +548,7 @@ export default function ExpensesPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell className="max-w-[160px] truncate">
-                                  <span className="text-xs font-medium text-foreground truncate block">
+                                  <span className="text-sm font-medium text-foreground truncate block">
                                     {expense.supplier?.name ?? "—"}
                                   </span>
                                 </TableCell>
@@ -544,28 +557,24 @@ export default function ExpensesPage() {
                                 </TableCell>
                                 <TableCell numeric>
                                   <div className="flex flex-col items-end">
-                                    <span className="text-xs font-semibold text-foreground tabular-nums">
+                                    <span className="text-sm font-semibold text-foreground tabular-nums">
                                       {formatCurrency(Number(expense.total))}
                                     </span>
                                     {!isPaid && remaining > 0 && (
-                                      <span className="text-[11px] text-warning-text tabular-nums">
+                                      <span className="text-[13px] text-warning-text tabular-nums">
                                         Saldo: {formatCurrency(remaining)}
                                       </span>
                                     )}
                                   </div>
                                 </TableCell>
                                 <TableCell numeric>
-                                  <div className="flex justify-end">
+                                  <div
+                                    className="flex justify-end"
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
                                     <RowActions
                                       label={`Más acciones de ${expenseName(expense)}`}
-                                      items={[
-                                        {
-                                          label: "Ver detalle",
-                                          icon: <Eye className="w-3.5 h-3.5" aria-hidden="true" />,
-                                          onSelect: () => setDetailExpense(expense),
-                                        },
-                                        ...actionsFor(expense, isPaid, paymentButtonLabel),
-                                      ]}
+                                      items={actionsFor(expense, isPaid, paymentButtonLabel)}
                                     />
                                   </div>
                                 </TableCell>

@@ -173,21 +173,21 @@ export default function AdminPage() {
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-medium text-foreground">Requieren atención</h2>
-            <span className="text-[11px] text-muted-foreground tabular-nums">
+            <span className="text-[13px] text-muted-foreground tabular-nums">
               {attention.length}
             </span>
           </CardHeader>
           <CardContent className="p-0">
             {organizationsLoading ? (
-              <p className="px-5 py-6 text-xs text-muted-foreground">
+              <p className="px-5 py-6 text-[13px] text-muted-foreground">
                 Cargando organizaciones…
               </p>
             ) : organizationsError ? (
-              <p className="px-5 py-6 text-xs text-muted-foreground">
+              <p className="px-5 py-6 text-[13px] text-muted-foreground">
                 No se pudieron cargar las organizaciones.
               </p>
             ) : attention.length === 0 ? (
-              <p className="px-5 py-6 text-xs text-muted-foreground">
+              <p className="px-5 py-6 text-[13px] text-muted-foreground">
                 Ninguna organización requiere atención.
               </p>
             ) : (
@@ -202,7 +202,7 @@ export default function AdminPage() {
                         <span className="block truncate text-[13px] text-foreground">
                           {item.name}
                         </span>
-                        <span className="block text-[11px] text-muted-foreground">
+                        <span className="block text-[13px] text-muted-foreground">
                           {item.reason}
                         </span>
                       </span>
@@ -221,7 +221,7 @@ export default function AdminPage() {
         <Card>
           <CardHeader className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-medium text-foreground">Organizaciones por plan</h2>
-            <span className="text-[11px] text-muted-foreground tabular-nums">
+            <span className="text-[13px] text-muted-foreground tabular-nums">
               {total}
             </span>
           </CardHeader>
@@ -253,7 +253,7 @@ export default function AdminPage() {
                         <span className="text-foreground">{planLabels[plan] ?? plan}</span>
                       </span>
                       <span className="flex items-center gap-3">
-                        <span className="text-[11px] text-muted-foreground tabular-nums">
+                        <span className="text-[13px] text-muted-foreground tabular-nums">
                           {planShare}%
                         </span>
                         <span className="w-8 text-right text-[13px] text-foreground tabular-nums">

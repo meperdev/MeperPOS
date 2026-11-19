@@ -28,7 +28,7 @@ function StockBadge({ product }: { product: Product }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border tabular-nums shrink-0",
+        "inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border tabular-nums shrink-0",
         service
           ? "bg-muted/60 text-muted-foreground border-border/60"
           : isOutOfStock
@@ -76,11 +76,11 @@ function ProductRow({ product }: { product: Product }) {
           {product.name}
         </p>
         <div className="flex flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
-          <span className="text-[11px] font-medium text-muted-foreground">
+          <span className="text-[13px] font-medium text-muted-foreground">
             {product.sku}
           </span>
           {isInactive && (
-            <span className="text-[11px] font-semibold text-muted-foreground">
+            <span className="text-[13px] font-semibold text-muted-foreground">
               · Inactivo
             </span>
           )}
@@ -190,12 +190,12 @@ function CategoryPage({ category, onClose }: { category: Category; onClose: () =
           </ul>
         )}
         <nav ref={pagerRef} aria-label="Paginación de productos" className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs">
-          <span aria-live="polite" className="mr-auto text-[11px] text-muted-foreground tabular-nums">
+          <span aria-live="polite" className="mr-auto text-[13px] text-muted-foreground tabular-nums">
             {current && !clamping ? `Mostrando ${start}–${end} de ${total}` : "Esperando productos"}
           </span>
           <div className="flex items-center gap-2">
             <Button type="button" variant="secondary" size="sm" aria-label="Página anterior" disabled={pending || isError || page === 1} onClick={() => setPaging({ limit, page: page - 1 })}>Anterior</Button>
-            <span aria-live="polite" className="px-1 text-xs font-medium text-muted-foreground tabular-nums">Página {page}{current && !clamping ? ` de ${totalPages}` : ""}</span>
+            <span aria-live="polite" className="px-1 text-[13px] font-medium text-muted-foreground tabular-nums">Página {page}{current && !clamping ? ` de ${totalPages}` : ""}</span>
             <Button type="button" variant="secondary" size="sm" aria-label="Página siguiente" disabled={pending || isError || !current || page >= totalPages} onClick={() => setPaging({ limit, page: page + 1 })}>Siguiente</Button>
           </div>
         </nav>

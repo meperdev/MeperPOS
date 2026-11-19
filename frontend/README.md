@@ -72,7 +72,7 @@ El layout `DashboardLayout` envuelve todas las páginas autenticadas: renderiza 
 - **`getApiErrorMessage(error, fallback)`** para extraer mensajes de error legibles de los errores de Axios.
 - **Cliente `api`** (`lib/api.ts`): singleton de Axios con inyección automática del JWT y redirección en respuestas `401`.
 - **Contextos**: `AuthContext` (usuario + JWT), `ThemeContext` (tema claro/oscuro) y `ToastContext` (notificaciones).
-- El tema usa variables CSS definidas en `globals.css` (`--primary` teal, `--terracotta` como acento) y fuentes Geist + JetBrains Mono self-hosted vía `next/font/local`.
+- El tema usa variables CSS definidas en `globals.css` (`--primary` teal, `--terracotta` como acento) y una sola familia, **Inter** (subset latin self-hosted vía `next/font/local`, expuesta como `--font-sans-face`). Los identificadores (SKU, códigos de venta y OC, NIT, teléfonos) usan esa misma familia con cifras tabulares (`.id-text`); no se carga ninguna familia monoespaciada. Escala: cuerpo y celdas de tabla `text-sm` (14px), etiquetas y metadatos `text-[13px]`, micro-etiquetas (chips, badges, atajos, encabezados de tabla) `text-xs` (12px, piso) y valores de resumen un paso por encima de su etiqueta (`text-xl` → `sm:text-[28px]`).
 
 ## Testing
 

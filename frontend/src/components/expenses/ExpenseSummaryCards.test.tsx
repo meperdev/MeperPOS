@@ -67,6 +67,30 @@ describe("ExpenseSummaryCards", () => {
     expect(strip.querySelectorAll('[class*="shadow"]')).toHaveLength(0);
   });
 
+  it("sets the labels and the month total at reading size", () => {
+    render(<ExpenseSummaryCards month="2026-08" summary={summary} />);
+
+    const strip = screen.getByRole("region", { name: "Resumen del mes" });
+    const label = within(strip).getByText("Total del mes");
+    const [monthTotal, ...groupTotals] = [
+      "900.000",
+      "500.000",
+      "250.000",
+      "150.000",
+    ].map((amount) => within(strip).getAllByText(new RegExp(amount))[0]);
+
+    // Labels and the quiet detail lines sit at 13px so they read as text, not
+    // as micro-print; the group totals stay one step under the month total.
+    expect(label).toHaveClass("text-[13px]");
+    expect(within(strip).getByText(/Período: 2026-08/).parentElement).toHaveClass(
+      "text-[13px]",
+    );
+    expect(monthTotal).toHaveClass("text-xl");
+    for (const total of groupTotals) {
+      expect(total).toHaveClass("text-lg");
+    }
+  });
+
   it("sizes the columns from the cell count so no track is left empty", () => {
     const oneGroup = { ...summary, groups: [summary.groups[0]] };
     const { unmount } = render(

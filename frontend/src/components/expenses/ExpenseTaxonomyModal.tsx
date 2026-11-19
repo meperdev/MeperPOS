@@ -77,7 +77,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
       size="xl"
       footer={
         <div className="flex items-center justify-between w-full">
-          <p className="text-xs text-muted-foreground tabular-nums">
+          <p className="text-[13px] text-muted-foreground tabular-nums">
             {groups.length} {groups.length === 1 ? "grupo activo" : "grupos activos"}
           </p>
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -90,10 +90,10 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
         {/* Top Section: Create New Group */}
         <div className="rounded-xl border border-border/70 bg-muted/20 p-4 shadow-2xs space-y-3">
           <div>
-            <h3 className="text-xs font-semibold text-foreground">
+            <h3 className="text-[13px] font-semibold text-foreground">
               Crear nuevo grupo de gasto
             </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-[13px] text-muted-foreground mt-0.5">
               Organiza tus salidas en grupos lógicos para clasificar compras, suministros, nómina y servicios.
             </p>
           </div>
@@ -175,7 +175,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                         <h3 className="font-semibold text-sm text-foreground truncate">
                           {group.name}
                         </h3>
-                        <span className="text-[11px] text-muted-foreground px-1.5 py-0.5 rounded-md bg-muted/50 border border-border/60 tabular-nums shrink-0">
+                        <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded-md bg-muted/50 border border-border/60 tabular-nums shrink-0">
                           {activeLabels.length} {activeLabels.length === 1 ? "etiqueta" : "etiquetas"}
                         </span>
                       </div>
@@ -223,8 +223,8 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                   {activeLabels.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center py-6 px-2">
                       <Tag className="w-5 h-5 text-muted-foreground/30 mb-1.5" />
-                      <p className="text-xs text-muted-foreground/70">Sin etiquetas</p>
-                      <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                      <p className="text-[13px] text-muted-foreground/70">Sin etiquetas</p>
+                      <p className="text-[13px] text-muted-foreground/70 mt-0.5">
                         Agrega una abajo para clasificar este grupo
                       </p>
                     </div>
@@ -232,7 +232,7 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
                     activeLabels.map((label) => (
                       <div
                         key={label.id}
-                        className="flex items-center gap-2 text-xs py-1 px-2.5 rounded-lg bg-muted/40 transition-colors hover:bg-muted/60"
+                        className="flex items-center gap-2 text-sm py-1 px-2.5 rounded-lg bg-muted/40 transition-colors hover:bg-muted/60"
                       >
                         <Tag className="w-3 h-3 text-muted-foreground/60 shrink-0" />
                         {editing?.id === label.id ? (

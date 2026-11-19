@@ -87,6 +87,43 @@ describe("Advanced settings page", () => {
     });
   });
 
+  it("asks for the removal inside the row and drops the key only on confirm", async () => {
+    mockQueryState({ data: settingsData, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<AdvancedSettingsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Eliminar clave theme" }));
+
+    // The first press only arms the row's own control; nothing is lost yet and
+    // no dialog takes over the screen.
+    expect(screen.getByDisplayValue("theme")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "¿Eliminar?" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "¿Eliminar?" }));
+
+    expect(screen.queryByDisplayValue("theme")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /guardar/i }));
+
+    expect(updateSettingsMutateAsyncMock).toHaveBeenCalledWith({ custom: {} });
+  });
+
+  it("keeps the key when the inline confirm is cancelled", async () => {
+    mockQueryState({ data: settingsData, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<AdvancedSettingsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Eliminar clave theme" }));
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.getByDisplayValue("theme")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "¿Eliminar?" })).toBeNull();
+  });
+
   it("shows the error state with retry when the query failed, without loading or the editor", async () => {
     mockQueryState({
       data: undefined,

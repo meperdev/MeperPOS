@@ -101,7 +101,7 @@ describe("RecentSalesCard (compact recent sales)", () => {
     const item = within(within(screen.getByTestId("recent-sales-list")).getByTestId("recent-sale-item"));
     expect(item.getByText("101")).toBeTruthy();
     expect(item.getByText("Cliente 1")).toBeTruthy();
-    expect(item.getByText("Hora")).toBeTruthy();
+    expect(item.getByText("Fecha")).toBeTruthy();
     expect(item.getByText("Pago")).toBeTruthy();
     expect(item.getByText("Total")).toBeTruthy();
     expect(item.getByText("Efectivo")).toBeTruthy();
@@ -192,6 +192,25 @@ describe("RecentSalesCard (compact recent sales)", () => {
     const { container } = render(<RecentSalesCard />);
 
     expect(container.querySelector(".overflow-y-auto")).toBeNull();
+  });
+
+  it("runs the table edge to edge like the sales page table, not inset in the card padding", () => {
+    useSalesMock.mockReturnValue({ data: { data: [sale(1)] } });
+
+    render(<RecentSalesCard />);
+
+    const card = screen.getByTestId("recent-sales-card");
+    expect(card.className).toContain("overflow-hidden");
+    expect(card.className).not.toMatch(/(^|\s)p-4(\s|$)/);
+    const table = within(card).getByRole("table");
+    let node: HTMLElement | null = table.parentElement;
+    while (node && node !== card) {
+      expect(node.className).not.toMatch(/(^|\s)(p|px|mt)-\S+/);
+      node = node.parentElement;
+    }
+    for (const header of within(table).getAllByRole("columnheader")) {
+      expect(header.className).not.toContain("px-2");
+    }
   });
 
   it("sets money in the tabular sans, not the mono face, in both layouts", () => {

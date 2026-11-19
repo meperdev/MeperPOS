@@ -73,7 +73,7 @@ export function OrganizationSelectModal({
                 <p className="font-medium text-foreground truncate">
                   {org.name}
                 </p>
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="mt-1 flex items-center gap-2 text-[13px] text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Shield className="h-3 w-3" />
                     {roleLabels[org.role] || org.role}

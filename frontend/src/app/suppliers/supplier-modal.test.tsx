@@ -178,10 +178,11 @@ describe("Suppliers page modal — customer-supplier-info-fields (T19)", () => {
     expect(screen.getByRole("button", { name: /Tipo de cuenta/i })).toBeTruthy();
   });
 
-  it("renders bank badge and account type/number on the supplier card", () => {
+  it("renders bank badge, account type and the whole account number on the supplier card", () => {
     render(<SuppliersPage />);
     expect(screen.getByText("Bancolombia")).toBeTruthy();
-    expect(screen.getByText("Corriente: 0111111111")).toBeTruthy();
+    expect(screen.getByText("Corriente")).toBeTruthy();
+    expect(screen.getByText("0111111111")).toBeTruthy();
   });
 });
 

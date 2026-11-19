@@ -112,7 +112,9 @@ describe("ExpenseCard", () => {
     expect(screen.queryByText(/Saldo:/)).toBeNull();
   });
 
-  it("names the detail control after the expense and opens it", async () => {
+  // S11: the separate eye control is gone; the card itself is the target and
+  // keeps the accessible name the eye button used to carry.
+  it("makes the whole card the detail control, named after the expense (S11)", async () => {
     const user = userEvent.setup();
     const onOpenDetail = vi.fn();
 
@@ -124,10 +126,59 @@ describe("ExpenseCard", () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole("button", { name: "Ver detalle de Arriendo" }),
-    );
+    expect(screen.queryByTitle("Ver detalle")).toBeNull();
+
+    const card = screen.getByRole("button", { name: "Ver detalle de Arriendo" });
+    // The named element is the card, not a control inside it.
+    expect(card).toHaveTextContent("Renta agosto");
+    expect(card).toHaveAttribute("tabindex", "0");
+
+    await user.click(card);
     expect(onOpenDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the detail from the keyboard with Enter and Space (S11)", async () => {
+    const user = userEvent.setup();
+    const onOpenDetail = vi.fn();
+
+    render(
+      <ExpenseCard
+        expense={partialExpense}
+        actions={actions}
+        onOpenDetail={onOpenDetail}
+      />,
+    );
+
+    screen.getByRole("button", { name: "Ver detalle de Arriendo" }).focus();
+
+    await user.keyboard("{Enter}");
+    expect(onOpenDetail).toHaveBeenCalledTimes(1);
+
+    await user.keyboard(" ");
+    expect(onOpenDetail).toHaveBeenCalledTimes(2);
+  });
+
+  it("never opens the detail from the actions menu inside the card (S11)", async () => {
+    const user = userEvent.setup();
+    const onOpenDetail = vi.fn();
+    const onSelect = vi.fn();
+
+    render(
+      <ExpenseCard
+        expense={partialExpense}
+        actions={[{ label: "Editar gasto", onSelect }]}
+        onOpenDetail={onOpenDetail}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Más acciones de Arriendo" }),
+    );
+    expect(onOpenDetail).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("menuitem", { name: "Editar gasto" }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onOpenDetail).not.toHaveBeenCalled();
   });
 
   it("marks an attached receipt without a second line of text", () => {

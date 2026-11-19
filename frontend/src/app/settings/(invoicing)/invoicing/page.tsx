@@ -14,7 +14,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { SettingsCard } from "../../_components/SettingsCard";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
+import { cn, formatCurrency, formatDateTimeLong } from "@/lib/utils";
 import { Hash, Receipt, Store } from "lucide-react";
 
 const sampleItems = [
@@ -69,13 +69,13 @@ function ReceiptPreview({
       <div className="border-b border-border/60 px-4 py-3.5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="mt-0.5 text-xs sm:text-sm font-semibold tracking-tight text-foreground">
+            <h2 className="mt-0.5 text-sm sm:text-sm font-semibold tracking-tight text-foreground">
               Comprobante / recibo de muestra
             </h2>
           </div>
           <Receipt className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
           Se actualiza en vivo. Es una muestra ilustrativa y no un documento electrónico válido.
         </p>
       </div>
@@ -108,7 +108,7 @@ function ReceiptPreview({
             <h3 className="break-words text-base font-semibold tracking-tight text-foreground">
               {organizationName || "Nombre de la organización"}
             </h3>
-            <div className="mt-1 space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            <div className="mt-1 space-y-0.5 text-xs leading-relaxed text-muted-foreground">
               {taxId ? <p>NIT {taxId}</p> : null}
               {address ? <p>{address}</p> : null}
               {phone ? <p>Tel. {phone}</p> : null}
@@ -122,9 +122,11 @@ function ReceiptPreview({
                 Encabezado de impresión
               </p>
             )}
-            <div className="mt-3.5 space-y-0.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+            {/* A preview of the printed receipt: it keeps the long wording the
+                document itself carries, not the compact row form. */}
+            <div className="mt-3.5 space-y-0.5 id-text text-xs text-muted-foreground tabular-nums">
               <p className="font-semibold text-foreground">Comprobante #{sampleNumber}</p>
-              <p>{formatDateTime(new Date())}</p>
+              <p>{formatDateTimeLong(new Date())}</p>
             </div>
           </header>
 
@@ -135,11 +137,11 @@ function ReceiptPreview({
               <div key={item.name} className="text-xs">
                 <div className="flex items-start justify-between gap-3 font-medium text-foreground">
                   <span className="min-w-0 break-words">{item.name}</span>
-                  <span className="shrink-0 font-mono font-semibold tabular-nums">
+                  <span className="shrink-0 id-text font-semibold tabular-nums">
                     {formatCurrency(item.quantity * item.price)}
                   </span>
                 </div>
-                <p className="mt-0.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+                <p className="mt-0.5 id-text text-xs text-muted-foreground tabular-nums">
                   {item.quantity} × {formatCurrency(item.price)}
                 </p>
               </div>
@@ -151,19 +153,19 @@ function ReceiptPreview({
           <section aria-label="Totales de muestra" className="space-y-1.5 text-xs">
             <div className="flex justify-between gap-3 text-muted-foreground">
               <span>Subtotal</span>
-              <span className="font-mono tabular-nums">{formatCurrency(subtotal)}</span>
+              <span className="id-text tabular-nums">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between gap-3 text-muted-foreground">
               <span>Descuento</span>
-              <span className="font-mono tabular-nums">-{formatCurrency(discount)}</span>
+              <span className="id-text tabular-nums">-{formatCurrency(discount)}</span>
             </div>
             <div className="flex justify-between gap-3 text-muted-foreground">
               <span>Impuestos (19%)</span>
-              <span className="font-mono tabular-nums">{formatCurrency(tax)}</span>
+              <span className="id-text tabular-nums">{formatCurrency(tax)}</span>
             </div>
             <div className="mt-2.5 flex justify-between gap-3 border-t border-border/70 pt-2.5 text-sm font-semibold text-foreground">
               <span>Total</span>
-              <span className="font-mono tabular-nums">{formatCurrency(total)}</span>
+              <span className="id-text tabular-nums">{formatCurrency(total)}</span>
             </div>
           </section>
 
@@ -239,7 +241,7 @@ export default function InvoicingSettingsPage() {
         <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
           Facturación y recibos
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Personaliza los textos e identificadores de tus comprobantes
         </p>
       </div>

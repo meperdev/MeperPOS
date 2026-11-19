@@ -32,6 +32,16 @@
     --danger-text: #B91C1C;
     --info: #2563EB;
     --info-text: #1D4ED8;
+    /*
+     * Solid tiles behind the white glyph of a notification. A glyph is not body
+     * text, so it answers to the 3:1 non-text floor; the fill tokens are one
+     * step too bright for it (#16A34A with white is 3.3:1 on a good day), so the
+     * tile borrows the darker label variant instead of the fill.
+     */
+    --toast-success-tile: var(--success-text);
+    --toast-warning-tile: var(--warning-text);
+    --toast-danger-tile: var(--danger-text);
+    --toast-info-tile: var(--info-text);
     --coral: #D0453F;
 
     /* Categorical scale for chart series. Categories, not states: never reuse the status tokens. */
@@ -80,6 +90,15 @@
     --danger-text: #F87171;
     --info: #60A5FA;
     --info-text: #60A5FA;
+    /*
+     * In dark mode the semantic fills turn into light tints that a white glyph
+     * cannot sit on (white on #22C55E is 2.3:1). The tile therefore keeps the
+     * deep variant of its own hue, which clears 5:1 in both themes.
+     */
+    --toast-success-tile: #15803D;
+    --toast-warning-tile: #B45309;
+    --toast-danger-tile: #B91C1C;
+    --toast-info-tile: #1D4ED8;
     --coral: #E0524C;
 
     --chart-1: var(--primary);
@@ -126,6 +145,10 @@
     --color-danger-text: var(--danger-text);
     --color-info: var(--info);
     --color-info-text: var(--info-text);
+    --color-toast-success: var(--toast-success-tile);
+    --color-toast-warning: var(--toast-warning-tile);
+    --color-toast-danger: var(--toast-danger-tile);
+    --color-toast-info: var(--toast-info-tile);
     --color-coral: var(--coral);
     --color-chart-1: var(--chart-1);
     --color-chart-2: var(--chart-2);
@@ -135,8 +158,7 @@
     --color-chart-6: var(--chart-6);
     --color-chart-7: var(--chart-7);
     --color-chart-8: var(--chart-8);
-    --font-sans: var(--font-geist);
-    --font-mono: var(--font-jetbrains-mono);
+    --font-sans: var(--font-sans-face);
 }
 
 /* ─── Base ─────────────────────────────────────────────── */
@@ -158,7 +180,10 @@ body {
     background-color: var(--background);
     color: var(--foreground);
     caret-color: var(--primary);
-    font-family: var(--font-geist), system-ui, sans-serif;
+    /* Inter is a variable face with an optical-size axis: let it pick the
+       cut for the rendered size instead of pinning one. */
+    font-family: var(--font-sans-face), system-ui, sans-serif;
+    font-optical-sizing: auto;
     transition:
         background-color 0.25s ease,
         color 0.25s ease;
@@ -169,17 +194,42 @@ h1,
 h2,
 h3,
 h4 {
-    letter-spacing: -0.025em;
+    letter-spacing: -0.015em;
     line-height: 1.2;
 }
 
+/*
+ * A number that carries data (a total, a count, a delta) reads better in the
+ * sans face with tabular figures: columns of money stay aligned without a
+ * second family.
+ */
 .stat-number {
-    font-family:
-        var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
-        Consolas, monospace;
+    font-family: var(--font-sans-face), system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     letter-spacing: -0.02em;
+}
+
+/*
+ * Identifiers — SKU, barcode, sale and purchase-order numbers, NIT, phone,
+ * document and account numbers — stay scannable through tabular figures and a
+ * hair of tracking rather than a fixed-width face. The subset keeps `tnum`
+ * only (no `zero`), so no slashed zero is drawn here.
+ */
+.id-text {
+    font-family: var(--font-sans-face), system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: 0.01em;
+}
+
+/*
+ * The one place that is literal code the reader may retype, not prose with an
+ * identifier in it: a shell command. It borrows the platform's mono face
+ * instead of loading one.
+ */
+.code-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* ─── Animations ───────────────────────────────────────── */
@@ -268,48 +318,58 @@ h4 {
 }
 
 
-/* Notifications: drop from the top edge, leave the same way. */
+/* Notifications: drop in from above, leave the same way. */
 @keyframes toast-in {
     from {
         opacity: 0;
-        transform: translateY(-14px) scale(0.98);
+        transform: translateY(-12px);
     }
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
 }
 
 @keyframes toast-out {
     from {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
     to {
         opacity: 0;
-        transform: translateY(-8px) scale(0.98);
+        transform: translateY(-8px);
     }
 }
 
-@keyframes toast-progress {
+/* Reduced motion keeps the acknowledgement, drops the travel. */
+@keyframes toast-fade-in {
     from {
-        transform: scaleX(1);
+        opacity: 0;
     }
     to {
-        transform: scaleX(0);
+        opacity: 1;
     }
 }
 
+@keyframes toast-fade-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+/*
+ * No fill mode on the way in: a card that finished its entrance must stay free
+ * to become the next one's neighbour in the stack, which is a transform change.
+ */
 .animate-toast-in {
-    animation: toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .animate-toast-out {
     animation: toast-out 160ms ease-in both;
-}
-
-.animate-toast-progress {
-    animation: toast-progress linear both;
 }
 
 /* Motion is decoration: without it, content must still be fully visible. */
@@ -324,15 +384,12 @@ h4 {
         transform: none;
     }
 
-    .animate-toast-in,
-    .animate-toast-out {
-        animation: none;
-        opacity: 1;
-        transform: none;
+    .animate-toast-in {
+        animation: toast-fade-in 160ms ease-out;
     }
 
-    .animate-toast-progress {
-        display: none;
+    .animate-toast-out {
+        animation: toast-fade-out 120ms ease-in both;
     }
 
     /* Transitions are decoration too: state changes land immediately. */
@@ -352,7 +409,7 @@ h4 {
     border: none;
     background: transparent;
     text-align: left;
-    font-family: var(--font-geist), system-ui, sans-serif;
+    font-family: var(--font-sans-face), system-ui, sans-serif;
 }
 
 /* ─── Scrollbars ───────────────────────────────────────── */
@@ -422,6 +479,14 @@ h4 {
     --mobile-header: 3.5rem;
     /* Gap between that header and the first content row. */
     --mobile-header-gap: 1.5rem;
+    /*
+     * Height of the desktop header bar. One value for the four surfaces that
+     * depend on it: the bar itself, the skeleton that stands in for it, the
+     * content column that starts below it and the POS page that fits itself to
+     * the viewport. Hand-copying the number is how they drift apart, and a page
+     * that sized itself to `100dvh` without it always overflowed by the bar.
+     */
+    --app-header-height: 3.5rem;
     /*
      * Height of the fixed mobile tab bar, excluding the home-indicator inset it
      * pays on top. Every fixed surface that shares the bottom edge below `lg`
@@ -499,6 +564,28 @@ label {
     touch-action: manipulation;
 }
 
+/* iOS Safari (and the installed PWA) draws date/time inputs with a native
+   appearance, an intrinsic min-width and its own height, so they ignore the
+   field geometry and overflow their grid track. Drop the native box and let the
+   Input component's height, padding and width rule. The picker still opens. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    max-width: 100%;
+    display: block;
+}
+
+/* WebKit centers the value and adds its own vertical margin; align it with the
+   text in every other field. */
+input::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+}
+
 /* The navigation rail paints no track: a 5px thumb over 9px icons reads as a
    hard seam. Scrollability is carried by the rail's own edge fades instead. */
 .sidebar-scroll {
@@ -513,4 +600,87 @@ label {
     width: 0;
     height: 0;
     display: none;
+}
+
+/* --- AnimatedNumber (KPI odometer) ------------------------------------------ */
+/* A column that did not exist in the previous value has no digit to roll from,
+   so it fades in place instead of popping. The component already withholds the
+   motion under `prefers-reduced-motion`; the media query is the belt for a
+   preference flipped mid-session, since the class may already be painted. */
+@keyframes animated-number-column-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.35em);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Each digit column is a window onto a ten-digit strip. The ink of a digit
+   starts 14% inside its cell, so a 10% fade never touches a digit at rest; it
+   only softens the digits entering and leaving while a column rolls. */
+.animated-number-column {
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 0,
+        #000 10%,
+        #000 90%,
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 0,
+        #000 10%,
+        #000 90%,
+        transparent 100%
+    );
+}
+
+.animated-number-column-in {
+    animation: animated-number-column-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animated-number-column-in {
+        animation: none;
+    }
+}
+
+/* ─── Tareas: tachado animado al completar ────────────────
+   The completion line is the title's own background gradient, so animating
+   `background-size` draws it left to right while the text colour fades to
+   muted — one transition, two properties, no extra element. `currentColor`
+   ties the line to the text colour in either theme. The reduced-motion block
+   above already collapses every transition duration, so the line still lands,
+   just without the draw. */
+.task-title-strike {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-repeat: no-repeat;
+    background-position: 0 58%;
+    background-size: 0% 1.5px;
+    transition:
+        background-size 250ms cubic-bezier(0.16, 1, 0.3, 1),
+        color 250ms ease-out;
+}
+
+.task-title-strike[data-struck="true"] {
+    background-size: 100% 1.5px;
+}
+
+/* ─── Bottom sheet (components/ui/BottomSheet.tsx) ───────
+   The sheet rises from the edge it is welded to, over the same keyframes as the
+   dialogs, and springs back on the class transition when a drag ends inside its
+   threshold. Both are spatial, so reduced motion keeps the appearance and drops
+   the travel: the sheet fades in place. The global reduced-motion block above
+   already collapses the spring-back to nothing. */
+.bottom-sheet-panel {
+    animation: sheet-up 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bottom-sheet-panel {
+        animation: fade-in 160ms ease-out;
+    }
 }

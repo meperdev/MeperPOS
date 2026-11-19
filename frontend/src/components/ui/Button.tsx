@@ -26,8 +26,8 @@ const buttonVariants = {
 const buttonSizes = {
   // Phone: every small control is a row/card action under a thumb, so it pays a
   // 44px floor. The density stays desktop-only, which is where it was designed.
-  sm: "h-8 px-3 py-1 text-xs font-medium gap-1.5 rounded-md max-sm:min-h-11 max-sm:min-w-11",
-  md: "h-10 sm:h-9 px-3.5 py-2 text-xs font-medium gap-2 rounded-lg",
+  sm: "h-8 px-3 py-1 text-[13px] font-medium gap-1.5 rounded-md max-sm:min-h-11 max-sm:min-w-11",
+  md: "h-10 sm:h-9 px-3.5 py-2 text-[13px] font-medium gap-2 rounded-lg",
   lg: "h-11 px-5 py-2.5 text-sm font-semibold gap-2 rounded-lg",
 };
 

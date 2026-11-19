@@ -128,7 +128,7 @@ export function DailyReportSection({
           className="min-h-[120px]"
         />
       ) : !report ? (
-        <p className="py-1 text-xs text-muted-foreground">
+        <p className="py-1 text-[13px] text-muted-foreground">
           Todavía no hay datos para el reporte de hoy.
         </p>
       ) : (
@@ -136,8 +136,8 @@ export function DailyReportSection({
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border/60 bg-border/60 sm:grid-cols-4">
             {pulse.map((item) => (
               <div key={item.label} className="bg-card px-3 py-2.5">
-                <p className="text-[11px] text-muted-foreground">{item.label}</p>
-                <p className="mt-0.5 truncate text-base font-semibold tracking-tight text-foreground tabular-nums">
+                <p className="text-[13px] text-muted-foreground">{item.label}</p>
+                <p className="mt-0.5 truncate text-lg font-semibold tracking-tight text-foreground tabular-nums">
                   {item.value}
                 </p>
               </div>
@@ -145,7 +145,7 @@ export function DailyReportSection({
           </div>
 
           {pendingItems.length === 0 ? (
-            <p className="border-t border-border/60 pt-2.5 text-xs text-muted-foreground">
+            <p className="border-t border-border/60 pt-2.5 text-[13px] text-muted-foreground">
               Sin pendientes para hoy: stock, órdenes de compra y préstamos al día.
             </p>
           ) : (
@@ -172,17 +172,17 @@ export function DailyReportSection({
                           aria-hidden="true"
                         />
                         <div className="flex min-w-0 items-baseline gap-1.5">
-                          <span className="text-xs font-medium leading-snug text-foreground">
+                          <span className="text-[13px] font-medium leading-snug text-foreground">
                             {item.label}
                           </span>
-                          <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
+                          <span className="text-[13px] font-medium text-muted-foreground tabular-nums">
                             {item.count}
                           </span>
                         </div>
                       </div>
                       <Link
                         href={item.href}
-                        className="-my-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        className="-my-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         Ver
                         <ChevronRight className="h-3 w-3" aria-hidden="true" />
@@ -204,10 +204,10 @@ export function DailyReportSection({
                               SEVERITY_DOT[chip.severity],
                             )}
                           />
-                          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">
+                          <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">
                             {chip.label}
                           </span>
-                          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                          <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">
                             {chip.value}
                           </span>
                         </li>
@@ -215,7 +215,7 @@ export function DailyReportSection({
                     </ul>
 
                     {item.remaining > 0 && (
-                      <p className="mt-auto pt-1.5 text-[11px] text-muted-foreground">
+                      <p className="mt-auto pt-1.5 text-[13px] text-muted-foreground">
                         +{item.remaining} más
                       </p>
                     )}
@@ -226,7 +226,7 @@ export function DailyReportSection({
           )}
 
           <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               Ventas de hoy{" "}
               <span className="font-medium text-foreground tabular-nums">
                 {salesRows.length}
@@ -253,7 +253,7 @@ export function DailyReportSection({
           <div id="daily-report-sales">
             {showSales &&
               (salesRows.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Sin ventas registradas hoy.</p>
+                <p className="text-[13px] text-muted-foreground">Sin ventas registradas hoy.</p>
               ) : (
                 <div className="max-h-72 overflow-y-auto">
                   <ul aria-label="Ventas de hoy" className="divide-y divide-border/50">
@@ -263,17 +263,17 @@ export function DailyReportSection({
                         className="flex items-baseline justify-between gap-3 py-1.5"
                       >
                         <div className="flex min-w-0 items-baseline gap-2">
-                          <span className="shrink-0 text-[11px] font-medium text-muted-foreground tabular-nums">
+                          <span className="shrink-0 text-[13px] font-medium text-muted-foreground tabular-nums">
                             #{row.saleNumber}
                           </span>
-                          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                          <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">
                             {row.time}
                           </span>
-                          <span className="truncate text-xs text-foreground">
+                          <span className="truncate text-sm text-foreground">
                             {row.customerLabel}
                           </span>
                         </div>
-                        <span className="shrink-0 text-xs font-semibold text-foreground tabular-nums">
+                        <span className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
                           {formatReportMoney(row.total)}
                         </span>
                       </li>

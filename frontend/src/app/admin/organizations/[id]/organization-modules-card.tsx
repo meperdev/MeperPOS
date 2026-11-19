@@ -29,7 +29,7 @@ export function OrganizationModulesCard({
           <h3 className="text-sm font-medium text-foreground">Módulos</h3>
           <Link
             href="/admin/modules"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground"
+            className="inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors duration-150 hover:text-foreground"
           >
             Administrar módulos
             <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -38,12 +38,12 @@ export function OrganizationModulesCard({
       </CardHeader>
       <CardContent className="space-y-2">
         {modules.isLoading && (
-          <p className="text-xs text-muted-foreground">Cargando módulos…</p>
+          <p className="text-[13px] text-muted-foreground">Cargando módulos…</p>
         )}
 
         {modules.isError && (
           <div role="alert" className="space-y-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               No se pudieron cargar los módulos.
             </p>
             <Button
@@ -58,7 +58,7 @@ export function OrganizationModulesCard({
         )}
 
         {!modules.isLoading && !modules.isError && catalog.length === 0 && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             No hay módulos disponibles para esta organización.
           </p>
         )}
@@ -75,7 +75,7 @@ export function OrganizationModulesCard({
                     <span className="block text-sm font-medium text-foreground transition-colors duration-150 group-hover:text-primary">
                       {module.name}
                     </span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                    <span className="mt-0.5 block text-[13px] text-muted-foreground">
                       {module.description}
                     </span>
                   </span>

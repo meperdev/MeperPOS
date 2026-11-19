@@ -329,11 +329,11 @@ export function CreatePaymentDialog({
           />
         </>
       ) : !employeeId ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Selecciona un empleado para ver sus jornadas
         </p>
       ) : shifts.isLoading ? (
-        <p className="text-xs text-muted-foreground">Cargando jornadas…</p>
+        <p className="text-sm text-muted-foreground">Cargando jornadas…</p>
       ) : shifts.isError ? (
         <ErrorState
           className="min-h-[140px]"
@@ -342,12 +342,12 @@ export function CreatePaymentDialog({
           onRetry={() => void shifts.refetch()}
         />
       ) : !availableShifts.length ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           No hay jornadas disponibles
         </p>
       ) : (
         <fieldset className="space-y-2">
-          <legend className="text-xs font-medium text-muted-foreground">
+          <legend className="text-[13px] font-medium text-muted-foreground">
             Jornadas disponibles
           </legend>
           {availableShifts.map((shift) => (
@@ -526,8 +526,8 @@ export function CorrectionDialog({
         value={amount}
         onChange={setAmount}
       />
-      <p className="text-xs text-muted-foreground">{CORRECTION_INTRO}</p>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">{CORRECTION_INTRO}</p>
+      <p className="text-sm text-muted-foreground">
         {CORRECTION_COMPLETION_NOTICE}
       </p>
     </PayrollFormDialog>
@@ -618,8 +618,8 @@ export function CashReturnDialog({
         }
         options={METHOD_OPTIONS}
       />
-      <p className="text-xs text-muted-foreground">{CASH_RETURN_INTRO}</p>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">{CASH_RETURN_INTRO}</p>
+      <p className="text-sm text-muted-foreground">
         {CASH_RETURN_EFFECT_NOTICE}
       </p>
     </PayrollFormDialog>
@@ -716,7 +716,7 @@ export function ReplacementPaymentDialog({
       error={error}
     >
       <fieldset className="space-y-2">
-        <legend className="text-xs font-medium text-muted-foreground">
+        <legend className="text-[13px] font-medium text-muted-foreground">
           Abonos válidos a referenciar
         </legend>
         {obligation.installments.map((installment) => (
@@ -777,8 +777,8 @@ export function ReplacementPaymentDialog({
         onToggle={setExpenseEnabled}
         onDateChange={setExpenseDate}
       />
-      <p className="text-xs text-muted-foreground">{REPLACEMENT_INTRO}</p>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">{REPLACEMENT_INTRO}</p>
+      <p className="text-sm text-muted-foreground">
         {REPLACEMENT_PREVIEW_NOTICE}
       </p>
     </PayrollFormDialog>

@@ -32,6 +32,7 @@ const quickSearchMutateMock = vi.fn();
 const createSaleMutateMock = vi.fn();
 const createPosLoanMutateMock = vi.fn();
 const resumeSaleMock = vi.fn();
+const deletePausedSaleMock = vi.fn();
 const apiGetMock = vi.fn();
 const pausedSalesState = vi.hoisted(() => ({ list: [] as unknown[] }));
 
@@ -333,7 +334,7 @@ vi.mock("@/hooks/usePausedSales", () => ({
     pausedSales: pausedSalesState.list,
     pauseSale: vi.fn(),
     resumeSale: resumeSaleMock,
-    deletePausedSale: vi.fn(),
+    deletePausedSale: deletePausedSaleMock,
   }),
 }));
 
@@ -585,8 +586,19 @@ describe("POS panel sizing (S1.3)", () => {
     const page = screen.getByTestId("pos-page-root");
     // The box between the fixed top bar and the tab bar, derived from tokens.
     expect(page.className).toContain("h-[var(--mobile-content-height)]");
-    // Desktop keeps its own height; only the mobile one changed.
-    expect(page.className).toContain("lg:h-[calc(100dvh-6rem)]");
+    // Desktop keeps its own height, less the header bar the shell now draws and
+    // the vertical padding the shell actually applies — both read from tokens, so
+    // a page can never sit 32px short of the space the viewport really has.
+    expect(page.className).toContain(
+      "lg:h-[calc(100dvh-var(--app-header-height)-var(--app-content-padding-y))]",
+    );
+    // The till is a work surface: it reclaims half of the shell's vertical
+    // padding, so its own gutter is 16px top and bottom instead of 32px, and it
+    // still fits the viewport exactly (no page scroll, no magic 6rem).
+    expect(page.className).toContain(
+      "lg:-my-[calc(var(--app-content-padding-y)/2)]",
+    );
+    expect(page.className).not.toContain("6rem");
     expect(page.className).toContain("lg:grid");
 
     const panel = screen.getByTestId("pos-products-panel");
@@ -765,22 +777,54 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: undefined, categoryId: undefined, page: 1 }));
   });
 
-  it("caps the rendered grid tracks using a responsive minimum rather than fixed five columns", () => {
+  it("caps the rendered grid tracks at four columns using a responsive minimum", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
     const grid = screen.getByTestId("pos-capacity-area").firstElementChild as HTMLElement;
-    expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(152px, calc((100% - 48px) / 5))), 1fr))");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(152px, calc((100% - 36px) / 4))), 1fr))");
   });
 
-  it("gives products the fluid column and the cart 18rem, widening to 22rem only from xl", () => {
+  it("puts the customer and finance actions side by side as icon-over-label cards", () => {
+    useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
+    render(<POSPage />);
+    const customer = screen.getByRole("button", { name: "Sin cliente" });
+    const finance = screen.getByRole("button", { name: /financiar/i });
+    expect(customer.parentElement).toBe(finance.parentElement);
+    expect(customer.parentElement!.className).toContain("grid-cols-2");
+    for (const card of [customer, finance]) {
+      expect(card.className).toContain("flex-col");
+      expect(card.firstElementChild!.tagName.toLowerCase()).toBe("span");
+      expect(card.firstElementChild!.querySelector("svg")).not.toBeNull();
+    }
+    expect(finance).toBeDisabled();
+  });
+
+  it("gives the cart 18rem at lg and a 60/40 split from xl", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     const { container } = render(<POSPage />);
-    // A minmax(18rem,22rem) track always takes its 22rem max before the 1fr column, starving the products.
+    // At lg a fixed 18rem cart still leaves products two readable tracks; from xl products take 3fr and the cart 2fr.
     const split = container.querySelector<HTMLElement>(".lg\\:grid-cols-\\[minmax\\(0\\,1fr\\)_18rem\\]");
     expect(split).not.toBeNull();
-    expect(split!.className).toContain("xl:grid-cols-[minmax(0,1fr)_22rem]");
+    expect(split!.className).toContain("xl:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)]");
     expect(split!.className).not.toContain("lg:grid-cols-12");
     expect(container.querySelector(".lg\\:col-span-7, .lg\\:col-span-5")).toBeNull();
+  });
+
+  it("sets the cart total in tabular sans, never mono", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Tipografía")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Tipografía" }));
+
+    const total = await screen.findByTestId("pos-cart-total");
+    // Money is data, not an identifier: tabular figures in the sans face.
+    expect(total).toHaveClass("tabular-nums");
+    expect(total).not.toHaveClass("font-mono");
+    expect(total.textContent).toMatch(/\$\s/);
   });
 
   it("lets a cart line name wrap to two lines and keeps quantity and total from shrinking", async () => {
@@ -841,6 +885,24 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(row.className).not.toContain("flex-col");
     expect(row.className).not.toContain("sm:flex-row");
     expect(search.className).toContain("min-w-[14rem]");
+    expect(search.className).toContain("flex-[999_1_16rem]");
+  });
+
+  it("gives the category filter room for its whole placeholder and keeps the search field first", () => {
+    useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
+    render(<POSPage />);
+
+    const trigger = screen.getByRole("button", { name: "Todas las categorías" });
+    const field = trigger.parentElement!;
+    // "Todas las categorías" needs 138px of text plus the trigger's own 28px of
+    // horizontal padding, the 16px chevron and its 8px gap; below 200px the label
+    // is clipped, which is what the 106px box used to do.
+    expect(field.className).toContain("xl:min-w-[12.5rem]");
+    // Below xl the filter still yields to the grid, and the search keeps priority.
+    expect(field.className).toContain("min-w-0");
+    const search = screen
+      .getByPlaceholderText("Escanear o buscar por nombre, SKU o código...")
+      .closest<HTMLElement>("div.relative")!;
     expect(search.className).toContain("flex-[999_1_16rem]");
   });
 
@@ -1209,7 +1271,7 @@ describe("POS behavior evidence (#19, #18)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
 
-    const customerLabel = screen.getByText("Cliente (opcional)");
+    const customerLabel = screen.getByRole("button", { name: /sin cliente/i });
     const totalLabel = screen.getByText("Total");
     expect(customerLabel.compareDocumentPosition(totalLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -1476,7 +1538,7 @@ describe("POS item price override (pos-edit-item-price)", () => {
     expect(struck).not.toBeNull();
     expect(struck!.textContent).toBe(formatCurrency(50000));
     expect(struck!.className).toContain("line-through");
-    expect(struck!.className).toContain("text-xs");
+    expect(struck!.className).toContain("text-[13px]");
     expect(struck!.parentElement!.className).toContain("shrink-0");
   });
 
@@ -2169,6 +2231,105 @@ describe("POS cart financing (pos-loan-initiation)", () => {
 
     resolveInitiation(initiation());
     await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
+  });
+});
+
+describe("POS paused sale removal (inline confirm)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    pausedSalesState.list = [];
+  });
+
+  afterEach(() => {
+    cleanup();
+    pausedSalesState.list = [];
+  });
+
+  function pausedSale(product: Product) {
+    return {
+      id: "paused-1",
+      customerName: "Ana Perez",
+      customerId: "customer-1",
+      discountAmount: 0,
+      pausedAt: "2026-08-25T10:00:00.000Z",
+      cart: [
+        {
+          productId: product.id,
+          product,
+          quantity: 1,
+          unitPrice: product.salePrice,
+          originalUnitPrice: product.salePrice,
+          discountAmount: 0,
+          availableStock: 10,
+        },
+      ],
+    };
+  }
+
+  function renderWithPausedSale() {
+    const product = makeProduct("p1", "Producto Pausado", { salePrice: 1000 });
+    pausedSalesState.list = [pausedSale(product)];
+    useProductsMock.mockReturnValue({
+      data: { data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+    return product;
+  }
+
+  const openPausedSales = () =>
+    userEvent.click(screen.getByRole("button", { name: "Reanudar (1)" }));
+
+  it("deletes a paused sale only after the row's own confirm, with no dialog", async () => {
+    renderWithPausedSale();
+    await openPausedSales();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Eliminar venta pausada de Ana Perez" }),
+    );
+
+    // The first activation only arms the row control: the draft is still there.
+    expect(deletePausedSaleMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "¿Eliminar?" }));
+
+    expect(deletePausedSaleMock).toHaveBeenCalledTimes(1);
+    expect(deletePausedSaleMock).toHaveBeenCalledWith("paused-1");
+    expect(toastState.success).toHaveBeenCalledWith("Venta pausada eliminada");
+  });
+
+  it("cancelling the inline confirm leaves the paused sale untouched", async () => {
+    renderWithPausedSale();
+    await openPausedSales();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Eliminar venta pausada de Ana Perez" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(deletePausedSaleMock).not.toHaveBeenCalled();
+    expect(toastState.success).not.toHaveBeenCalledWith("Venta pausada eliminada");
+    // Back to the idle control, the row still offers both actions.
+    expect(
+      screen.getByRole("button", { name: "Eliminar venta pausada de Ana Perez" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reanudar" })).toBeTruthy();
+  });
+
+  it("keeps resuming a paused sale working exactly as before", async () => {
+    const product = renderWithPausedSale();
+    resumeSaleMock.mockReturnValue(pausedSale(product));
+    apiGetMock.mockResolvedValue({ data: product });
+    await openPausedSales();
+
+    await userEvent.click(screen.getByRole("button", { name: "Reanudar" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("line-unit-price")).toBeTruthy();
+    });
+    expect(deletePausedSaleMock).not.toHaveBeenCalled();
   });
 });
 

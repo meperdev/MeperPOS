@@ -167,6 +167,23 @@ function settleGridSize(pageSize: number, columns = 9, rows = 4) {
   pageSizeMock.mockReturnValue({ pageSize, columns, rows });
 }
 
+/**
+ * jsdom ships no `matchMedia`. The inventory grid widens its track from `lg` in CSS,
+ * and the page mirrors that width into the hook, so this stub answers that one query.
+ */
+function stubMatchMedia(isWide: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: isWide && query === "(min-width: 1024px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }),
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
@@ -179,6 +196,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  Reflect.deleteProperty(window, "matchMedia");
 });
 
 describe("Inventory page — page size follows the viewport (card view)", () => {
@@ -190,14 +208,97 @@ describe("Inventory page — page size follows the viewport (card view)", () => 
     expect(lastPageSizeOptions()).toEqual(
       expect.objectContaining({ minCardWidth: 160, gap: 16, min: 10, max: 100 }),
     );
+    // Inventory stretches its rows, so the row count must come from the minimum row
+    // height: a stretched card is taller than that and would shrink the page.
+    expect(lastPageSizeOptions()).toEqual(
+      expect.objectContaining({ measureRowHeight: false }),
+    );
   });
 
-  it("keeps the fixed page size in table view", () => {
-    window.localStorage.setItem("meperpos:view-mode:inventory", "table");
+  it("uses the wider 200px inventory track from lg, where the grid CSS widens it", () => {
+    stubMatchMedia(true);
+
+    render(<InventoryPage />);
+
+    expect(lastPageSizeOptions()).toEqual(
+      expect.objectContaining({ minCardWidth: 200 }),
+    );
+  });
+
+  it("keeps the shared 160px track below lg, so a phone still holds two cards", () => {
+    stubMatchMedia(false);
+
+    render(<InventoryPage />);
+
+    expect(lastPageSizeOptions()).toEqual(
+      expect.objectContaining({ minCardWidth: 160 }),
+    );
+  });
+
+  it("asks for exactly the cards that fit from lg, where rows stretch under the pager", () => {
+    // 1366x768 fits four columns and two rows: asking for the ten-card floor would
+    // add a third row that scrolls under the pinned pager.
+    stubMatchMedia(true);
+    settleGridSize(10, 4, 2);
+
+    render(<InventoryPage />);
+
+    expect(lastQuery()).toEqual(expect.objectContaining({ page: 1, limit: 8 }));
+  });
+
+  it("keeps the ten-card floor below lg, so a phone keeps the list it always had", () => {
+    stubMatchMedia(false);
+    settleGridSize(10, 2, 2);
 
     render(<InventoryPage />);
 
     expect(lastQuery()).toEqual(expect.objectContaining({ page: 1, limit: 10 }));
+  });
+
+  it("gives the grid exactly one row track per measured row from lg", () => {
+    // CSS auto-fill would fit its own number of tracks, which can differ from the rows
+    // the page requested: at 1590x913 that left the first row 335px and the second
+    // 216px. The tracks come from the hook's row count instead.
+    stubMatchMedia(true);
+    settleGridSize(10, 5, 2);
+
+    render(<InventoryPage />);
+
+    const grid = document.querySelector("[aria-busy]") as HTMLElement;
+    expect(grid.style.gridTemplateRows).toBe("repeat(2, minmax(216px, 1fr))");
+  });
+
+  it("keeps every row track on a short last page, so its cards are not taller", () => {
+    // Only two products render here, far fewer than the five columns: the tracks must
+    // still be the two the full page uses, or the lone row would grow to the whole grid.
+    stubMatchMedia(true);
+    settleGridSize(10, 5, 2);
+
+    render(<InventoryPage />);
+
+    const grid = document.querySelector("[aria-busy]") as HTMLElement;
+    expect(grid.children).toHaveLength(2);
+    expect(grid.style.gridTemplateRows).toBe("repeat(2, minmax(216px, 1fr))");
+  });
+
+  it("leaves the row tracks to the cards below lg", () => {
+    // Below lg the grid is a normal auto-row grid of poster cards: no inline tracks.
+    stubMatchMedia(false);
+    settleGridSize(10, 2, 2);
+
+    render(<InventoryPage />);
+
+    const grid = document.querySelector("[aria-busy]") as HTMLElement;
+    expect(grid.style.gridTemplateRows).toBe("");
+  });
+
+  it("requests the rows the table measured in table view", () => {
+    window.localStorage.setItem("meperpos:view-mode:inventory", "table");
+    settleGridSize(7, 0, 7);
+
+    render(<InventoryPage />);
+
+    expect(lastQuery()).toEqual(expect.objectContaining({ page: 1, limit: 7 }));
     expect(lastPageSizeOptions()).toEqual(
       expect.objectContaining({ enabled: false }),
     );

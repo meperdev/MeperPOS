@@ -182,11 +182,11 @@ export function PaymentConfirmationModal({
                       {item.product.name}
                     </h4>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-muted-foreground tabular-nums">
+                      <span className="text-[13px] text-muted-foreground tabular-nums">
                         {formatCurrency(item.unitPrice)} x {item.quantity}
                       </span>
                       {item.discountAmount > 0 && (
-                        <Badge variant="success" className="text-xs">
+                        <Badge variant="success" className="text-[13px]">
                           -{formatCurrency(item.discountAmount)}
                           {item.discountPercent ? ` (${item.discountPercent}%)` : ""}
                         </Badge>
@@ -323,7 +323,7 @@ export function PaymentConfirmationModal({
                       if (cashIndex === -1) return;
                       updateMethodAmount(cashIndex, amount);
                     }}
-                    className="text-xs"
+                    className="text-[13px]"
                   >
                     {formatCurrency(amount)}
                   </Button>

@@ -260,6 +260,18 @@ describe("useResponsivePageSize", () => {
     expect(result.current.columns).toBe(7);
   });
 
+  it("measures the rendered card when the caller does not fix the row height", () => {
+    // The default: a rendered card wins over `rowHeight`, because most collection
+    // grids keep the card's natural height.
+    const scene = mountScene({ width: 1600, top: 300, cardHeight: 400, footerHeight: 64 });
+    const { result } = renderPageSize(scene);
+
+    settle();
+
+    // 1060px of space for cards: (1060 + 16) / (400 + 16) = 2.58 -> 2 rows.
+    expect(result.current).toMatchObject({ columns: 9, rows: 2 });
+  });
+
   it("rebuilds the measurement when the card height changes", () => {
     const scene = mountScene({ width: 1600, top: 300, cardHeight: 248, footerHeight: 64 });
     const { result } = renderPageSize(scene);
@@ -277,6 +289,34 @@ describe("useResponsivePageSize", () => {
     settle();
 
     expect(result.current).toMatchObject({ pageSize: 45, columns: 9, rows: 5 });
+  });
+});
+
+describe("useResponsivePageSize with a fixed row height", () => {
+  it("ignores a stretched card, so the taller rows cannot shrink the page", () => {
+    // Inventory stretches every row to fill the space above the pager, so the
+    // rendered card is TALLER than the minimum row height. Counting rows from that
+    // stretched height would ask for fewer rows, which stretches the cards further:
+    // a feedback loop that never settles. The caller fixes the height instead.
+    const scene = mountScene({ width: 1600, top: 300, cardHeight: 216, footerHeight: 64 });
+    const { result } = renderPageSize(scene, { measureRowHeight: false });
+
+    settle();
+    // 1060px of space, 216px rows and 16px gaps: (1060 + 16) / 232 = 4 rows.
+    expect(result.current).toMatchObject({ pageSize: 36, columns: 9, rows: 4 });
+
+    // The rows stretched to fill it: the card now measures 400px.
+    Object.defineProperty(scene.card, "getBoundingClientRect", {
+      value: rect({ width: 200, top: 300, height: 400 }),
+      configurable: true,
+    });
+    act(() => {
+      observers.forEach((observer) => observer.trigger());
+    });
+    settle();
+
+    // Same size: the count comes from the minimum row height, never the card.
+    expect(result.current).toMatchObject({ pageSize: 36, columns: 9, rows: 4 });
   });
 });
 
@@ -303,5 +343,120 @@ beforeEach(() => {
     value: StubResizeObserver,
     configurable: true,
     writable: true,
+  });
+});
+
+/** A table wrapper at `top` holding a header row and one body row. */
+function mountTable({
+  top,
+  headerHeight,
+  rowHeight,
+  footerHeight,
+  width = 1200,
+}: {
+  top: number;
+  headerHeight: number;
+  rowHeight: number;
+  footerHeight: number;
+  width?: number;
+}) {
+  const wrapper = makeBox({ width, top, height: headerHeight + rowHeight * 20 });
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const headerRow = makeBox({ width, top, height: headerHeight }) as unknown as HTMLElement;
+  thead.appendChild(document.createElement("tr"));
+  Object.defineProperty(thead, "getBoundingClientRect", { value: headerRow.getBoundingClientRect, configurable: true });
+  const tbody = document.createElement("tbody");
+  const row = document.createElement("tr");
+  Object.defineProperty(row, "getBoundingClientRect", {
+    value: rect({ width, top: top + headerHeight, height: rowHeight }),
+    configurable: true,
+  });
+  tbody.appendChild(row);
+  table.append(thead, tbody);
+  wrapper.appendChild(table);
+  const footer = makeBox({ width, top: top + 2000, height: 0 });
+  const pager = makeBox({ width, top: top + 2000, height: footerHeight });
+  footer.appendChild(pager);
+  document.body.append(wrapper, footer);
+  return { wrapper, footer, row };
+}
+
+describe("useResponsivePageSize in table view", () => {
+  it("fits whole rows between the table top and the pager, ignoring how tall the table already is", () => {
+    // 1000 viewport - 260 top - 64 pager - 16 gap - 40 header = 620 -> 10 rows of 61px.
+    setViewportHeight(1000);
+    const scene = mountTable({ top: 260, headerHeight: 40, rowHeight: 61, footerHeight: 64 });
+    const { result } = renderHook(() => useResponsivePageSize(optionsFor(null, { enabled: false })));
+    act(() => {
+      result.current.tableRef(scene.wrapper);
+      result.current.footerRef(scene.footer);
+    });
+    settle();
+    expect(result.current.pageSize).toBe(10);
+  });
+
+  it("shrinks on a short viewport instead of keeping the fixed page", () => {
+    setViewportHeight(800);
+    // 800 - 260 - 64 - 16 - 40 = 420 -> 6 rows of 61px.
+    const scene = mountTable({ top: 260, headerHeight: 40, rowHeight: 61, footerHeight: 64 });
+    const { result } = renderHook(() => useResponsivePageSize(optionsFor(null, { enabled: false })));
+    act(() => {
+      result.current.tableRef(scene.wrapper);
+      result.current.footerRef(scene.footer);
+    });
+    settle();
+    expect(result.current.pageSize).toBe(6);
+  });
+
+  it("keeps a floor of five rows and the endpoint ceiling", () => {
+    setViewportHeight(400);
+    const scene = mountTable({ top: 260, headerHeight: 40, rowHeight: 61, footerHeight: 64 });
+    const { result } = renderHook(() => useResponsivePageSize(optionsFor(null, { enabled: false, max: 100 })));
+    act(() => {
+      result.current.tableRef(scene.wrapper);
+      result.current.footerRef(scene.footer);
+    });
+    settle();
+    expect(result.current.pageSize).toBe(5);
+  });
+
+  it("answers the fixed page size while no table is attached", () => {
+    const { result } = renderHook(() => useResponsivePageSize(optionsFor(null, { enabled: false, min: 10 })));
+    settle();
+    expect(result.current.pageSize).toBe(10);
+  });
+
+  it("keeps the measured rows while the table is detached for a loading state", () => {
+    // /customers in table view: the measured rows become `limit`, the new page
+    // loads behind a skeleton, and the table unmounts for that commit. Collapsing
+    // the answer back to `min` there changes `limit` again, which refetches and
+    // unmounts once more: the page size then oscillates between the two values.
+    setViewportHeight(1000);
+    const scene = mountTable({ top: 260, headerHeight: 40, rowHeight: 61, footerHeight: 64 });
+    const { result } = renderHook(() =>
+      useResponsivePageSize(optionsFor(null, { enabled: false, min: 5 })),
+    );
+    act(() => {
+      result.current.tableRef(scene.wrapper);
+      result.current.footerRef(scene.footer);
+    });
+    settle();
+    // 1000 - 260 - 64 - 16 - 40 = 620 -> 10 rows of 61px, well above `min`.
+    expect(result.current.pageSize).toBe(10);
+
+    act(() => {
+      result.current.tableRef(null);
+    });
+    expect(result.current.pageSize).toBe(10);
+
+    // Remounting something else still re-measures: the last value is kept, not frozen.
+    // 620 -> 6 rows of 100px.
+    const shorter = mountTable({ top: 260, headerHeight: 40, rowHeight: 100, footerHeight: 64 });
+    act(() => {
+      result.current.tableRef(shorter.wrapper);
+    });
+    settle();
+    expect(result.current.pageSize).toBe(6);
   });
 });

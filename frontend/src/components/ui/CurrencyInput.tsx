@@ -246,7 +246,7 @@ function HelperText({
   return (
     <div>
       {children}
-      <p className="mt-1.5 text-xs text-muted-foreground">{text}</p>
+      <p className="mt-1.5 text-[13px] text-muted-foreground">{text}</p>
     </div>
   );
 }

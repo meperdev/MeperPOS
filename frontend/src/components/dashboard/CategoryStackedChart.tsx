@@ -74,10 +74,10 @@ export function CategoryTooltipContent({
       data-testid="category-tooltip"
       className="pointer-events-none min-w-[175px] rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg shadow-black/10 text-foreground"
     >
-      <p className="text-[11px] font-medium text-muted-foreground capitalize">
+      <p className="text-xs font-medium text-muted-foreground capitalize">
         {formatCategoryTooltipDate(typeof row?.date === "string" ? row.date : "")}
       </p>
-      <p className="mt-0.5 text-base font-semibold font-mono text-foreground tabular-nums">
+      <p className="mt-0.5 text-base font-semibold text-foreground tabular-nums">
         {formatCurrency(total)}
       </p>
       {segments.length > 0 && (
@@ -85,7 +85,7 @@ export function CategoryTooltipContent({
           {segments.map((entry) => (
             <li
               key={String(entry.dataKey)}
-              className="flex items-center justify-between gap-3 py-1 text-[11px]"
+              className="flex items-center justify-between gap-3 py-1 text-xs"
             >
               <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
                 <span
@@ -94,7 +94,7 @@ export function CategoryTooltipContent({
                 />
                 {entry.name ?? entry.dataKey}
               </span>
-              <span className="font-mono font-semibold text-foreground tabular-nums">
+              <span className="font-semibold text-foreground tabular-nums">
                 {formatCurrency(Number(entry.value))}
               </span>
             </li>
@@ -136,37 +136,37 @@ export function CategoryDayDetailModal({
         {/* Summary metrics: Total recaudado gets double width so large COP figures never overflow */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           <div className="sm:col-span-6 rounded-lg bg-muted/40 p-3.5 min-w-0">
-            <span className="text-xs font-medium text-muted-foreground block">
+            <span className="text-[13px] font-medium text-muted-foreground block">
               Total recaudado
             </span>
-            <p className="mt-1 text-xl sm:text-2xl font-semibold font-mono text-foreground tabular-nums tracking-tight whitespace-nowrap">
+            <p className="mt-1 text-xl sm:text-2xl font-semibold text-foreground tabular-nums tracking-tight whitespace-nowrap">
               {formatCurrency(day.total)}
             </p>
-            <span className="text-[11px] text-muted-foreground block mt-0.5">
+            <span className="text-xs text-muted-foreground block mt-0.5">
               Ventas del día
             </span>
           </div>
 
           <div className="sm:col-span-3 rounded-lg bg-muted/40 p-3.5 min-w-0">
-            <span className="text-xs font-medium text-muted-foreground block">
+            <span className="text-[13px] font-medium text-muted-foreground block">
               Unidades
             </span>
-            <p className="mt-1 text-xl sm:text-2xl font-semibold font-mono text-foreground tabular-nums tracking-tight">
+            <p className="mt-1 text-xl sm:text-2xl font-semibold text-foreground tabular-nums tracking-tight">
               {totalQuantity}
             </p>
-            <span className="text-[11px] text-muted-foreground block mt-0.5">
+            <span className="text-xs text-muted-foreground block mt-0.5">
               {totalQuantity} {totalQuantity === 1 ? "unidad" : "unidades"}
             </span>
           </div>
 
           <div className="sm:col-span-3 rounded-lg bg-muted/40 p-3.5 min-w-0">
-            <span className="text-xs font-medium text-muted-foreground block">
+            <span className="text-[13px] font-medium text-muted-foreground block">
               Categorías
             </span>
-            <p className="mt-1 text-xl sm:text-2xl font-semibold font-mono text-foreground tabular-nums tracking-tight">
+            <p className="mt-1 text-xl sm:text-2xl font-semibold text-foreground tabular-nums tracking-tight">
               {activeSegments.length}
             </p>
-            <span className="text-[11px] text-muted-foreground block mt-0.5">
+            <span className="text-xs text-muted-foreground block mt-0.5">
               {activeSegments.length === 1 ? "categoría activa" : "categorías activas"}
             </span>
           </div>
@@ -175,17 +175,17 @@ export function CategoryDayDetailModal({
         {/* Breakdown by category */}
         <div className="mt-5">
           <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-semibold text-foreground">
+            <span className="text-[13px] font-semibold text-foreground">
               Desglose por categoría
             </span>
-            <span className="text-xs font-mono text-muted-foreground tabular-nums">
+            <span className="text-[13px] text-muted-foreground tabular-nums">
               {activeSegments.length}{" "}
               {activeSegments.length === 1 ? "categoría activa" : "categorías activas"}
             </span>
           </div>
 
           {activeSegments.length === 0 ? (
-            <div className="rounded-lg bg-muted/40 p-6 text-center text-xs text-muted-foreground">
+            <div className="rounded-lg bg-muted/40 p-6 text-center text-[13px] text-muted-foreground">
               Sin ventas registradas en esta fecha.
             </div>
           ) : (
@@ -208,7 +208,7 @@ export function CategoryDayDetailModal({
                         />
                         <span className="truncate">{segment.category}</span>
                       </span>
-                      <span className="font-mono font-semibold text-sm text-foreground tabular-nums shrink-0">
+                      <span className="font-semibold text-sm text-foreground tabular-nums shrink-0">
                         {formatCurrency(segment.total)}
                       </span>
                     </div>
@@ -220,7 +220,7 @@ export function CategoryDayDetailModal({
                           style={{ width: `${percentage}%`, backgroundColor: color }}
                         />
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground tabular-nums shrink-0">
+                      <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground tabular-nums shrink-0">
                         <span>
                           {segment.quantity} {segment.quantity === 1 ? "ud" : "uds"}
                         </span>
@@ -340,7 +340,7 @@ export function CategoryStackedChart({
         </p>
         <span
           data-testid="category-chart-range"
-          className="shrink-0 rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums"
+          className="shrink-0 rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums"
         >
           Últimos {days.length} días
         </span>
@@ -454,7 +454,7 @@ export function CategoryStackedChart({
             tick={{
               fontSize: 10,
               fill: "var(--muted-foreground)",
-              fontFamily: "var(--font-jetbrains-mono)",
+              fontFamily: "var(--font-sans-face)",
             }}
           />
           <XAxis

@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Area, AreaChart } from "recharts";
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 export type MetricCardTone = "primary" | "accent" | "rose" | "green" | "blue";
 
@@ -24,6 +25,11 @@ interface MetricCardProps {
   sparkline?: number[];
   /** Optional CTA rendered at the card footer (e.g. "Reordenar"). */
   action?: MetricCardAction;
+  /**
+   * Opt-in odometer roll for the value when it changes. Panel KPIs enable it;
+   * every other caller keeps the plain, static string.
+   */
+  animateValue?: boolean;
 }
 
 const toneCardClasses: Record<MetricCardTone, string> = {
@@ -111,6 +117,9 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
  * MetricCard (neutral card surface), so refactors are behavior-preserving.
  * `sparkline` and `action` are additive and optional; omitting both keeps the
  * original markup unchanged.
+ *
+ * `animateValue` is opt-in and reserved for the Panel KPIs: the value then rolls
+ * digit by digit through `AnimatedNumber` instead of swapping as text.
  */
 export function MetricCard({
   label,
@@ -120,6 +129,7 @@ export function MetricCard({
   tone,
   sparkline,
   action,
+  animateValue,
 }: MetricCardProps) {
   const percentage = delta?.percentage ?? null;
   const hasBaseline = percentage !== null;
@@ -142,17 +152,17 @@ export function MetricCard({
           : "rounded-xl border border-border/70 bg-card p-3 sm:p-4 shadow-2xs flex flex-col"
       }
     >
-      <p className="text-xs font-medium text-muted-foreground">
+      <p className="text-[13px] font-medium text-muted-foreground">
         {label}
       </p>
       <p
         className={cn(
-          "mt-1.5 truncate text-lg font-semibold text-foreground tracking-tight tabular-nums sm:text-2xl",
+          "mt-1.5 truncate text-xl font-semibold text-foreground tracking-tight tabular-nums sm:text-[28px]",
           tone && toneValueClasses[tone],
         )}
         title={value}
       >
-        {value}
+        {animateValue ? <AnimatedNumber value={value} /> : value}
       </p>
       {sparkline && sparkline.length > 0 && (
         <MetricSparkline
@@ -160,11 +170,11 @@ export function MetricCard({
           color={tone ? toneSparkColor[tone] : NEUTRAL_SPARK_COLOR}
         />
       )}
-      <div className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs">
+      <div className="mt-auto flex items-center justify-between gap-2 pt-3 text-[13px]">
         {delta ? (
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums",
               !hasBaseline
                 ? "bg-muted/70 text-muted-foreground border border-border/70"
                 : positive
@@ -182,14 +192,14 @@ export function MetricCard({
         ) : (
           <span />
         )}
-        <span className="text-right text-[11px] text-muted-foreground">{helper}</span>
+        <span className="text-right text-[13px] text-muted-foreground">{helper}</span>
       </div>
       {action && (
         <button
           type="button"
           onClick={action.onClick}
           className={cn(
-            "mt-3 inline-flex min-h-9 items-center gap-1 self-start rounded-md border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+            "mt-3 inline-flex min-h-9 items-center gap-1 self-start rounded-md border px-3 py-1 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
             tone
               ? toneActionClasses[tone]
               : "border-border/70 bg-muted/40 text-foreground hover:bg-muted",

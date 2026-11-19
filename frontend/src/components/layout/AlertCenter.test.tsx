@@ -183,3 +183,117 @@ describe("AlertCenter mobile panel", () => {
     expect(panel.className).toContain("100dvh");
   });
 });
+
+function setViewport(width: number, height: number) {
+  for (const [key, value] of [
+    ["innerWidth", width],
+    ["innerHeight", height],
+  ] as const) {
+    Object.defineProperty(window, key, {
+      value,
+      configurable: true,
+      writable: true,
+    });
+  }
+}
+
+function domRect(top: number, bottom: number, left: number, right: number) {
+  return {
+    top,
+    bottom,
+    left,
+    right,
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+/**
+ * The desktop header mounts the bell at the top of the screen, where the rail
+ * flyout math would open the panel over the header and hide the bell and the
+ * avatar next to it. The mount site names that placement, so the panel hangs
+ * under its own trigger and ends on the account menu's right edge.
+ */
+describe("AlertCenter header placement", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    alertsState.current = twoAlerts;
+    setViewport(1590, 913);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    setViewport(1024, 768);
+  });
+
+  it("opens below the bell, aligned with the header's right content edge", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.hasAttribute("data-app-header-actions")) {
+          return domRect(0, 56, 1500, 1566);
+        }
+        if (this.getAttribute("aria-label")?.startsWith("Alertas")) {
+          return domRect(12, 44, 1468, 1500);
+        }
+        return domRect(0, 0, 0, 0);
+      },
+    );
+
+    render(
+      <div data-app-header-actions="">
+        <AlertCenter placement="header" />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+
+    const panel = screen.getByRole("dialog", { name: "Alertas" });
+    // 8px under the bell's own bottom edge.
+    expect(panel.style.top).toBe("52px");
+    // Right edge on the same line as the account menu.
+    expect(panel.style.left).toBe("1214px");
+    expect(panel.style.bottom).toBe("");
+    // Same width as the rail flyout, capped by the space left below.
+    expect(panel.className).toContain("w-[22rem]");
+    expect(panel.style.maxHeight).toBe("849px");
+  });
+
+  it("gives the focus back to the bell on Escape", () => {
+    render(<AlertCenter placement="header" />);
+
+    const bell = screen.getByRole("button", { name: "Alertas, 2 sin leer" });
+    fireEvent.click(bell);
+    expect(screen.getByRole("dialog", { name: "Alertas" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(
+      screen.queryByRole("dialog", { name: "Alertas" }),
+    ).not.toBeInTheDocument();
+    expect(bell).toHaveFocus();
+  });
+
+  it("keeps the rail flyout for a mount that names no placement", () => {
+    setViewport(1440, 900);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.getAttribute("aria-label")?.startsWith("Alertas")) {
+          return domRect(768, 800, 268, 300);
+        }
+        return domRect(0, 0, 0, 0);
+      },
+    );
+
+    render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+
+    const panel = screen.getByRole("dialog", { name: "Alertas" });
+    // Right of the rail and growing upward, exactly as the footer bell does.
+    expect(panel.style.left).toBe("312px");
+    expect(panel.style.bottom).toBe("100px");
+  });
+});

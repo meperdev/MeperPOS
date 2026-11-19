@@ -667,6 +667,50 @@ describe("ProductCard — responsive action and price hierarchy", () => {
   });
 });
 
+describe("ProductCard — inventory fills the stretched grid row", () => {
+  it("grows to its row height at lg while keeping the 216px floor", () => {
+    const { container } = render(<ProductCard product={baseProduct} mode="inventory" />);
+
+    // /inventory stretches every row to the space above the pager. The card gives up
+    // its poster aspect and its height cap there, so the row decides its height; below
+    // lg the poster shape and the minimum height are exactly what they were.
+    expect(container.firstElementChild).toHaveClass(
+      "min-h-[13.5rem]",
+      "lg:h-full",
+      "lg:aspect-auto",
+      "lg:max-h-none",
+    );
+  });
+
+  it("gives the extra height to the media band, not to the text block", () => {
+    const { container } = render(<ProductCard product={baseProduct} mode="inventory" />);
+
+    const card = container.firstElementChild as HTMLElement;
+    const media = screen.getByTestId("product-media");
+    const sheet = screen.getByTestId("product-sheet");
+
+    // The photo layer is edge to edge, so a taller card shows more photo — that is
+    // what "the media band grows" means for an absolutely positioned layer.
+    expect(media).toHaveClass("absolute", "inset-0");
+    // The information block stays docked to the bottom at its content height.
+    expect(sheet).toHaveClass("mt-auto");
+    expect(sheet).not.toHaveClass("flex-1");
+    expect(card.lastElementChild).toBe(sheet);
+  });
+
+  it("leaves the POS poster card's shape exactly as it was", () => {
+    const { container } = render(
+      <ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} />,
+    );
+
+    const card = container.firstElementChild as HTMLElement;
+    expect(card).toHaveClass("aspect-[4/5]", "min-h-[15.5rem]", "max-h-[22rem]");
+    expect(card).not.toHaveClass("lg:h-full");
+    expect(card).not.toHaveClass("lg:aspect-auto");
+    expect(card).not.toHaveClass("lg:max-h-none");
+  });
+});
+
 describe("ProductCard — premium layout contract", () => {
   it("lays the photo over the whole card frame instead of an inset sub-frame", () => {
     const { container } = render(
@@ -778,20 +822,30 @@ const promoProduct: CardProduct = {
 };
 
 describe("ProductCard — premium card v2: shape and layers", () => {
-  it("gives every card the same fixed 4:5 shape with a height guard", () => {
+  it("keeps the inventory card short enough for three rows in a 1080p viewport", () => {
     const { container } = render(<ProductCard product={baseProduct} mode="inventory" />);
 
     // A fixed shape means content can never resize the card: a card stretched by its
-    // grid row just shows more photo.
+    // grid row just shows more photo. Inventory is the short one (three rows between
+    // the header and the pager); POS keeps its taller poster.
     expect(container.firstElementChild).toHaveClass(
       "relative",
       "isolate",
       "overflow-hidden",
       "rounded-2xl",
       "aspect-[4/5]",
-      "min-h-[15.5rem]",
+      "min-h-[13.5rem]",
       "max-h-[22rem]",
     );
+    // The sheet is the tight one too: it is what leaves the media band its height.
+    expect(screen.getByTestId("product-sheet")).toHaveClass("pt-2.5", "pb-2.5");
+  });
+
+  it("keeps the POS card's taller height guard and padding", () => {
+    const { container } = render(<ProductCard product={baseProduct} mode="pos" />);
+
+    expect(container.firstElementChild).toHaveClass("min-h-[15.5rem]");
+    expect(screen.getByTestId("product-sheet")).toHaveClass("pt-3", "pb-3");
   });
 
   it.each([
@@ -966,9 +1020,19 @@ describe("ProductCard — premium card v2: content block", () => {
     const price = screen.getByText("$ 45.000");
 
     expect(name).toHaveClass("line-clamp-2", "break-words", "text-sm", "font-semibold", "text-foreground");
-    expect(sku).toHaveClass("min-w-0", "truncate", "font-mono", "text-muted-foreground");
+    expect(sku).toHaveClass("min-w-0", "truncate", "id-text", "text-muted-foreground");
     expect(price).toHaveClass("text-xl", "font-semibold", "tabular-nums", "whitespace-nowrap", "text-foreground");
     expect(price).not.toHaveClass("truncate");
+  });
+
+  it("keeps the SKU in tabular sans and money out of any mono face", () => {
+    render(<ProductCard product={baseProduct} mode="inventory" />);
+
+    // Identifiers ride the one loaded family with tabular figures: no second face.
+    expect(screen.getByText("SKU-0001")).toHaveClass("id-text");
+    expect(screen.getByText("SKU-0001")).not.toHaveClass("font-mono");
+    expect(screen.getByText("20 uds.")).toHaveClass("tabular-nums");
+    expect(screen.getByText("20 uds.")).not.toHaveClass("font-mono");
   });
 
   it("shows the stock of tracked goods on the SKU line, outside the price panel", () => {
@@ -1165,9 +1229,62 @@ describe("ProductCard — compact POS card on phones (S3.3)", () => {
 
     const name = screen.getByRole("heading", { name: baseProduct.name });
     expect(name.className).toContain("line-clamp-2");
-    expect(name.className).toContain("max-sm:text-xs");
+    expect(name.className).toContain("max-sm:text-[13px]");
 
     expect(screen.getByTestId("product-stock")).toBeInTheDocument();
     expect(screen.getByTestId("product-price-panel")).toBeInTheDocument();
   });
 });
+
+describe("ProductCard — POS tile lines survive the tighter desktop grid", () => {
+  const longSku = "CAMISA-LINO-NATURAL-EXTRA-LARGA-SKU-000001";
+
+  it("lets the SKU ellipsize only after the stock pill has taken its whole width", () => {
+    render(<ProductCard product={{ ...baseProduct, sku: longSku, stock: 1240 }} mode="pos" onClick={vi.fn()} />);
+
+    const sku = screen.getByTestId("product-sku");
+    const stock = screen.getByTestId("product-stock");
+
+    // One flexible identifier, one fixed pill, on the same line: the overflow has
+    // to land on the SKU, never on the count.
+    expect(stock.parentElement).toBe(sku.parentElement);
+    expect(sku).toHaveClass("min-w-0", "truncate");
+    expect(sku).not.toHaveClass("shrink-0");
+    expect(stock).toHaveClass("shrink-0", "whitespace-nowrap");
+    // The pill is the line's right-hand fact: its count sits after the SKU.
+    expect(sku.compareDocumentPosition(stock) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stock).toHaveTextContent("1240 uds.");
+  });
+
+  it("gives the category chip its own line at the tile's full width", () => {
+    render(
+      <ProductCard
+        product={{ ...baseProduct, category: { name: "Panadería y Pastelería" } }}
+        mode="pos"
+        onClick={vi.fn()}
+      />,
+    );
+
+    const chip = screen.getByTestId("product-category");
+    const priceRow = screen.getByTestId("product-price-row");
+
+    // A long category name is not squeezed by the price: it owns a whole line,
+    // may use every pixel the tile gives it, and ellipsizes beyond that.
+    expect(chip).toHaveTextContent("Panadería y Pastelería");
+    expect(chip).toHaveClass("block", "w-fit", "max-w-full", "truncate");
+    expect(chip.parentElement).toBe(priceRow.parentElement);
+    expect(chip.nextElementSibling).toBe(priceRow);
+    // The price row keeps its own line underneath, prices intact.
+    expect(priceRow).toHaveClass("flex", "flex-wrap", "items-baseline");
+    expect(screen.getByText("$ 45.000")).not.toHaveClass("truncate");
+  });
+
+  it("keeps the inventory tile's lines exactly as they were", () => {
+    render(<ProductCard product={{ ...baseProduct, sku: longSku }} mode="inventory" />);
+
+    expect(screen.getByTestId("product-sku")).toHaveClass("min-w-0", "truncate", "id-text");
+    expect(screen.getByTestId("product-stock")).toHaveClass("shrink-0");
+    expect(screen.getByTestId("product-category")).toHaveClass("max-w-full", "truncate");
+  });
+});
+

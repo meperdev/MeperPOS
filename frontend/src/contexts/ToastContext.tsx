@@ -9,18 +9,18 @@ import {
   useRef,
   useState,
 } from "react";
-import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ToastStack } from "@/components/ui/ToastStack";
+import type { ToastAction, ToastInput, ToastOptions, ToastType } from "@/components/ui/Toast";
 
-type ToastType = "success" | "error" | "info";
+export type { ToastAction, ToastOptions, ToastType } from "@/components/ui/Toast";
 
 type ToastItem = {
   id: string;
   type: ToastType;
-  message: string;
+  title: string;
+  description?: string;
+  action?: ToastAction;
   duration: number;
-  /** Bumped when an identical message is re-shown, so its progress bar restarts. */
-  version: number;
   leaving: boolean;
 };
 
@@ -28,21 +28,47 @@ type TimerEntry = {
   timeout: number;
   startedAt: number;
   remaining: number;
+  paused: boolean;
 };
 
 type ToastContextValue = {
-  showToast: (type: ToastType, message: string, duration?: number) => void;
-  success: (message: string, duration?: number) => void;
-  error: (message: string, duration?: number) => void;
-  info: (message: string, duration?: number) => void;
+  showToast: (type: ToastType, message: string, input?: ToastInput) => void;
+  success: (message: string, input?: ToastInput) => void;
+  error: (message: string, input?: ToastInput) => void;
+  warning: (message: string, input?: ToastInput) => void;
+  info: (message: string, input?: ToastInput) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+const EXIT_MS = 160;
+
+/**
+ * A failure deserves more reading time than a confirmation. An error is the
+ * only level that keeps the reader on the card, so it outlives the rest.
+ */
+const DEFAULT_DURATION: Record<ToastType, number> = {
+  success: 4000,
+  info: 4000,
+  warning: 4000,
+  error: 6000,
+};
+
+/** A toast offering a recovery must stay long enough to be clicked. */
+const ACTION_MIN_DURATION = 8000;
+
 /** Never let notifications pile up into a wall: the oldest one bows out. */
 const MAX_VISIBLE = 3;
-const EXIT_MS = 160;
-const DEFAULT_DURATION = 3500;
+
+function normalize(input: ToastInput | undefined, type: ToastType) {
+  const options: ToastOptions = typeof input === "number" ? { duration: input } : (input ?? {});
+  const base = options.duration ?? DEFAULT_DURATION[type];
+  return {
+    description: options.description,
+    action: options.action,
+    duration: options.action ? Math.max(base, ACTION_MIN_DURATION) : base,
+  };
+}
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -92,6 +118,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         timeout,
         startedAt: Date.now(),
         remaining,
+        paused: false,
       });
     },
     [dismiss],
@@ -99,19 +126,20 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const pause = useCallback((id: string) => {
     const entry = timersRef.current.get(id);
-    if (!entry) return;
+    if (!entry || entry.paused) return;
     window.clearTimeout(entry.timeout);
     entry.remaining = Math.max(
       0,
       entry.remaining - (Date.now() - entry.startedAt),
     );
+    entry.paused = true;
     timersRef.current.set(id, entry);
   }, []);
 
   const resume = useCallback(
     (id: string) => {
       const entry = timersRef.current.get(id);
-      if (!entry) return;
+      if (!entry || !entry.paused) return;
       const toast = toastsRef.current.find((item) => item.id === id);
       if (!toast || toast.leaving) return;
       schedule(id, entry.remaining);
@@ -119,10 +147,25 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [schedule],
   );
 
+  /** Hovering the stack stops every countdown in it, not only the card under the pointer. */
+  const pauseAll = useCallback(() => {
+    toastsRef.current.forEach((toast) => pause(toast.id));
+  }, [pause]);
+
+  const resumeAll = useCallback(() => {
+    toastsRef.current.forEach((toast) => resume(toast.id));
+  }, [resume]);
+
   const showToast = useCallback(
-    (type: ToastType, message: string, duration = DEFAULT_DURATION) => {
+    (type: ToastType, message: string, input?: ToastInput) => {
+      const { description, action, duration } = normalize(input, type);
+
       const duplicate = toastsRef.current.find(
-        (item) => !item.leaving && item.type === type && item.message === message,
+        (item) =>
+          !item.leaving &&
+          item.type === type &&
+          item.title === message &&
+          item.description === description,
       );
 
       // Repeating the same message refreshes it instead of stacking a copy.
@@ -131,7 +174,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         commit(
           toastsRef.current.map((item) =>
             item.id === duplicate.id
-              ? { ...item, duration, version: item.version + 1 }
+              ? { ...item, duration, description, action }
               : item,
           ),
         );
@@ -142,9 +185,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       const toast: ToastItem = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         type,
-        message,
+        title: message,
+        description,
+        action,
         duration,
-        version: 1,
         leaving: false,
       };
       const next = [...toastsRef.current, toast];
@@ -176,104 +220,42 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       showToast,
-      success: (message: string, duration?: number) =>
-        showToast("success", message, duration),
-      error: (message: string, duration?: number) =>
-        showToast("error", message, duration),
-      info: (message: string, duration?: number) =>
-        showToast("info", message, duration),
+      success: (message: string, input?: ToastInput) =>
+        showToast("success", message, input),
+      error: (message: string, input?: ToastInput) => showToast("error", message, input),
+      warning: (message: string, input?: ToastInput) =>
+        showToast("warning", message, input),
+      info: (message: string, input?: ToastInput) => showToast("info", message, input),
     }),
     [showToast],
+  );
+
+  // Newest first: the freshest card is the one in front of the stack.
+  const stackToasts = useMemo(
+    () =>
+      toasts
+        .map((toast) => ({
+          id: toast.id,
+          type: toast.type,
+          title: toast.title,
+          description: toast.description,
+          action: toast.action,
+          leaving: toast.leaving,
+        }))
+        .reverse(),
+    [toasts],
   );
 
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 top-[calc(var(--mobile-header)+var(--safe-top)+0.5rem)] z-[100] flex flex-col items-center gap-2 px-4 lg:top-4">
-        {toasts.map((toast) => (
-          <ToastCard
-            key={toast.id}
-            toast={toast}
-            onClose={dismiss}
-            onPause={pause}
-            onResume={resume}
-          />
-        ))}
-      </div>
-    </ToastContext.Provider>
-  );
-}
-
-const TONE = {
-  success: {
-    icon: <CheckCircle2 className="h-4 w-4" aria-hidden="true" />,
-    iconClass: "text-success-text",
-    barClass: "bg-success/70",
-  },
-  error: {
-    icon: <AlertCircle className="h-4 w-4" aria-hidden="true" />,
-    iconClass: "text-danger-text",
-    barClass: "bg-danger/70",
-  },
-  info: {
-    icon: <Info className="h-4 w-4" aria-hidden="true" />,
-    iconClass: "text-muted-foreground",
-    barClass: "bg-foreground/35",
-  },
-} as const;
-
-function ToastCard({
-  toast,
-  onClose,
-  onPause,
-  onResume,
-}: {
-  toast: ToastItem;
-  onClose: (id: string) => void;
-  onPause: (id: string) => void;
-  onResume: (id: string) => void;
-}) {
-  const tone = TONE[toast.type];
-
-  return (
-    <div
-      role={toast.type === "error" ? "alert" : "status"}
-      aria-atomic="true"
-      onMouseEnter={() => onPause(toast.id)}
-      onMouseLeave={() => onResume(toast.id)}
-      onFocus={() => onPause(toast.id)}
-      onBlur={() => onResume(toast.id)}
-      className={cn(
-        "group pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg shadow-black/10",
-        "pl-3 pr-2.5 py-2.5",
-        toast.leaving ? "animate-toast-out" : "animate-toast-in",
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <span className={cn("mt-0.5 shrink-0", tone.iconClass)}>{tone.icon}</span>
-        <p className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">
-          {toast.message}
-        </p>
-        <button
-          type="button"
-          onClick={() => onClose(toast.id)}
-          aria-label="Cerrar notificación"
-          className="-mr-1 -mt-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
-      </div>
-
-      <span
-        key={toast.version}
-        aria-hidden="true"
-        style={{ animationDuration: `${toast.duration}ms` }}
-        className={cn(
-          "absolute inset-x-0 bottom-0 h-px origin-left animate-toast-progress group-hover:[animation-play-state:paused]",
-          tone.barClass,
-        )}
+      <ToastStack
+        toasts={stackToasts}
+        onDismiss={dismiss}
+        onPauseAll={pauseAll}
+        onResumeAll={resumeAll}
       />
-    </div>
+    </ToastContext.Provider>
   );
 }
 

@@ -49,7 +49,7 @@ function BackToModules() {
   return (
     <Link
       href="/admin/modules"
-      className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      className="inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
     >
       <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
       Volver a módulos
@@ -276,10 +276,10 @@ export default function ModuleDetailPage({
                       <TableRow key={organization.id}>
                         <TableCell>
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-medium text-foreground">
+                            <p className="truncate text-sm font-medium text-foreground">
                               {organization.name}
                             </p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
                               {organization.slug}
                             </p>
                           </div>
@@ -304,7 +304,7 @@ export default function ModuleDetailPage({
                         </TableCell>
                         <TableCell className="text-right">
                           {state === "unknown" ? (
-                            <span className="text-[11px] text-muted-foreground">
+                            <span className="text-[13px] text-muted-foreground">
                               Sin datos del servidor
                             </span>
                           ) : (

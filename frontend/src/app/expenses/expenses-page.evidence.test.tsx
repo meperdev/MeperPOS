@@ -340,14 +340,55 @@ async function openRowActions(user: ReturnType<typeof userEvent.setup>) {
     expect(await screen.findByText("HistoryModal")).toBeTruthy();
   });
 
-  it("opens the expense detail modal from the row actions", async () => {
+  // S11: the eye control is gone in every layout. The card and the table row
+  // carry the detail affordance, and the overflow menu keeps only the actions
+  // that are not "open it".
+  it("opens the expense detail modal from the card itself (S11)", async () => {
     const user = userEvent.setup();
 
     render(<ExpensesPage />);
 
-    await user.click(screen.getAllByRole("button", { name: /^Ver detalle/ })[0]);
+    expect(screen.queryByTitle("Ver detalle")).toBeNull();
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Ver detalle de Arriendo" })[0],
+    );
 
     expect(await screen.findByText("ExpenseDetailModal")).toBeTruthy();
+  });
+
+  it("opens the expense detail modal from the table row itself (S11)", async () => {
+    const user = userEvent.setup();
+
+    render(<ExpensesPage />);
+    await user.click(screen.getByRole("button", { name: "Vista en lista" }));
+
+    const table = screen.getByRole("table");
+    await user.click(
+      within(table).getByRole("button", { name: "Ver detalle de Arriendo" }),
+    );
+
+    expect(await screen.findByText("ExpenseDetailModal")).toBeTruthy();
+
+    window.localStorage.removeItem("meperpos:view-mode:expenses");
+  });
+
+  it("keeps the detail out of the table row actions menu (S11)", async () => {
+    const user = userEvent.setup();
+
+    render(<ExpensesPage />);
+    await user.click(screen.getByRole("button", { name: "Vista en lista" }));
+
+    const table = screen.getByRole("table");
+    await user.click(within(table).getByRole("button", { name: /^Más acciones/ }));
+
+    expect(screen.queryByRole("menuitem", { name: "Ver detalle" })).toBeNull();
+
+    await user.click(screen.getByRole("menuitem", { name: "Ver historial" }));
+    expect(await screen.findByText("HistoryModal")).toBeTruthy();
+    expect(screen.queryByText("ExpenseDetailModal")).toBeNull();
+
+    window.localStorage.removeItem("meperpos:view-mode:expenses");
   });
 
   it("keeps the add payment action enabled with the Agregar pago label for partial expenses", async () => {

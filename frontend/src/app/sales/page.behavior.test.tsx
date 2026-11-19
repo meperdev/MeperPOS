@@ -233,3 +233,78 @@ describe("Sales table width (min-w only with rows)", () => {
     expect(screen.getAllByText("No hay ventas registradas").length).toBeGreaterThan(0);
   });
 });
+
+describe("Sales open their detail by clicking the card or row (no Detalle button)", () => {
+  const sale = {
+    id: "sale-1",
+    saleNumber: 42,
+    status: "COMPLETED",
+    total: 100,
+    subtotal: 100,
+    tax: 0,
+    createdAt: "2026-03-24T10:00:00Z",
+    customer: { name: "Ana Perez" },
+    payments: [],
+    items: [],
+    financed: false,
+    user: { name: "Admin" },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentSearchParams = new URLSearchParams();
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    useSalesMock.mockReturnValue({
+      data: { data: [sale], meta: { total: 1, page: 1, limit: 10, totalPages: 1 } },
+      isLoading: false,
+    });
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem("meperpos:view-mode:sales");
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("drops the Detalle button from the card and opens the detail from the card itself", async () => {
+    window.localStorage.setItem("meperpos:view-mode:sales", "grid");
+    render(<SalesPage />);
+
+    expect(screen.queryByRole("button", { name: /^Detalle$/ })).toBeNull();
+    const card = screen.getAllByRole("button", { name: "Ver detalle de venta 42" })[0];
+    expect(card).toHaveAttribute("tabindex", "0");
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByText("Productos de la venta")).toBeTruthy();
+  });
+
+  it("sits the payment method in the detail tile grid instead of a full-width row", async () => {
+    window.localStorage.setItem("meperpos:view-mode:sales", "grid");
+    useSalesMock.mockReturnValue({
+      data: {
+        data: [{ ...sale, payments: [{ method: "CARD", amount: 100 }] }],
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
+      },
+      isLoading: false,
+    });
+    render(<SalesPage />);
+    await userEvent.click(screen.getAllByRole("button", { name: "Ver detalle de venta 42" })[0]);
+
+    const paymentTile = screen.getAllByText("Método de pago").at(-1)!.parentElement!;
+    const clientTile = screen.getAllByText("Cliente").at(-1)!.parentElement!;
+    expect(paymentTile.parentElement).toBe(clientTile.parentElement);
+    expect(paymentTile.parentElement!.className).toContain("sm:grid-cols-3");
+    expect(paymentTile.className).not.toContain("sm:col-span-4");
+  });
+
+  it("drops the eye button from the table row; the row opens the detail", async () => {
+    window.localStorage.setItem("meperpos:view-mode:sales", "table");
+    render(<SalesPage />);
+
+    const rows = screen.getAllByRole("button", { name: "Ver detalle de venta 42" });
+    expect(rows.some((row) => row.tagName === "TR")).toBe(true);
+    for (const row of rows) {
+      expect(row.querySelector('[aria-label="Ver detalle de venta 42"]')).toBeNull();
+    }
+  });
+});

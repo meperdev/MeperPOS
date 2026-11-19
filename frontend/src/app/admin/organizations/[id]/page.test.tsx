@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, within } from "@testing-library/react";
+import { render, screen, act, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import OrganizationDetailPage from "./page";
@@ -19,6 +19,7 @@ const {
   mockUseUpdateMemberRole,
   mockUseRemoveOrganizationMember,
   mockUseDeleteOrganization,
+  removeMemberMutateAsync,
 } = vi.hoisted(() => ({
   mockUseOrganization: vi.fn(),
   mockUseUpdateOrganizationStatus: vi.fn(),
@@ -28,6 +29,18 @@ const {
   mockUseUpdateMemberRole: vi.fn(),
   mockUseRemoveOrganizationMember: vi.fn(),
   mockUseDeleteOrganization: vi.fn(),
+  removeMemberMutateAsync: vi.fn(),
+}));
+
+const toastErrorMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/contexts/ToastContext", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: toastErrorMock,
+    warning: vi.fn(),
+    info: vi.fn(),
+  }),
 }));
 
 vi.mock("@/hooks/useAdmin", () => ({
@@ -120,6 +133,7 @@ function setupDefaultMocks() {
   });
   mockUseRemoveOrganizationMember.mockReturnValue({
     mutate: vi.fn(),
+    mutateAsync: removeMemberMutateAsync,
   });
 }
 
@@ -399,6 +413,102 @@ describe("OrganizationDetailPage", () => {
     it("renders an add member button", () => {
       const addButton = screen.getByText("A\u00f1adir miembro");
       expect(addButton).toBeInTheDocument();
+    });
+  });
+
+  describe("member removal confirmation", () => {
+    beforeEach(async () => {
+      mockUseOrganization.mockReturnValue({
+        data: mockOrg,
+        isLoading: false,
+      });
+      setupDefaultMocks();
+      await act(async () => {
+        render(<OrganizationDetailPage params={resolvedParams} />, { wrapper });
+      });
+    });
+
+    async function openRemovalDialog() {
+      await userEvent.click(
+        within(screen.getByRole("table")).getByRole("button", {
+          name: "Acciones de Maria Lopez",
+        }),
+      );
+      await userEvent.click(screen.getByRole("menuitem", { name: "Quitar" }));
+      return screen.getByRole("dialog", { name: "Quitar miembro" });
+    }
+
+    it("asks for confirmation, naming the person and the organization, before calling the API", async () => {
+      const dialog = await openRemovalDialog();
+
+      expect(removeMemberMutateAsync).not.toHaveBeenCalled();
+      expect(
+        within(dialog).getByText(
+          "Maria Lopez perderá el acceso a Tienda Principal.",
+        ),
+      ).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Quitar" })).toBeInTheDocument();
+    });
+
+    it("removes the member once the confirmation is pending, then closes on success", async () => {
+      let settle: () => void = () => {};
+      removeMemberMutateAsync.mockReturnValue(
+        new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+      );
+      const dialog = await openRemovalDialog();
+
+      await userEvent.click(within(dialog).getByRole("button", { name: "Quitar" }));
+
+      expect(removeMemberMutateAsync).toHaveBeenCalledTimes(1);
+      expect(removeMemberMutateAsync).toHaveBeenCalledWith({
+        orgId: "org-1",
+        userId: "u-2",
+      });
+      // Still waiting: the dialog holds the reader until the server answers.
+      expect(
+        screen.getByRole("dialog", { name: "Quitar miembro" }),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        settle();
+      });
+
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog", { name: "Quitar miembro" })).toBeNull(),
+      );
+    });
+
+    it("cancelling leaves the member in place and never calls the API", async () => {
+      const dialog = await openRemovalDialog();
+
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Cancelar" }),
+      );
+
+      expect(removeMemberMutateAsync).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog", { name: "Quitar miembro" })).toBeNull();
+      expect(
+        within(screen.getByRole("table")).getByText("Maria Lopez"),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the member and the dialog when the request fails, surfacing the error", async () => {
+      removeMemberMutateAsync.mockRejectedValue(new Error("network"));
+      const dialog = await openRemovalDialog();
+
+      await userEvent.click(within(dialog).getByRole("button", { name: "Quitar" }));
+
+      await waitFor(() =>
+        expect(toastErrorMock).toHaveBeenCalledWith("No se pudo quitar el miembro"),
+      );
+      expect(
+        screen.getByRole("dialog", { name: "Quitar miembro" }),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("table")).getByText("Maria Lopez"),
+      ).toBeInTheDocument();
     });
   });
 

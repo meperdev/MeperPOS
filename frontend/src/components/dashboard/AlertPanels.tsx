@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useTasks } from "@/hooks/useTasks";
 import { computePendingAmount, filterOpenTasks } from "@/lib/dashboard";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDateShort } from "@/lib/utils";
 import type { Expense } from "@/types";
 
 /** Compact cap: the panels are a peek, not a list page. */
@@ -67,7 +67,7 @@ export function AlertPanels() {
           />
           <div className="mt-3">
             {partialExpenses.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Sin gastos pendientes</p>
+              <p className="text-[13px] text-muted-foreground">Sin gastos pendientes</p>
             ) : (
               <>
                 <ul className="space-y-1.5">
@@ -79,17 +79,17 @@ export function AlertPanels() {
                       <span className="truncate text-sm font-medium text-foreground">
                         {expense.description || "Gasto"}
                       </span>
-                      <span className="shrink-0 font-mono text-xs font-semibold text-foreground tabular-nums">
+                      <span className="shrink-0 text-[13px] font-semibold text-foreground tabular-nums">
                         {formatCurrency(computePendingAmount(expense))}
                       </span>
                     </li>
                   ))}
                 </ul>
                 <div className="mt-2.5 flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
-                  <span className="text-xs font-medium text-muted-foreground">
+                  <span className="text-[13px] font-medium text-muted-foreground">
                     Total pendiente
                   </span>
-                  <span className="font-mono text-sm font-semibold text-primary-text tabular-nums">
+                  <span className="text-sm font-semibold text-primary-text tabular-nums">
                     {formatCurrency(totalPending)}
                   </span>
                 </div>
@@ -123,7 +123,7 @@ export function AlertPanels() {
           />
           <div className="mt-3">
             {openTasks.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Sin tareas abiertas</p>
+              <p className="text-[13px] text-muted-foreground">Sin tareas abiertas</p>
             ) : (
               <ul className="space-y-1.5">
                 {openTasks.map((task) => {
@@ -144,8 +144,8 @@ export function AlertPanels() {
                           {task.status === "IN_PROGRESS" ? "En progreso" : "Pendiente"}
                         </Badge>
                         {task.dueDate && (
-                          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
-                            {formatDate(task.dueDate)}
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {formatDateShort(task.dueDate)}
                           </span>
                         )}
                       </div>

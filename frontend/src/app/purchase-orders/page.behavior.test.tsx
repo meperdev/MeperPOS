@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
-const { authState, urlState, listState, usePurchaseOrdersMock } = vi.hoisted(() => ({
-  authState: { role: "ADMIN" },
-  urlState: { params: new URLSearchParams() },
-  listState: { orders: [] as unknown[] },
-  usePurchaseOrdersMock: vi.fn(),
-}));
+const { authState, urlState, listState, routerPush, usePurchaseOrdersMock } =
+  vi.hoisted(() => ({
+    authState: { role: "ADMIN" },
+    urlState: { params: new URLSearchParams() },
+    listState: { orders: [] as unknown[] },
+    routerPush: vi.fn(),
+    usePurchaseOrdersMock: vi.fn(),
+  }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: routerPush }),
   useSearchParams: () => urlState.params,
 }));
 
@@ -194,5 +197,71 @@ describe("Purchase orders status filter from the URL", () => {
     expect(usePurchaseOrdersMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: undefined }),
     );
+  });
+});
+
+// S10: the list keeps its shape; only the separate "Detalle" control goes away,
+// because the card and the row already open the order.
+describe("Purchase orders list — the order itself opens the detail", () => {
+  const VIEW_MODE_KEY = "meperpos:view-mode:purchase-orders";
+
+  const order = {
+    id: "po-1",
+    orderNumber: 1,
+    supplierId: "s-1",
+    supplier: { id: "s-1", name: "Proveedor Andino" },
+    createdById: "u-1",
+    status: "PENDING",
+    subtotal: 100,
+    taxAmount: 19,
+    total: 119,
+    notes: null,
+    sentAt: null,
+    overdue: false,
+    createdAt: "2026-04-19T09:00:00.000Z",
+    updatedAt: "2026-04-19T09:00:00.000Z",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listState.orders = [order];
+  });
+
+  afterEach(() => {
+    listState.orders = [];
+    window.localStorage.removeItem(VIEW_MODE_KEY);
+    cleanup();
+  });
+
+  it("drops the Detalle button from the card and opens the order by click and Enter", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(VIEW_MODE_KEY, "grid");
+
+    render(<PurchaseOrdersPage />);
+
+    expect(screen.queryByRole("button", { name: /^detalle$/i })).toBeNull();
+
+    const card = screen.getByRole("button", { name: "Ver orden OC-1" });
+    expect(card).toHaveAttribute("tabindex", "0");
+
+    await user.click(card);
+    expect(routerPush).toHaveBeenCalledWith("/purchase-orders/po-1");
+
+    card.focus();
+    await user.keyboard("{Enter}");
+    expect(routerPush).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops the eye column from the table row; the row opens the order", () => {
+    window.localStorage.setItem(VIEW_MODE_KEY, "table");
+
+    render(<PurchaseOrdersPage />);
+
+    expect(screen.queryByRole("button", { name: /^detalle$/i })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Acciones" })).toBeNull();
+
+    const row = screen.getByRole("button", { name: "Ver orden OC-1" });
+    expect(row.tagName).toBe("TR");
+    expect(row).toHaveAttribute("tabindex", "0");
   });
 });

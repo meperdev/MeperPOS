@@ -50,7 +50,72 @@ export function formatCalendarDay(date: string | Date) {
   }).format(new Date(date));
 }
 
+/**
+ * The day-only label a dense row reads at a glance: "16 nov 2026".
+ *
+ * `formatDate` is the prose wording ("16 de noviembre de 2026") that belongs in
+ * a sentence or a document detail; inside a table cell it pushes the row onto a
+ * second line. Same zone semantics as `formatDate` (the value's own day, not
+ * `formatCalendarDay`'s UTC pinning), same ICU month abbreviation as
+ * `formatDateTime`, trailing period removed.
+ */
+const compactDateFormatter = new Intl.DateTimeFormat(LOCALE, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+export function formatDateShort(date: string | Date) {
+  const parts = compactDateFormatter.formatToParts(new Date(date));
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const month = pick("month").replace(/\.$/, "");
+
+  return `${pick("day")} ${month} ${pick("year")}`.trim();
+}
+
+/**
+ * The compact date-time a UI row reads at a glance: "16 nov 2026, 4:21 p. m.".
+ *
+ * Intl joins es-CO short-month dates with " de " and separates the time with
+ * " a las ", which turns every table cell into a sentence; the parts are
+ * reassembled here so a dense table keeps one scan line. The month keeps the
+ * ICU abbreviation (four letters in September) and loses any trailing period,
+ * the hour rides the 12-hour clock without a leading zero, and the day period's
+ * narrow space becomes a plain one.
+ *
+ * Printed documents and message texts keep the long wording through
+ * `formatDateTimeLong` — never this one.
+ */
+const compactDateTimeFormatter = new Intl.DateTimeFormat(LOCALE, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
 export function formatDateTime(date: string | Date) {
+  const parts = compactDateTimeFormatter.formatToParts(new Date(date));
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const month = pick("month").replace(/\.$/, "");
+  const dayPeriod = pick("dayPeriod").replace(/[\u00a0\u202f]/g, " ");
+  const datePart = `${pick("day")} ${month} ${pick("year")}`;
+  const timePart = `${pick("hour")}:${pick("minute")}`;
+
+  return `${datePart}, ${timePart} ${dayPeriod}`.trimEnd();
+}
+
+/**
+ * The long wording a document or a message keeps: "16 de noviembre de 2026 a
+ * las 04:21 p. m.". Receipt previews, exported copy and WhatsApp texts read as
+ * prose, so they take this one and the UI takes `formatDateTime`.
+ */
+export function formatDateTimeLong(date: string | Date) {
   return new Intl.DateTimeFormat(LOCALE, {
     year: "numeric",
     month: "long",

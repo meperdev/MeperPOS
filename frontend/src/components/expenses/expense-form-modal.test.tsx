@@ -172,6 +172,10 @@ function makeExpense(): Expense {
 describe("ExpenseFormModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // jsdom ships no smooth scrolling; the form scrolls its payments list after
+    // a row is added, and an unstubbed call would surface as an unhandled error
+    // once the test is over.
+    HTMLElement.prototype.scrollTo = vi.fn();
     createMutateAsyncMock.mockResolvedValue({ id: "exp-1" } as never);
     updateMutateAsyncMock.mockResolvedValue({} as never);
     uploadReceiptMutateAsyncMock.mockResolvedValue({} as never);
@@ -316,6 +320,48 @@ describe("ExpenseFormModal", () => {
       },
     });
     expect(toastSuccessMock).toHaveBeenCalledWith("Gasto actualizado");
+  });
+
+  it("confirms a draft payment removal inside the row, without a dialog", async () => {
+    const user = userEvent.setup();
+
+    render(<ExpenseFormModal isOpen onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /Agregar pago/i }));
+    fireEvent.change(screen.getAllByPlaceholderText("Valor del pago")[1], {
+      target: { value: "100000" },
+    });
+    expect(screen.getAllByPlaceholderText("Valor del pago")).toHaveLength(2);
+
+    const removes = screen.getAllByRole("button", { name: "Eliminar pago" });
+    await user.click(removes[1]);
+
+    // The first press arms the line's own control: the typed amount stays put
+    // and no dialog interrupts the form.
+    expect(screen.getAllByPlaceholderText("Valor del pago")).toHaveLength(2);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "¿Quitar?" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "¿Quitar?" }));
+
+    expect(screen.getAllByPlaceholderText("Valor del pago")).toHaveLength(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps a draft payment line when the inline confirm is cancelled", async () => {
+    const user = userEvent.setup();
+
+    render(<ExpenseFormModal isOpen onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /Agregar pago/i }));
+    const removes = screen.getAllByRole("button", { name: "Eliminar pago" });
+    await user.click(removes[1]);
+    // The row's own cancel comes before the form footer's.
+    await user.click(screen.getAllByRole("button", { name: "Cancelar" })[0]);
+
+    expect(screen.getAllByPlaceholderText("Valor del pago")).toHaveLength(2);
   });
 
   it("blocks an edit whose new total is below the sum of payments (EXP-5)", async () => {

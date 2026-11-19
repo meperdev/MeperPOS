@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Stepper } from "@/components/ui/Stepper";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { InlineConfirmButton } from "@/components/ui/InlineConfirmButton";
 import { Pagination } from "@/components/ui/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -294,10 +295,6 @@ export default function POSPage() {
   const [customDiscount, setCustomDiscount] = useState("");
   const [customPrice, setCustomPrice] = useState("");
   const [showPausedSalesModal, setShowPausedSalesModal] = useState(false);
-  const [pausedSaleToDelete, setPausedSaleToDelete] = useState<string | null>(
-    null,
-  );
-  const [showDeletePausedModal, setShowDeletePausedModal] = useState(false);
   // Financing is the only action here that creates a real debt, so it waits for
   // an explicit confirmation before the initiation request is built or sent.
   const [showFinanceConfirm, setShowFinanceConfirm] = useState(false);
@@ -461,8 +458,7 @@ export default function POSPage() {
     showReceiptModal ||
     showPaymentModal ||
     !!editingDiscount ||
-    showPausedSalesModal ||
-    showDeletePausedModal;
+    showPausedSalesModal;
 
   const focusScannerInput = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -1067,15 +1063,8 @@ export default function POSPage() {
   };
 
   const handleDeletePausedSale = (saleId: string) => {
-    setPausedSaleToDelete(saleId);
-    setShowDeletePausedModal(true);
-  };
-
-  const confirmDeletePausedSale = () => {
-    if (!pausedSaleToDelete) return;
-    deletePausedSale(pausedSaleToDelete);
+    deletePausedSale(saleId);
     toast.success("Venta pausada eliminada");
-    setPausedSaleToDelete(null);
   };
 
   const openPaymentModal = () => {
@@ -1095,7 +1084,14 @@ export default function POSPage() {
   return (
     <DashboardLayout>
       <h1 className="sr-only">Punto de venta</h1>
-      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_22rem] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
+      {/* At lg this page fits the viewport exactly. The height subtracts the two
+          things the shell owns — the header bar and the vertical padding it
+          actually applies — so the root measures the space the browser gives it
+          instead of guessing. The negative vertical margin reclaims half of that
+          padding: the till is a work surface, so its own gutter is 16px top and
+          bottom while it still ends 16px above the viewport edge (no page
+          scroll, no leftover band under the products panel). */}
+      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-var(--app-header-height)-var(--app-content-padding-y))] lg:-my-[calc(var(--app-content-padding-y)/2)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
         <div className="flex min-h-0 flex-1 flex-col lg:h-full">
           {/*
@@ -1116,7 +1112,7 @@ export default function POSPage() {
               </h2>
               <div className="flex items-center gap-2">
                 {cart.length > 0 && (
-                  <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="text-[13px] text-muted-foreground tabular-nums">
                     {cart.length} en carrito
                   </span>
                 )}
@@ -1173,7 +1169,11 @@ export default function POSPage() {
                     setSelectedFilter(value);
                     setCurrentPage(1);
                   }}
-                  className="min-w-0 flex-[1_1_10rem]"
+                  // "Todas las categorías" needs 138px of text plus the trigger's
+                  // own padding and chevron: below 200px the label clipped. The
+                  // floor only applies from xl, where the panel is wide enough to
+                  // pay for it without starving the search field.
+                  className="min-w-0 flex-[1_1_10rem] xl:min-w-[12.5rem]"
                   placeholder="Todas las categorías"
                   options={filterOptions}
                 />
@@ -1182,7 +1182,7 @@ export default function POSPage() {
                 <p
                   role="status"
                   className={cn(
-                    "text-xs font-medium",
+                    "text-[13px] font-medium",
                     {
                       idle: "text-muted-foreground",
                       success: "text-success-text",
@@ -1277,7 +1277,7 @@ export default function POSPage() {
                 Carrito
               </h2>
               {cart.length > 0 && (
-                <span className="text-xs text-muted-foreground tabular-nums">
+                <span className="text-[13px] text-muted-foreground tabular-nums">
                   {cart.length}
                 </span>
               )}
@@ -1311,11 +1311,11 @@ export default function POSPage() {
                       <p className="text-sm font-medium leading-snug text-foreground line-clamp-2 break-words">
                         {item.product.name}
                       </p>
-                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground tabular-nums mt-0.5">
+                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-muted-foreground tabular-nums mt-0.5">
                         {cartItemOffer(item) && (
                           <Badge
                             variant="danger"
-                            className="shrink-0 text-[11px] px-1.5 py-0.5 rounded-md"
+                            className="shrink-0 text-xs px-1.5 py-0.5 rounded-md"
                           >
                             Oferta -{cartItemOffer(item)!.percent}%
                           </Badge>
@@ -1324,7 +1324,7 @@ export default function POSPage() {
                           <span data-testid="price-overridden" className="shrink-0">
                             <Badge
                               variant="warning"
-                              className="text-[11px] px-1.5 py-0.5 rounded-md"
+                              className="text-xs px-1.5 py-0.5 rounded-md"
                             >
                               Precio ajustado
                             </Badge>
@@ -1365,7 +1365,7 @@ export default function POSPage() {
                         )}
                       </span>
                       {item.discountAmount > 0 && (
-                        <s className="text-xs text-muted-foreground line-through tabular-nums whitespace-nowrap">
+                        <s className="text-[13px] text-muted-foreground line-through tabular-nums whitespace-nowrap">
                           {formatCurrency(item.quantity * item.unitPrice)}
                         </s>
                       )}
@@ -1383,7 +1383,7 @@ export default function POSPage() {
                           }
                         />
                         {item.quantity >= item.availableStock && (
-                          <span className="text-xs font-medium text-warning-text">
+                          <span className="text-[13px] font-medium text-warning-text">
                             máx.
                           </span>
                         )}
@@ -1416,43 +1416,53 @@ export default function POSPage() {
 
             {/* Cart Footer */}
             <div className="p-4 border-t border-border/60 bg-muted/10 space-y-3 shrink-0">
-              {/* Customer Selector */}
-              <div>
-                <p className="text-[13px] font-normal text-muted-foreground mb-1.5">
-                  Cliente (opcional)
-                </p>
+              {/* Customer and financed sale share one row of icon-over-label cards,
+                  matching the payment method cards below. */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setShowCustomerModal(true)}
-                  className="flex items-center gap-2 w-full h-10 sm:h-9 px-3 rounded-lg border border-border/70 bg-background/60 text-sm text-foreground hover:border-border transition-colors duration-150 overflow-hidden"
+                  title={selectedCustomerName || undefined}
+                  className={cn(
+                    "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2.5 transition-colors duration-150 ease-out",
+                    selectedCustomer
+                      ? "border-primary/40 bg-primary/10 text-foreground"
+                      : "border-border/80 bg-muted/20 dark:bg-background/50 text-muted-foreground hover:border-foreground/25 hover:bg-muted/50 hover:text-foreground",
+                  )}
                 >
-                  <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="truncate text-[13px] font-medium">
+                  <span className={cn("shrink-0", selectedCustomer ? "text-primary-text" : "text-muted-foreground")}>
+                    <User className="w-4 h-4" />
+                  </span>
+                  <span className="w-full truncate text-center text-[13px] font-medium tracking-tight">
                     {selectedCustomerName || "Sin cliente"}
+                  </span>
+                </button>
+
+                {/* Financed sale: quiet secondary action, far from the checkout button */}
+                <button
+                  type="button"
+                  onClick={() => setShowFinanceConfirm(true)}
+                  disabled={cart.length === 0 || !selectedCustomer || cartLocked}
+                  title={
+                    !selectedCustomer
+                      ? "Selecciona un cliente para financiar"
+                      : undefined
+                  }
+                  className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 px-2 py-2.5 text-muted-foreground transition-colors duration-150 ease-out hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <span className="shrink-0">
+                    <HandCoins className="w-4 h-4" />
+                  </span>
+                  <span className="text-[13px] font-medium tracking-tight whitespace-nowrap">
+                    Financiar
                   </span>
                 </button>
               </div>
 
-              {/* Financed sale: quiet secondary action, far from the checkout button */}
-              <button
-                type="button"
-                onClick={() => setShowFinanceConfirm(true)}
-                disabled={cart.length === 0 || !selectedCustomer || cartLocked}
-                title={
-                  !selectedCustomer
-                    ? "Selecciona un cliente para financiar"
-                    : undefined
-                }
-                className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-              >
-                <HandCoins className="w-3.5 h-3.5" />
-                Financiar a crédito
-              </button>
-
               {/* Totals Breakdown */}
               <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
                 {discountAmount > 0 && (
-                  <div className="flex justify-between text-xs text-success-text mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
+                  <div className="flex justify-between text-[13px] text-success-text mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
                     <span>Descuento</span>
                     <span className="font-medium">
                       -{formatCurrency(discountAmount)}
@@ -1463,7 +1473,10 @@ export default function POSPage() {
                   <span className="text-[13px] font-medium text-muted-foreground">
                     Total
                   </span>
-                  <span className="stat-number text-xl font-semibold tracking-tight text-primary-text tabular-nums">
+                  <span
+                    data-testid="pos-cart-total"
+                    className="stat-number text-xl font-semibold tracking-tight text-primary-text tabular-nums"
+                  >
                     {formatCurrency(total)}
                   </span>
                 </div>
@@ -1475,7 +1488,7 @@ export default function POSPage() {
                   variant="secondary"
                   size="sm"
                   onClick={() => setShowPausedSalesModal(true)}
-                  className="flex-1 h-9 rounded-lg text-xs font-medium"
+                  className="flex-1 h-9 rounded-lg text-[13px] font-medium"
                 >
                   <Play className="w-3.5 h-3.5" />
                   Reanudar ({pausedSales.length})
@@ -1485,7 +1498,7 @@ export default function POSPage() {
                   size="sm"
                   onClick={handlePauseSale}
                   disabled={cart.length === 0}
-                  className="flex-1 h-9 rounded-lg text-xs font-medium"
+                  className="flex-1 h-9 rounded-lg text-[13px] font-medium"
                 >
                   <Pause className="w-3.5 h-3.5" />
                   Pausar
@@ -1643,7 +1656,7 @@ export default function POSPage() {
                   />
                 )}
               </div>
-              <p className="text-xs text-muted-foreground shrink-0">
+              <p className="text-[13px] text-muted-foreground shrink-0">
                 Sin cliente asignado
               </p>
             </div>
@@ -1680,7 +1693,7 @@ export default function POSPage() {
                       />
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  <p className="text-[13px] text-muted-foreground tabular-nums shrink-0">
                     {customer.documentNumber}
                   </p>
                 </div>
@@ -1753,7 +1766,7 @@ export default function POSPage() {
                 },
               ].map(({ label, value }) => (
                 <div key={label} className="p-3 rounded-lg bg-muted/40">
-                  <p className="text-xs text-muted-foreground mb-1">
+                  <p className="text-[13px] text-muted-foreground mb-1">
                     {label}
                   </p>
                   <p className="text-sm font-semibold text-foreground tabular-nums">
@@ -1762,7 +1775,7 @@ export default function POSPage() {
                 </div>
               ))}
               <div className="p-3 rounded-lg bg-primary/10">
-                <p className="text-xs text-muted-foreground mb-1">
+                <p className="text-[13px] text-muted-foreground mb-1">
                   Total
                 </p>
                 <p className="stat-number text-lg font-semibold tabular-nums text-primary-text">
@@ -1923,7 +1936,7 @@ export default function POSPage() {
                       <p className="text-sm font-semibold text-foreground">
                         {sale.customerName || "Sin cliente"}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-[13px] text-muted-foreground mt-0.5">
                         {sale.cart.length} producto(s) ·{" "}
                         {new Date(sale.pausedAt).toLocaleString("es-CO")}
                       </p>
@@ -1948,14 +1961,18 @@ export default function POSPage() {
                     >
                       <Play className="w-3.5 h-3.5" /> Reanudar
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => handleDeletePausedSale(sale.id)}
-                      className="p-2"
+                    <InlineConfirmButton
+                      ariaLabel={
+                        sale.customerName
+                          ? `Eliminar venta pausada de ${sale.customerName}`
+                          : "Eliminar venta pausada"
+                      }
+                      announce="Confirma para eliminar la venta pausada"
+                      confirmLabel="¿Eliminar?"
+                      onConfirm={() => handleDeletePausedSale(sale.id)}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </InlineConfirmButton>
                   </div>
                 </div>
               ))}
@@ -1986,18 +2003,6 @@ export default function POSPage() {
           selectedCustomerName ?? "el cliente seleccionado"
         }. Monto a financiar: ${formatCurrency(total)} (calculado en el POS; el total final lo confirma el servidor).`}
         confirmText="Financiar venta"
-      />
-
-      <ConfirmDialog
-        isOpen={showDeletePausedModal}
-        onClose={() => {
-          setShowDeletePausedModal(false);
-          setPausedSaleToDelete(null);
-        }}
-        onConfirm={confirmDeletePausedSale}
-        title="Eliminar venta pausada"
-        message="Se eliminará la venta pausada de forma definitiva."
-        confirmText="Eliminar"
       />
     </DashboardLayout>
   );

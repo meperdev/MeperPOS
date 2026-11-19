@@ -62,10 +62,10 @@ export function ImportUpload({
           onChange={handleInputFile}
         />
         <FileSpreadsheet className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
-        <p className="text-xs sm:text-sm font-semibold text-foreground">
+        <p className="text-sm sm:text-sm font-semibold text-foreground">
           Arrastra un archivo o haz clic para subir
         </p>
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-[13px] text-muted-foreground mt-1">
           Multi-hoja: Productos, Clientes, Proveedores, Usuarios (.xlsx)
         </p>
       </label>
@@ -73,7 +73,7 @@ export function ImportUpload({
       {error && (
         <div
           role="alert"
-          className="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger-text"
+          className="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger-text"
         >
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
@@ -83,17 +83,17 @@ export function ImportUpload({
       {selectedFile && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
           <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-medium text-foreground truncate">
+            <p className="text-sm sm:text-sm font-medium text-foreground truncate">
               {selectedFile.name}
             </p>
-            <p className="text-[11px] text-muted-foreground tabular-nums">
+            <p className="text-[13px] text-muted-foreground tabular-nums">
               {(selectedFile.size / 1024).toFixed(1)} KB
             </p>
           </div>
           <button
             type="button"
             onClick={onClear}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 border border-border/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 border border-border/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           >
             <X className="w-3.5 h-3.5" />
             Limpiar
