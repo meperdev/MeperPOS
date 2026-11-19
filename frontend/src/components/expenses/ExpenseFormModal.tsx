@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
+import { InlineConfirmButton } from "@/components/ui/InlineConfirmButton";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import {
@@ -428,10 +429,10 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                               method: value as ExpensePayment["method"],
                             })
                           }
-                          className="flex-1"
+                          className="flex-1 min-w-0"
                           options={PAYMENT_METHOD_OPTIONS}
                         />
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <label
                             htmlFor={`${uid}-paydate-${row.tempId}`}
                             className="mb-1 block text-[13px] font-medium text-muted-foreground"
@@ -449,19 +450,21 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                             className="tabular-nums"
                           />
                         </div>
-                        <button
-                          type="button"
-                          aria-label="Eliminar pago"
-                          onClick={() =>
+                        <InlineConfirmButton
+                          ariaLabel="Eliminar pago"
+                          title="Eliminar pago"
+                          confirmLabel="¿Quitar?"
+                          announce="Confirma para quitar el pago"
+                          disabled={rows.length === 1}
+                          onConfirm={() =>
                             setRows((prev) =>
                               prev.filter((r) => r.tempId !== row.tempId),
                             )
                           }
-                          disabled={rows.length === 1}
-                          className="h-9 w-9 mb-0.5 rounded-lg flex items-center justify-center shrink-0 text-muted-foreground hover:text-danger-text hover:bg-danger/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                          className="mb-0.5 shrink-0"
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                        </InlineConfirmButton>
                       </div>
                     </div>
                   ))}

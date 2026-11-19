@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { InlineConfirmButton } from "@/components/ui/InlineConfirmButton";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -119,15 +120,13 @@ export default function AdvancedSettingsPage() {
                   value={entry.value}
                   onChange={(e) => updateEntry(index, { value: e.target.value })}
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeEntry(index)}
-                  aria-label={`Eliminar clave ${entry.key || "sin nombre"}`}
+                <InlineConfirmButton
+                  ariaLabel={`Eliminar clave ${entry.key || "sin nombre"}`}
+                  onConfirm={() => removeEntry(index)}
+                  className="justify-self-start"
                 >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </InlineConfirmButton>
               </div>
             ))
           )}

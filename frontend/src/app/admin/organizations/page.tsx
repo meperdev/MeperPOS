@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Select } from "@/components/ui/Select";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -528,14 +529,14 @@ export default function OrganizationsPage() {
                 error={formErrors.adminEmail}
                 required={formData.hasAdmin}
               />
-              <Input
+              <PasswordInput
                 label="Contraseña del admin"
-                type="password"
                 placeholder="Dejar vacío para generar automáticamente"
                 minLength={10}
                 value={formData.adminPassword}
                 onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
                 error={formErrors.adminPassword}
+                showStrength
               />
               <p className="text-[13px] text-muted-foreground">
                 Si dejas este campo vacío, se generará una contraseña temporal automáticamente. Mínimo 10 caracteres.

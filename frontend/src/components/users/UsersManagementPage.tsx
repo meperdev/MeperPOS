@@ -11,6 +11,7 @@ import {
 } from "@/hooks/useUsers";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -315,7 +316,7 @@ export default function UsersPage() {
         <form onSubmit={handleCreate} className="space-y-4">
           <Input label="Nombre" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
           <Input label="Correo" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
-          <Input label="Contraseña" type="password" minLength={10} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required />
+          <PasswordInput label="Contraseña" minLength={10} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} showStrength required />
           <p className="text-[13px] text-muted-foreground">Mínimo 10 caracteres</p>
           <Select
             label="Rol"
@@ -340,12 +341,12 @@ export default function UsersPage() {
             <p className="text-[13px] text-muted-foreground">
               Usuario: <span className="font-semibold text-foreground">{userToReset.name}</span>
             </p>
-            <Input
+            <PasswordInput
               label="Nueva contraseña"
-              type="password"
               minLength={10}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              showStrength
               required
             />
             <p className="text-[13px] text-muted-foreground">Mínimo 10 caracteres</p>
