@@ -18,8 +18,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: ReactNode }) => (
-    <a href={href}>{children}</a>
+  default: ({ href, children, ...props }: { href: string; children: ReactNode } & Record<string, unknown>) => (
+    <a href={href} {...props}>{children}</a>
   ),
 }));
 
@@ -227,9 +227,9 @@ describe("Dashboard scope evidence (DIA-4/13/10 — reports no longer duplicated
     expect(screen.getByText("Productos totales")).toBeTruthy();
     expect(screen.getByText("Clientes totales")).toBeTruthy();
 
-    // Stock crítico became its own alert strip, not a metric card
-    expect(screen.getByText(/1 producto en stock crítico/)).toBeTruthy();
-    expect(screen.queryByText("Stock crítico")).toBeNull();
+    // Stock crítico is an action cell inside the totals card, not a full-width strip
+    const lowStock = screen.getByRole("link", { name: /1 producto en stock crítico/i });
+    expect(screen.getByRole("region", { name: "Totales" }).contains(lowStock)).toBe(true);
 
     // Compact operational panels (low-stock is no longer duplicated here)
     expect(screen.queryByText("Stock bajo")).toBeNull();

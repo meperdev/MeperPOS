@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 import { useDashboard, useDailySales } from "@/hooks/useReports";
 import { useExpenses } from "@/hooks/useExpenses";
 import {
+  cn,
   formatCurrency,
   getBogotaDateInputValue,
   shiftDateInputValue,
@@ -76,6 +77,9 @@ export function TodayStatsInner({ today }: { today: string }) {
     .slice(-SPARKLINE_DAYS);
 
   const lowStockCount = dashboard?.lowStockProducts ?? 0;
+  const lowStockLabel = lowStockCount === 1
+    ? "1 producto"
+    : `${lowStockCount.toLocaleString("es-CO")} productos`;
   const totals = [
     {
       label: "Ventas completadas",
@@ -132,39 +136,18 @@ export function TodayStatsInner({ today }: { today: string }) {
         />
       </div>
 
-      {/* Low stock is a condition to act on, not a metric to read: the whole
-          strip is the link, and it disappears when there is nothing to reorder. */}
-      {lowStockCount > 0 && (
-        <Link
-          href={LOW_STOCK_HREF}
-          data-testid="kpi-low-stock"
-          className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-danger-text transition-colors hover:bg-danger/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-        >
-          <span className="min-w-0 text-sm font-medium tabular-nums">
-            {lowStockCount === 1
-              ? "1 producto en stock crítico"
-              : `${lowStockCount.toLocaleString("es-CO")} productos en stock crítico`}
-          </span>
-          <span
-            aria-hidden="true"
-            className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold"
-          >
-            Reordenar
-            <ChevronRight className="h-3.5 w-3.5" />
-          </span>
-        </Link>
-      )}
-
       {/* All-time totals — one compact card, three divided cells, no sparkline
-          and no footer. Three columns hold at every width, mobile included. */}
+          and no footer. Three columns hold at every width, mobile included.
+          Low stock is a condition to act on, so it joins as a fourth cell that
+          is a link (a full row below md), and disappears when nothing needs reordering. */}
       <section
         data-testid="kpi-totals"
         aria-label="Totales"
-        className="rounded-xl border border-border/70 bg-card shadow-2xs"
+        className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs"
       >
-        <div className="grid grid-cols-3 divide-x divide-border">
-          {totals.map((total) => (
-            <div key={total.label} className="flex min-w-0 flex-col px-3 py-3">
+        <div className={cn("grid grid-cols-3", lowStockCount > 0 && "md:grid-cols-4")}>
+          {totals.map((total, index) => (
+            <div key={total.label} className={cn("flex min-w-0 flex-col px-3 py-3", index > 0 && "border-l border-border")}>
               <p className="text-xs font-medium text-muted-foreground">
                 {total.label}
               </p>
@@ -178,6 +161,25 @@ export function TodayStatsInner({ today }: { today: string }) {
               </p>
             </div>
           ))}
+          {lowStockCount > 0 && (
+            <Link
+              href={LOW_STOCK_HREF}
+              data-testid="kpi-low-stock"
+              aria-label={`${lowStockLabel} en stock crítico, reordenar`}
+              className="group col-span-3 flex min-w-0 items-center justify-between gap-3 border-t border-border bg-danger/10 px-3 py-3 text-danger-text transition-colors hover:bg-danger/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 md:col-span-1 md:border-l md:border-t-0"
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="text-xs font-medium">Stock crítico</span>
+                <span className="mt-auto truncate pt-1 text-lg font-semibold tabular-nums">
+                  {lowStockLabel}
+                </span>
+              </span>
+              <ChevronRight
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 transition-transform duration-150 ease-out group-hover:translate-x-0.5"
+              />
+            </Link>
+          )}
         </div>
       </section>
     </div>

@@ -24,9 +24,9 @@ export function RecentSalesCard() {
   return (
     <section
       data-testid="recent-sales-card"
-      className="min-w-0 rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border sm:p-5"
+      className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card text-foreground transition-colors hover:border-border"
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
         <p className="text-sm font-semibold tracking-tight text-foreground">
           Ventas recientes
         </p>
@@ -40,44 +40,46 @@ export function RecentSalesCard() {
       </div>
 
       {isLoading ? (
-        <div className="mt-3 space-y-2" aria-busy="true" data-testid="recent-sales-skeleton">
+        <div className="space-y-2 px-4 pb-4 sm:px-5 sm:pb-5" aria-busy="true" data-testid="recent-sales-skeleton">
           {[0, 1, 2].map((row) => (
             <div key={row} className="h-8 animate-pulse rounded-md bg-muted" />
           ))}
         </div>
       ) : isError ? (
         <ErrorState
-          className="mt-3 min-h-0 py-4 shadow-none"
+          className="mx-4 mb-4 min-h-0 py-4 shadow-none sm:mx-5 sm:mb-5"
           message="No pudimos cargar las ventas recientes."
           retryLabel="Reintentar"
           onRetry={() => refetch()}
         />
       ) : sales.length === 0 ? (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="px-4 pb-4 text-xs text-muted-foreground sm:px-5 sm:pb-5">
           Sin ventas recientes
         </p>
       ) : (
-        <div className="@container mt-3">
-          <div className="hidden @2xl:block overflow-x-auto">
+        <div className="@container">
+          {/* Edge to edge, like the sales page table: the header band meets the
+              card borders instead of floating inside the card padding. */}
+          <div className="hidden @2xl:block overflow-x-auto border-t border-border/60">
           <Table variant="default" className="min-w-[440px]">
             <TableHeader>
               <TableRow>
-                <TableCell as="th" className="px-2 py-2 text-left font-medium text-muted-foreground">
+                <TableCell as="th">
                   #
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-left font-medium text-muted-foreground">
+                <TableCell as="th">
                   Hora
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-left font-medium text-muted-foreground">
+                <TableCell as="th">
                   Cliente
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-left font-medium text-muted-foreground">
+                <TableCell as="th">
                   Pago
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-right font-medium text-muted-foreground">
+                <TableCell as="th" className="text-right">
                   Total
                 </TableCell>
-                <TableCell as="th" className="px-2 py-2 text-right font-medium text-muted-foreground">
+                <TableCell as="th" className="text-right">
                   Estado
                 </TableCell>
               </TableRow>
@@ -85,22 +87,22 @@ export function RecentSalesCard() {
             <tbody>
               {sales.map((sale) => (
                 <TableRow key={sale.id} data-testid="recent-sale-row">
-                  <TableCell className="px-2 py-2 font-mono font-semibold tabular-nums">
+                  <TableCell className="font-mono font-semibold tabular-nums">
                     {sale.saleNumber}
                   </TableCell>
-                  <TableCell className="px-2 py-2 text-muted-foreground tabular-nums">
+                  <TableCell className="text-muted-foreground tabular-nums">
                     {formatDateTime(sale.createdAt)}
                   </TableCell>
-                  <TableCell className="max-w-[12rem] truncate px-2 py-2">
+                  <TableCell className="max-w-[12rem] truncate">
                     {sale.customer?.name ?? "Sin cliente"}
                   </TableCell>
-                  <TableCell className="px-2 py-2">
+                  <TableCell>
                     <span className={getPaymentState(sale.payments, sale.financed).className}>{getPaymentState(sale.payments, sale.financed).label}</span>
                   </TableCell>
-                  <TableCell className="px-2 py-2 text-right font-semibold tabular-nums">
+                  <TableCell className="text-right font-semibold tabular-nums">
                     {formatCurrency(sale.total)}
                   </TableCell>
-                  <TableCell className="px-2 py-2 text-right">
+                  <TableCell className="text-right">
                     <StatusBadge domain="sale" status={sale.status} dot={false} />
                   </TableCell>
                 </TableRow>
@@ -109,7 +111,7 @@ export function RecentSalesCard() {
           </Table>
           </div>
 
-          <div data-testid="recent-sales-list" className="@2xl:hidden divide-y divide-border/60">
+          <div data-testid="recent-sales-list" className="@2xl:hidden divide-y divide-border/60 border-t border-border/60 px-4 sm:px-5">
             {sales.map((sale) => {
               const payment = getPaymentState(sale.payments, sale.financed);
               return (

@@ -156,7 +156,8 @@ describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
     });
 
     expect(strip).toHaveAttribute("href", "/inventory?filter=lowStock");
-    expect(within(strip).getByText("Reordenar")).toBeTruthy();
+    expect(within(strip).getByText("Stock crítico")).toBeTruthy();
+    expect(within(strip).getByText("2 productos")).toBeTruthy();
   });
 
   it("uses the singular copy for a single low-stock product", () => {
@@ -190,22 +191,23 @@ describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 
     expect(screen.queryByTestId("kpi-low-stock")).toBeNull();
-    expect(screen.queryByText("Reordenar")).toBeNull();
+    expect(screen.queryByText("Stock crítico")).toBeNull();
     expect(screen.getByTestId("kpi-totals")).toBeTruthy();
+    expect(screen.getByTestId("kpi-totals").firstElementChild!.className).not.toContain("md:grid-cols-4");
   });
 
-  it("orders the sections: today row, then the low-stock strip, then the totals", () => {
+  it("puts the low-stock link as the fourth cell of the totals card instead of a full-width strip", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 
     const row = screen.getByTestId("kpi-row-1");
     const strip = screen.getByTestId("kpi-low-stock");
     const totals = screen.getByTestId("kpi-totals");
 
+    expect(totals.contains(strip)).toBe(true);
+    expect(strip.parentElement!.className).toContain("md:grid-cols-4");
+    expect(strip.parentElement!.lastElementChild).toBe(strip);
     expect(
-      row.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      strip.compareDocumentPosition(totals) & Node.DOCUMENT_POSITION_FOLLOWING,
+      row.compareDocumentPosition(totals) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
