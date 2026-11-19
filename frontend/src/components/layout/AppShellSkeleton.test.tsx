@@ -59,6 +59,25 @@ describe("AppShellSkeleton desktop", () => {
     expect(main.className).toContain("lg:ml-[256px]");
   });
 
+  it("reserves the header bar so the swap to the real shell does not jump", () => {
+    const { container } = render(<AppShellSkeleton isCollapsed={false} />);
+
+    const header = screen.getByTestId("app-shell-skeleton-header");
+    expect(header.className).toContain("hidden");
+    expect(header.className).toContain("lg:flex");
+    expect(header.className).toContain("h-[var(--app-header-height)]");
+    expect(header.className).toContain("lg:ml-[256px]");
+    expect(container.querySelector("aside")).toBeInTheDocument();
+  });
+
+  it("keeps the header above the rail's collapsed width too", () => {
+    render(<AppShellSkeleton isCollapsed />);
+
+    expect(screen.getByTestId("app-shell-skeleton-header").className).toContain(
+      "lg:ml-[72px]",
+    );
+  });
+
   it("keeps the rail and its margin untouched", () => {
     const { container } = render(<AppShellSkeleton isCollapsed />);
 

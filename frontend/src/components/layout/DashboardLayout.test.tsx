@@ -22,6 +22,18 @@ vi.mock("./Sidebar", () => ({
   Sidebar: () => null,
 }));
 
+// The header and the palette are surfaces with their own suites; the shell only
+// owes them a slot and the rail's collapsed state.
+vi.mock("./AppHeader", () => ({
+  AppHeader: ({ isCollapsed }: { isCollapsed: boolean }) => (
+    <div data-testid="app-header" data-collapsed={String(isCollapsed)} />
+  ),
+}));
+
+vi.mock("./CommandPalette", () => ({
+  CommandPalette: () => <div data-testid="command-palette" />,
+}));
+
 // The tab bar is the shell's other navigation surface; it renders real links,
 // and this suite is about the shell's geometry and gating, not Next's router.
 vi.mock("next/link", () => ({
@@ -267,8 +279,25 @@ describe("DashboardLayout route gating for /expenses", () => {
     expect(column.querySelector("p")!.parentElement).toBe(column);
   });
 
-  it("keeps the content column clear of the notch, the home indicator and the tab bar", () => {
+  it("fills exactly the height the header leaves, so a short page does not scroll", () => {
     setUser("ADMIN");
+
+    const { container } = render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    const mainElement = container.querySelector("main")!;
+    // The sticky bar owns the top of the viewport; without this cap the
+    // document would be one header taller than the screen on every page that
+    // fits inside it.
+    expect(mainElement.className).toContain(
+      "lg:min-h-[calc(100dvh-var(--app-header-height))]"
+    );
+  });
+
+  it("keeps the content column clear of the notch, the home indicator and the tab bar", () => {    setUser("ADMIN");
 
     const { container } = render(
       <DashboardLayout>
@@ -315,5 +344,75 @@ describe("DashboardLayout route gating for /expenses", () => {
     );
 
     expect(screen.getByTestId("connection-status")).toBeInTheDocument();
+  });
+
+  it("mounts the desktop header above the content column", () => {
+    setUser("ADMIN");
+
+    render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    expect(screen.getByTestId("app-header")).toHaveAttribute(
+      "data-collapsed",
+      "false",
+    );
+  });
+
+  it("hands the header the rail's collapsed state", async () => {
+    setUser("ADMIN");
+
+    function ToggleProbe() {
+      const { toggleCollapse } = useSidebar();
+      return <button onClick={toggleCollapse}>Toggle</button>;
+    }
+
+    render(
+      <SidebarProvider>
+        <ToggleProbe />
+        <DashboardLayout>
+          <p>Contenido</p>
+        </DashboardLayout>
+      </SidebarProvider>
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Toggle" }));
+
+    expect(screen.getByTestId("app-header")).toHaveAttribute(
+      "data-collapsed",
+      "true",
+    );
+  });
+
+  it("mounts one command palette for the whole shell", () => {
+    setUser("ADMIN");
+
+    render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    expect(screen.getAllByTestId("command-palette")).toHaveLength(1);
+  });
+
+  it("keeps the header off the skeleton while the session restores", () => {
+    useAuthMock.mockReturnValue({
+      isAuthenticated: false,
+      loading: true,
+      user: null,
+      organization: undefined,
+    });
+
+    render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    expect(screen.getByTestId("app-shell-skeleton")).toBeInTheDocument();
+    expect(screen.queryByTestId("app-header")).not.toBeInTheDocument();
   });
 });
