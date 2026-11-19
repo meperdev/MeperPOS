@@ -158,6 +158,28 @@ describe("Sidebar", () => {
     expect(link).toHaveAttribute("href", "/expenses");
   });
 
+  it("marks the current section with a soft primary tint and a primary icon", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    render(<Sidebar />, { wrapper });
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/auth/organizations");
+    });
+
+    // pathname is mocked to /dashboard, so Panel is the current section.
+    const active = screen.getByRole("link", { name: "Panel" });
+    expect(active).toHaveClass("bg-primary-light/60", "text-foreground");
+    expect(active.firstElementChild).toHaveClass("text-primary-text");
+    expect(active).not.toHaveClass("bg-muted/70");
+
+    const idle = screen.getByRole("link", { name: "Salidas" });
+    expect(idle).not.toHaveClass("bg-primary-light/60");
+    expect(idle.firstElementChild).toHaveClass("text-muted-foreground");
+  });
+
   it("uses the approved operational order and keeps users out of the main sidebar", async () => {
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { organizations },

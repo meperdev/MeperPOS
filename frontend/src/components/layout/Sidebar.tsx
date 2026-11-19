@@ -422,8 +422,10 @@ export function Sidebar() {
                         // comes back with the rail; tailwind-merge drops the bare
                         // `flex` so `hidden` actually wins below lg.
                         mobileTabHrefs.has(item.href) && "hidden lg:flex",
+                        // Current section: a softer take on the palette's active row
+                        // (tinted primary at 60%, primary icon, label in foreground).
                         isActive
-                          ? "active bg-muted/70 text-foreground"
+                          ? "active bg-primary-light/60 text-foreground"
                           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                       )}
                       title={isCollapsed ? item.label : undefined}
@@ -431,7 +433,7 @@ export function Sidebar() {
                       <span
                         className={cn(
                           "shrink-0 flex items-center justify-center",
-                          isActive ? "text-foreground" : "text-muted-foreground"
+                          isActive ? "text-primary-text" : "text-muted-foreground"
                         )}
                       >
                         {item.icon}
