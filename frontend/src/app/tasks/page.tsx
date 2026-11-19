@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useCreateTask,
@@ -99,6 +99,25 @@ function getTaskEventLabel(type: "CREATED" | "UPDATED" | "STATUS_CHANGED" | "DEL
   }
 }
 
+/** Strike-through draw time. The row holds its place until the line lands. */
+const STRIKE_MS = 250;
+/** Row travel time for the reorder. */
+const MOVE_MS = 300;
+/** Rectangles of every rendered row, taken before the reorder commits. */
+type FlipSnapshot = {
+  rects: Map<string, DOMRect>;
+  /** Row that owned the focused checkbox, when the toggle came from the keyboard. */
+  focusTaskId: string | null;
+};
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export default function TasksPage() {
   const toast = useToast();
   const { user: currentUser } = useAuth();
@@ -132,7 +151,7 @@ export default function TasksPage() {
 
   // Queries & Mutations
   const tasksQuery = useTasks();
-  const taskList = tasksQuery.data?.tasks ?? [];
+  const taskList = useMemo(() => tasksQuery.data?.tasks ?? [], [tasksQuery.data]);
   const assigneesQuery = useTaskAssignees();
   const assignees = assigneesQuery.data ?? [];
 
@@ -179,6 +198,186 @@ export default function TasksPage() {
       return true;
     });
   }, [visibleTaskList, scope, statusFilter, selectedAssigneeId, searchQuery, currentUser?.id]);
+
+  /*
+   * Completion motion, first half: a row that just completed keeps the slot it
+   * had in the last committed order while its strike-through draws. Holding it
+   * in an effect would be too late — the commit that paints the strike is also
+   * the commit that would move the row, and moving a node re-inserts it, which
+   * drops the CSS transition on the floor.
+   *
+   * The snapshots are state, not refs: they are read while rendering, and the
+   * render-phase updates below are the documented "adjust state when props
+   * change" pattern, which re-renders before anything is committed.
+   */
+  const [orderSnapshot, setOrderSnapshot] = useState<string[]>([]);
+  const [statusSnapshot, setStatusSnapshot] = useState<Record<string, TaskStatus>>({});
+  const [holdSlots, setHoldSlots] = useState<Record<string, number>>({});
+  const releaseTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const pendingFlip = useRef<FlipSnapshot | null>(null);
+  const previousOrderKey = useRef<string | null>(null);
+  const isMounted = useRef(true);
+
+  const nextStatuses: Record<string, TaskStatus> = {};
+  for (const task of visibleTaskList) {
+    nextStatuses[task.id] = task.status;
+  }
+
+  const statusesChanged =
+    Object.keys(nextStatuses).length !== Object.keys(statusSnapshot).length ||
+    Object.keys(nextStatuses).some((id) => statusSnapshot[id] !== nextStatuses[id]);
+
+  const newlyCompleted = statusesChanged
+    ? visibleTaskList.filter(
+        (task) =>
+          task.status === "COMPLETED" &&
+          statusSnapshot[task.id] !== undefined &&
+          statusSnapshot[task.id] !== "COMPLETED" &&
+          holdSlots[task.id] === undefined,
+      )
+    : [];
+
+  if (newlyCompleted.length > 0) {
+    setHoldSlots((current) => {
+      const next = { ...current };
+      for (const task of newlyCompleted) {
+        const index = orderSnapshot.indexOf(task.id);
+        if (index >= 0) next[task.id] = index;
+      }
+      return next;
+    });
+  }
+
+  if (statusesChanged) setStatusSnapshot(nextStatuses);
+
+  /**
+   * Completed rows sink to the end of the open list; everything still open
+   * keeps the order the server sent (`sort` is stable). Held rows are re-seated
+   * at the index they had before the status changed, so nothing jumps while
+   * its strike is still drawing.
+   */
+  const orderedTasks = useMemo(() => {
+    const statusById = new Map(filteredTasks.map((task) => [task.id, task.status]));
+    const rankOf = (id: string) =>
+      statusById.get(id) === "COMPLETED" && holdSlots[id] === undefined ? 1 : 0;
+
+    const orderedIds = filteredTasks
+      .map((task) => task.id)
+      .sort((a, b) => rankOf(a) - rankOf(b));
+
+    for (const [id, index] of Object.entries(holdSlots)) {
+      const from = orderedIds.indexOf(id);
+      if (from < 0) continue;
+      orderedIds.splice(from, 1);
+      orderedIds.splice(Math.min(index, orderedIds.length), 0, id);
+    }
+
+    const byId = new Map(filteredTasks.map((task) => [task.id, task]));
+    return orderedIds.flatMap((id) => {
+      const task = byId.get(id);
+      return task ? [task] : [];
+    });
+  }, [filteredTasks, holdSlots]);
+
+  const renderedOrder = orderedTasks.map((task) => task.id);
+  const taskOrderKey = renderedOrder.join("|");
+
+  // Remember the order that actually reached the screen: it is the reference
+  // slot for the next row that completes. Same render-phase sync pattern, so
+  // the snapshot is current before anything is committed.
+  const orderUnchanged =
+    renderedOrder.length === orderSnapshot.length &&
+    renderedOrder.every((id, index) => id === orderSnapshot[index]);
+  if (!orderUnchanged) setOrderSnapshot(renderedOrder);
+
+  // One timer per held row, released once its strike has drawn. Reduced motion
+  // draws the line instantly, so the row may travel at once.
+  useEffect(() => {
+    const held = Object.keys(holdSlots);
+    const holdMs = prefersReducedMotion() ? 0 : STRIKE_MS;
+
+    for (const id of held) {
+      if (releaseTimers.current.has(id)) continue;
+
+      releaseTimers.current.set(
+        id,
+        setTimeout(() => {
+          releaseTimers.current.delete(id);
+          if (!isMounted.current) return;
+          setHoldSlots((current) => {
+            if (current[id] === undefined) return current;
+            const next = { ...current };
+            delete next[id];
+            return next;
+          });
+        }, holdMs),
+      );
+    }
+
+    for (const [id, timer] of releaseTimers.current) {
+      if (held.includes(id)) continue;
+      clearTimeout(timer);
+      releaseTimers.current.delete(id);
+    }
+  }, [holdSlots]);
+
+  useEffect(() => {
+    isMounted.current = true;
+    const timers = releaseTimers.current;
+    return () => {
+      isMounted.current = false;
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
+
+  // Completion motion, second half (FLIP): the "before" rectangles are captured
+  // at the click and the "after" ones by the layout effect that runs on the
+  // render which finally reorders. The strike-through changes no layout, so both
+  // measurements describe the same rows.
+  const captureRowRects = () => {
+    const rects = new Map<string, DOMRect>();
+    rowRefs.current.forEach((element, id) => {
+      rects.set(id, element.getBoundingClientRect());
+    });
+    return rects;
+  };
+
+  useLayoutEffect(() => {
+    const orderChanged =
+      previousOrderKey.current !== null && previousOrderKey.current !== taskOrderKey;
+    previousOrderKey.current = taskOrderKey;
+
+    const pending = pendingFlip.current;
+    if (!pending || !orderChanged) return;
+    pendingFlip.current = null;
+
+    if (!prefersReducedMotion()) {
+      rowRefs.current.forEach((element, id) => {
+        const before = pending.rects.get(id);
+        if (!before) return;
+
+        const delta = before.top - element.getBoundingClientRect().top;
+        if (Math.abs(delta) < 1) return;
+        if (typeof element.animate !== "function") return;
+
+        element.animate(
+          [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0px)" }],
+          { duration: MOVE_MS, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+        );
+      });
+    }
+
+    // The row is the same keyed node in its new place, so focus usually rides
+    // along; restore it explicitly when the move dropped it.
+    if (pending.focusTaskId) {
+      const toggle = rowRefs.current
+        .get(pending.focusTaskId)
+        ?.querySelector<HTMLButtonElement>("[data-task-toggle]");
+      if (toggle && document.activeElement !== toggle) toggle.focus();
+    }
+  }, [taskOrderKey]);
 
   // Metrics
   const totalTasks = visibleTaskList.length;
@@ -227,9 +426,20 @@ export default function TasksPage() {
     currentStatus: TaskStatus,
   ) => {
     const nextStatus: TaskStatus = currentStatus === "COMPLETED" ? "PENDING" : "COMPLETED";
+    const toggle = rowRefs.current
+      .get(taskId)
+      ?.querySelector<HTMLButtonElement>("[data-task-toggle]");
+
+    pendingFlip.current = {
+      rects: captureRowRects(),
+      focusTaskId: toggle && document.activeElement === toggle ? taskId : null,
+    };
+
     try {
       await updateTaskStatus.mutateAsync({ id: taskId, status: nextStatus });
     } catch (error) {
+      // A rejected request leaves the row where it was: nothing to animate.
+      pendingFlip.current = null;
       toast.error(getApiErrorMessage(error, "No se pudo actualizar la tarea"));
     }
   };
@@ -238,9 +448,15 @@ export default function TasksPage() {
     taskId: string,
     status: TaskStatus,
   ) => {
+    pendingFlip.current = {
+      rects: captureRowRects(),
+      focusTaskId: null,
+    };
+
     try {
       await updateTaskStatus.mutateAsync({ id: taskId, status });
     } catch (error) {
+      pendingFlip.current = null;
       toast.error(getApiErrorMessage(error, "No se pudo actualizar la tarea"));
     }
   };
@@ -615,7 +831,7 @@ export default function TasksPage() {
                   />
                 ) : (
                   <div className="space-y-1">
-                    {filteredTasks.map((task) => {
+                    {orderedTasks.map((task) => {
                       const isSelected = task.id === selectedTask?.id;
                       const isOverdue =
                         task.dueDate &&
@@ -626,6 +842,11 @@ export default function TasksPage() {
                       return (
                         <div
                           key={task.id}
+                          data-task-id={task.id}
+                          ref={(element) => {
+                            if (element) rowRefs.current.set(task.id, element);
+                            else rowRefs.current.delete(task.id);
+                          }}
                           onClick={() => {
                             setSelectedTaskId(task.id);
                             setIsEditingTask(false);
@@ -641,6 +862,7 @@ export default function TasksPage() {
                             {/* Fast Toggle Checkbox */}
                             <button
                               type="button"
+                              data-task-toggle=""
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleToggleTask(task.id, task.status);
@@ -659,10 +881,11 @@ export default function TasksPage() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
                                 <span
+                                  data-struck={task.status === "COMPLETED"}
                                   className={cn(
-                                    "text-sm font-semibold transition-colors line-clamp-1",
+                                    "task-title-strike line-clamp-1 text-sm font-semibold",
                                     task.status === "COMPLETED"
-                                      ? "text-muted-foreground line-through decoration-muted-foreground/60"
+                                      ? "text-muted-foreground"
                                       : "text-foreground",
                                   )}
                                 >

@@ -648,3 +648,23 @@ input::-webkit-date-and-time-value {
     }
 }
 
+/* ─── Tareas: tachado animado al completar ────────────────
+   The completion line is the title's own background gradient, so animating
+   `background-size` draws it left to right while the text colour fades to
+   muted — one transition, two properties, no extra element. `currentColor`
+   ties the line to the text colour in either theme. The reduced-motion block
+   above already collapses every transition duration, so the line still lands,
+   just without the draw. */
+.task-title-strike {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-repeat: no-repeat;
+    background-position: 0 58%;
+    background-size: 0% 1.5px;
+    transition:
+        background-size 250ms cubic-bezier(0.16, 1, 0.3, 1),
+        color 250ms ease-out;
+}
+
+.task-title-strike[data-struck="true"] {
+    background-size: 100% 1.5px;
+}

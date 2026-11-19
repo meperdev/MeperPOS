@@ -11,10 +11,12 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { InstallAppCard } from "../../_components/InstallAppCard";
+import { SettingsCard } from "../../_components/SettingsCard";
+import { ThemeSelector } from "@/components/ui/ThemeSelector";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Building2, Image as ImageIcon, Upload } from "lucide-react";
+import { Building2, Image as ImageIcon, Palette, Upload } from "lucide-react";
 
 /**
  * One settings row: the label and its explanation sit on the left rail, the
@@ -278,6 +280,14 @@ export default function GeneralSettingsPage() {
           </div>
         </div>
       </div>
+
+      <SettingsCard
+        title="Apariencia"
+        description="Elige el tema de la interfaz en este dispositivo."
+        icon={<Palette className="h-4 w-4 text-primary" aria-hidden="true" />}
+      >
+        <ThemeSelector />
+      </SettingsCard>
 
       <InstallAppCard />
     </div>
