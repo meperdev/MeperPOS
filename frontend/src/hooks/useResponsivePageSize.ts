@@ -22,6 +22,13 @@ export interface ResponsivePageSizeOptions {
   gap: number;
   /** Card height used until a rendered card can be measured. */
   rowHeight: number;
+  /**
+   * `false` when the grid stretches its rows to fill the space above the pager.
+   * The rendered card is then TALLER than its row minimum, so measuring it would
+   * count fewer rows, which stretches the cards further — a feedback loop. With
+   * this off, `rowHeight` always decides the row count. Default `true`.
+   */
+  measureRowHeight?: boolean;
   minRows?: number;
   /** The page's fixed default: the floor, so phones keep their current list. */
   min: number;
@@ -92,6 +99,7 @@ export function useResponsivePageSize({
   minCardWidth,
   gap,
   rowHeight,
+  measureRowHeight = true,
   minRows = MIN_VISIBLE_ROWS,
   min,
   max,
@@ -134,7 +142,9 @@ export function useResponsivePageSize({
       const width = container.clientWidth || box.width;
       if (!(width > 0)) return;
 
-      const cardHeight = container.firstElementChild?.getBoundingClientRect().height;
+      const cardHeight = measureRowHeight
+        ? container.firstElementChild?.getBoundingClientRect().height
+        : undefined;
       const footerHeight = footer ? outsideHeight(footer) : 0;
       const top = box.top + scrollOffset();
       const availableHeight = viewportHeight() - top - footerHeight - gap;
@@ -202,6 +212,7 @@ export function useResponsivePageSize({
     minCardWidth,
     gap,
     rowHeight,
+    measureRowHeight,
     minRows,
     min,
     max,

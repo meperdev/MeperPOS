@@ -239,7 +239,13 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
         // Inventory is the short card: three rows of it have to fit a 1080p
         // viewport between the filters and the pager (see
         // PRODUCT_CARD_MIN_ROW_HEIGHT). POS keeps the taller poster.
-        isInventory ? "min-h-[13.5rem]" : "min-h-[15.5rem]",
+        // From `lg` the inventory grid stretches every row to the height left above
+        // the pager, so the card gives up its poster aspect and its height cap there
+        // and takes the row's height. The photo is an edge-to-edge layer, so that
+        // extra height becomes more photo; the sheet stays docked at the bottom.
+        isInventory
+          ? "min-h-[13.5rem] lg:h-full lg:aspect-auto lg:max-h-none"
+          : "min-h-[15.5rem]",
         compactPos &&
           "max-sm:min-h-[7rem] max-sm:max-h-none max-sm:aspect-auto max-sm:max-w-none max-sm:rounded-xl",
         barePhoneTile && "max-sm:bg-card",

@@ -667,6 +667,50 @@ describe("ProductCard — responsive action and price hierarchy", () => {
   });
 });
 
+describe("ProductCard — inventory fills the stretched grid row", () => {
+  it("grows to its row height at lg while keeping the 216px floor", () => {
+    const { container } = render(<ProductCard product={baseProduct} mode="inventory" />);
+
+    // /inventory stretches every row to the space above the pager. The card gives up
+    // its poster aspect and its height cap there, so the row decides its height; below
+    // lg the poster shape and the minimum height are exactly what they were.
+    expect(container.firstElementChild).toHaveClass(
+      "min-h-[13.5rem]",
+      "lg:h-full",
+      "lg:aspect-auto",
+      "lg:max-h-none",
+    );
+  });
+
+  it("gives the extra height to the media band, not to the text block", () => {
+    const { container } = render(<ProductCard product={baseProduct} mode="inventory" />);
+
+    const card = container.firstElementChild as HTMLElement;
+    const media = screen.getByTestId("product-media");
+    const sheet = screen.getByTestId("product-sheet");
+
+    // The photo layer is edge to edge, so a taller card shows more photo — that is
+    // what "the media band grows" means for an absolutely positioned layer.
+    expect(media).toHaveClass("absolute", "inset-0");
+    // The information block stays docked to the bottom at its content height.
+    expect(sheet).toHaveClass("mt-auto");
+    expect(sheet).not.toHaveClass("flex-1");
+    expect(card.lastElementChild).toBe(sheet);
+  });
+
+  it("leaves the POS poster card's shape exactly as it was", () => {
+    const { container } = render(
+      <ProductCard product={baseProduct} mode="pos" onClick={vi.fn()} />,
+    );
+
+    const card = container.firstElementChild as HTMLElement;
+    expect(card).toHaveClass("aspect-[4/5]", "min-h-[15.5rem]", "max-h-[22rem]");
+    expect(card).not.toHaveClass("lg:h-full");
+    expect(card).not.toHaveClass("lg:aspect-auto");
+    expect(card).not.toHaveClass("lg:max-h-none");
+  });
+});
+
 describe("ProductCard — premium layout contract", () => {
   it("lays the photo over the whole card frame instead of an inset sub-frame", () => {
     const { container } = render(

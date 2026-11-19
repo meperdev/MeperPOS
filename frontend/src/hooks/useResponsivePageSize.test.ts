@@ -260,6 +260,18 @@ describe("useResponsivePageSize", () => {
     expect(result.current.columns).toBe(7);
   });
 
+  it("measures the rendered card when the caller does not fix the row height", () => {
+    // The default: a rendered card wins over `rowHeight`, because most collection
+    // grids keep the card's natural height.
+    const scene = mountScene({ width: 1600, top: 300, cardHeight: 400, footerHeight: 64 });
+    const { result } = renderPageSize(scene);
+
+    settle();
+
+    // 1060px of space for cards: (1060 + 16) / (400 + 16) = 2.58 -> 2 rows.
+    expect(result.current).toMatchObject({ columns: 9, rows: 2 });
+  });
+
   it("rebuilds the measurement when the card height changes", () => {
     const scene = mountScene({ width: 1600, top: 300, cardHeight: 248, footerHeight: 64 });
     const { result } = renderPageSize(scene);
@@ -277,6 +289,34 @@ describe("useResponsivePageSize", () => {
     settle();
 
     expect(result.current).toMatchObject({ pageSize: 45, columns: 9, rows: 5 });
+  });
+});
+
+describe("useResponsivePageSize with a fixed row height", () => {
+  it("ignores a stretched card, so the taller rows cannot shrink the page", () => {
+    // Inventory stretches every row to fill the space above the pager, so the
+    // rendered card is TALLER than the minimum row height. Counting rows from that
+    // stretched height would ask for fewer rows, which stretches the cards further:
+    // a feedback loop that never settles. The caller fixes the height instead.
+    const scene = mountScene({ width: 1600, top: 300, cardHeight: 216, footerHeight: 64 });
+    const { result } = renderPageSize(scene, { measureRowHeight: false });
+
+    settle();
+    // 1060px of space, 216px rows and 16px gaps: (1060 + 16) / 232 = 4 rows.
+    expect(result.current).toMatchObject({ pageSize: 36, columns: 9, rows: 4 });
+
+    // The rows stretched to fill it: the card now measures 400px.
+    Object.defineProperty(scene.card, "getBoundingClientRect", {
+      value: rect({ width: 200, top: 300, height: 400 }),
+      configurable: true,
+    });
+    act(() => {
+      observers.forEach((observer) => observer.trigger());
+    });
+    settle();
+
+    // Same size: the count comes from the minimum row height, never the card.
+    expect(result.current).toMatchObject({ pageSize: 36, columns: 9, rows: 4 });
   });
 });
 

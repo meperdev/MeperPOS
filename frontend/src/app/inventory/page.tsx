@@ -15,7 +15,7 @@ import {
 import { useCategories } from "@/hooks/useCategories";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { PRODUCT_GRID_CLASSES } from "@/components/ui/collectionGrid";
+import { INVENTORY_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -39,14 +39,17 @@ import {
 } from "@/components/ui/Table";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useEffectiveViewMode, useMediaQuery } from "@/hooks/useEffectiveViewMode";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_GRID_GAP,
+  INVENTORY_CARD_MIN_WIDTH,
+  INVENTORY_WIDE_TRACK_QUERY,
   MAX_COLLECTION_PAGE_SIZE,
   MIN_VISIBLE_ROWS,
   PRODUCT_CARD_MIN_ROW_HEIGHT,
   PRODUCT_CARD_MIN_WIDTH,
+  inventoryGridRows,
   remapPageForPageSize,
 } from "@/lib/collection-grid";
 import { shouldAutoFocusTextInput } from "@/lib/input-focus";
@@ -159,21 +162,45 @@ function InventoryContent() {
 
   // Card view asks the grid how many cards fit; table view fits whole rows
   // between the table top and the pager. Both answer TABLE_PAGE_SIZE until measured.
+  // The grid's track widens from `lg` (see INVENTORY_GRID_CLASSES), so the width the
+  // page counts with follows the same breakpoint; when the viewport cannot be
+  // measured the narrower track stands, which just asks for fewer columns.
+  const wideInventoryTracks = useMediaQuery(INVENTORY_WIDE_TRACK_QUERY, false);
   const {
     pageSize: gridPageSize,
+    columns: gridColumns,
+    rows: gridRows,
     containerRef: gridRef,
     footerRef,
     tableRef,
   } = useResponsivePageSize({
-    minCardWidth: PRODUCT_CARD_MIN_WIDTH,
+    minCardWidth: wideInventoryTracks ? INVENTORY_CARD_MIN_WIDTH : PRODUCT_CARD_MIN_WIDTH,
     gap: COLLECTION_GRID_GAP,
     rowHeight: PRODUCT_CARD_MIN_ROW_HEIGHT,
+    // Rows stretch to the space above the pager, so a rendered card is taller than
+    // its row: measuring it would ask for fewer rows, which stretches it further.
+    measureRowHeight: false,
     minRows: MIN_VISIBLE_ROWS,
     min: TABLE_PAGE_SIZE,
     max: MAX_COLLECTION_PAGE_SIZE,
     enabled: viewMode === "grid",
   });
-  const pageSize = gridPageSize;
+  // From `lg` the grid stretches its rows into the height above the pager, so the page
+  // must hold exactly the cards that fit: the hook's floor would add a row that scrolls
+  // under the pinned pager (1366x768 fits four columns and two rows, not ten cards).
+  // Below `lg` the floor stands, so a phone keeps the list it always had.
+  const pageSize =
+    wideInventoryTracks && gridColumns > 0
+      ? Math.min(gridColumns * gridRows, MAX_COLLECTION_PAGE_SIZE)
+      : gridPageSize;
+  // One equal track per row, written inline: CSS `auto-fill` would choose its own track
+  // count and leave the leftover height unevenly distributed. The track count is the
+  // measured one whatever the card count, so a short last page keeps a full page's card
+  // height instead of one tall row.
+  const gridRowStyle =
+    wideInventoryTracks && gridRows > 0
+      ? { gridTemplateRows: inventoryGridRows(gridRows) }
+      : undefined;
 
   // Server-side pagination: every request — filtered or not — is bounded to
   // one page of rows. Low stock and alphabetical order are resolved by the
@@ -687,7 +714,8 @@ function InventoryContent() {
             {viewMode === "grid" ? (
               <div
                 ref={gridRef}
-                className={cn(PRODUCT_GRID_CLASSES, "flex-1 content-start justify-items-center")}
+                style={gridRowStyle}
+                className={cn(INVENTORY_GRID_CLASSES, "flex-1 content-start justify-items-center")}
                 aria-busy={isFetching}
               >
                 {displayProducts.map((product) => (

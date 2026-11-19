@@ -12,6 +12,17 @@
 /** `minmax(10rem, 1fr)` — the product card track (`PRODUCT_GRID_CLASSES`). */
 export const PRODUCT_CARD_MIN_WIDTH = 160;
 
+/**
+ * `minmax(12.5rem, 1fr)` from `lg` — the inventory track
+ * (`INVENTORY_GRID_CLASSES`). Fewer, chubbier cards, as the inventory panel asks:
+ * the page mirrors the `lg` breakpoint below into the page-size calculation, so
+ * the computed column count is the one the grid actually draws.
+ */
+export const INVENTORY_CARD_MIN_WIDTH = 200;
+
+/** Tailwind's `lg` — the width from which the inventory grid widens its track. */
+export const INVENTORY_WIDE_TRACK_QUERY = "(min-width: 1024px)";
+
 /** `minmax(16rem, 1fr)` — the generic collection card track (`COLLECTION_GRID_CLASSES`). */
 export const COLLECTION_CARD_MIN_WIDTH = 256;
 
@@ -35,6 +46,21 @@ export const PRODUCT_CARD_MIN_ROW_HEIGHT = 216;
  * so this value is never what decides the final row count.
  */
 export const COLLECTION_CARD_FALLBACK_ROW_HEIGHT = 240;
+
+/**
+ * The inventory grid's row tracks: one equal, stretched track per requested row.
+ *
+ * Written as an inline `gridTemplateRows` instead of a CSS `repeat(auto-fill, …)`:
+ * auto-fill picks its own track count, which can differ from the rows the page asked
+ * for, and the leftover space then lands unevenly (1590x913 gave a 335px first row
+ * over a 216px second). Explicit tracks are equal by construction, and the track count
+ * does not depend on how many cards the page holds — a half-empty last page keeps the
+ * full page's card height instead of stretching its single row to the whole grid.
+ */
+export function inventoryGridRows(rows: number): string {
+  const count = Number.isFinite(rows) ? Math.max(1, Math.round(rows)) : 1;
+  return `repeat(${count}, minmax(${PRODUCT_CARD_MIN_ROW_HEIGHT}px, 1fr))`;
+}
 
 /**
  * The highest page size a collection page may request. Every list endpoint

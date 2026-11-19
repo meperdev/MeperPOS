@@ -4,14 +4,18 @@ import { describe, expect, it } from "vitest";
 import {
   COLLECTION_CARD_MIN_WIDTH,
   COLLECTION_GRID_GAP,
+  INVENTORY_CARD_MIN_WIDTH,
+  INVENTORY_WIDE_TRACK_QUERY,
   MAX_COLLECTION_PAGE_SIZE,
   PRODUCT_CARD_MIN_ROW_HEIGHT,
   PRODUCT_CARD_MIN_WIDTH,
   computeCollectionPageSize,
   computeColumns,
   computeVisibleRows,
+  inventoryGridRows,
   remapPageForPageSize,
 } from "@/lib/collection-grid";
+import { INVENTORY_GRID_CLASSES } from "@/components/ui/collectionGrid";
 
 describe("collection grid constants mirror the shared CSS grid", () => {
   // The single card grid lives in components/ui/collectionGrid.ts. This module
@@ -44,6 +48,60 @@ describe("collection grid constants mirror the shared CSS grid", () => {
     );
     expect(card).toContain("min-h-[13.5rem]");
     expect(PRODUCT_CARD_MIN_ROW_HEIGHT).toBe(216); // 13.5rem
+  });
+});
+
+describe("the inventory grid widens its tracks and stretches its rows", () => {
+  // /inventory is the one page whose cards were wider than the space they filled:
+  // at 1590x913 the grid ended in an empty band above the pager. Its grid keeps the
+  // 10rem phone track, widens to 12.5rem from lg, and stretches the rows to fill the
+  // height left above the pager — so the constants below must mirror that CSS.
+  it("keeps the shared 10rem track below lg, so a phone still holds two columns", () => {
+    expect(INVENTORY_GRID_CLASSES).toContain(
+      "grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]",
+    );
+    expect(computeColumns(358, PRODUCT_CARD_MIN_WIDTH, COLLECTION_GRID_GAP)).toBe(2);
+  });
+
+  it("widens the inventory track to 12.5rem (200px) from lg", () => {
+    expect(INVENTORY_GRID_CLASSES).toContain(
+      "lg:grid-cols-[repeat(auto-fill,minmax(12.5rem,1fr))]",
+    );
+    expect(INVENTORY_CARD_MIN_WIDTH).toBe(200); // 12.5rem
+  });
+
+  it("turns the wide track on at the lg breakpoint the page mirrors", () => {
+    expect(INVENTORY_WIDE_TRACK_QUERY).toBe("(min-width: 1024px)");
+  });
+
+  it("stretches rows from lg so the grid ends where the pager starts", () => {
+    // The row COUNT is the hook's, never CSS auto-fill's: auto-fill could fit a
+    // different number of tracks than the page requested and leave one row tall and
+    // the next at 216px. The page writes the tracks inline from `inventoryGridRows`.
+    expect(INVENTORY_GRID_CLASSES).not.toContain("lg:grid-rows-");
+    expect(INVENTORY_GRID_CLASSES).toContain("lg:auto-rows-[13.5rem]");
+    // The row floor is the card's own minimum height: 13.5rem = 216px.
+    expect(PRODUCT_CARD_MIN_ROW_HEIGHT).toBe(216);
+  });
+
+  it("writes one equal, stretched track per requested row", () => {
+    // Two rows -> two identical 1fr tracks, so no row can absorb the free space of
+    // another. The 216px floor is the same PRODUCT_CARD_MIN_ROW_HEIGHT the page
+    // counts with, so the tracks and the page size can never disagree.
+    expect(inventoryGridRows(2)).toBe("repeat(2, minmax(216px, 1fr))");
+    expect(inventoryGridRows(3)).toBe("repeat(3, minmax(216px, 1fr))");
+    // A short last page keeps the full page's track count, so its cards are neither
+    // taller nor shorter than a full page's cards.
+    expect(inventoryGridRows(2)).toBe(inventoryGridRows(2));
+    // Nothing measured yet: one row is still a valid grid, never `repeat(0, ...)`.
+    expect(inventoryGridRows(0)).toBe("repeat(1, minmax(216px, 1fr))");
+    expect(inventoryGridRows(-3)).toBe("repeat(1, minmax(216px, 1fr))");
+    expect(inventoryGridRows(2.4)).toBe("repeat(2, minmax(216px, 1fr))");
+  });
+
+  it("keeps the shared gap-4 gutter the page-size hook mirrors", () => {
+    expect(INVENTORY_GRID_CLASSES.startsWith("grid gap-4 ")).toBe(true);
+    expect(COLLECTION_GRID_GAP).toBe(16); // gap-4
   });
 });
 
