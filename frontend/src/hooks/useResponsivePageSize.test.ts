@@ -386,4 +386,37 @@ describe("useResponsivePageSize in table view", () => {
     settle();
     expect(result.current.pageSize).toBe(10);
   });
+
+  it("keeps the measured rows while the table is detached for a loading state", () => {
+    // /customers in table view: the measured rows become `limit`, the new page
+    // loads behind a skeleton, and the table unmounts for that commit. Collapsing
+    // the answer back to `min` there changes `limit` again, which refetches and
+    // unmounts once more: the page size then oscillates between the two values.
+    setViewportHeight(1000);
+    const scene = mountTable({ top: 260, headerHeight: 40, rowHeight: 61, footerHeight: 64 });
+    const { result } = renderHook(() =>
+      useResponsivePageSize(optionsFor(null, { enabled: false, min: 5 })),
+    );
+    act(() => {
+      result.current.tableRef(scene.wrapper);
+      result.current.footerRef(scene.footer);
+    });
+    settle();
+    // 1000 - 260 - 64 - 16 - 40 = 620 -> 10 rows of 61px, well above `min`.
+    expect(result.current.pageSize).toBe(10);
+
+    act(() => {
+      result.current.tableRef(null);
+    });
+    expect(result.current.pageSize).toBe(10);
+
+    // Remounting something else still re-measures: the last value is kept, not frozen.
+    // 620 -> 6 rows of 100px.
+    const shorter = mountTable({ top: 260, headerHeight: 40, rowHeight: 100, footerHeight: 64 });
+    act(() => {
+      result.current.tableRef(shorter.wrapper);
+    });
+    settle();
+    expect(result.current.pageSize).toBe(6);
+  });
 });
