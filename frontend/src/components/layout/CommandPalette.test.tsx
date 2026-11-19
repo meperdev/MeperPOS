@@ -221,6 +221,61 @@ describe("CommandPalette empty state", () => {
   });
 });
 
+describe("CommandPalette active row", () => {
+  // The active row sits on the tinted-primary surface with primary text, so it
+  // reads in both themes instead of one more grey on the modal card.
+  const ACTIVE_TINT = ["bg-primary-light", "text-primary-text"];
+
+  function activeOption() {
+    const input = screen.getByRole("combobox");
+    const active = document.getElementById(
+      input.getAttribute("aria-activedescendant") ?? "",
+    );
+    if (!active) throw new Error("no active option");
+    return active;
+  }
+
+  it("tints only the active option", () => {
+    renderPalette();
+    openWithShortcut();
+
+    const active = activeOption();
+    expect(active).toHaveAttribute("aria-selected", "true");
+    for (const className of ACTIVE_TINT) expect(active).toHaveClass(className);
+
+    const inactive = screen
+      .queryAllByRole("option")
+      .filter((option) => option.getAttribute("aria-selected") === "false");
+    expect(inactive.length).toBeGreaterThan(0);
+    for (const option of inactive) {
+      for (const className of ACTIVE_TINT) expect(option).not.toHaveClass(className);
+    }
+  });
+
+  it("moves the tint with ArrowDown", () => {
+    renderPalette();
+    openWithShortcut();
+
+    const input = screen.getByRole("combobox");
+    const first = activeOption();
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const second = activeOption();
+
+    expect(second).not.toBe(first);
+    expect(first).toHaveAttribute("aria-selected", "false");
+    for (const className of ACTIVE_TINT) expect(first).not.toHaveClass(className);
+    for (const className of ACTIVE_TINT) expect(second).toHaveClass(className);
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const third = activeOption();
+
+    expect(third).not.toBe(second);
+    for (const className of ACTIVE_TINT) expect(second).not.toHaveClass(className);
+    for (const className of ACTIVE_TINT) expect(third).toHaveClass(className);
+  });
+});
+
 describe("CommandPalette search", () => {
   it("waits for two characters before asking the API", async () => {
     renderPalette();

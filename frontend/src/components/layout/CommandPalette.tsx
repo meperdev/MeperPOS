@@ -437,23 +437,33 @@ function PaletteDialog() {
                   onMouseEnter={() => setActiveId(option.id)}
                   onClick={option.onOpen}
                   className={cn(
-                    "flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-xs",
+                    "flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors",
                     "max-sm:min-h-11",
+                    // The active row is the palette's only selection signal, and
+                    // a grey-on-grey one disappears on the light card: the
+                    // project's tinted-primary surface plus primary text reads in
+                    // both themes (4.8:1 light, 6.3:1 dark).
                     isActive
-                      ? "bg-muted text-foreground"
+                      ? "bg-primary-light text-primary-text"
                       : "text-muted-foreground hover:bg-muted/50",
                   )}
                 >
                   <span className="shrink-0" aria-hidden="true">
                     {option.icon}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-foreground/90">
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate",
+                      isActive ? "text-primary-text" : "text-foreground/90",
+                    )}
+                  >
                     {option.label}
                   </span>
                   {option.hint && (
                     <span
                       className={cn(
-                        "shrink-0 text-[11px] tabular-nums text-muted-foreground",
+                        "shrink-0 text-[11px] tabular-nums",
+                        isActive ? "text-foreground/80" : "text-muted-foreground",
                         option.hintMono && "id-text",
                       )}
                     >
@@ -462,7 +472,7 @@ function PaletteDialog() {
                   )}
                   {isActive && (
                     <CornerDownLeft
-                      className="h-3 w-3 shrink-0 text-muted-foreground"
+                      className="h-3 w-3 shrink-0 text-primary-text"
                       aria-hidden="true"
                     />
                   )}
