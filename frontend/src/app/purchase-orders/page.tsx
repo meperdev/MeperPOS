@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { usePurchaseOrders } from "@/hooks/usePurchaseOrders";
 import { useSuppliers } from "@/hooks/useSuppliers";
-import { Button, buttonClassName } from "@/components/ui/Button";
+import { buttonClassName } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
@@ -21,6 +21,7 @@ import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
+import { activationProps } from "@/lib/activation";
 import {
   COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
   COLLECTION_CARD_MIN_WIDTH,
@@ -31,7 +32,6 @@ import {
 } from "@/lib/collection-grid";
 import {
   Plus,
-  Eye,
   ClipboardList,
   Truck,
   Calendar,
@@ -275,19 +275,17 @@ function PurchaseOrdersContent() {
                         <TableCell as="th" className="text-right">
                           Total
                         </TableCell>
-                        <TableCell as="th" className="text-right">
-                          Acciones
-                        </TableCell>
                       </TableRow>
                     </TableHeader>
                     <tbody>
                       {orders.map((order) => (
                         <TableRow
                           key={order.id}
-                          className="cursor-pointer active:bg-muted/40"
-                          onClick={() =>
-                            router.push(`/purchase-orders/${order.id}`)
-                          }
+                          {...activationProps(
+                            () => router.push(`/purchase-orders/${order.id}`),
+                            `Ver orden OC-${order.orderNumber}`,
+                          )}
+                          className="cursor-pointer active:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
                         >
                           <TableCell>
                             <span className="text-xs font-semibold text-foreground tabular-nums">
@@ -316,23 +314,6 @@ function PurchaseOrdersContent() {
                               {formatCurrency(order.total)}
                             </span>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div
-                              className="inline-flex items-center justify-end"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  router.push(`/purchase-orders/${order.id}`)
-                                }
-                                className="px-2.5 gap-1.5"
-                              >
-                                <Eye className="w-3.5 h-3.5" /> Detalle
-                              </Button>
-                            </div>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </tbody>
@@ -344,8 +325,11 @@ function PurchaseOrdersContent() {
                 {orders.map((order) => (
                   <div
                     key={order.id}
-                    className="group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border active:bg-muted/60 cursor-pointer"
-                    onClick={() => router.push(`/purchase-orders/${order.id}`)}
+                    {...activationProps(
+                      () => router.push(`/purchase-orders/${order.id}`),
+                      `Ver orden OC-${order.orderNumber}`,
+                    )}
+                    className="group flex cursor-pointer flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background active:bg-muted/60"
                   >
                     <div>
                       {/* Header */}
@@ -383,26 +367,13 @@ function PurchaseOrdersContent() {
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between pt-3 mt-3.5 border-t border-border/60">
-                      <div>
-                        <p className="text-[11px] font-medium text-muted-foreground">
-                          Total compra
-                        </p>
-                        <p className="text-sm font-semibold text-foreground tabular-nums">
-                          {formatCurrency(order.total)}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/purchase-orders/${order.id}`);
-                        }}
-                        className="px-2.5 gap-1"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> Detalle
-                      </Button>
+                    <div className="mt-3.5 border-t border-border/60 pt-3">
+                      <p className="text-[11px] font-medium text-muted-foreground">
+                        Total compra
+                      </p>
+                      <p className="text-sm font-semibold text-foreground tabular-nums">
+                        {formatCurrency(order.total)}
+                      </p>
                     </div>
                   </div>
                 ))}
