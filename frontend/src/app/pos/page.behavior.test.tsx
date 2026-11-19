@@ -765,20 +765,35 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ type: undefined, categoryId: undefined, page: 1 }));
   });
 
-  it("caps the rendered grid tracks using a responsive minimum rather than fixed five columns", () => {
+  it("caps the rendered grid tracks at four columns using a responsive minimum", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
     const grid = screen.getByTestId("pos-capacity-area").firstElementChild as HTMLElement;
-    expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(152px, calc((100% - 48px) / 5))), 1fr))");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(152px, calc((100% - 36px) / 4))), 1fr))");
   });
 
-  it("gives products the fluid column and the cart 18rem, widening to 22rem only from xl", () => {
+  it("puts the customer and finance actions side by side as icon-over-label cards", () => {
+    useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
+    render(<POSPage />);
+    const customer = screen.getByRole("button", { name: "Sin cliente" });
+    const finance = screen.getByRole("button", { name: /financiar/i });
+    expect(customer.parentElement).toBe(finance.parentElement);
+    expect(customer.parentElement!.className).toContain("grid-cols-2");
+    for (const card of [customer, finance]) {
+      expect(card.className).toContain("flex-col");
+      expect(card.firstElementChild!.tagName.toLowerCase()).toBe("span");
+      expect(card.firstElementChild!.querySelector("svg")).not.toBeNull();
+    }
+    expect(finance).toBeDisabled();
+  });
+
+  it("gives the cart 18rem at lg and a 60/40 split from xl", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     const { container } = render(<POSPage />);
-    // A minmax(18rem,22rem) track always takes its 22rem max before the 1fr column, starving the products.
+    // At lg a fixed 18rem cart still leaves products two readable tracks; from xl products take 3fr and the cart 2fr.
     const split = container.querySelector<HTMLElement>(".lg\\:grid-cols-\\[minmax\\(0\\,1fr\\)_18rem\\]");
     expect(split).not.toBeNull();
-    expect(split!.className).toContain("xl:grid-cols-[minmax(0,1fr)_22rem]");
+    expect(split!.className).toContain("xl:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)]");
     expect(split!.className).not.toContain("lg:grid-cols-12");
     expect(container.querySelector(".lg\\:col-span-7, .lg\\:col-span-5")).toBeNull();
   });
@@ -1209,7 +1224,7 @@ describe("POS behavior evidence (#19, #18)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
 
-    const customerLabel = screen.getByText("Cliente (opcional)");
+    const customerLabel = screen.getByRole("button", { name: /sin cliente/i });
     const totalLabel = screen.getByText("Total");
     expect(customerLabel.compareDocumentPosition(totalLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 

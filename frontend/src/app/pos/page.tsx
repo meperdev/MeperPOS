@@ -1076,7 +1076,7 @@ export default function POSPage() {
   return (
     <DashboardLayout>
       <h1 className="sr-only">Punto de venta</h1>
-      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_22rem] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
+      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-6rem)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
         <div className="flex min-h-0 flex-1 flex-col lg:h-full">
           {/*
@@ -1397,38 +1397,48 @@ export default function POSPage() {
 
             {/* Cart Footer */}
             <div className="p-4 border-t border-border/60 bg-muted/10 space-y-3 shrink-0">
-              {/* Customer Selector */}
-              <div>
-                <p className="text-[13px] font-normal text-muted-foreground mb-1.5">
-                  Cliente (opcional)
-                </p>
+              {/* Customer and financed sale share one row of icon-over-label cards,
+                  matching the payment method cards below. */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setShowCustomerModal(true)}
-                  className="flex items-center gap-2 w-full h-10 sm:h-9 px-3 rounded-lg border border-border/70 bg-background/60 text-sm text-foreground hover:border-border transition-colors duration-150 overflow-hidden"
+                  title={selectedCustomerName || undefined}
+                  className={cn(
+                    "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2.5 transition-colors duration-150 ease-out",
+                    selectedCustomer
+                      ? "border-primary/40 bg-primary/10 text-foreground"
+                      : "border-border/80 bg-muted/20 dark:bg-background/50 text-muted-foreground hover:border-foreground/25 hover:bg-muted/50 hover:text-foreground",
+                  )}
                 >
-                  <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="truncate text-[13px] font-medium">
+                  <span className={cn("shrink-0", selectedCustomer ? "text-primary-text" : "text-muted-foreground")}>
+                    <User className="w-4 h-4" />
+                  </span>
+                  <span className="w-full truncate text-center text-[13px] font-medium tracking-tight">
                     {selectedCustomerName || "Sin cliente"}
                   </span>
                 </button>
-              </div>
 
-              {/* Financed sale: quiet secondary action, far from the checkout button */}
-              <button
-                type="button"
-                onClick={() => setShowFinanceConfirm(true)}
-                disabled={cart.length === 0 || !selectedCustomer || cartLocked}
-                title={
-                  !selectedCustomer
-                    ? "Selecciona un cliente para financiar"
-                    : undefined
-                }
-                className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-              >
-                <HandCoins className="w-3.5 h-3.5" />
-                Financiar a crédito
-              </button>
+                {/* Financed sale: quiet secondary action, far from the checkout button */}
+                <button
+                  type="button"
+                  onClick={() => setShowFinanceConfirm(true)}
+                  disabled={cart.length === 0 || !selectedCustomer || cartLocked}
+                  title={
+                    !selectedCustomer
+                      ? "Selecciona un cliente para financiar"
+                      : undefined
+                  }
+                  className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 px-2 py-2.5 text-muted-foreground transition-colors duration-150 ease-out hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <span className="shrink-0">
+                    <HandCoins className="w-4 h-4" />
+                  </span>
+                  <span className="text-[13px] font-medium tracking-tight whitespace-nowrap">
+                    Financiar
+                  </span>
+                </button>
+              </div>
 
               {/* Totals Breakdown */}
               <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">

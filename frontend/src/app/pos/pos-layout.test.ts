@@ -31,7 +31,7 @@ describe("POS grid measurement lifecycle", () => {
     expect(observe).toHaveBeenCalledWith(area);
     width = 4000;
     resize();
-    expect(update).toHaveBeenLastCalledWith(5);
+    expect(update).toHaveBeenLastCalledWith(4);
     width = 160;
     window.dispatchEvent(new Event("resize"));
     expect(update).toHaveBeenLastCalledWith(1);
@@ -59,8 +59,8 @@ describe("POS grid measurement lifecycle", () => {
 
 describe("POS capacity from measured grid geometry", () => {
   it.each([
-    [160, 1], [363.8, 1], [363.95, 2], [364, 2], [600, 3], [928, 5], [4000, 5],
-  ])("caps columns at five and adapts at width %s", (width, columns) => {
+    [160, 1], [363.8, 1], [363.95, 2], [364, 2], [600, 3], [928, 4], [4000, 4],
+  ])("caps columns at four and adapts at width %s", (width, columns) => {
     expect(getPOSCapacity({ width, height: 508, cardWidth: 176, cardHeight: 248, columnGap: 12, rowGap: 12 })).toBe(columns * 2);
   });
 

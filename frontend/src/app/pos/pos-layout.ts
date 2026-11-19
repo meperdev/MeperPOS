@@ -1,6 +1,6 @@
-const MAX_POS_COLUMNS = 5;
+const MAX_POS_COLUMNS = 4;
 const POS_COLUMN_GAP = 12;
-// Two cards must fit the products column beside an 18rem cart at a 1024px viewport with the 320px sidebar.
+// Two cards must fit the products column beside the 18rem lg cart at a 1024px viewport with the 320px sidebar.
 export const POS_MIN_CARD_WIDTH = 152;
 // A phone fits three tiles across: at 390px that is ~110px each, which is why
 // the card itself is a short fixed tile below sm (see ProductCard).
@@ -28,7 +28,7 @@ function isDesktopViewport(): boolean {
 
 /**
  * The grid's track definition. Grow the minimum track at wide widths so
- * auto-fill cannot create a sixth column, but still allow fewer readable cards
+ * auto-fill cannot create a fifth column, but still allow fewer readable cards
  * on narrow panels. A phone gets a three-across tile wall; everything wider
  * keeps the measured desktop geometry (see POS_MIN_CARD_WIDTH).
  */
