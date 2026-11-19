@@ -585,7 +585,7 @@ function InventoryContent() {
                 {lowStockCount > 0 && (
                   <span
                     className={cn(
-                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-[11px] font-semibold tabular-nums shrink-0",
+                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-xs font-semibold tabular-nums shrink-0",
                       showLowStockOnly
                         ? "bg-danger text-white"
                         : "bg-danger/15 text-danger-text",
@@ -608,7 +608,7 @@ function InventoryContent() {
             hasFilter ? (
               <div className="flex items-center gap-2 mt-2 pt-2 px-1 border-t border-border/60">
                 <SlidersHorizontal className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground">
+                <span className="text-[13px] text-muted-foreground">
                   <span className="font-semibold text-foreground tabular-nums">
                     {displayProducts.length}
                   </span>{" "}
@@ -753,7 +753,7 @@ function InventoryContent() {
                               product.active === false && "opacity-60",
                             )}
                           >
-                            <TableCell>
+                            <TableCell className="text-sm">
                               {canManageInventory ? (
                                 <button
                                   type="button"
@@ -772,26 +772,26 @@ function InventoryContent() {
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
+                            <TableCell className="font-mono text-xs text-muted-foreground">
                               {product.sku}
                             </TableCell>
                             <TableCell>
-                              <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
+                              <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-[13px] font-medium text-foreground">
                                 {product.category?.name || "Sin categoría"}
                               </span>
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                            <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
                               {formatCurrency(toFiniteNumber(product.costPrice))}
                             </TableCell>
-                            <TableCell className="text-right font-semibold tabular-nums text-foreground">
+                            <TableCell className="text-sm text-right font-semibold tabular-nums text-foreground">
                               {formatCurrency(sellingPrice)}
                               {hasPromo && (
-                                <s className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                                <s className="ml-1.5 text-xs font-normal text-muted-foreground">
                                   {formatCurrency(toFiniteNumber(product.salePrice))}
                                 </s>
                               )}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">
+                            <TableCell className="text-sm text-right tabular-nums">
                               {isSrv ? (
                                 <span className="text-muted-foreground">Servicio</span>
                               ) : isUntracked ? (
@@ -905,10 +905,10 @@ function InventoryContent() {
         >
           <fieldset disabled={isSaving} className="m-0 w-full min-w-0 space-y-5 border-0 p-0">
           <div role="group" aria-label="Identidad" className="min-w-0 space-y-3">
-            <h3 className="text-xs font-semibold text-foreground">Datos del producto</h3>
+            <h3 className="text-[13px] font-semibold text-foreground">Datos del producto</h3>
             <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-[minmax(0,19.5rem)_minmax(0,1fr)]">
               <div className="w-full min-w-0">
-                <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                <p className="mb-1.5 text-[13px] font-medium text-muted-foreground">
                   Imagen del producto
                 </p>
                 <ImageUpload
@@ -989,7 +989,7 @@ function InventoryContent() {
                   />
                 </div>
                 <div role="group" aria-label="Oferta" className="sm:col-span-2 min-w-0 space-y-1.5">
-                  <h3 className="text-xs font-medium text-muted-foreground">Oferta</h3>
+                  <h3 className="text-[13px] font-medium text-muted-foreground">Oferta</h3>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                     <div className="w-full min-w-0 sm:flex-1">
                       <Select
@@ -1058,7 +1058,7 @@ function InventoryContent() {
 
           <div role="group" aria-label="Precios" className="min-w-0 space-y-3 border-t border-border/60 pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold text-foreground">Precios e impuesto</h3>
+              <h3 className="text-[13px] font-semibold text-foreground">Precios e impuesto</h3>
               {(() => {
                 const cost = toFiniteNumber(formData.costPrice);
                 const sale = toFiniteNumber(formData.salePrice);
@@ -1069,7 +1069,7 @@ function InventoryContent() {
                 return (
                   <Badge
                     variant={isNegative ? "danger" : "success"}
-                    className="gap-1.5 text-[11px] tabular-nums"
+                    className="gap-1.5 text-xs tabular-nums"
                   >
                     <span>Utilidad: {profit >= 0 ? "+" : ""}{formatCurrency(profit)}</span>
                     {sale > 0 && <span>· {marginPct}%</span>}
@@ -1107,7 +1107,7 @@ function InventoryContent() {
           {!isService(formData) && (
             <div role="group" aria-label="Inventario" className="min-w-0 space-y-3 border-t border-border/60 pt-4">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xs font-semibold text-foreground">Inventario</h3>
+                <h3 className="text-[13px] font-semibold text-foreground">Inventario</h3>
                 <label
                   htmlFor="tracksStock"
                   className="inline-flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none"

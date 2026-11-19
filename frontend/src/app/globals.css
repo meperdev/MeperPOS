@@ -135,7 +135,7 @@
     --color-chart-6: var(--chart-6);
     --color-chart-7: var(--chart-7);
     --color-chart-8: var(--chart-8);
-    --font-sans: var(--font-geist);
+    --font-sans: var(--font-sans-face);
     --font-mono: var(--font-jetbrains-mono);
 }
 
@@ -158,7 +158,10 @@ body {
     background-color: var(--background);
     color: var(--foreground);
     caret-color: var(--primary);
-    font-family: var(--font-geist), system-ui, sans-serif;
+    /* Inter is a variable face with an optical-size axis: let it pick the
+       cut for the rendered size instead of pinning one. */
+    font-family: var(--font-sans-face), system-ui, sans-serif;
+    font-optical-sizing: auto;
     transition:
         background-color 0.25s ease,
         color 0.25s ease;
@@ -169,14 +172,19 @@ h1,
 h2,
 h3,
 h4 {
-    letter-spacing: -0.025em;
+    letter-spacing: -0.015em;
     line-height: 1.2;
 }
 
+/*
+ * A number that carries data (a total, a count, a delta) reads better in the
+ * sans face with tabular figures than in the mono face: mono is reserved for
+ * identifiers — SKU, barcode, sale and purchase-order numbers, NIT — where a
+ * fixed character grid is what makes them scannable. Tabular figures are what
+ * this class actually needs, so columns of money stay aligned.
+ */
 .stat-number {
-    font-family:
-        var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
-        Consolas, monospace;
+    font-family: var(--font-sans-face), system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     letter-spacing: -0.02em;
@@ -352,7 +360,7 @@ h4 {
     border: none;
     background: transparent;
     text-align: left;
-    font-family: var(--font-geist), system-ui, sans-serif;
+    font-family: var(--font-sans-face), system-ui, sans-serif;
 }
 
 /* ─── Scrollbars ───────────────────────────────────────── */

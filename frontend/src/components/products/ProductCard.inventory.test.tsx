@@ -981,6 +981,15 @@ describe("ProductCard — premium card v2: content block", () => {
     expect(price).not.toHaveClass("truncate");
   });
 
+  it("keeps mono for the SKU and sets money in tabular sans", () => {
+    render(<ProductCard product={baseProduct} mode="inventory" />);
+
+    // An identifier is the one thing the fixed-width face is for.
+    expect(screen.getByText("SKU-0001")).toHaveClass("font-mono");
+    expect(screen.getByText("20 uds.")).toHaveClass("tabular-nums");
+    expect(screen.getByText("20 uds.")).not.toHaveClass("font-mono");
+  });
+
   it("shows the stock of tracked goods on the SKU line, outside the price panel", () => {
     render(<ProductCard product={baseProduct} mode="inventory" />);
 
@@ -1175,7 +1184,7 @@ describe("ProductCard — compact POS card on phones (S3.3)", () => {
 
     const name = screen.getByRole("heading", { name: baseProduct.name });
     expect(name.className).toContain("line-clamp-2");
-    expect(name.className).toContain("max-sm:text-xs");
+    expect(name.className).toContain("max-sm:text-[13px]");
 
     expect(screen.getByTestId("product-stock")).toBeInTheDocument();
     expect(screen.getByTestId("product-price-panel")).toBeInTheDocument();
