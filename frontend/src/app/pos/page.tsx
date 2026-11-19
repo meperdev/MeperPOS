@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Stepper } from "@/components/ui/Stepper";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { InlineConfirmButton } from "@/components/ui/InlineConfirmButton";
 import { Pagination } from "@/components/ui/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -294,10 +295,6 @@ export default function POSPage() {
   const [customDiscount, setCustomDiscount] = useState("");
   const [customPrice, setCustomPrice] = useState("");
   const [showPausedSalesModal, setShowPausedSalesModal] = useState(false);
-  const [pausedSaleToDelete, setPausedSaleToDelete] = useState<string | null>(
-    null,
-  );
-  const [showDeletePausedModal, setShowDeletePausedModal] = useState(false);
   // Financing is the only action here that creates a real debt, so it waits for
   // an explicit confirmation before the initiation request is built or sent.
   const [showFinanceConfirm, setShowFinanceConfirm] = useState(false);
@@ -461,8 +458,7 @@ export default function POSPage() {
     showReceiptModal ||
     showPaymentModal ||
     !!editingDiscount ||
-    showPausedSalesModal ||
-    showDeletePausedModal;
+    showPausedSalesModal;
 
   const focusScannerInput = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -1048,15 +1044,8 @@ export default function POSPage() {
   };
 
   const handleDeletePausedSale = (saleId: string) => {
-    setPausedSaleToDelete(saleId);
-    setShowDeletePausedModal(true);
-  };
-
-  const confirmDeletePausedSale = () => {
-    if (!pausedSaleToDelete) return;
-    deletePausedSale(pausedSaleToDelete);
+    deletePausedSale(saleId);
     toast.success("Venta pausada eliminada");
-    setPausedSaleToDelete(null);
   };
 
   const openPaymentModal = () => {
@@ -1953,14 +1942,18 @@ export default function POSPage() {
                     >
                       <Play className="w-3.5 h-3.5" /> Reanudar
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => handleDeletePausedSale(sale.id)}
-                      className="p-2"
+                    <InlineConfirmButton
+                      ariaLabel={
+                        sale.customerName
+                          ? `Eliminar venta pausada de ${sale.customerName}`
+                          : "Eliminar venta pausada"
+                      }
+                      announce="Confirma para eliminar la venta pausada"
+                      confirmLabel="¿Eliminar?"
+                      onConfirm={() => handleDeletePausedSale(sale.id)}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </InlineConfirmButton>
                   </div>
                 </div>
               ))}
@@ -1991,18 +1984,6 @@ export default function POSPage() {
           selectedCustomerName ?? "el cliente seleccionado"
         }. Monto a financiar: ${formatCurrency(total)} (calculado en el POS; el total final lo confirma el servidor).`}
         confirmText="Financiar venta"
-      />
-
-      <ConfirmDialog
-        isOpen={showDeletePausedModal}
-        onClose={() => {
-          setShowDeletePausedModal(false);
-          setPausedSaleToDelete(null);
-        }}
-        onConfirm={confirmDeletePausedSale}
-        title="Eliminar venta pausada"
-        message="Se eliminará la venta pausada de forma definitiva."
-        confirmText="Eliminar"
       />
     </DashboardLayout>
   );

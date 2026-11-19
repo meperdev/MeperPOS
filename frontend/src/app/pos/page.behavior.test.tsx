@@ -32,6 +32,7 @@ const quickSearchMutateMock = vi.fn();
 const createSaleMutateMock = vi.fn();
 const createPosLoanMutateMock = vi.fn();
 const resumeSaleMock = vi.fn();
+const deletePausedSaleMock = vi.fn();
 const apiGetMock = vi.fn();
 const pausedSalesState = vi.hoisted(() => ({ list: [] as unknown[] }));
 
@@ -333,7 +334,7 @@ vi.mock("@/hooks/usePausedSales", () => ({
     pausedSales: pausedSalesState.list,
     pauseSale: vi.fn(),
     resumeSale: resumeSaleMock,
-    deletePausedSale: vi.fn(),
+    deletePausedSale: deletePausedSaleMock,
   }),
 }));
 
@@ -2230,6 +2231,105 @@ describe("POS cart financing (pos-loan-initiation)", () => {
 
     resolveInitiation(initiation());
     await waitFor(() => expect(screen.getByText("Carrito vacío")).toBeTruthy());
+  });
+});
+
+describe("POS paused sale removal (inline confirm)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    pausedSalesState.list = [];
+  });
+
+  afterEach(() => {
+    cleanup();
+    pausedSalesState.list = [];
+  });
+
+  function pausedSale(product: Product) {
+    return {
+      id: "paused-1",
+      customerName: "Ana Perez",
+      customerId: "customer-1",
+      discountAmount: 0,
+      pausedAt: "2026-08-25T10:00:00.000Z",
+      cart: [
+        {
+          productId: product.id,
+          product,
+          quantity: 1,
+          unitPrice: product.salePrice,
+          originalUnitPrice: product.salePrice,
+          discountAmount: 0,
+          availableStock: 10,
+        },
+      ],
+    };
+  }
+
+  function renderWithPausedSale() {
+    const product = makeProduct("p1", "Producto Pausado", { salePrice: 1000 });
+    pausedSalesState.list = [pausedSale(product)];
+    useProductsMock.mockReturnValue({
+      data: { data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+    return product;
+  }
+
+  const openPausedSales = () =>
+    userEvent.click(screen.getByRole("button", { name: "Reanudar (1)" }));
+
+  it("deletes a paused sale only after the row's own confirm, with no dialog", async () => {
+    renderWithPausedSale();
+    await openPausedSales();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Eliminar venta pausada de Ana Perez" }),
+    );
+
+    // The first activation only arms the row control: the draft is still there.
+    expect(deletePausedSaleMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "¿Eliminar?" }));
+
+    expect(deletePausedSaleMock).toHaveBeenCalledTimes(1);
+    expect(deletePausedSaleMock).toHaveBeenCalledWith("paused-1");
+    expect(toastState.success).toHaveBeenCalledWith("Venta pausada eliminada");
+  });
+
+  it("cancelling the inline confirm leaves the paused sale untouched", async () => {
+    renderWithPausedSale();
+    await openPausedSales();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Eliminar venta pausada de Ana Perez" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(deletePausedSaleMock).not.toHaveBeenCalled();
+    expect(toastState.success).not.toHaveBeenCalledWith("Venta pausada eliminada");
+    // Back to the idle control, the row still offers both actions.
+    expect(
+      screen.getByRole("button", { name: "Eliminar venta pausada de Ana Perez" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reanudar" })).toBeTruthy();
+  });
+
+  it("keeps resuming a paused sale working exactly as before", async () => {
+    const product = renderWithPausedSale();
+    resumeSaleMock.mockReturnValue(pausedSale(product));
+    apiGetMock.mockResolvedValue({ data: product });
+    await openPausedSales();
+
+    await userEvent.click(screen.getByRole("button", { name: "Reanudar" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("line-unit-price")).toBeTruthy();
+    });
+    expect(deletePausedSaleMock).not.toHaveBeenCalled();
   });
 });
 
