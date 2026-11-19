@@ -77,7 +77,7 @@ describe("LoginPage Redesign", () => {
     });
     expect(passwordInput).toHaveAttribute("type", "password");
 
-    const toggleBtn = screen.getByLabelText("Ver contraseña");
+    const toggleBtn = screen.getByLabelText("Mostrar contraseña");
     await userEvent.click(toggleBtn);
 
     expect(passwordInput).toHaveAttribute("type", "text");

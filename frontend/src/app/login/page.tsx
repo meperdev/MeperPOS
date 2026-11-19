@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { getApiErrorMessage } from "@/lib/api";
@@ -12,8 +13,6 @@ import { APP_NAME } from "@/lib/constants";
 import {
   Mail,
   Lock,
-  Eye,
-  EyeOff,
   ArrowRight,
   ShieldCheck,
   Sun,
@@ -29,7 +28,6 @@ const emptySubscribe = () => () => {};
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [showSupportModal, setShowSupportModal] = useState(false);
 
@@ -185,10 +183,9 @@ export default function LoginPage() {
               icon={<Mail className="h-4 w-4" />}
             />
 
-            <Input
+            <PasswordInput
               id="password"
               name="password"
-              type={showPassword ? "text" : "password"}
               label="Contraseña"
               placeholder="••••••••"
               value={password}
@@ -198,22 +195,6 @@ export default function LoginPage() {
               // Last field of the form: the keyboard's return key is the submit.
               enterKeyHint="go"
               icon={<Lock className="h-4 w-4" />}
-              suffixIcon={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((p) => !p)}
-                  className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                  aria-label={
-                    showPassword ? "Ocultar contraseña" : "Ver contraseña"
-                  }
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              }
             />
 
             <Button

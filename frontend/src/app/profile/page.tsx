@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUpdateProfile, useChangePassword, useProfile } from "@/hooks/useProfile";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
@@ -208,44 +209,45 @@ export default function ProfilePage() {
                   </h3>
                 </div>
                 <p className="mt-0.5 text-[13px] text-muted-foreground">
-                  Mínimo 10 caracteres recomendados
+                  Mínimo 10 caracteres. Evita contraseñas comunes.
                 </p>
               </div>
 
               <form id="password-form" onSubmit={handlePasswordChange} className="space-y-3">
-                <Input
+                <PasswordInput
                   label="Contraseña actual"
-                  type="password"
                   value={passwordData.currentPassword}
                   onChange={(e) =>
                     setPasswordData({ ...passwordData, currentPassword: e.target.value })
                   }
                   placeholder="••••••••••••"
                   icon={<Lock className="w-4 h-4" />}
+                  autoComplete="current-password"
                   required
                 />
 
-                <Input
+                <PasswordInput
                   label="Nueva contraseña"
-                  type="password"
                   value={passwordData.newPassword}
                   onChange={(e) =>
                     setPasswordData({ ...passwordData, newPassword: e.target.value })
                   }
                   placeholder="••••••••••••"
                   icon={<Lock className="w-4 h-4" />}
+                  autoComplete="new-password"
+                  showStrength
                   required
                 />
 
-                <Input
+                <PasswordInput
                   label="Confirmar nueva contraseña"
-                  type="password"
                   value={passwordData.confirmPassword}
                   onChange={(e) =>
                     setPasswordData({ ...passwordData, confirmPassword: e.target.value })
                   }
                   placeholder="••••••••••••"
                   icon={<Lock className="w-4 h-4" />}
+                  autoComplete="new-password"
                   required
                 />
               </form>
