@@ -40,12 +40,12 @@ import { ExpenseStatusBadge } from "@/components/expenses/ExpenseStatusBadge";
 import { ExpenseCard, expenseName } from "@/components/expenses/ExpenseCard";
 import { ExpenseFilters } from "@/components/expenses/ExpenseFilters";
 import { ExpenseSummaryCards } from "@/components/expenses/ExpenseSummaryCards";
-import { DynamicFallback } from "@/components/ui/DynamicFallback";
+import { ExpenseModalFallback } from "@/components/expenses/ExpenseModalFallback";
+import { activationProps } from "@/lib/activation";
 import { prefetchOnIdle } from "@/lib/prefetch";
 import {
   Copy,
   Download,
-  Eye,
   FileCheck,
   History,
   Pencil,
@@ -79,16 +79,16 @@ const loadExpenseDetailModal = () =>
   }));
 
 const ExpenseFormModal = dynamic(loadExpenseFormModal, {
-  loading: () => <DynamicFallback />,
+  loading: () => <ExpenseModalFallback />,
 });
 const AddPaymentModal = dynamic(loadAddPaymentModal, {
-  loading: () => <DynamicFallback />,
+  loading: () => <ExpenseModalFallback />,
 });
 const HistoryModal = dynamic(loadHistoryModal, {
-  loading: () => <DynamicFallback />,
+  loading: () => <ExpenseModalFallback />,
 });
 const ExpenseDetailModal = dynamic(loadExpenseDetailModal, {
-  loading: () => <DynamicFallback />,
+  loading: () => <ExpenseModalFallback />,
 });
 
 /** Table view: a dense list keeps the page it always had. */
@@ -508,7 +508,14 @@ export default function ExpensesPage() {
                             const remaining = Math.max(Number(expense.total) - paidSum, 0);
 
                             return (
-                              <TableRow key={expense.id}>
+                              <TableRow
+                                key={expense.id}
+                                {...activationProps(
+                                  () => setDetailExpense(expense),
+                                  `Ver detalle de ${expenseName(expense)}`,
+                                )}
+                                className="cursor-pointer active:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+                              >
                                 <TableCell className="text-muted-foreground whitespace-nowrap text-xs tabular-nums">
                                   {formatDate(expense.date)}
                                 </TableCell>
@@ -556,17 +563,13 @@ export default function ExpensesPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell numeric>
-                                  <div className="flex justify-end">
+                                  <div
+                                    className="flex justify-end"
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
                                     <RowActions
                                       label={`Más acciones de ${expenseName(expense)}`}
-                                      items={[
-                                        {
-                                          label: "Ver detalle",
-                                          icon: <Eye className="w-3.5 h-3.5" aria-hidden="true" />,
-                                          onSelect: () => setDetailExpense(expense),
-                                        },
-                                        ...actionsFor(expense, isPaid, paymentButtonLabel),
-                                      ]}
+                                      items={actionsFor(expense, isPaid, paymentButtonLabel)}
                                     />
                                   </div>
                                 </TableCell>

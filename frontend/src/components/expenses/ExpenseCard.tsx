@@ -1,8 +1,9 @@
 "use client";
 
-import { Eye, FileCheck } from "lucide-react";
+import { FileCheck } from "lucide-react";
 import { ExpenseStatusBadge } from "./ExpenseStatusBadge";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
+import { activationProps } from "@/lib/activation";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Expense } from "@/types";
 
@@ -15,6 +16,9 @@ export function expenseName(expense: Expense): string {
  * The one Salidas card. Phones and the desktop grid render the same component,
  * so the list cannot drift into two designs: category caption, the label as the
  * title, what was paid to whom and when, then the amount with its actions.
+ *
+ * The whole card opens the detail, the way a sale card does; the actions menu
+ * keeps its own clicks so an operation never turns into "open".
  */
 export function ExpenseCard({
   expense,
@@ -35,7 +39,10 @@ export function ExpenseCard({
   const groupName = expense.label?.group?.name;
 
   return (
-    <article className="flex flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs">
+    <article
+      {...activationProps(onOpenDetail, `Ver detalle de ${name}`)}
+      className="flex cursor-pointer flex-col rounded-xl border border-border/70 bg-card p-3 shadow-2xs transition-colors hover:border-border active:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           {groupName && (
@@ -87,16 +94,10 @@ export function ExpenseCard({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            aria-label={`Ver detalle de ${name}`}
-            title="Ver detalle"
-            onClick={onOpenDetail}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-          >
-            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+        <div
+          className="flex shrink-0 items-center gap-1"
+          onClick={(event) => event.stopPropagation()}
+        >
           <RowActions label={`Más acciones de ${name}`} items={actions} />
         </div>
       </div>
