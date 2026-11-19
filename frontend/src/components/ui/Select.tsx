@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
+import { BottomSheet } from "@/components/ui/BottomSheet";
 import { cn } from "@/lib/utils";
 import { useBelowSmViewport } from "@/hooks/useVisualViewport";
 
@@ -78,7 +78,6 @@ export function Select({
   const listRef = useRef<HTMLDivElement>(null);
   const triggerId = useId();
   const listboxId = useId();
-  const sheetTitleId = useId();
   const errorId = useId();
 
   const selectedOption = options.find((opt) => opt.value === value);
@@ -167,22 +166,9 @@ export function Select({
     items[(index + step + items.length) % items.length]?.focus();
   };
 
-  // The sheet wraps the list, so it owns the keys before the Modal behind it
-  // sees them: Escape must close the options, never the dialog that opened them.
-  const handleSheetKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeToTrigger();
-      return;
-    }
-    if (event.key === "Tab") {
-      triggerRef.current?.focus();
-      setIsOpen(false);
-      return;
-    }
-    handleListKeyDown(event);
-  };
-
+  // The list is the focused surface in both presentations, so it owns Escape
+  // and Tab before the Modal behind the sheet sees them: Escape closes the
+  // options, never the dialog that opened them.
   const optionRow = (option: SelectOption) => {
     const isSelected = option.value === value;
     return (
@@ -298,51 +284,27 @@ export function Select({
       </button>
 
       {/* Options: a bottom sheet below sm, the floating menu from sm up. */}
-      {sheet &&
-        createPortal(
-          <div className="fixed inset-0 z-[60] flex flex-col justify-end" data-select-sheet>
-            <div
-              data-select-sheet-overlay
-              aria-hidden="true"
-              className="absolute inset-0 bg-black/40 dark:bg-black/60"
-              onClick={closeToTrigger}
-            />
-
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={sheetTitleId}
-              onKeyDown={handleSheetKeyDown}
-              className={cn(
-                "relative flex w-full flex-col rounded-t-2xl border border-border border-x-0 border-b-0 bg-card pb-[var(--safe-bottom)]",
-                "shadow-lg shadow-black/10 animate-sheet-up",
-                "max-h-[min(calc(100dvh-var(--safe-top)-0.75rem),100%)]",
-              )}
-            >
-              <div aria-hidden="true" className="flex shrink-0 justify-center pb-1 pt-2.5">
-                <span className="h-1 w-10 rounded-full bg-border" />
-              </div>
-
-              <h2
-                id={sheetTitleId}
-                className="shrink-0 border-b border-border/60 px-4 pb-2.5 text-[13px] font-medium text-muted-foreground"
-              >
-                {label ?? placeholder}
-              </h2>
-
-              <div
-                ref={listRef}
-                id={listboxId}
-                role="listbox"
-                aria-label={label ?? placeholder}
-                className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto scrollbar-app p-1.5"
-              >
-                {options.map((option) => optionRow(option))}
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      <BottomSheet
+        isOpen={sheet}
+        onClose={closeToTrigger}
+        title={label ?? placeholder}
+        showCloseButton={false}
+        className="z-[60]"
+        returnFocusTo={triggerRef}
+        portalProps={{ "data-select-sheet": "" }}
+        bodyClassName="p-1.5"
+      >
+        <div
+          ref={listRef}
+          id={listboxId}
+          role="listbox"
+          aria-label={label ?? placeholder}
+          onKeyDown={handleListKeyDown}
+          className="flex flex-col gap-1"
+        >
+          {options.map((option) => optionRow(option))}
+        </div>
+      </BottomSheet>
 
       {isOpen && !belowSm && (
         <div

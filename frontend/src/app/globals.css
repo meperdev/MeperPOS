@@ -668,3 +668,19 @@ input::-webkit-date-and-time-value {
 .task-title-strike[data-struck="true"] {
     background-size: 100% 1.5px;
 }
+
+/* ─── Bottom sheet (components/ui/BottomSheet.tsx) ───────
+   The sheet rises from the edge it is welded to, over the same keyframes as the
+   dialogs, and springs back on the class transition when a drag ends inside its
+   threshold. Both are spatial, so reduced motion keeps the appearance and drops
+   the travel: the sheet fades in place. The global reduced-motion block above
+   already collapses the spring-back to nothing. */
+.bottom-sheet-panel {
+    animation: sheet-up 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bottom-sheet-panel {
+        animation: fade-in 160ms ease-out;
+    }
+}
