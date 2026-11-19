@@ -1235,3 +1235,56 @@ describe("ProductCard — compact POS card on phones (S3.3)", () => {
     expect(screen.getByTestId("product-price-panel")).toBeInTheDocument();
   });
 });
+
+describe("ProductCard — POS tile lines survive the tighter desktop grid", () => {
+  const longSku = "CAMISA-LINO-NATURAL-EXTRA-LARGA-SKU-000001";
+
+  it("lets the SKU ellipsize only after the stock pill has taken its whole width", () => {
+    render(<ProductCard product={{ ...baseProduct, sku: longSku, stock: 1240 }} mode="pos" onClick={vi.fn()} />);
+
+    const sku = screen.getByTestId("product-sku");
+    const stock = screen.getByTestId("product-stock");
+
+    // One flexible identifier, one fixed pill, on the same line: the overflow has
+    // to land on the SKU, never on the count.
+    expect(stock.parentElement).toBe(sku.parentElement);
+    expect(sku).toHaveClass("min-w-0", "truncate");
+    expect(sku).not.toHaveClass("shrink-0");
+    expect(stock).toHaveClass("shrink-0", "whitespace-nowrap");
+    // The pill is the line's right-hand fact: its count sits after the SKU.
+    expect(sku.compareDocumentPosition(stock) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stock).toHaveTextContent("1240 uds.");
+  });
+
+  it("gives the category chip its own line at the tile's full width", () => {
+    render(
+      <ProductCard
+        product={{ ...baseProduct, category: { name: "Panadería y Pastelería" } }}
+        mode="pos"
+        onClick={vi.fn()}
+      />,
+    );
+
+    const chip = screen.getByTestId("product-category");
+    const priceRow = screen.getByTestId("product-price-row");
+
+    // A long category name is not squeezed by the price: it owns a whole line,
+    // may use every pixel the tile gives it, and ellipsizes beyond that.
+    expect(chip).toHaveTextContent("Panadería y Pastelería");
+    expect(chip).toHaveClass("block", "w-fit", "max-w-full", "truncate");
+    expect(chip.parentElement).toBe(priceRow.parentElement);
+    expect(chip.nextElementSibling).toBe(priceRow);
+    // The price row keeps its own line underneath, prices intact.
+    expect(priceRow).toHaveClass("flex", "flex-wrap", "items-baseline");
+    expect(screen.getByText("$ 45.000")).not.toHaveClass("truncate");
+  });
+
+  it("keeps the inventory tile's lines exactly as they were", () => {
+    render(<ProductCard product={{ ...baseProduct, sku: longSku }} mode="inventory" />);
+
+    expect(screen.getByTestId("product-sku")).toHaveClass("min-w-0", "truncate", "id-text");
+    expect(screen.getByTestId("product-stock")).toHaveClass("shrink-0");
+    expect(screen.getByTestId("product-category")).toHaveClass("max-w-full", "truncate");
+  });
+});
+

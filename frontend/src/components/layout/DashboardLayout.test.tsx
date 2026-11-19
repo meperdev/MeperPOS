@@ -279,6 +279,32 @@ describe("DashboardLayout route gating for /expenses", () => {
     expect(column.querySelector("p")!.parentElement).toBe(column);
   });
 
+  it("publishes the desktop vertical padding as a token, so a page can subtract the real space", () => {
+    setUser("ADMIN");
+
+    const { container } = render(
+      <DashboardLayout>
+        <p>Contenido</p>
+      </DashboardLayout>
+    );
+
+    const mainElement = container.querySelector("main")!;
+    // The shell's own vertical padding is the only number a viewport-fitting page
+    // has to subtract, so it is declared once as a custom property and used here.
+    // The POS root reads the same token instead of guessing `6rem` and sitting
+    // 32px short of the screen.
+    expect(mainElement.className).toContain("[--app-content-padding-y:2rem]");
+    expect(mainElement.className).toContain(
+      "lg:pt-[var(--app-content-padding-y)]"
+    );
+    expect(mainElement.className).toContain(
+      "lg:pb-[var(--app-content-padding-y)]"
+    );
+    // No second, hard-coded desktop padding that could drift from the token.
+    expect(mainElement.className).not.toContain("lg:pt-8");
+    expect(mainElement.className).not.toContain("lg:pb-8");
+  });
+
   it("fills exactly the height the header leaves, so a short page does not scroll", () => {
     setUser("ADMIN");
 

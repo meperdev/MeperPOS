@@ -1076,10 +1076,14 @@ export default function POSPage() {
   return (
     <DashboardLayout>
       <h1 className="sr-only">Punto de venta</h1>
-      {/* At lg this page fits the viewport exactly: the shell's own padding
-          (6rem) plus the header bar it now draws, both subtracted from `dvh` so
-          the document never scrolls behind the till. */}
-      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-var(--app-header-height)-6rem)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
+      {/* At lg this page fits the viewport exactly. The height subtracts the two
+          things the shell owns — the header bar and the vertical padding it
+          actually applies — so the root measures the space the browser gives it
+          instead of guessing. The negative vertical margin reclaims half of that
+          padding: the till is a work surface, so its own gutter is 16px top and
+          bottom while it still ends 16px above the viewport edge (no page
+          scroll, no leftover band under the products panel). */}
+      <div data-testid="pos-page-root" className={cn("flex flex-col gap-4 h-[var(--mobile-content-height)] lg:h-[calc(100dvh-var(--app-header-height)-var(--app-content-padding-y))] lg:-my-[calc(var(--app-content-padding-y)/2)] lg:min-h-[500px] lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)] lg:gap-4", cart.length > 0 && "pb-28 lg:pb-0")}>
         {/* Products Panel */}
         <div className="flex min-h-0 flex-1 flex-col lg:h-full">
           {/*
@@ -1157,7 +1161,11 @@ export default function POSPage() {
                     setSelectedFilter(value);
                     setCurrentPage(1);
                   }}
-                  className="min-w-0 flex-[1_1_10rem]"
+                  // "Todas las categorías" needs 138px of text plus the trigger's
+                  // own padding and chevron: below 200px the label clipped. The
+                  // floor only applies from xl, where the panel is wide enough to
+                  // pay for it without starving the search field.
+                  className="min-w-0 flex-[1_1_10rem] xl:min-w-[12.5rem]"
                   placeholder="Todas las categorías"
                   options={filterOptions}
                 />

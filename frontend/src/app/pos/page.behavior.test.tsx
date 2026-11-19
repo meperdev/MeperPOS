@@ -585,11 +585,19 @@ describe("POS panel sizing (S1.3)", () => {
     const page = screen.getByTestId("pos-page-root");
     // The box between the fixed top bar and the tab bar, derived from tokens.
     expect(page.className).toContain("h-[var(--mobile-content-height)]");
-    // Desktop keeps its own height, less the header bar the shell now draws —
-    // derived from the shared token so the two cannot drift apart.
+    // Desktop keeps its own height, less the header bar the shell now draws and
+    // the vertical padding the shell actually applies — both read from tokens, so
+    // a page can never sit 32px short of the space the viewport really has.
     expect(page.className).toContain(
-      "lg:h-[calc(100dvh-var(--app-header-height)-6rem)]",
+      "lg:h-[calc(100dvh-var(--app-header-height)-var(--app-content-padding-y))]",
     );
+    // The till is a work surface: it reclaims half of the shell's vertical
+    // padding, so its own gutter is 16px top and bottom instead of 32px, and it
+    // still fits the viewport exactly (no page scroll, no magic 6rem).
+    expect(page.className).toContain(
+      "lg:-my-[calc(var(--app-content-padding-y)/2)]",
+    );
+    expect(page.className).not.toContain("6rem");
     expect(page.className).toContain("lg:grid");
 
     const panel = screen.getByTestId("pos-products-panel");
@@ -876,6 +884,24 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(row.className).not.toContain("flex-col");
     expect(row.className).not.toContain("sm:flex-row");
     expect(search.className).toContain("min-w-[14rem]");
+    expect(search.className).toContain("flex-[999_1_16rem]");
+  });
+
+  it("gives the category filter room for its whole placeholder and keeps the search field first", () => {
+    useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
+    render(<POSPage />);
+
+    const trigger = screen.getByRole("button", { name: "Todas las categorías" });
+    const field = trigger.parentElement!;
+    // "Todas las categorías" needs 138px of text plus the trigger's own 28px of
+    // horizontal padding, the 16px chevron and its 8px gap; below 200px the label
+    // is clipped, which is what the 106px box used to do.
+    expect(field.className).toContain("xl:min-w-[12.5rem]");
+    // Below xl the filter still yields to the grid, and the search keeps priority.
+    expect(field.className).toContain("min-w-0");
+    const search = screen
+      .getByPlaceholderText("Escanear o buscar por nombre, SKU o código...")
+      .closest<HTMLElement>("div.relative")!;
     expect(search.className).toContain("flex-[999_1_16rem]");
   });
 

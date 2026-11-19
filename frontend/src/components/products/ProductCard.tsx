@@ -373,6 +373,7 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
           <div className="mt-1 flex min-w-0 items-center justify-between gap-2 max-sm:mt-0.5 max-sm:flex-wrap">
             {product.sku && (
               <span
+                data-testid="product-sku"
                 className={cn(
                   "min-w-0 truncate id-text text-xs text-muted-foreground",
                   // The tile has room for the name, the price and the stock — not the SKU.
@@ -386,7 +387,9 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
               <span
                 data-testid="product-stock"
                 className={cn(
-                  "ml-auto shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium leading-none tabular-nums",
+                  // The pill is the line's fixed fact: it never shrinks and its
+                  // count never breaks, so a long identifier ellipsizes instead.
+                  "ml-auto shrink-0 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium leading-none tabular-nums",
                   // On a phone tile the count is its own line, reading from the left.
                   compactPos && "max-sm:ml-0",
                   STOCK_TONE[status] ?? "border-border bg-muted text-foreground",
@@ -417,7 +420,12 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
           )}
         >
           <span
+            data-testid="product-category"
             className={cn(
+              // The chip owns a whole line at the tile's full width: a long
+              // category name is shown whole when the tile allows it and
+              // ellipsized from the right when it cannot, never compressed by
+              // the price row underneath.
               "block w-fit max-w-full truncate rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-xs font-semibold leading-none text-primary-text",
               compactPos && "max-sm:hidden",
             )}
