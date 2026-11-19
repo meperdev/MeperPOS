@@ -192,7 +192,7 @@ describe("DashboardLayout route gating for /expenses", () => {
 
     // The chrome stays: no full-page spinner, no redirect while restoring.
     expect(screen.getByTestId("app-shell-skeleton")).toBeInTheDocument();
-    expect(container.querySelector("main")).toHaveClass("lg:ml-[320px]");
+    expect(container.querySelector("main")).toHaveClass("lg:ml-[256px]");
     expect(screen.queryByText("Contenido")).not.toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
     expect(replaceMock).not.toHaveBeenCalled();
@@ -231,13 +231,13 @@ describe("DashboardLayout route gating for /expenses", () => {
     );
 
     const mainElement = container.querySelector("main");
-    expect(mainElement).toHaveClass("lg:ml-[320px]");
+    expect(mainElement).toHaveClass("lg:ml-[256px]");
 
     await userEvent.click(screen.getByRole("button", { name: "Toggle" }));
     expect(mainElement).toHaveClass("lg:ml-[72px]");
 
     await userEvent.click(screen.getByRole("button", { name: "Toggle" }));
-    expect(mainElement).toHaveClass("lg:ml-[320px]");
+    expect(mainElement).toHaveClass("lg:ml-[256px]");
   });
 
   // Pins the safe-area composition of the content column. jsdom resolves

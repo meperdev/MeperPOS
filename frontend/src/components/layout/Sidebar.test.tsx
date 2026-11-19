@@ -1009,11 +1009,34 @@ describe("the mobile drawer is the phone's whole screen", () => {
     expect(drawer.className).toContain("w-full");
     expect(drawer.className).toContain("h-dvh");
     // The rail is still a column of its own width that never hides.
-    expect(drawer.className).toContain("lg:w-[320px]");
+    expect(drawer.className).toContain("lg:w-[256px]");
     expect(drawer.className).toContain("lg:h-screen");
     expect(drawer.className).toContain("lg:translate-x-0");
     expect(drawer.className).toContain("lg:opacity-100");
     expect(drawer.className).toContain("lg:pointer-events-auto");
+  });
+
+  it("keeps the collapsed rail at the 72px icon column", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations },
+    });
+
+    const { container } = render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <SidebarProvider>
+          <Sidebar />
+        </SidebarProvider>
+      </QueryClientProvider>,
+    );
+    const drawer = drawerElement(container);
+
+    await userEvent.click(await screen.findByTestId("sidebar-collapse-toggle"));
+    expect(drawer.className).toContain("lg:w-[72px]");
+
+    await userEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+    expect(drawer.className).toContain("lg:w-[256px]");
   });
 
   it("enters with a short travel plus a fade, and honours reduced motion", () => {

@@ -22,10 +22,13 @@ export const COLLECTION_GRID_GAP = 16;
 export const MIN_VISIBLE_ROWS = 2;
 
 /**
- * `min-h-[15.5rem]` on the inventory product card: the row height to assume
+ * `min-h-[13.5rem]` on the inventory product card: the row height to assume
  * before a rendered card can be measured. Any real card wins over this.
+ *
+ * 216px is what lets three rows fit a 1037px-tall viewport under the filters
+ * and above the pager; the POS card keeps its taller poster and never uses it.
  */
-export const PRODUCT_CARD_MIN_ROW_HEIGHT = 248;
+export const PRODUCT_CARD_MIN_ROW_HEIGHT = 216;
 
 /**
  * Only a starting point: a collection card is measured as soon as one renders,

@@ -42,8 +42,8 @@ describe("collection grid constants mirror the shared CSS grid", () => {
       path.resolve(__dirname, "../components/products/ProductCard.tsx"),
       "utf8",
     );
-    expect(card).toContain("min-h-[15.5rem]");
-    expect(PRODUCT_CARD_MIN_ROW_HEIGHT).toBe(248); // 15.5rem
+    expect(card).toContain("min-h-[13.5rem]");
+    expect(PRODUCT_CARD_MIN_ROW_HEIGHT).toBe(216); // 13.5rem
   });
 });
 

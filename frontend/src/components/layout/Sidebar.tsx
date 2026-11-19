@@ -297,19 +297,21 @@ export function Sidebar() {
     <>
       {/* Block 1: Brand - logo and wordmark sized to read as one lockup. The
           drawer keeps a compact lockup so the brand and its 44px close control
-          share one row; the rail keeps the full size. */}
+          share one row; the rail keeps the full size. At the 256px rail the
+          lockup scales with it (44px mark, 24px wordmark) so the wordmark keeps
+          the same share of the column and never truncates. */}
       <div
         data-testid="sidebar-brand"
         className={cn(
           "border-b border-border/70 shrink-0",
           isCollapsed
             ? "px-2 py-4 flex flex-col items-center gap-3"
-            : "px-4 py-4 lg:px-5 lg:py-5 flex items-center justify-between gap-2 lg:gap-3"
+            : "px-4 py-4 lg:px-4 lg:py-4 flex items-center justify-between gap-2"
         )}
       >
         <div
           className={cn(
-            "flex items-center gap-3 min-w-0 lg:gap-3.5",
+            "flex items-center gap-3 min-w-0",
             isCollapsed && "justify-center"
           )}
         >
@@ -320,12 +322,12 @@ export function Sidebar() {
             height={192}
             className={cn(
               "shrink-0 object-contain drop-shadow-xs",
-              isCollapsed ? "w-11 h-11" : "w-10 h-10 lg:w-14 lg:h-14"
+              isCollapsed ? "w-11 h-11" : "w-10 h-10 lg:w-11 lg:h-11"
             )}
           />
           <p
             className={cn(
-              "text-2xl lg:text-[30px] font-bold text-foreground truncate leading-none tracking-tight",
+              "text-2xl font-bold text-foreground truncate leading-none tracking-tight",
               isCollapsed ? "sr-only" : "min-w-0"
             )}
           >
@@ -630,7 +632,7 @@ export function Sidebar() {
           "lg:border-r lg:border-border/80 lg:shadow-none",
           "lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto",
           "lg:transition-[width,transform] lg:duration-300 lg:ease-in-out",
-          isCollapsed ? "lg:w-[72px]" : "lg:w-[320px]",
+          isCollapsed ? "lg:w-[72px]" : "lg:w-[256px]",
         )}
       >
         <div className="flex flex-col flex-1 min-h-0">

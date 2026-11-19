@@ -110,7 +110,7 @@ export const DashboardLayout = memo(function DashboardLayout({
               "pt-[calc(var(--mobile-header)+var(--mobile-header-gap)+var(--safe-top))] pb-[calc(var(--mobile-tabbar)+var(--safe-bottom)+var(--mobile-content-bottom-gap))]",
               "pl-[calc(1rem+var(--safe-left))] pr-[calc(1rem+var(--safe-right))]",
               "lg:px-8 lg:pb-8 lg:pt-8 transition-[margin] duration-300 ease-in-out",
-              isCollapsed ? "lg:ml-[72px]" : "lg:ml-[320px]"
+              isCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]"
             )}
           >
             <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col">

@@ -235,7 +235,11 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
   return (
     <div
       className={cn(
-        "group relative isolate flex w-full max-w-[22rem] aspect-[4/5] max-h-[22rem] min-h-[15.5rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-2xs transition-colors duration-150 hover:border-primary/40",
+        "group relative isolate flex w-full max-w-[22rem] aspect-[4/5] max-h-[22rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-2xs transition-colors duration-150 hover:border-primary/40",
+        // Inventory is the short card: three rows of it have to fit a 1080p
+        // viewport between the filters and the pager (see
+        // PRODUCT_CARD_MIN_ROW_HEIGHT). POS keeps the taller poster.
+        isInventory ? "min-h-[13.5rem]" : "min-h-[15.5rem]",
         compactPos &&
           "max-sm:min-h-[7rem] max-sm:max-h-none max-sm:aspect-auto max-sm:max-w-none max-sm:rounded-xl",
         barePhoneTile && "max-sm:bg-card",
@@ -334,7 +338,11 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
       <div
         data-testid="product-sheet"
         className={cn(
-          "relative mt-auto flex w-full min-w-0 flex-col border-t border-border bg-card px-3 pb-3 pt-3 text-foreground",
+          "relative mt-auto flex w-full min-w-0 flex-col border-t border-border bg-card px-3 text-foreground",
+          // The inventory sheet is the tight one: a shorter card means less
+          // photo band, not less information, so the padding gives a few pixels
+          // back. POS keeps its roomier panel.
+          isInventory ? "pb-2.5 pt-2.5" : "pb-3 pt-3",
           compactPos && "max-sm:px-2 max-sm:pb-1.5 max-sm:pt-1.5",
           // The tile starts at the sheet's own top edge: no strip above it, and
           // therefore no divider to mark one. The name, stock and price spread

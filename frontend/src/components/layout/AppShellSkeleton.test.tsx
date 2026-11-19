@@ -49,6 +49,16 @@ describe("AppShellSkeleton mobile geometry", () => {
 });
 
 describe("AppShellSkeleton desktop", () => {
+  it("reserves the expanded rail at the real shell's width", () => {
+    const { container } = render(<AppShellSkeleton isCollapsed={false} />);
+
+    const rail = container.querySelector("aside")!;
+    expect(rail.className).toContain("w-[256px]");
+
+    const main = document.querySelector("main")!;
+    expect(main.className).toContain("lg:ml-[256px]");
+  });
+
   it("keeps the rail and its margin untouched", () => {
     const { container } = render(<AppShellSkeleton isCollapsed />);
 

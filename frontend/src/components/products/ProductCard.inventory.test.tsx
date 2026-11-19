@@ -778,20 +778,30 @@ const promoProduct: CardProduct = {
 };
 
 describe("ProductCard — premium card v2: shape and layers", () => {
-  it("gives every card the same fixed 4:5 shape with a height guard", () => {
+  it("keeps the inventory card short enough for three rows in a 1080p viewport", () => {
     const { container } = render(<ProductCard product={baseProduct} mode="inventory" />);
 
     // A fixed shape means content can never resize the card: a card stretched by its
-    // grid row just shows more photo.
+    // grid row just shows more photo. Inventory is the short one (three rows between
+    // the header and the pager); POS keeps its taller poster.
     expect(container.firstElementChild).toHaveClass(
       "relative",
       "isolate",
       "overflow-hidden",
       "rounded-2xl",
       "aspect-[4/5]",
-      "min-h-[15.5rem]",
+      "min-h-[13.5rem]",
       "max-h-[22rem]",
     );
+    // The sheet is the tight one too: it is what leaves the media band its height.
+    expect(screen.getByTestId("product-sheet")).toHaveClass("pt-2.5", "pb-2.5");
+  });
+
+  it("keeps the POS card's taller height guard and padding", () => {
+    const { container } = render(<ProductCard product={baseProduct} mode="pos" />);
+
+    expect(container.firstElementChild).toHaveClass("min-h-[15.5rem]");
+    expect(screen.getByTestId("product-sheet")).toHaveClass("pt-3", "pb-3");
   });
 
   it.each([

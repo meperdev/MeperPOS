@@ -88,7 +88,7 @@ Next.js App Router under `frontend/src/`:
 
 **Data fetching**: All server state via TanStack Query (React Query v5). Custom hooks in `hooks/` wrap `api` client calls (e.g., `useProducts`, `useSales`). The `api` singleton in `lib/api.ts` is an Axios instance with auto-JWT injection and 401-redirect handling.
 
-**Layout**: `DashboardLayout` wraps all authenticated pages. It renders the `Sidebar` and enforces role-based redirects. Mobile uses a slide-over sidebar; on desktop the sidebar is fixed and the main content column is offset with `lg:ml-[320px]`, so the two numbers must be changed together.
+**Layout**: `DashboardLayout` wraps all authenticated pages. It renders the `Sidebar` and enforces role-based redirects. Mobile uses a slide-over sidebar; on desktop the sidebar is fixed (`lg:w-[256px]`, `lg:w-[72px]` collapsed) and the main content column is offset with `lg:ml-[256px]` / `lg:ml-[72px]`, so the width and the margin must be changed together — including in `AppShellSkeleton`, which mirrors the same geometry for the first paint.
 
 **UI Components** (`components/ui/`): `Badge`, `Button`, `Card`, `ConfirmDialog`, `CurrencyInput`, `DynamicFallback`, `EmptyState`, `ErrorState`, `FilterBar`, `ImageUpload`, `Input`, `LoadingState`, `MetricCard`, `Modal`, `Pagination`, `Select`, `Stepper`, `Table`. All accept a `className` prop and use the `cn()` utility (clsx + tailwind-merge).
 
