@@ -9,3 +9,6 @@ dist/
 
 # Operator artifacts written by the WhatsApp pairing command
 .tmp/
+
+# Local upload artifacts: the Cloudinary fallback writes here at runtime
+uploads/
