@@ -613,7 +613,10 @@ describe('AuthService', () => {
       expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { userId: 'user-1', revokedAt: null },
-          data: { revokedAt: expect.any(Date) },
+          data: {
+            revokedAt: expect.any(Date),
+            revocationCause: 'revoke-all',
+          },
         }),
       );
       expect(mockJwtService.sign).toHaveBeenCalledWith(
@@ -639,7 +642,10 @@ describe('AuthService', () => {
 
       expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith({
         where: { token: expectedHash, revokedAt: null },
-        data: { revokedAt: expect.any(Date) },
+        data: {
+          revokedAt: expect.any(Date),
+          revocationCause: 'logout',
+        },
       });
     });
 
@@ -712,7 +718,10 @@ describe('AuthService', () => {
       });
       expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith({
         where: { userId: 'user-1', revokedAt: null },
-        data: { revokedAt: expect.any(Date) },
+        data: {
+          revokedAt: expect.any(Date),
+          revocationCause: 'revoke-all',
+        },
       });
 
       // The replacement pair carries the bumped tokenVersion, so the stolen

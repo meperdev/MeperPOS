@@ -44,6 +44,7 @@ Backend requires a `.env` file in `/backend/`:
 ```
 DATABASE_URL="postgresql://admin:admin123@localhost:5432/inventario_db"
 JWT_SECRET="your-jwt-secret"
+SUPER_ADMIN_PASSWORD=""  # seed-only: SUPER_ADMIN bootstrap requires an explicit >=10-char password (never defaulted or printed)
 PORT=3001
 CORS_ORIGIN="http://localhost:3000"
 CLOUDINARY_CLOUD_NAME=...
@@ -102,6 +103,7 @@ Next.js App Router under `frontend/src/`:
 
 ## Key Conventions
 
+- **Every authenticated, organization-scoped route MUST carry `@UseGuards(..., OrganizationRequiredGuard)` (plus `JwtAuthGuard` + `@Roles`).** This guard is the tenant boundary: without it, `user.organizationId` can arrive `undefined` and the Prisma fallback pattern `...(organizationId ? { organizationId } : {})` silently degrades into a **cross-tenant, all-organizations query** (see `docs/security/FINDINGS.md`, SEC-002 — security audit FASE 2). Only platform `SUPER_ADMIN` routes (`admin/*`, `whatsapp/intelligence`) and pre-auth routes (`auth/*`, WAHA webhook, health) may omit it. If you add a controller or endpoint, include the guard or there must be an explicit, commented reason; new services must scope every read AND every write (`where: { id, organizationId }`), never a conditional-org fallback.
 - **The server owns every number that becomes money.** Tax rate (`resolveEffectiveTaxRate`), effective sale price (`computeEffectiveSalePrice`), sale totals, change and low-stock classification are all derived in the backend and sent down as fields. The client *reads* them; it never re-derives them. A client-supplied `unitPrice` is a **request to override**, not a default — it requires ADMIN/OWNER/CASHIER/SUPER_ADMIN and is recorded in `AuditLog` as `SALE_PRICE_OVERRIDE` inside the sale transaction. This permits raising or lowering the charged POS price, not editing catalog prices; MEMBER and INVENTORY_USER cannot override it. A financed sale's agreed total remains fixed after POS initiation. See `SalesService.create` and `canOverridePrice`.
 - **The alert feed is server-owned.** `GET /api/alerts` (`backend/src/alerts/`) returns the whole feed with a `revision` per alert; the bell only renders it and keeps a per-organization `id -> revision` ledger, so a changed condition re-alerts without a new id. Low-stock episodes live in `ProductStockAlert`, every transition is appended to `ProductStockAlertEvent`, and their WhatsApp text goes through `WHATSAPP_TEXT_SENDER` on the central `INTELLIGENCE` session — one attempt per episode, no automatic retry. The history is served at `GET /api/alerts/notifications` and rendered at `/alerts`. See `docs/referencias/alertas.md`.
 - **A sent purchase order is a frozen document.** The first `POST /api/purchase-orders/:id/send` stores `documentSnapshot` (business, supplier, template, item names); every later `GET /api/purchase-orders/:id/pdf` renders from it, so the supplier's copy never changes. Sending adds no status: a `PENDING` order with `sentAt` reads "Enviada", and `overdue` is server-computed by `isPurchaseOrderOverdue`. See `docs/referencias/ordenes-de-compra.md`.

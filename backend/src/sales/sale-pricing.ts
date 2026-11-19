@@ -300,6 +300,50 @@ export function reconcileLineTaxes(
   });
 }
 
+/**
+ * Distributes a sale-wide discount across the pre-tax subtotals of its lines.
+ *
+ * SEC-015: a sale-wide discount is a discount like any other, so it must reduce
+ * the taxable base *before* the per-line tax is computed. The sale keeps its
+ * gross subtotal and records the whole discount on `Sale.discountAmount` (that
+ * is what the header allowance means and what `saleMoneyReconciles` checks), so
+ * the discount is allocated to each line only for its tax base.
+ *
+ * The shares are exact `Decimal` proportions of the discount, and the last line
+ * takes the division remainder, so they add up to the discount itself: the
+ * payable is never off by the rounding of the split. A line whose subtotal is
+ * zero (an item already fully discounted) receives no share, and no line can
+ * receive more than its own subtotal because the caller rejects a discount
+ * larger than the gross subtotal before allocating.
+ */
+export function allocateSaleDiscount(
+  lineSubtotals: ReadonlyArray<number | Decimal | string>,
+  discountAmount: number | Decimal | string,
+): Decimal[] {
+  const total = lineSubtotals.reduce<Decimal>(
+    (sum, subtotal) => sum.plus(new Decimal(subtotal)),
+    new Decimal(0),
+  );
+  const discount = new Decimal(discountAmount);
+  if (lineSubtotals.length === 0 || total.isZero() || discount.isZero()) {
+    return lineSubtotals.map(() => new Decimal(0));
+  }
+
+  let allocated = new Decimal(0);
+  return lineSubtotals.map((subtotal, index) => {
+    if (index === lineSubtotals.length - 1) {
+      // The division above is not exact in general; the last line owns the
+      // remainder so the shares always sum to `discountAmount`. A rounding
+      // error of one digit in the last place must not become a negative share.
+      const remainder = discount.minus(allocated);
+      return remainder.isNegative() ? new Decimal(0) : remainder;
+    }
+    const share = discount.times(new Decimal(subtotal)).div(total);
+    allocated = allocated.plus(share);
+    return share;
+  });
+}
+
 /** Exact cents of a money value, refusing anything that is not nonnegative. */
 function exactCents(value: number | Decimal, field: string): Decimal {
   let amount: Decimal;

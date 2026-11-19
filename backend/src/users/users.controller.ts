@@ -49,6 +49,7 @@ export class UsersController {
     return this.usersService.create(
       createUserDto,
       user.organizationId ?? undefined,
+      user,
     );
   }
 
@@ -101,6 +102,7 @@ export class UsersController {
       id,
       dto,
       user.organizationId ?? 'unknown',
+      user,
     );
   }
 

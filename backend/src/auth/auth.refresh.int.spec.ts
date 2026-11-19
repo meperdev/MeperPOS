@@ -196,6 +196,37 @@ describe('AuthService.refresh — 60s concurrent-tab reuse grace (spec 3.R1, ame
     expect(decodeOrg(tabB.accessToken)).toBe(orgBId);
   });
 
+  it('rejects with 401 a token revoked by logout even when a newer active row exists (SEC-005: logout beats grace)', async () => {
+    await revokeAllActiveRows();
+
+    // Two sessions of the same user: A stays active, B logs out.
+    const sessionA = await service.login({
+      email: multiOrgEmail,
+      password,
+      organizationId: orgBId,
+    });
+    const sessionB = await service.login({
+      email: multiOrgEmail,
+      password,
+      organizationId: orgBId,
+    });
+
+    // B logs out with its cookie present: the presented token is revoked by
+    // LOGOUT, not by rotation.
+    await service.logout(sessionB.refreshToken);
+
+    // A replay of B's token while A's active row is fresh (<60s) must NOT
+    // refill: revocation by logout is an explicit session end, so a stolen
+    // cookie copy cannot mint a new session after the victim logged out.
+    await expect(service.refresh(sessionB.refreshToken)).rejects.toMatchObject(
+      { status: 401 },
+    );
+
+    // Sanity: A's own token is untouched by B's logout.
+    const refreshedA = await service.refresh(sessionA.refreshToken);
+    expect(decodeOrg(refreshedA.accessToken)).toBe(orgBId);
+  });
+
   it('rejects a revoked token with 401 when the newest active row is older than the 60s grace window', async () => {
     await revokeAllActiveRows();
 

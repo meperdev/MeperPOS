@@ -254,7 +254,6 @@ function SalesPageContent() {
                 options={[
                   { value: "", label: "Todos los estados" },
                   { value: "COMPLETED", label: "Completada" },
-                  { value: "RETURNED_PARTIAL", label: "Parcial" },
                   { value: "CANCELLED", label: "Cancelada" },
                 ]}
               />
