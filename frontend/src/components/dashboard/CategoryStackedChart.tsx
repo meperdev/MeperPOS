@@ -454,7 +454,7 @@ export function CategoryStackedChart({
             tick={{
               fontSize: 10,
               fill: "var(--muted-foreground)",
-              fontFamily: "var(--font-jetbrains-mono)",
+              fontFamily: "var(--font-sans-face)",
             }}
           />
           <XAxis

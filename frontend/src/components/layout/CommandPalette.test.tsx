@@ -311,7 +311,7 @@ describe("CommandPalette search", () => {
     );
   });
 
-  it("sets a price in the text face and keeps identifiers in mono", async () => {
+  it("sets a price in the text face and keeps identifiers in tabular sans", async () => {
     renderPalette();
     openWithShortcut();
 
@@ -322,9 +322,10 @@ describe("CommandPalette search", () => {
     expect(price.className).toContain("tabular-nums");
     expect(price.className).not.toContain("font-mono");
 
-    // A document number is an identifier, so it keeps the mono face.
+    // A document number is an identifier: tabular figures in the same family.
     const document = screen.getByText("10203040");
-    expect(document.className).toContain("font-mono");
+    expect(document.className).toContain("id-text");
+    expect(document.className).not.toContain("font-mono");
   });
 
   it("keeps the other groups when one endpoint fails", async () => {

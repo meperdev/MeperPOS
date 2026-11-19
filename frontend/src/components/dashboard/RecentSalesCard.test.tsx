@@ -101,7 +101,7 @@ describe("RecentSalesCard (compact recent sales)", () => {
     const item = within(within(screen.getByTestId("recent-sales-list")).getByTestId("recent-sale-item"));
     expect(item.getByText("101")).toBeTruthy();
     expect(item.getByText("Cliente 1")).toBeTruthy();
-    expect(item.getByText("Hora")).toBeTruthy();
+    expect(item.getByText("Fecha")).toBeTruthy();
     expect(item.getByText("Pago")).toBeTruthy();
     expect(item.getByText("Total")).toBeTruthy();
     expect(item.getByText("Efectivo")).toBeTruthy();

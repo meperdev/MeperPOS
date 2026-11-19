@@ -106,7 +106,7 @@ function PurchaseOrderPreview({
               <p className="text-sm font-semibold text-foreground">
                 Orden de compra
               </p>
-              <p className="font-mono text-[11px] font-semibold tabular-nums text-foreground">
+              <p className="id-text text-[11px] font-semibold tabular-nums text-foreground">
                 OC-184
               </p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -165,11 +165,11 @@ function PurchaseOrderPreview({
                   <p className="break-words font-medium text-foreground">
                     {item.name}
                   </p>
-                  <p className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                  <p className="id-text text-[11px] text-muted-foreground tabular-nums">
                     {item.quantity} × {formatCurrency(item.cost)} · SKU {item.sku}
                   </p>
                 </div>
-                <span className="shrink-0 font-mono font-semibold tabular-nums text-foreground">
+                <span className="shrink-0 id-text font-semibold tabular-nums text-foreground">
                   {formatCurrency(item.quantity * item.cost)}
                 </span>
               </div>
@@ -182,15 +182,15 @@ function PurchaseOrderPreview({
           >
             <div className="flex justify-between gap-3 text-muted-foreground">
               <span>Subtotal</span>
-              <span className="font-mono tabular-nums">{formatCurrency(subtotal)}</span>
+              <span className="id-text tabular-nums">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between gap-3 text-muted-foreground">
               <span>IVA</span>
-              <span className="font-mono tabular-nums">{formatCurrency(tax)}</span>
+              <span className="id-text tabular-nums">{formatCurrency(tax)}</span>
             </div>
             <div className="flex justify-between gap-3 border-t border-border/70 pt-1.5 text-sm font-semibold text-foreground">
               <span>Total</span>
-              <span className="font-mono tabular-nums">
+              <span className="id-text tabular-nums">
                 {formatCurrency(subtotal + tax)}
               </span>
             </div>

@@ -976,16 +976,17 @@ describe("ProductCard — premium card v2: content block", () => {
     const price = screen.getByText("$ 45.000");
 
     expect(name).toHaveClass("line-clamp-2", "break-words", "text-sm", "font-semibold", "text-foreground");
-    expect(sku).toHaveClass("min-w-0", "truncate", "font-mono", "text-muted-foreground");
+    expect(sku).toHaveClass("min-w-0", "truncate", "id-text", "text-muted-foreground");
     expect(price).toHaveClass("text-xl", "font-semibold", "tabular-nums", "whitespace-nowrap", "text-foreground");
     expect(price).not.toHaveClass("truncate");
   });
 
-  it("keeps mono for the SKU and sets money in tabular sans", () => {
+  it("keeps the SKU in tabular sans and money out of any mono face", () => {
     render(<ProductCard product={baseProduct} mode="inventory" />);
 
-    // An identifier is the one thing the fixed-width face is for.
-    expect(screen.getByText("SKU-0001")).toHaveClass("font-mono");
+    // Identifiers ride the one loaded family with tabular figures: no second face.
+    expect(screen.getByText("SKU-0001")).toHaveClass("id-text");
+    expect(screen.getByText("SKU-0001")).not.toHaveClass("font-mono");
     expect(screen.getByText("20 uds.")).toHaveClass("tabular-nums");
     expect(screen.getByText("20 uds.")).not.toHaveClass("font-mono");
   });

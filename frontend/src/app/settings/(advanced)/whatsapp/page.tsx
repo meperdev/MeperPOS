@@ -533,7 +533,7 @@ function WhatsAppSettings() {
                 </p>
                 <p
                   data-testid="whatsapp-link-code"
-                  className="mt-1 font-mono text-lg font-bold tabular-nums tracking-[0.2em] text-foreground"
+                  className="mt-1 id-text text-lg font-bold tabular-nums tracking-[0.2em] text-foreground"
                 >
                   {linkCode.code}
                 </p>
@@ -787,7 +787,7 @@ function WhatsAppSettings() {
                                     </span>
                                   )}
                               </TableCell>
-                              <TableCell className="tabular-nums text-muted-foreground">
+                              <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
                                 {single && attempt.sentAt
                                   ? formatDateTime(attempt.sentAt)
                                   : "—"}
@@ -802,7 +802,7 @@ function WhatsAppSettings() {
                                     {formatDeliveryDay(day.reportDate)}
                                   </TableCell>
                                   <TableCell>{null}</TableCell>
-                                  <TableCell className="tabular-nums text-muted-foreground">
+                                  <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
                                     {day.sentAt
                                       ? formatDateTime(day.sentAt)
                                       : "—"}

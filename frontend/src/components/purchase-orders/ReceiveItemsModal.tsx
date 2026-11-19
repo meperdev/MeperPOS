@@ -139,7 +139,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                       <p className="text-sm font-medium text-foreground truncate max-w-[200px]">
                         {it.product?.name}
                       </p>
-                      <p className="text-[11px] text-muted-foreground font-mono">
+                      <p className="text-[11px] text-muted-foreground id-text">
                         {it.product?.sku}
                       </p>
                     </td>
@@ -166,7 +166,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                   <p className="text-sm font-medium text-foreground break-words">
                     {it.product?.name}
                   </p>
-                  <p className="text-[11px] text-muted-foreground font-mono">
+                  <p className="text-[11px] text-muted-foreground id-text">
                     {it.product?.sku}
                   </p>
                 </div>

@@ -59,9 +59,9 @@ interface PaletteOption {
   label: string;
   hint?: string;
   /**
-   * `font-mono` is for identifiers only (SKU, barcode, document, sale number).
-   * Money and labels are read, not parsed digit by digit, so they keep the text
-   * face with aligned figures.
+   * `id-text` is for identifiers only (SKU, barcode, document, sale number):
+   * the one sans family with tabular figures. Money and labels are read, not
+   * parsed digit by digit, so they keep the plain text face.
    */
   hintMono?: boolean;
   icon: React.ReactNode;
@@ -454,7 +454,7 @@ function PaletteDialog() {
                     <span
                       className={cn(
                         "shrink-0 text-[11px] tabular-nums text-muted-foreground",
-                        option.hintMono && "font-mono",
+                        option.hintMono && "id-text",
                       )}
                     >
                       {option.hint}

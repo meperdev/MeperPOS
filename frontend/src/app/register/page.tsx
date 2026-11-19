@@ -52,7 +52,7 @@ export default function RegisterPage() {
             </p>
             <p className="leading-relaxed">
               Contacta al administrador del sistema o escribe a{" "}
-              <span className="font-mono text-primary-text font-semibold">
+              <span className="id-text text-primary-text font-semibold">
                 soporte@meperpos.com
               </span>
             </p>

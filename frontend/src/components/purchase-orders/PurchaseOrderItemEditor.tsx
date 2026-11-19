@@ -451,7 +451,7 @@ export function PurchaseOrderItemEditor({
                       <p className="max-w-[220px] truncate text-xs font-semibold text-foreground">
                         {row.productName}
                       </p>
-                      <p className="text-[11px] font-mono text-muted-foreground">
+                      <p className="text-[11px] id-text text-muted-foreground">
                         {row.productSku}
                       </p>
                     </TableCell>
@@ -479,7 +479,7 @@ export function PurchaseOrderItemEditor({
                     <p className="break-words text-xs font-semibold text-foreground">
                       {row.productName}
                     </p>
-                    <p className="text-[11px] font-mono text-muted-foreground">
+                    <p className="text-[11px] id-text text-muted-foreground">
                       {row.productSku}
                     </p>
                   </div>

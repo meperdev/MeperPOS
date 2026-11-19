@@ -152,13 +152,13 @@ export default function AdminWhatsAppPage() {
             <dl className="grid gap-3 sm:grid-cols-3">
               <div>
                 <dt className="text-xs text-muted-foreground">Número vinculado</dt>
-                <dd className="mt-0.5 font-mono text-sm text-foreground">
+                <dd className="mt-0.5 id-text text-sm text-foreground">
                   {readablePhone(session.data?.accountId ?? null) ?? "Sin vincular"}
                 </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Sesión del proveedor</dt>
-                <dd className="mt-0.5 truncate font-mono text-sm text-foreground">
+                <dd className="mt-0.5 truncate id-text text-sm text-foreground">
                   {session.data?.sessionName ?? "—"}
                 </dd>
               </div>
@@ -318,7 +318,7 @@ export default function AdminWhatsAppPage() {
                 En el servidor, la misma vinculación corre sin credenciales de
                 MeperPOS:
               </p>
-              <code className="mt-2 block overflow-x-auto rounded bg-background/60 px-2 py-1 font-mono text-xs text-foreground">
+              <code className="code-text mt-2 block overflow-x-auto rounded bg-background/60 px-2 py-1 text-xs text-foreground">
                 npm run whatsapp:link
               </code>
             </div>

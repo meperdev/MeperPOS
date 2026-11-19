@@ -339,7 +339,7 @@ export default function OrganizationsPage() {
                             <p className="truncate text-xs font-medium text-foreground">
                               {org.name}
                             </p>
-                            <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                            <p className="mt-0.5 truncate id-text text-[11px] text-muted-foreground">
                               {org.slug}
                             </p>
                           </div>

@@ -244,7 +244,7 @@ export default function LoginPage() {
       </main>
 
       <footer className="pl-[max(1.5rem,var(--safe-left))] pr-[max(1.5rem,var(--safe-right))] pb-[max(1.5rem,var(--safe-bottom))] sm:pl-[max(2.5rem,var(--safe-left))] sm:pr-[max(2.5rem,var(--safe-right))] sm:pb-[max(2rem,var(--safe-bottom))]">
-        <div className="flex flex-col items-center justify-between gap-2 border-t border-border/60 pt-4 text-center font-mono text-[11px] text-muted-foreground/70 sm:flex-row sm:text-left">
+        <div className="flex flex-col items-center justify-between gap-2 border-t border-border/60 pt-4 text-center text-[11px] text-muted-foreground/70 sm:flex-row sm:text-left">
           <span>
             &copy; {new Date().getFullYear()} {APP_NAME} — Plataforma POS para negocios en Colombia.
           </span>
@@ -311,7 +311,7 @@ export default function LoginPage() {
               ¿Eres propietario y requieres habilitar tu negocio?
             </p>
             <p>Escribe directamente al equipo de aprovisionamiento de MeperPOS:</p>
-            <p className="font-mono text-primary-text font-semibold text-xs pt-0.5">
+            <p className="id-text text-primary-text font-semibold text-xs pt-0.5">
               soporte@meperpos.com
             </p>
             <div className="pt-1.5 text-[11px] flex items-center gap-1 text-muted-foreground">

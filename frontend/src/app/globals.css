@@ -136,7 +136,6 @@
     --color-chart-7: var(--chart-7);
     --color-chart-8: var(--chart-8);
     --font-sans: var(--font-sans-face);
-    --font-mono: var(--font-jetbrains-mono);
 }
 
 /* ─── Base ─────────────────────────────────────────────── */
@@ -178,16 +177,36 @@ h4 {
 
 /*
  * A number that carries data (a total, a count, a delta) reads better in the
- * sans face with tabular figures than in the mono face: mono is reserved for
- * identifiers — SKU, barcode, sale and purchase-order numbers, NIT — where a
- * fixed character grid is what makes them scannable. Tabular figures are what
- * this class actually needs, so columns of money stay aligned.
+ * sans face with tabular figures: columns of money stay aligned without a
+ * second family.
  */
 .stat-number {
     font-family: var(--font-sans-face), system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     letter-spacing: -0.02em;
+}
+
+/*
+ * Identifiers — SKU, barcode, sale and purchase-order numbers, NIT, phone,
+ * document and account numbers — stay scannable through tabular figures and a
+ * hair of tracking rather than a fixed-width face. The subset keeps `tnum`
+ * only (no `zero`), so no slashed zero is drawn here.
+ */
+.id-text {
+    font-family: var(--font-sans-face), system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: 0.01em;
+}
+
+/*
+ * The one place that is literal code the reader may retype, not prose with an
+ * identifier in it: a shell command. It borrows the platform's mono face
+ * instead of loading one.
+ */
+.code-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* ─── Animations ───────────────────────────────────────── */

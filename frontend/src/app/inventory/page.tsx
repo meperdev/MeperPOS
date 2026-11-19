@@ -785,7 +785,7 @@ function InventoryContent() {
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="font-mono text-xs text-muted-foreground">
+                            <TableCell className="id-text text-xs text-muted-foreground">
                               {product.sku}
                             </TableCell>
                             <TableCell>

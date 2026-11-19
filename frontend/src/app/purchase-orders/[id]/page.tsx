@@ -325,7 +325,7 @@ export default function PurchaseOrderDetailPage() {
                           <p className="text-xs font-semibold text-foreground truncate max-w-[240px]">
                             {it.product?.name ?? "Producto eliminado"}
                           </p>
-                          <p className="text-[11px] text-muted-foreground font-mono">
+                          <p className="text-[11px] text-muted-foreground id-text">
                             {it.product?.sku}
                           </p>
                         </TableCell>
@@ -356,7 +356,7 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-semibold text-foreground break-words">
                         {it.product?.name ?? "Producto eliminado"}
                       </p>
-                      <p className="text-[11px] text-muted-foreground font-mono">
+                      <p className="text-[11px] text-muted-foreground id-text">
                         {it.product?.sku}
                       </p>
                     </div>

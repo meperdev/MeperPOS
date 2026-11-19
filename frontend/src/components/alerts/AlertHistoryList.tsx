@@ -92,7 +92,7 @@ function AlertHistoryRow({ item }: { item: StockAlertHistoryItem }) {
           {item.product.name}
         </Link>
         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-          <span className="font-mono tabular-nums">{item.product.sku}</span>
+          <span className="id-text tabular-nums">{item.product.sku}</span>
           {" · "}
           <span className="tabular-nums">episodio {item.episode}</span>
           {item.failureReason ? (

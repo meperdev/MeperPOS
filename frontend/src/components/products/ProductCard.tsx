@@ -368,7 +368,7 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
             {product.sku && (
               <span
                 className={cn(
-                  "min-w-0 truncate font-mono text-[11px] text-muted-foreground",
+                  "min-w-0 truncate id-text text-[11px] text-muted-foreground",
                   // The tile has room for the name, the price and the stock — not the SKU.
                   compactPos && "max-sm:hidden",
                 )}

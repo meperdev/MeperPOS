@@ -92,7 +92,7 @@ describe("slice 1: layout font swap -> self-hosted Inter (ADR-1)", () => {
   });
 });
 
-describe("typography roles: mono is for identifiers, data numbers are tabular sans", () => {
+describe("typography roles: one sans family, identifiers in tabular figures", () => {
   const cssNoComments = globalsCss.replace(/\/\*[\s\S]*?\*\//g, "");
 
   function ruleBody(selector: string): string {
@@ -112,8 +112,19 @@ describe("typography roles: mono is for identifiers, data numbers are tabular sa
     expect(rule).not.toContain("--font-jetbrains-mono");
   });
 
-  it("keeps the mono token available for identifiers", () => {
-    expect(globalsCss).toContain("--font-mono: var(--font-jetbrains-mono);");
+  it("loads one family only: no mono face in the layout, none in the theme", () => {
+    expect(layoutTsx.toLowerCase()).not.toContain("jetbrains");
+    expect(globalsCss.toLowerCase()).not.toContain("jetbrains");
+    expect(globalsCss).not.toMatch(/--font-mono\s*:/);
+  });
+
+  it("sets identifiers in the sans face with tabular figures through .id-text", () => {
+    const rule = ruleBody(".id-text");
+
+    expect(rule).toContain("var(--font-sans-face)");
+    expect(rule).toContain("font-variant-numeric: tabular-nums;");
+    expect(rule).not.toContain("monospace");
+    expect(rule).not.toContain("slashed-zero");
   });
 
   it("sets headings at -0.015em tracking", () => {

@@ -259,7 +259,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                       <TableRow key={ou.id}>
                         <TableCell>
                           <p className="text-xs font-medium text-foreground">{ou.user.name}</p>
-                          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                          <p className="mt-0.5 id-text text-[11px] text-muted-foreground">
                             {ou.user.email}
                           </p>
                         </TableCell>
@@ -280,7 +280,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-foreground break-words">{ou.user.name}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground break-all">
+                        <p className="mt-0.5 id-text text-[11px] text-muted-foreground break-all">
                           {ou.user.email}
                         </p>
                       </div>
@@ -390,7 +390,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Escribe <strong className="font-mono text-foreground">{org.name}</strong> para confirmar:
+            Escribe <strong className="font-semibold text-foreground">{org.name}</strong> para confirmar:
           </p>
 
           <Input

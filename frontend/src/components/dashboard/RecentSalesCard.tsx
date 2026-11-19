@@ -68,7 +68,7 @@ export function RecentSalesCard() {
                   #
                 </TableCell>
                 <TableCell as="th">
-                  Hora
+                  Fecha
                 </TableCell>
                 <TableCell as="th">
                   Cliente
@@ -87,10 +87,10 @@ export function RecentSalesCard() {
             <tbody>
               {sales.map((sale) => (
                 <TableRow key={sale.id} data-testid="recent-sale-row">
-                  <TableCell className="font-mono font-semibold tabular-nums">
+                  <TableCell className="id-text font-semibold tabular-nums">
                     {sale.saleNumber}
                   </TableCell>
-                  <TableCell className="text-muted-foreground tabular-nums text-sm">
+                  <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums text-sm">
                     {formatDateTime(sale.createdAt)}
                   </TableCell>
                   <TableCell className="max-w-[12rem] truncate text-sm">
@@ -118,7 +118,7 @@ export function RecentSalesCard() {
                 <div key={sale.id} data-testid="recent-sale-item" className="py-3 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-mono text-[13px] font-semibold tabular-nums text-foreground">
+                      <p className="id-text text-[13px] font-semibold tabular-nums text-foreground">
                         {sale.saleNumber}
                       </p>
                       <p className="truncate text-[13px] text-muted-foreground">
@@ -129,8 +129,8 @@ export function RecentSalesCard() {
                   </div>
                   <dl className="grid grid-cols-3 gap-x-3 text-[13px]">
                     <div className="min-w-0 space-y-0.5">
-                      <dt className="text-muted-foreground">Hora</dt>
-                      <dd className="text-muted-foreground tabular-nums">{formatDateTime(sale.createdAt)}</dd>
+                      <dt className="text-muted-foreground">Fecha</dt>
+                      <dd className="whitespace-nowrap text-muted-foreground tabular-nums">{formatDateTime(sale.createdAt)}</dd>
                     </div>
                     <div className="min-w-0 space-y-0.5">
                       <dt className="text-muted-foreground">Pago</dt>
