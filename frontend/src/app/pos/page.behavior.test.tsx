@@ -798,6 +798,23 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(container.querySelector(".lg\\:col-span-7, .lg\\:col-span-5")).toBeNull();
   });
 
+  it("sets the cart total in tabular sans, never mono", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Tipografía")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Tipografía" }));
+
+    const total = await screen.findByTestId("pos-cart-total");
+    // Money is data, not an identifier: tabular figures in the sans face.
+    expect(total).toHaveClass("tabular-nums");
+    expect(total).not.toHaveClass("font-mono");
+    expect(total.textContent).toMatch(/\$\s/);
+  });
+
   it("lets a cart line name wrap to two lines and keeps quantity and total from shrinking", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Arroz Integral Premium Paquete 5 kg")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
@@ -1491,7 +1508,7 @@ describe("POS item price override (pos-edit-item-price)", () => {
     expect(struck).not.toBeNull();
     expect(struck!.textContent).toBe(formatCurrency(50000));
     expect(struck!.className).toContain("line-through");
-    expect(struck!.className).toContain("text-xs");
+    expect(struck!.className).toContain("text-[13px]");
     expect(struck!.parentElement!.className).toContain("shrink-0");
   });
 

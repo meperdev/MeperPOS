@@ -129,6 +129,21 @@ describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
     expect(totals.getByText("8")).toBeTruthy();
   });
 
+  it("sets money KPI values in tabular sans, never mono", () => {
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    // Row 1: today's sales total as money.
+    const sales = screen.getByText(/\$\s250\.000/);
+    expect(sales).toHaveClass("tabular-nums");
+    expect(sales).not.toHaveClass("font-mono");
+
+    // Totals row: a count, same rule — digits align, the face stays sans.
+    const totals = within(screen.getByTestId("kpi-totals"));
+    const count = totals.getByText("30");
+    expect(count).toHaveClass("tabular-nums");
+    expect(count).not.toHaveClass("font-mono");
+  });
+
   it("formats the totals values with es-CO grouping", () => {
     useDashboardMock.mockReturnValue({
       data: {

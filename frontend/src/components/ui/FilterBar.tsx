@@ -76,7 +76,7 @@ export function FilterGroup({
   return (
     <div className={cn("inline-flex items-center gap-1.5 flex-wrap max-w-full", className)}>
       {label && (
-        <span className="text-xs font-medium text-muted-foreground mr-0.5">
+        <span className="text-[13px] font-medium text-muted-foreground mr-0.5">
           {label}
         </span>
       )}
@@ -123,7 +123,7 @@ export function FilterOptionButton({
       aria-pressed={active}
       className={cn(
         // inline-flex centring: a bare inline SVG sits on the text baseline and drifts off-centre in icon-only segments.
-        "inline-flex h-8 items-center justify-center gap-1.5 px-3 max-sm:px-2.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap",
+        "inline-flex h-8 items-center justify-center gap-1.5 px-3 max-sm:px-2.5 rounded-md text-[13px] font-medium transition-colors whitespace-nowrap",
         // A segment never shrinks: squeezing is what cut "Inactivo" to "Inactiv…".
         "shrink-0 snap-start",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
@@ -151,7 +151,7 @@ export function FilterClearButton({
     <button
       type="button"
       className={cn(
-        "inline-flex items-center gap-1 h-8 px-3 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted border border-border/70 bg-muted/40 transition-colors",
+        "inline-flex items-center gap-1 h-8 px-3 rounded-md text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted border border-border/70 bg-muted/40 transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         className,
       )}

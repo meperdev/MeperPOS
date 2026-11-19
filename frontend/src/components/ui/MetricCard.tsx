@@ -142,7 +142,7 @@ export function MetricCard({
           : "rounded-xl border border-border/70 bg-card p-3 sm:p-4 shadow-2xs flex flex-col"
       }
     >
-      <p className="text-xs font-medium text-muted-foreground">
+      <p className="text-[13px] font-medium text-muted-foreground">
         {label}
       </p>
       <p
@@ -160,11 +160,11 @@ export function MetricCard({
           color={tone ? toneSparkColor[tone] : NEUTRAL_SPARK_COLOR}
         />
       )}
-      <div className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs">
+      <div className="mt-auto flex items-center justify-between gap-2 pt-3 text-[13px]">
         {delta ? (
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums",
               !hasBaseline
                 ? "bg-muted/70 text-muted-foreground border border-border/70"
                 : positive
@@ -182,14 +182,14 @@ export function MetricCard({
         ) : (
           <span />
         )}
-        <span className="text-right text-[11px] text-muted-foreground">{helper}</span>
+        <span className="text-right text-xs text-muted-foreground">{helper}</span>
       </div>
       {action && (
         <button
           type="button"
           onClick={action.onClick}
           className={cn(
-            "mt-3 inline-flex min-h-9 items-center gap-1 self-start rounded-md border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+            "mt-3 inline-flex min-h-9 items-center gap-1 self-start rounded-md border px-3 py-1 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
             tone
               ? toneActionClasses[tone]
               : "border-border/70 bg-muted/40 text-foreground hover:bg-muted",

@@ -1097,7 +1097,7 @@ export default function POSPage() {
               </h2>
               <div className="flex items-center gap-2">
                 {cart.length > 0 && (
-                  <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="text-[13px] text-muted-foreground tabular-nums">
                     {cart.length} en carrito
                   </span>
                 )}
@@ -1163,7 +1163,7 @@ export default function POSPage() {
                 <p
                   role="status"
                   className={cn(
-                    "text-xs font-medium",
+                    "text-[13px] font-medium",
                     {
                       idle: "text-muted-foreground",
                       success: "text-success-text",
@@ -1258,7 +1258,7 @@ export default function POSPage() {
                 Carrito
               </h2>
               {cart.length > 0 && (
-                <span className="text-xs text-muted-foreground tabular-nums">
+                <span className="text-[13px] text-muted-foreground tabular-nums">
                   {cart.length}
                 </span>
               )}
@@ -1292,11 +1292,11 @@ export default function POSPage() {
                       <p className="text-sm font-medium leading-snug text-foreground line-clamp-2 break-words">
                         {item.product.name}
                       </p>
-                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground tabular-nums mt-0.5">
+                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-muted-foreground tabular-nums mt-0.5">
                         {cartItemOffer(item) && (
                           <Badge
                             variant="danger"
-                            className="shrink-0 text-[11px] px-1.5 py-0.5 rounded-md"
+                            className="shrink-0 text-xs px-1.5 py-0.5 rounded-md"
                           >
                             Oferta -{cartItemOffer(item)!.percent}%
                           </Badge>
@@ -1305,7 +1305,7 @@ export default function POSPage() {
                           <span data-testid="price-overridden" className="shrink-0">
                             <Badge
                               variant="warning"
-                              className="text-[11px] px-1.5 py-0.5 rounded-md"
+                              className="text-xs px-1.5 py-0.5 rounded-md"
                             >
                               Precio ajustado
                             </Badge>
@@ -1346,7 +1346,7 @@ export default function POSPage() {
                         )}
                       </span>
                       {item.discountAmount > 0 && (
-                        <s className="text-xs text-muted-foreground line-through tabular-nums whitespace-nowrap">
+                        <s className="text-[13px] text-muted-foreground line-through tabular-nums whitespace-nowrap">
                           {formatCurrency(item.quantity * item.unitPrice)}
                         </s>
                       )}
@@ -1364,7 +1364,7 @@ export default function POSPage() {
                           }
                         />
                         {item.quantity >= item.availableStock && (
-                          <span className="text-xs font-medium text-warning-text">
+                          <span className="text-[13px] font-medium text-warning-text">
                             máx.
                           </span>
                         )}
@@ -1443,7 +1443,7 @@ export default function POSPage() {
               {/* Totals Breakdown */}
               <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
                 {discountAmount > 0 && (
-                  <div className="flex justify-between text-xs text-success-text mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
+                  <div className="flex justify-between text-[13px] text-success-text mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
                     <span>Descuento</span>
                     <span className="font-medium">
                       -{formatCurrency(discountAmount)}
@@ -1454,7 +1454,10 @@ export default function POSPage() {
                   <span className="text-[13px] font-medium text-muted-foreground">
                     Total
                   </span>
-                  <span className="stat-number text-xl font-semibold tracking-tight text-primary-text tabular-nums">
+                  <span
+                    data-testid="pos-cart-total"
+                    className="stat-number text-xl font-semibold tracking-tight text-primary-text tabular-nums"
+                  >
                     {formatCurrency(total)}
                   </span>
                 </div>
@@ -1466,7 +1469,7 @@ export default function POSPage() {
                   variant="secondary"
                   size="sm"
                   onClick={() => setShowPausedSalesModal(true)}
-                  className="flex-1 h-9 rounded-lg text-xs font-medium"
+                  className="flex-1 h-9 rounded-lg text-[13px] font-medium"
                 >
                   <Play className="w-3.5 h-3.5" />
                   Reanudar ({pausedSales.length})
@@ -1476,7 +1479,7 @@ export default function POSPage() {
                   size="sm"
                   onClick={handlePauseSale}
                   disabled={cart.length === 0}
-                  className="flex-1 h-9 rounded-lg text-xs font-medium"
+                  className="flex-1 h-9 rounded-lg text-[13px] font-medium"
                 >
                   <Pause className="w-3.5 h-3.5" />
                   Pausar
@@ -1634,7 +1637,7 @@ export default function POSPage() {
                   />
                 )}
               </div>
-              <p className="text-xs text-muted-foreground shrink-0">
+              <p className="text-[13px] text-muted-foreground shrink-0">
                 Sin cliente asignado
               </p>
             </div>
@@ -1671,7 +1674,7 @@ export default function POSPage() {
                       />
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  <p className="text-[13px] text-muted-foreground tabular-nums shrink-0">
                     {customer.documentNumber}
                   </p>
                 </div>
@@ -1744,7 +1747,7 @@ export default function POSPage() {
                 },
               ].map(({ label, value }) => (
                 <div key={label} className="p-3 rounded-lg bg-muted/40">
-                  <p className="text-xs text-muted-foreground mb-1">
+                  <p className="text-[13px] text-muted-foreground mb-1">
                     {label}
                   </p>
                   <p className="text-sm font-semibold text-foreground tabular-nums">
@@ -1753,7 +1756,7 @@ export default function POSPage() {
                 </div>
               ))}
               <div className="p-3 rounded-lg bg-primary/10">
-                <p className="text-xs text-muted-foreground mb-1">
+                <p className="text-[13px] text-muted-foreground mb-1">
                   Total
                 </p>
                 <p className="stat-number text-lg font-semibold tabular-nums text-primary-text">
@@ -1914,7 +1917,7 @@ export default function POSPage() {
                       <p className="text-sm font-semibold text-foreground">
                         {sale.customerName || "Sin cliente"}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-[13px] text-muted-foreground mt-0.5">
                         {sale.cart.length} producto(s) ·{" "}
                         {new Date(sale.pausedAt).toLocaleString("es-CO")}
                       </p>

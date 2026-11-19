@@ -71,7 +71,7 @@ const footerIconButtonClass =
   "h-9 w-9 lg:h-9 lg:w-9 rounded-lg border-transparent bg-transparent text-muted-foreground transition-colors hover:border-transparent hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
 const avatarCircleClass =
-  "grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary";
+  "grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-[13px] font-semibold text-primary";
 
 /** The glyph each account destination keeps in the menu. */
 function accountMenuIcon(href: string) {
@@ -592,7 +592,7 @@ export function Sidebar() {
         <div
           data-testid="sidebar-rail-tooltip"
           style={{ top: hoveredTooltip.top }}
-          className="fixed left-[78px] -translate-y-1/2 z-[70] rounded-md border border-border/70 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-lg pointer-events-none whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150"
+          className="fixed left-[78px] -translate-y-1/2 z-[70] rounded-md border border-border/70 bg-card px-2.5 py-1.5 text-[13px] font-medium text-foreground shadow-lg pointer-events-none whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150"
         >
           {hoveredTooltip.label}
         </div>

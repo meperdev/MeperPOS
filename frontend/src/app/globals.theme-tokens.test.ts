@@ -77,12 +77,48 @@ describe("slice 1: green accent kept as documented commented secondary (ADR-3/D1
   });
 });
 
-describe("slice 1: layout font swap Manrope -> Geist (ADR-1)", () => {
-  it("applies the self-hosted Geist variable and leaves Manrope behind", () => {
-    expect(layoutTsx).toContain("geist-latin.woff2");
-    expect(layoutTsx).toContain("--font-geist");
-    expect(layoutTsx).toContain("geist.variable");
+describe("slice 1: layout font swap -> self-hosted Inter (ADR-1)", () => {
+  it("applies the self-hosted Inter variable and leaves the previous sans face behind", () => {
+    expect(layoutTsx).toContain("inter-latin.woff2");
+    expect(layoutTsx).toContain("--font-sans-face");
+    expect(layoutTsx).toContain("inter.variable");
+    expect(layoutTsx).not.toContain("geist-latin.woff2");
     expect(layoutTsx).not.toContain("Manrope");
+  });
+
+  it("wires the sans face into the Tailwind font stack", () => {
+    expect(globalsCss).toContain("--font-sans: var(--font-sans-face);");
+    expect(globalsCss).not.toContain("--font-geist");
+  });
+});
+
+describe("typography roles: mono is for identifiers, data numbers are tabular sans", () => {
+  const cssNoComments = globalsCss.replace(/\/\*[\s\S]*?\*\//g, "");
+
+  function ruleBody(selector: string): string {
+    const start = cssNoComments.indexOf(`${selector} {`);
+    expect(start).toBeGreaterThan(-1);
+    const open = cssNoComments.indexOf("{", start);
+    const close = cssNoComments.indexOf("}", open);
+    return cssNoComments.slice(open + 1, close);
+  }
+
+  it("renders .stat-number in the sans face with tabular figures and no mono fallback", () => {
+    const rule = ruleBody(".stat-number");
+
+    expect(rule).toContain("var(--font-sans-face)");
+    expect(rule).toContain("font-variant-numeric: tabular-nums;");
+    expect(rule).not.toContain("monospace");
+    expect(rule).not.toContain("--font-jetbrains-mono");
+  });
+
+  it("keeps the mono token available for identifiers", () => {
+    expect(globalsCss).toContain("--font-mono: var(--font-jetbrains-mono);");
+  });
+
+  it("sets headings at -0.015em tracking", () => {
+    const rule = ruleBody("h1,\nh2,\nh3,\nh4");
+    expect(rule).toContain("letter-spacing: -0.015em;");
   });
 });
 

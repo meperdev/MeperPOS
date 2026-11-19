@@ -115,7 +115,7 @@ export function MobileCartDrawer({
                 <h2 className="text-sm font-semibold text-foreground leading-tight">
                   Carrito de compras
                 </h2>
-                <p className="text-xs text-muted-foreground tabular-nums">
+                <p className="text-[13px] text-muted-foreground tabular-nums">
                   {cart.length === 1 ? "1 producto agregado" : `${cart.length} productos agregados`}
                 </p>
               </div>
@@ -139,7 +139,7 @@ export function MobileCartDrawer({
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <ShoppingCart className="h-8 w-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm font-semibold text-foreground">Carrito vacío</p>
-                <p className="text-xs text-muted-foreground">Agrega productos para comenzar</p>
+                <p className="text-[13px] text-muted-foreground">Agrega productos para comenzar</p>
               </div>
             ) : (
               cart.map((item) => (
@@ -162,14 +162,14 @@ export function MobileCartDrawer({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-foreground line-clamp-1 mb-1">
+                    <p className="text-[13px] font-medium text-foreground line-clamp-1 mb-1">
                       {item.product.name}
                     </p>
-                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground tabular-nums mb-1.5">
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] text-muted-foreground tabular-nums mb-1.5">
                       {cartItemOffer(item) && (
                         <Badge
                           variant="danger"
-                          className="shrink-0 text-[11px] px-1.5 py-0 rounded-md"
+                          className="shrink-0 text-xs px-1.5 py-0 rounded-md"
                         >
                           Oferta -{cartItemOffer(item)!.percent}%
                         </Badge>
@@ -200,7 +200,7 @@ export function MobileCartDrawer({
                         onChange={(value) => onUpdateQuantity(item.productId, value)}
                       />
                       {item.quantity >= item.availableStock && (
-                        <span className="text-[11px] font-medium text-warning-text">
+                        <span className="text-xs font-medium text-warning-text">
                           máx.
                         </span>
                       )}
@@ -249,7 +249,7 @@ export function MobileCartDrawer({
               className="flex items-center gap-2 w-full h-10 sm:h-9 px-3 rounded-lg border border-border/70 bg-background/80 text-sm text-foreground hover:border-foreground/25 transition-colors overflow-hidden"
             >
               <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="truncate text-xs font-medium">
+              <span className="truncate text-[13px] font-medium">
                 {selectedCustomerName || "Sin cliente (opcional)"}
               </span>
             </button>
@@ -265,7 +265,7 @@ export function MobileCartDrawer({
                 ? "Selecciona un cliente para financiar"
                 : undefined
             }
-            className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+            className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-2 text-[13px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
           >
             <HandCoins className="w-3.5 h-3.5" />
             {isFinancing ? "Iniciando financiación…" : "Financiar a crédito"}
@@ -274,13 +274,13 @@ export function MobileCartDrawer({
           {/* Totals Breakdown */}
           <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
             {discountAmount > 0 && (
-              <div className="flex justify-between text-xs text-success-text mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
+              <div className="flex justify-between text-[13px] text-success-text mb-1.5 pb-1.5 border-b border-border/40 tabular-nums">
                 <span>Descuento</span>
                 <span className="font-medium">-{formatCurrency(discountAmount)}</span>
               </div>
             )}
             <div className="flex justify-between items-center">
-              <span className="text-xs font-medium text-muted-foreground">Total</span>
+              <span className="text-[13px] font-medium text-muted-foreground">Total</span>
               <span className="stat-number text-lg font-semibold text-primary-text tabular-nums">
                 {formatCurrency(total)}
               </span>
@@ -293,7 +293,7 @@ export function MobileCartDrawer({
               variant="secondary"
               size="sm"
               onClick={onOpenPausedSales}
-              className="flex-1 text-xs h-8"
+              className="flex-1 text-[13px] h-8"
             >
               <Play className="w-3.5 h-3.5 mr-1" />
               Reanudar ({pausedSalesCount})
@@ -303,7 +303,7 @@ export function MobileCartDrawer({
               size="sm"
               onClick={onPauseSale}
               disabled={cart.length === 0}
-              className="flex-1 text-xs h-8"
+              className="flex-1 text-[13px] h-8"
             >
               <Pause className="w-3.5 h-3.5 mr-1" />
               Pausar
@@ -312,7 +312,7 @@ export function MobileCartDrawer({
 
           {/* Payment Method Selector */}
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-2">
+            <p className="text-[13px] font-medium text-muted-foreground mb-2">
               Método de pago
             </p>
             <PaymentMethodCards

@@ -32,7 +32,7 @@ export function RecentSalesCard() {
         </p>
         <Link
           href="/sales"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-3 text-xs font-medium text-foreground transition-colors hover:border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-3 text-[13px] font-medium text-foreground transition-colors hover:border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
         >
           Ver todas
           <ArrowRight className="h-3 w-3" aria-hidden="true" />
@@ -53,7 +53,7 @@ export function RecentSalesCard() {
           onRetry={() => refetch()}
         />
       ) : sales.length === 0 ? (
-        <p className="px-4 pb-4 text-xs text-muted-foreground sm:px-5 sm:pb-5">
+        <p className="px-4 pb-4 text-[13px] text-muted-foreground sm:px-5 sm:pb-5">
           Sin ventas recientes
         </p>
       ) : (
@@ -90,16 +90,16 @@ export function RecentSalesCard() {
                   <TableCell className="font-mono font-semibold tabular-nums">
                     {sale.saleNumber}
                   </TableCell>
-                  <TableCell className="text-muted-foreground tabular-nums">
+                  <TableCell className="text-muted-foreground tabular-nums text-sm">
                     {formatDateTime(sale.createdAt)}
                   </TableCell>
-                  <TableCell className="max-w-[12rem] truncate">
+                  <TableCell className="max-w-[12rem] truncate text-sm">
                     {sale.customer?.name ?? "Sin cliente"}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-sm">
                     <span className={getPaymentState(sale.payments, sale.financed).className}>{getPaymentState(sale.payments, sale.financed).label}</span>
                   </TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">
+                  <TableCell className="text-right font-semibold tabular-nums text-sm">
                     {formatCurrency(sale.total)}
                   </TableCell>
                   <TableCell className="text-right">
@@ -118,16 +118,16 @@ export function RecentSalesCard() {
                 <div key={sale.id} data-testid="recent-sale-item" className="py-3 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-mono text-xs font-semibold tabular-nums text-foreground">
+                      <p className="font-mono text-[13px] font-semibold tabular-nums text-foreground">
                         {sale.saleNumber}
                       </p>
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p className="truncate text-[13px] text-muted-foreground">
                         {sale.customer?.name ?? "Sin cliente"}
                       </p>
                     </div>
                     <StatusBadge domain="sale" status={sale.status} dot={false} />
                   </div>
-                  <dl className="grid grid-cols-3 gap-x-3 text-xs">
+                  <dl className="grid grid-cols-3 gap-x-3 text-[13px]">
                     <div className="min-w-0 space-y-0.5">
                       <dt className="text-muted-foreground">Hora</dt>
                       <dd className="text-muted-foreground tabular-nums">{formatDateTime(sale.createdAt)}</dd>

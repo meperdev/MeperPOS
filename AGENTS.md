@@ -94,7 +94,7 @@ Next.js App Router under `frontend/src/`:
 
 **Styling**: TailwindCSS v4 with CSS variables for theming. Variables defined in `globals.css` under `:root` (light) and `.dark` (dark mode). Key tokens: `--primary` (teal), `--terracotta` (accent), `--card`, `--border`, `--muted`. Theme toggled via `ThemeContext` which sets a `dark` class on `<html>`.
 
-**Fonts**: Geist (sans) + JetBrains Mono (mono) self-hosted via `next/font/local` from WOFF2 files in `frontend/src/app/fonts/`, exposed as CSS variables `--font-geist` and `--font-jetbrains-mono`. This keeps production builds independent of any Google Fonts request.
+**Fonts**: Inter (sans) + JetBrains Mono (mono) self-hosted via `next/font/local` from WOFF2 files in `frontend/src/app/fonts/`, exposed as CSS variables `--font-sans-face` and `--font-jetbrains-mono`; this keeps production builds independent of any Google Fonts request. `inter-latin.woff2` is Inter 4.1 subset to latin with `pyftsubset` keeping both variable axes (`opsz` 14-32, `wght` 100-900) and the features the UI uses (`tnum`, `calt`, `cv11`, `ss01`); its licence ships as `Inter-OFL.txt`. Mono is reserved for **identifiers** — SKU, barcode, sale/purchase-order/receipt numbers, NIT, account numbers. Money, counts, percentages and dates use the sans face with `tabular-nums` (`.stat-number` in `globals.css` is sans + tabular figures, never mono). Body/table cells sit at `text-sm` (14px), labels and metadata at `text-[13px]`, and headings use `letter-spacing: -0.015em`.
 
 **POS module**: Maintains client-side cart state with favorites (persisted to `localStorage` under `pos_favorite_product_ids`), paused sales, multi-payment splits, and invoice printing through `printReceipt` from `useReceipt`.
 

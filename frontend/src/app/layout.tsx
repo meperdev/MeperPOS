@@ -13,14 +13,18 @@ import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar"
 import { buildPwaMetadata, buildPwaViewport } from "@/lib/pwa";
 
 /**
- * Geist (sans) and JetBrains Mono (mono) are self-hosted as latin variable
+ * Inter (sans) and JetBrains Mono (identifiers) are self-hosted as latin
  * WOFF2 files so production builds never depend on a Google Fonts request.
  * The `next/font/google` loader downloads fonts at build time and fails the
  * whole build whenever that request returns an unexpected payload.
+ *
+ * The sans face is Inter's variable font, subset to latin with both axes
+ * (opsz 14-32, wght 100-900) and the features the UI uses kept: tabular
+ * numbers (tnum), contextual alternates (calt), cv11 and ss01.
  */
-const geist = localFont({
-  src: "./fonts/geist-latin.woff2",
-  variable: "--font-geist",
+const inter = localFont({
+  src: "./fonts/inter-latin.woff2",
+  variable: "--font-sans-face",
   display: "swap",
   weight: "100 900",
 });
@@ -44,7 +48,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body
-        className={`${geist.variable} ${jetbrainsMono.variable} antialiased`}
+        className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
       >
         <QueryProvider>
           <ThemeProvider>
