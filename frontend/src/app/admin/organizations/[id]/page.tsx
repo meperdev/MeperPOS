@@ -1,11 +1,12 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useRef, useState } from "react";
 import { OrganizationModulesCard } from "./organization-modules-card";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -27,6 +28,7 @@ import {
 import type { Organization } from "@/hooks/useAdmin";
 import { formatDate } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api";
+import { useToast } from "@/contexts/ToastContext";
 import {
   planLabels,
   planOptions,
@@ -62,10 +64,19 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
   const updateMemberRole = useUpdateMemberRole();
   const removeMember = useRemoveOrganizationMember();
   const deleteOrg = useDeleteOrganization();
+  const toast = useToast();
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [memberToRemove, setMemberToRemove] = useState<{
+    userId: string;
+    name: string;
+  } | null>(null);
+  // ConfirmDialog closes itself once `onConfirm` resolves, so a failed removal
+  // consumes one close and leaves the dialog up: the toast carries the reason
+  // and the reader decides again (retry or Cancelar).
+  const keepRemovalDialogOpen = useRef(false);
   const [newMember, setNewMember] = useState({ email: "", name: "", role: "CASHIER" });
   const [addMemberError, setAddMemberError] = useState("");
   const [deleteError, setDeleteError] = useState("");
@@ -114,6 +125,16 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
       <span className="text-[13px] text-muted-foreground">—</span>
     );
 
+  const handleRemoveMember = async () => {
+    if (!memberToRemove) return;
+    try {
+      await removeMember.mutateAsync({ orgId: org.id, userId: memberToRemove.userId });
+    } catch (error) {
+      keepRemovalDialogOpen.current = true;
+      toast.error(getApiErrorMessage(error, "No se pudo quitar el miembro"));
+    }
+  };
+
   const renderMemberActions = (ou: OrgMember) => (
     <RowActions
       label={`Acciones de ${ou.user.name}`}
@@ -127,7 +148,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             ? "El propietario no se puede quitar"
             : undefined,
           onSelect: () =>
-            removeMember.mutate({ orgId: org.id, userId: ou.user.id }),
+            setMemberToRemove({ userId: ou.user.id, name: ou.user.name }),
         },
       ]}
     />
@@ -430,6 +451,21 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={memberToRemove !== null}
+        onClose={() => {
+          if (keepRemovalDialogOpen.current) {
+            keepRemovalDialogOpen.current = false;
+            return;
+          }
+          setMemberToRemove(null);
+        }}
+        onConfirm={handleRemoveMember}
+        title="Quitar miembro"
+        message={`${memberToRemove?.name ?? ""} perderá el acceso a ${org.name}.`}
+        confirmText="Quitar"
+      />
     </div>
   );
 }
