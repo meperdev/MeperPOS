@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   computeAlertPanelGeometry,
+  computeHeaderAlertPanelGeometry,
   type AlertPanelGeometry,
 } from "@/components/layout/alert-panel-geometry";
 import { useAuth } from "@/contexts/AuthContext";
@@ -75,15 +76,26 @@ function writeSeen(key: string, seen: SeenLedger): void {
 
 const emptySubscribe = () => () => {};
 
+/**
+ * Where the panel opens from. `auto` is the pair the bell had before the
+ * desktop header existed: the rail footer's flyout on wide screens, the pinned
+ * sheet under the phone's top bar below `lg`. `header` is the mount site saying
+ * "I am the top-right corner of the page", where the flyout math would open the
+ * panel over the bar instead of under it.
+ */
+export type AlertPanelPlacement = "auto" | "header";
+
 export function AlertCenter({
   className,
   buttonClassName,
   collapsed = false,
+  placement = "auto",
 }: {
   className?: string;
   /** Trigger surface; the rail styles it as a tile instead of a bare glyph. */
   buttonClassName?: string;
   collapsed?: boolean;
+  placement?: AlertPanelPlacement;
 }) {
   const { user, organization } = useAuth();
   const alerts = useAlerts();
@@ -142,7 +154,11 @@ export function AlertCenter({
       setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      // Escape is a dismissal, not a jump to the top of the page: the operator
+      // stays where they were, on the bell that opened the panel.
+      buttonRef.current?.focus();
     };
     // The geometry is measured once; a viewport change would leave it stale.
     const onResize = () => setOpen(false);
@@ -162,7 +178,20 @@ export function AlertCenter({
       return;
     }
     const element = buttonRef.current;
-    if (element && window.innerWidth >= 1024) {
+    if (element && placement === "header") {
+      // The actions cluster is the header's right content edge — the same line
+      // the account menu ends on. Reading it from the mount site keeps the two
+      // popovers aligned without either knowing the other exists.
+      const actions = element.closest<HTMLElement>("[data-app-header-actions]");
+      setCoords(
+        computeHeaderAlertPanelGeometry({
+          anchor: element.getBoundingClientRect(),
+          alignRight: (actions ?? element).getBoundingClientRect().right,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        }),
+      );
+    } else if (element && window.innerWidth >= 1024) {
       const rect = element.getBoundingClientRect();
       const sidebar = element.closest("[data-sidebar-root]");
       const railRight = sidebar
@@ -233,7 +262,10 @@ export function AlertCenter({
             aria-label="Alertas"
             style={coords ?? undefined}
             className={cn(
-              "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg shadow-black/10",
+              // The account menu's surface, one family: same radius, hairline,
+              // shadow, and the same 0.3s fade. The panel sits above the page
+              // chrome because it is portaled to the body, not nested in a bar.
+              "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg shadow-black/10 animate-fade-in",
               coords
                 ? "w-[22rem]"
                 : // Pinned under the mobile header and inside the side insets, never

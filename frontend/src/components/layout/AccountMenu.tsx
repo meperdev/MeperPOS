@@ -237,9 +237,14 @@ export function AccountMenu() {
                 className={cn(
                   "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                  // A grey hover on the white card is 1.09:1 — invisible — and
+                  // the focus ring alone leaves the keyboard with no row state.
+                  // The palette's tinted-primary surface is the one signal that
+                  // reads in both themes; the icon inherits currentColor with
+                  // the label. Cerrar sesión keeps its danger hue.
                   item.destructive
-                    ? "text-danger-text hover:bg-danger/10"
-                    : "text-foreground hover:bg-muted",
+                    ? "text-danger-text hover:bg-danger/10 focus-visible:bg-danger/10"
+                    : "text-foreground hover:bg-primary-light hover:text-primary-text focus-visible:bg-primary-light focus-visible:text-primary-text",
                 )}
               >
                 {item.icon}

@@ -165,6 +165,33 @@ describe("AccountMenu", () => {
     expect(promptInstall).toHaveBeenCalledTimes(1);
   });
 
+  it("tints the row under the pointer and under keyboard focus", () => {
+    render(<AccountMenu />);
+    const menu = openMenu();
+    const items = Array.from(
+      menu.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+    );
+
+    // A grey hover on the white card is invisible; the tinted-primary row is
+    // the menu's only selection signal, so both the pointer and the focused
+    // row carry it — and the icon inherits currentColor with the label.
+    for (const item of items.slice(0, -1)) {
+      expect(item.className).toContain("hover:bg-primary-light");
+      expect(item.className).toContain("hover:text-primary-text");
+      expect(item.className).toContain("focus-visible:bg-primary-light");
+      expect(item.className).toContain("focus-visible:text-primary-text");
+      const icon = item.querySelector("svg");
+      expect(icon?.getAttribute("class")).not.toMatch(
+        /text-(foreground|muted|danger)/,
+      );
+    }
+
+    // Cerrar sesión keeps the danger color it already had.
+    const logout = items.at(-1)!;
+    expect(logout).toHaveClass("text-danger-text");
+    expect(logout.className).not.toContain("text-primary-text");
+  });
+
   it("closes on Escape and gives the focus back to the avatar", async () => {
     render(<AccountMenu />);
     openMenu();

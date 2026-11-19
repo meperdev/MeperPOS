@@ -34,7 +34,9 @@ vi.mock("@/contexts/InstallPromptContext", () => ({
 
 // The bell is a surface with its own suite; here only its slot matters.
 vi.mock("@/components/layout/AlertCenter", () => ({
-  AlertCenter: () => <button type="button" aria-label="Alertas" />,
+  AlertCenter: ({ placement }: { placement?: string }) => (
+    <button type="button" aria-label="Alertas" data-placement={placement} />
+  ),
 }));
 
 function setUser(role = "ADMIN") {
@@ -67,6 +69,17 @@ describe("AppHeader", () => {
     expect(
       screen.getByRole("button", { name: "Opciones de cuenta" }),
     ).toHaveTextContent("AP");
+  });
+
+  it("mounts the bell in the header placement", () => {
+    render(<AppHeader isCollapsed={false} />);
+
+    // The mount site owns the placement: the same bell in the rail footer opens
+    // as a flyout, in the header it has to hang below its own row.
+    expect(screen.getByRole("button", { name: "Alertas" })).toHaveAttribute(
+      "data-placement",
+      "header",
+    );
   });
 
   it("opens the command palette from the search field", () => {

@@ -56,9 +56,14 @@ export function AppHeader({ isCollapsed }: { isCollapsed: boolean }) {
           </button>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          {/* The same bell the rail footer mounts: one component, one ledger. */}
-          <AlertCenter />
+        <div
+          data-app-header-actions=""
+          className="flex shrink-0 items-center gap-1"
+        >
+          {/* The same bell the rail footer mounts: one component, one ledger.
+              The header names its own placement, because here the panel has to
+              hang under this row instead of growing out of the sidebar. */}
+          <AlertCenter placement="header" />
           <AccountMenu />
         </div>
       </div>
