@@ -32,7 +32,7 @@ export function ErrorState({
         {icon}
       </div>
       {title && <p className="text-sm font-semibold text-foreground mt-3">{title}</p>}
-      <p className="text-xs text-muted-foreground mt-1">{message}</p>
+      <p className="text-sm text-muted-foreground mt-1">{message}</p>
       {onRetry && retryLabel && (
         <Button
           type="button"

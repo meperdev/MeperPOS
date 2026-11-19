@@ -87,7 +87,7 @@ export function ConfirmDialog({
             <AlertTriangle className="h-5 w-5" aria-hidden="true" />
           </div>
           <h3 className="text-base font-semibold text-foreground">{title}</h3>
-          <p className="mt-1 text-xs text-muted-foreground">{message}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{message}</p>
         </div>
 
         <div className={cn("gap-2 pt-1", actionSheet ? "flex flex-col" : "flex")}>

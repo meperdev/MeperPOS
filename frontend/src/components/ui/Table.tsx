@@ -86,7 +86,12 @@ export function TableCell({
   return (
     <Comp
       className={cn(
-        "py-3 px-5 text-xs",
+        // A 14px body inside the old 20px gutters widened every table by ~2%
+        // and pushed the last column out of a 1366px viewport: the gutter gives
+        // that back below 2xl, where the columns are tight.
+        "py-3 px-4 2xl:px-5",
+        // The row is content at body size; the caption above it is a micro-label.
+        as === "th" ? "text-xs" : "text-sm",
         as === "th" && "font-medium text-muted-foreground",
         as === "th" && !numeric && "text-left",
         numeric && "text-right tabular-nums",

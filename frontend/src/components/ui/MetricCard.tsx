@@ -147,7 +147,7 @@ export function MetricCard({
       </p>
       <p
         className={cn(
-          "mt-1.5 truncate text-lg font-semibold text-foreground tracking-tight tabular-nums sm:text-2xl",
+          "mt-1.5 truncate text-xl font-semibold text-foreground tracking-tight tabular-nums sm:text-[28px]",
           tone && toneValueClasses[tone],
         )}
         title={value}
@@ -182,7 +182,7 @@ export function MetricCard({
         ) : (
           <span />
         )}
-        <span className="text-right text-xs text-muted-foreground">{helper}</span>
+        <span className="text-right text-[13px] text-muted-foreground">{helper}</span>
       </div>
       {action && (
         <button

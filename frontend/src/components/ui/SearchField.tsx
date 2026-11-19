@@ -52,7 +52,7 @@ export function SearchField({
         }}
         className={cn(
           "h-10 sm:h-9 w-full rounded-lg border border-transparent bg-muted/40 pl-9 pr-9 text-base text-foreground transition-colors",
-          "placeholder:text-muted-foreground/60 focus:border-primary/60 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 sm:text-xs",
+          "placeholder:text-muted-foreground/60 focus:border-primary/60 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/25 sm:text-sm",
           "[&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",
           inputClassName,
         )}

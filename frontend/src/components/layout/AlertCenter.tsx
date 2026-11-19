@@ -276,9 +276,9 @@ export function AlertCenter({
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5">
               <div className="flex items-center gap-2">
                 <Bell className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                <h2 className="text-xs font-semibold text-foreground">Alertas</h2>
+                <h2 className="text-[13px] font-semibold text-foreground">Alertas</h2>
                 {openedUnread.length > 0 && (
-                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
+                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
                     {openedUnread.length}
                   </span>
                 )}
@@ -288,8 +288,8 @@ export function AlertCenter({
             {alerts.length === 0 ? (
               <div className="px-3.5 py-8 text-center">
                 <Check className="mx-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <p className="mt-2 text-xs font-medium text-foreground">Todo en orden</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                <p className="mt-2 text-sm font-medium text-foreground">Todo en orden</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   No hay alertas pendientes.
                 </p>
               </div>
@@ -314,7 +314,7 @@ export function AlertCenter({
               <Link
                 href="/alerts"
                 onClick={() => setOpen(false)}
-                className="text-[11px] font-medium text-primary hover:underline"
+                className="text-[13px] font-medium text-primary hover:underline"
               >
                 Ver historial de notificaciones
               </Link>
@@ -354,10 +354,10 @@ function AlertRow({
         {CATEGORY_ICON[alert.category]}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold text-foreground">
+        <span className="block truncate text-sm font-semibold text-foreground">
           {alert.title}
         </span>
-        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
           {alert.detail}
         </span>
       </span>

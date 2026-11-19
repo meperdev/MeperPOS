@@ -193,7 +193,7 @@ export function Select({
         aria-selected={isSelected}
         onClick={() => handleSelect(option.value)}
         className={cn(
-          "flex w-full items-center justify-between px-3 py-2 min-h-11 sm:min-h-9 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150",
+          "flex w-full items-center justify-between px-3 py-2 min-h-11 sm:min-h-9 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
           isSelected
             ? "bg-primary-light text-primary-text font-bold"
@@ -232,7 +232,7 @@ export function Select({
       {label && (
         <label
           htmlFor={triggerId}
-          className="mb-1.5 block text-xs font-medium text-muted-foreground"
+          className="mb-1.5 block text-[13px] font-medium text-muted-foreground"
         >
           {label}
         </label>
@@ -268,7 +268,7 @@ export function Select({
         aria-controls={isOpen ? listboxId : undefined}
         aria-describedby={error ? errorId : undefined}
         className={cn(
-          "w-full h-10 sm:h-9 rounded-lg border bg-card px-3.5 py-2 text-xs font-medium text-foreground",
+          "w-full h-10 sm:h-9 rounded-lg border bg-card px-3.5 py-2 text-sm font-medium text-foreground",
           "flex items-center justify-between gap-2 shadow-2xs transition-colors duration-150",
           "focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/25",
           error
@@ -325,7 +325,7 @@ export function Select({
 
               <h2
                 id={sheetTitleId}
-                className="shrink-0 border-b border-border/60 px-4 pb-2.5 text-xs font-medium text-muted-foreground"
+                className="shrink-0 border-b border-border/60 px-4 pb-2.5 text-[13px] font-medium text-muted-foreground"
               >
                 {label ?? placeholder}
               </h2>
@@ -363,7 +363,7 @@ export function Select({
       )}
 
       {error && (
-        <span id={errorId} className="mt-1.5 block text-xs font-medium text-danger-text">
+        <span id={errorId} className="mt-1.5 block text-[13px] font-medium text-danger-text">
           {error}
         </span>
       )}

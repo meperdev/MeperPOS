@@ -25,7 +25,7 @@ export function DynamicFallback({ label = "Cargando...", className }: DynamicFal
         aria-hidden="true"
         className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-b-transparent"
       />
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-[13px] text-muted-foreground">{label}</span>
     </div>
   );
 }

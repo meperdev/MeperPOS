@@ -215,10 +215,10 @@ export function AccountMenu() {
           className="absolute right-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-lg shadow-black/10 animate-fade-in"
         >
           <div className="px-2.5 pb-2 pt-1.5">
-            <p className="truncate text-xs font-semibold text-foreground">
+            <p className="truncate text-sm font-semibold text-foreground">
               {user.name}
             </p>
-            <p className="truncate text-[11px] text-muted-foreground">
+            <p className="truncate text-xs text-muted-foreground">
               {roleLabels[user.role] ?? user.role}
             </p>
           </div>
@@ -235,7 +235,7 @@ export function AccountMenu() {
                 role="menuitem"
                 onClick={() => runItem(item)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors",
+                  "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                   // A grey hover on the white card is 1.09:1 — invisible — and
                   // the focus ring alone leaves the keyboard with no row state.

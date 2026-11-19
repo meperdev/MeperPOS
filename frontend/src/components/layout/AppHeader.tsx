@@ -38,7 +38,7 @@ export function AppHeader({ isCollapsed }: { isCollapsed: boolean }) {
             aria-label={`Buscar en ${APP_NAME}`}
             aria-keyshortcuts="Control+K Meta+K"
             className={cn(
-              "flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 text-xs text-muted-foreground transition-colors",
+              "flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 text-sm text-muted-foreground transition-colors",
               "hover:border-border hover:bg-muted hover:text-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
             )}
@@ -49,7 +49,7 @@ export function AppHeader({ isCollapsed }: { isCollapsed: boolean }) {
             </span>
             <kbd
               aria-hidden="true"
-              className="hidden shrink-0 items-center rounded border border-border/70 bg-background px-1.5 py-0.5 id-text text-[10px] font-medium text-muted-foreground sm:inline-flex"
+              className="hidden shrink-0 items-center rounded border border-border/70 bg-background px-1.5 py-0.5 id-text text-xs font-medium text-muted-foreground sm:inline-flex"
             >
               Ctrl K
             </kbd>

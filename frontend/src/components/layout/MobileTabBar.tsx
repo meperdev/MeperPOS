@@ -31,7 +31,7 @@ export function MobileTabBar() {
   const itemClass = (isActive: boolean) =>
     cn(
       "flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1",
-      "text-[11px] font-medium leading-none transition-colors",
+      "text-xs font-medium leading-none transition-colors",
       "active:bg-muted/70",
       isActive ? "text-primary" : "text-muted-foreground",
     );

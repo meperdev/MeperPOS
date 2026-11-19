@@ -391,7 +391,7 @@ function PaletteDialog() {
         className="mt-3 max-h-[min(56dvh,24rem)] space-y-1 overflow-y-auto scrollbar-app"
       >
         {showsEmptyMessage && (
-          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
             No encontramos resultados para «{trimmed}».
           </p>
         )}
@@ -407,7 +407,7 @@ function PaletteDialog() {
           >
             <p
               id={`${listId}-${section.key}-heading`}
-              className="px-2.5 pb-1 pt-2 text-xs font-medium text-muted-foreground"
+              className="px-2.5 pb-1 pt-2 text-[13px] font-medium text-muted-foreground"
             >
               {section.title}
             </p>
@@ -416,7 +416,7 @@ function PaletteDialog() {
               <p
                 data-status={section.status.kind}
                 className={cn(
-                  "px-2.5 py-1.5 text-[11px]",
+                  "px-2.5 py-1.5 text-xs",
                   section.status.kind === "error"
                     ? "text-danger-text"
                     : "text-muted-foreground",
@@ -437,7 +437,7 @@ function PaletteDialog() {
                   onMouseEnter={() => setActiveId(option.id)}
                   onClick={option.onOpen}
                   className={cn(
-                    "flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors",
+                    "flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
                     "max-sm:min-h-11",
                     // The active row is the palette's only selection signal, and
                     // a grey-on-grey one disappears on the light card: the
@@ -462,7 +462,7 @@ function PaletteDialog() {
                   {option.hint && (
                     <span
                       className={cn(
-                        "shrink-0 text-[11px] tabular-nums",
+                        "shrink-0 text-xs tabular-nums",
                         isActive ? "text-foreground/80" : "text-muted-foreground",
                         option.hintMono && "id-text",
                       )}

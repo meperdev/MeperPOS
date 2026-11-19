@@ -60,7 +60,7 @@ export function Pagination({
     // panel (the POS pager) gets the compact one-row form.
     <div
       className={cn(
-        "@container flex flex-wrap items-center justify-between gap-3 text-xs",
+        "@container flex flex-wrap items-center justify-between gap-3 text-[13px]",
         pinned &&
           "mt-auto sticky bottom-[calc(var(--mobile-tabbar)+var(--safe-bottom))] lg:bottom-0 z-10 bg-background border-t border-border pt-3 pb-[max(0.75rem,var(--safe-bottom))]",
         className,
@@ -91,12 +91,12 @@ export function Pagination({
           size="sm"
           onClick={prev}
           disabled={clamped <= 1 || isDisabled}
-          className="h-10 w-10 p-0 rounded-md text-xs @md:h-9 @md:w-auto @md:px-3"
+          className="h-10 w-10 p-0 rounded-md text-[13px] @md:h-9 @md:w-auto @md:px-3"
         >
           <ChevronLeft className="h-3.5 w-3.5 @md:mr-1" aria-hidden="true" />
           <span className="sr-only @md:not-sr-only">Anterior</span>
         </Button>
-        <span className="inline-flex h-10 @md:h-9 items-center px-2.5 rounded-md bg-muted/60 border border-border/70 text-xs font-semibold tabular-nums text-foreground">
+        <span className="inline-flex h-10 @md:h-9 items-center px-2.5 rounded-md bg-muted/60 border border-border/70 text-[13px] font-semibold tabular-nums text-foreground">
           {clamped} / {pageCount}
         </span>
         <Button
@@ -105,7 +105,7 @@ export function Pagination({
           size="sm"
           onClick={next}
           disabled={clamped >= pageCount || isDisabled}
-          className="h-10 w-10 p-0 rounded-md text-xs @md:h-9 @md:w-auto @md:px-3"
+          className="h-10 w-10 p-0 rounded-md text-[13px] @md:h-9 @md:w-auto @md:px-3"
         >
           <span className="sr-only @md:not-sr-only">Siguiente</span>
           <ChevronRight className="h-3.5 w-3.5 @md:ml-1" aria-hidden="true" />
