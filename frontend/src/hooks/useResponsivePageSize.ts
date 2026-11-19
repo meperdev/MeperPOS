@@ -9,6 +9,12 @@ import {
 /** One settle per window resize / rail collapse, not one per pointer move. */
 export const PAGE_SIZE_DEBOUNCE_MS = 150;
 
+/** Table view never asks for fewer rows than this, even on a very short screen. */
+export const MIN_TABLE_ROWS = 5;
+/** Row and header heights used until a rendered table can be measured. */
+const FALLBACK_TABLE_ROW_HEIGHT = 53;
+const FALLBACK_TABLE_HEADER_HEIGHT = 40;
+
 export interface ResponsivePageSizeOptions {
   /** The track width the CSS grid uses (`minmax()`), from `lib/collection-grid`. */
   minCardWidth: number;
@@ -39,6 +45,11 @@ export interface ResponsivePageSize {
    * height is the space the grid must leave free at the bottom of the viewport.
    */
   footerRef: (element: HTMLElement | null) => void;
+  /**
+   * Attach to the box that holds the table view. Rows are then fitted between
+   * its top edge and the pager; until it mounts, table view keeps `min`.
+   */
+  tableRef: (element: HTMLElement | null) => void;
 }
 
 /** The viewport the list is actually laid out in, scrollbar excluded. */
@@ -87,6 +98,8 @@ export function useResponsivePageSize({
 }: ResponsivePageSizeOptions): ResponsivePageSize {
   const [container, setContainer] = useState<HTMLElement | null>(null);
   const [footer, setFooter] = useState<HTMLElement | null>(null);
+  const [table, setTable] = useState<HTMLElement | null>(null);
+  const [tableRows, setTableRows] = useState<number | null>(null);
   const [size, setSize] = useState<Measurements>(() => ({
     pageSize: min,
     columns: 0,
@@ -99,6 +112,9 @@ export function useResponsivePageSize({
   }, []);
   const footerRef = useCallback((element: HTMLElement | null) => {
     setFooter(element);
+  }, []);
+  const tableRef = useCallback((element: HTMLElement | null) => {
+    setTable(element);
   }, []);
 
   // Table view answers the fixed size without touching the measurement: the
@@ -191,5 +207,65 @@ export function useResponsivePageSize({
     debounceMs,
   ]);
 
-  return { ...(enabled ? size : tableSize), containerRef, footerRef };
+  // Table view: whole rows between the table's top edge and the pager. Only the
+  // table's position is read, never its height, so rendering more rows can
+  // never ask for still more rows (the feedback loop that made /sales scroll).
+  useEffect(() => {
+    if (enabled || !table) return;
+
+    const measure = () => {
+      const box = table.getBoundingClientRect();
+      if (!(box.width > 0)) return;
+      const rowHeight =
+        table.querySelector("tbody tr")?.getBoundingClientRect().height ||
+        FALLBACK_TABLE_ROW_HEIGHT;
+      const headerHeight =
+        table.querySelector("thead")?.getBoundingClientRect().height ||
+        FALLBACK_TABLE_HEADER_HEIGHT;
+      const footerHeight = footer ? outsideHeight(footer) : 0;
+      const top = box.top + scrollOffset();
+      const available = viewportHeight() - top - footerHeight - gap - headerHeight;
+      const rows = Math.floor(available / rowHeight);
+      const next = Math.min(Math.max(rows, MIN_TABLE_ROWS), Math.max(MIN_TABLE_ROWS, max));
+      setTableRows((previous) => (previous === next ? previous : next));
+    };
+
+    const schedule = (immediate: boolean) => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (immediate) {
+        measure();
+        return;
+      }
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        measure();
+      }, debounceMs);
+    };
+
+    schedule(true);
+    const onResize = () => schedule(false);
+    window.addEventListener("resize", onResize);
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => schedule(false));
+    observer?.observe(table);
+    if (footer) observer?.observe(footer);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      observer?.disconnect();
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [table, footer, gap, max, enabled, debounceMs]);
+
+  const tableAnswer =
+    table && tableRows !== null ? { ...tableSize, pageSize: tableRows, rows: tableRows } : tableSize;
+  return { ...(enabled ? size : tableAnswer), containerRef, footerRef, tableRef };
 }

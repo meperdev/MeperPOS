@@ -144,12 +144,13 @@ function InventoryContent() {
     setLowStockFilter({ urlValue: urlLowStock, enabled: !showLowStockOnly });
   };
 
-  // Table view keeps a fixed page: rows are dense, so a viewport-sized page is
-  // not a win there. Card view asks the grid how many cards actually fit.
+  // Card view asks the grid how many cards fit; table view fits whole rows
+  // between the table top and the pager. Both answer TABLE_PAGE_SIZE until measured.
   const {
     pageSize: gridPageSize,
     containerRef: gridRef,
     footerRef,
+    tableRef,
   } = useResponsivePageSize({
     minCardWidth: PRODUCT_CARD_MIN_WIDTH,
     gap: COLLECTION_GRID_GAP,
@@ -159,7 +160,7 @@ function InventoryContent() {
     max: MAX_COLLECTION_PAGE_SIZE,
     enabled: viewMode === "grid",
   });
-  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+  const pageSize = gridPageSize;
 
   // Server-side pagination: every request — filtered or not — is bounded to
   // one page of rows. Low stock and alphabetical order are resolved by the
@@ -699,7 +700,7 @@ function InventoryContent() {
               </div>
             ) : (
               <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
-                <div className="overflow-x-auto">
+                <div ref={tableRef} className="overflow-x-auto">
                   <Table variant="default" className="min-w-[720px]">
                     <TableHeader>
                       <TableRow>

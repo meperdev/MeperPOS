@@ -305,3 +305,85 @@ beforeEach(() => {
     writable: true,
   });
 });
+
+/** A table wrapper at `top` holding a header row and one body row. */
+function mountTable({
+  top,
+  headerHeight,
+  rowHeight,
+  footerHeight,
+  width = 1200,
+}: {
+  top: number;
+  headerHeight: number;
+  rowHeight: number;
+  footerHeight: number;
+  width?: number;
+}) {
+  const wrapper = makeBox({ width, top, height: headerHeight + rowHeight * 20 });
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const headerRow = makeBox({ width, top, height: headerHeight }) as unknown as HTMLElement;
+  thead.appendChild(document.createElement("tr"));
+  Object.defineProperty(thead, "getBoundingClientRect", { value: headerRow.getBoundingClientRect, configurable: true });
+  const tbody = document.createElement("tbody");
+  const row = document.createElement("tr");
+  Object.defineProperty(row, "getBoundingClientRect", {
+    value: rect({ width, top: top + headerHeight, height: rowHeight }),
+    configurable: true,
+  });
+  tbody.appendChild(row);
+  table.append(thead, tbody);
+  wrapper.appendChild(table);
+  const footer = makeBox({ width, top: top + 2000, height: 0 });
+  const pager = makeBox({ width, top: top + 2000, height: footerHeight });
+  footer.appendChild(pager);
+  document.body.append(wrapper, footer);
+  return { wrapper, footer, row };
+}
+
+describe("useResponsivePageSize in table view", () => {
+  it("fits whole rows between the table top and the pager, ignoring how tall the table already is", () => {
+    // 1000 viewport - 260 top - 64 pager - 16 gap - 40 header = 620 -> 10 rows of 61px.
+    setViewportHeight(1000);
+    const scene = mountTable({ top: 260, headerHeight: 40, rowHeight: 61, footerHeight: 64 });
+    const { result } = renderHook(() => useResponsivePageSize(optionsFor(null, { enabled: false })));
+    act(() => {
+      result.current.tableRef(scene.wrapper);
+      result.current.footerRef(scene.footer);
+    });
+    settle();
+    expect(result.current.pageSize).toBe(10);
+  });
+
+  it("shrinks on a short viewport instead of keeping the fixed page", () => {
+    setViewportHeight(800);
+    // 800 - 260 - 64 - 16 - 40 = 420 -> 6 rows of 61px.
+    const scene = mountTable({ top: 260, headerHeight: 40, rowHeight: 61, footerHeight: 64 });
+    const { result } = renderHook(() => useResponsivePageSize(optionsFor(null, { enabled: false })));
+    act(() => {
+      result.current.tableRef(scene.wrapper);
+      result.current.footerRef(scene.footer);
+    });
+    settle();
+    expect(result.current.pageSize).toBe(6);
+  });
+
+  it("keeps a floor of five rows and the endpoint ceiling", () => {
+    setViewportHeight(400);
+    const scene = mountTable({ top: 260, headerHeight: 40, rowHeight: 61, footerHeight: 64 });
+    const { result } = renderHook(() => useResponsivePageSize(optionsFor(null, { enabled: false, max: 100 })));
+    act(() => {
+      result.current.tableRef(scene.wrapper);
+      result.current.footerRef(scene.footer);
+    });
+    settle();
+    expect(result.current.pageSize).toBe(5);
+  });
+
+  it("answers the fixed page size while no table is attached", () => {
+    const { result } = renderHook(() => useResponsivePageSize(optionsFor(null, { enabled: false, min: 10 })));
+    settle();
+    expect(result.current.pageSize).toBe(10);
+  });
+});

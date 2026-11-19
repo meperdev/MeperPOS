@@ -192,12 +192,13 @@ describe("Inventory page — page size follows the viewport (card view)", () => 
     );
   });
 
-  it("keeps the fixed page size in table view", () => {
+  it("requests the rows the table measured in table view", () => {
     window.localStorage.setItem("meperpos:view-mode:inventory", "table");
+    settleGridSize(7, 0, 7);
 
     render(<InventoryPage />);
 
-    expect(lastQuery()).toEqual(expect.objectContaining({ page: 1, limit: 10 }));
+    expect(lastQuery()).toEqual(expect.objectContaining({ page: 1, limit: 7 }));
     expect(lastPageSizeOptions()).toEqual(
       expect.objectContaining({ enabled: false }),
     );

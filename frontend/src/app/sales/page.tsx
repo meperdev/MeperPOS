@@ -34,7 +34,7 @@ import {
   MIN_VISIBLE_ROWS,
   remapPageForPageSize,
 } from "@/lib/collection-grid";
-import { Download, Eye, Receipt } from "lucide-react";
+import { Download, Receipt } from "lucide-react";
 import {
   cn,
   formatCurrency,
@@ -47,6 +47,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
+import { activationProps } from "@/lib/activation";
 import { PaymentStateBadge, getPaymentState } from "@/components/sales/PaymentState";
 import { SaleCardRow } from "@/components/sales/SaleCardRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -71,17 +72,13 @@ function SalesPageContent() {
   const customerId = searchParams.get("customerId") ?? "";
   const customerLabel = searchParams.get("customerName") ?? "";
 
-  // Table view sizes itself to the box it actually gets, so the last row never
-  // hides behind the paginator and no row is clipped.
-  const listRef = useRef<HTMLDivElement>(null);
-  const [tableRows, setTableRows] = useState(10);
-
-  // Card view fills the viewport: the grid reports how many cards fit. The table
-  // keeps its own row measurement above.
+  // Card view fills the viewport with the cards that fit; table view fits whole
+  // rows between the table's top edge and the pager (see useResponsivePageSize).
   const {
     pageSize: gridPageSize,
     containerRef: gridRef,
     footerRef,
+    tableRef,
   } = useResponsivePageSize({
     minCardWidth: COLLECTION_CARD_MIN_WIDTH,
     gap: COLLECTION_GRID_GAP,
@@ -91,7 +88,7 @@ function SalesPageContent() {
     max: MAX_COLLECTION_PAGE_SIZE,
     enabled: viewMode === "grid",
   });
-  const pageSize = viewMode === "grid" ? gridPageSize : tableRows;
+  const pageSize = gridPageSize;
 
   // Re-anchor on the item the user was already looking at when a resize changes
   // the page size, instead of leaving them on a page that now starts elsewhere.
@@ -156,23 +153,6 @@ function SalesPageContent() {
   });
   const sales = data?.data ?? [];
   const meta = data?.meta;
-
-  // Table view sizes itself to the box it actually gets, so the last row never
-  // hides behind the paginator and no row is clipped.
-  useEffect(() => {
-    const element = listRef.current;
-    if (!element || viewMode !== "table") return;
-    const observer = new ResizeObserver(() => {
-      const rowHeight =
-        element.querySelector("tbody tr")?.getBoundingClientRect().height || 53;
-      const rows = Math.floor((element.clientHeight - 40) / rowHeight);
-      setTableRows((current) =>
-        current === rows ? current : Math.max(8, Math.min(30, rows)),
-      );
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [viewMode, isLoading]);
 
   useEffect(() => {
     if (meta && meta.totalPages > 0 && page > meta.totalPages) {
@@ -313,8 +293,8 @@ function SalesPageContent() {
                 sales.map((sale) => (
                   <div
                     key={sale.id}
-                    onClick={() => handleViewDetails(sale)}
-                    className="cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3 transition-colors hover:border-border active:bg-muted/60"
+                    {...activationProps(() => handleViewDetails(sale), `Ver detalle de venta ${sale.saleNumber}`)}
+                    className="cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3 transition-colors hover:border-border active:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground tabular-nums">
@@ -352,13 +332,6 @@ function SalesPageContent() {
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => handleViewDetails(sale)}
-                        >
-                          <Eye className="w-3.5 h-3.5" /> Detalle
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
                           onClick={() => handleOpenReceipt(sale.id)}
                           className="h-9 w-9 px-0"
                           title="Ver comprobante" aria-label={`Ver comprobante de venta ${sale.saleNumber}`}
@@ -384,10 +357,9 @@ function SalesPageContent() {
             {/* Desktop Table View */}
             {viewMode === "table" && (
             <div
-              ref={listRef}
               className="hidden md:block w-full flex-1 rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden"
             >
-              <div className="overflow-x-auto">
+              <div ref={tableRef} className="overflow-x-auto">
                 {/* Min width only when there are rows: an empty state must not scroll sideways. */}
                 <Table variant="default" className={sales.length > 0 ? "min-w-[680px]" : undefined}>
                   <TableHeader>
@@ -431,8 +403,8 @@ function SalesPageContent() {
                       sales.map((sale) => (
                         <TableRow
                           key={sale.id}
-                          onClick={() => handleViewDetails(sale)}
-                          className="cursor-pointer active:bg-muted/40"
+                          {...activationProps(() => handleViewDetails(sale), `Ver detalle de venta ${sale.saleNumber}`)}
+                          className="cursor-pointer active:bg-muted/40 focus-visible:outline-none focus-visible:bg-muted/40"
                         >
                           <TableCell>
                             <span className="text-xs font-semibold text-foreground tabular-nums">
@@ -482,15 +454,6 @@ function SalesPageContent() {
                               className="flex items-center justify-end gap-1"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleViewDetails(sale)}
-                                className="p-1.5 h-9 w-9 rounded-md border border-transparent hover:border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground"
-                                title="Ver detalle" aria-label={`Ver detalle de venta ${sale.saleNumber}`}
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </Button>
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -547,7 +510,7 @@ function SalesPageContent() {
       >
         {selectedSale && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[
                 {
                   label: "Cliente",
@@ -589,11 +552,11 @@ function SalesPageContent() {
                   )}
                 </div>
               ))}
-              <div className="col-span-2 sm:col-span-4 p-3 rounded-lg bg-muted/30 border border-border/60">
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">
+              <div className="col-span-2 min-w-0 p-3 rounded-lg bg-muted/30 border border-border/60">
+                <p className="text-xs font-medium text-muted-foreground mb-1">
                   Método de pago
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {selectedSale.payments?.length ? (
                     selectedSale.payments.map((p, i) => (
                       <span

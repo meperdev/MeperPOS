@@ -223,6 +223,7 @@ export default function LoansPage() {
     pageSize: gridPageSize,
     containerRef: gridRef,
     footerRef,
+    tableRef,
   } = useResponsivePageSize({
     minCardWidth: COLLECTION_CARD_MIN_WIDTH,
     gap: COLLECTION_GRID_GAP,
@@ -232,7 +233,7 @@ export default function LoansPage() {
     max: MAX_COLLECTION_PAGE_SIZE,
     enabled: viewMode === "grid",
   });
-  const pageSize = viewMode === "grid" ? gridPageSize : TABLE_PAGE_SIZE;
+  const pageSize = gridPageSize;
 
   // Re-anchor on the item the user was already looking at when a resize changes
   // the page size, instead of leaving them on a page that now starts elsewhere.
@@ -400,7 +401,7 @@ export default function LoansPage() {
             />
           ) : viewMode === "table" ? (
             <div className="flex-1 overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs">
-              <div className="overflow-x-auto">
+              <div ref={tableRef} className="overflow-x-auto">
                 <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
