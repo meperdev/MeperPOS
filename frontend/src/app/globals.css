@@ -154,7 +154,7 @@
     --color-chart-ink: var(--chart-ink);
     --color-chart-ink-muted: var(--chart-ink-muted);
     --color-chart-danger: var(--chart-danger);
-    --font-sans: var(--font-geist);
+    --font-sans: var(--font-inter);
     --font-mono: var(--font-jetbrains-mono);
 }
 
@@ -177,7 +177,13 @@ body {
     background-color: var(--background);
     color: var(--foreground);
     caret-color: var(--primary);
-    font-family: var(--font-geist), system-ui, sans-serif;
+    font-family: var(--font-inter), system-ui, sans-serif;
+    /* Inter is a UI face: grayscale smoothing keeps its light weights from
+       blooming on cheap panels, and optimizeLegibility keeps the ligature
+       and kerning work in long prose instead of leaving it to the UA. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     transition:
         background-color 0.25s ease,
         color 0.25s ease;
@@ -394,7 +400,7 @@ h4 {
     border: none;
     background: transparent;
     text-align: left;
-    font-family: var(--font-geist), system-ui, sans-serif;
+    font-family: var(--font-inter), system-ui, sans-serif;
 }
 
 /* ─── Scrollbars ───────────────────────────────────────── */

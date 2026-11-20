@@ -1,13 +1,13 @@
 # Plan de Implementación: Rediseño Frontend MeperPOS (Kinetic Bento)
 
-Implementación integral del sistema de diseño **Kinetic Bento** en el frontend de MeperPOS (Next.js 16 + React 19 + Tailwind CSS v4), aplicando la paleta oficial **Terracotta Copper (`#c25e36`)**, **Obsidian Dark (`#111114`)**, y la tipografía combinada **Geist** (UI) + **JetBrains Mono** (datos y cifras COP).
+Implementación integral del sistema de diseño **Kinetic Bento** en el frontend de MeperPOS (Next.js 16 + React 19 + Tailwind CSS v4), aplicando la paleta oficial **Terracotta Copper (`#c25e36`)**, **Obsidian Dark (`#111114`)**, y la tipografía combinada **Inter** (UI) + **JetBrains Mono** (datos y cifras COP).
 
 ---
 
 ## 5 Fases de Implementación Ejecutadas
 
 ### Fase 1: Tokens Globales, Tipografía y Tema Dual
-- Inyección de `Geist` y `JetBrains Mono` vía `next/font/google` en `frontend/src/app/layout.tsx`.
+- Inyección de `Inter` y `JetBrains Mono` vía `next/font/local` (WOFF2 self-hosted) en `frontend/src/app/layout.tsx`.
 - Definición de variables CSS en `:root` y `.dark` bajo `@theme inline` en `frontend/src/app/globals.css`.
 
 ### Fase 2: Biblioteca de Componentes Atómicos UI

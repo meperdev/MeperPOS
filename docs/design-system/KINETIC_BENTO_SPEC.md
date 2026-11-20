@@ -33,7 +33,7 @@ colors:
     text-muted: '#6a6a78'
 typography:
   source_of_truth:
-    font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif
+    font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif
     font-mono: 'JetBrains Mono', monospace
 ---
 
@@ -42,13 +42,13 @@ typography:
 ## 1. Tokens de Identidad & Marca (Definitivos)
 - **Color Base Primario**: `Terracotta Copper` (`#c25e36`) con hover en `#a84d28`.
 - **Fondo de Acento Suave**: `#faece5` en Light / `#2c1d18` en Dark.
-- **Tipografía de Interfaz (UI / Títulos / Textos)**: `Geist` (Vercel / Google Fonts).
-- **Tipografía Monospace (Cifras, Precios COP, SKUs, Fechas)**: `JetBrains Mono` (Google Fonts).
+- **Tipografía de Interfaz (UI / Títulos / Textos)**: `Inter` (variable, self-hosted vía `next/font/local`).
+- **Tipografía Monospace (Códigos, SKUs, IDs, Precios COP)**: `JetBrains Mono`.
 - **Paleta Modo Oscuro**: `Obsidian Charcoal` neutro (`#111114` fondo, `#18181c` tarjetas, `#30303a` bordes).
 
 ## 2. Cobertura de Módulos Auditados
 1. **Autenticación (`/login` & `/register`)**:
-   - Layout **Centrado Elevado Bento**: Card `rounded-3xl` con sombras de profundidad, branding Terracotta Copper, inputs limpios en Geist y botón principal sólido.
+   - Layout **Centrado Elevado Bento**: Card `rounded-3xl` con sombras de profundidad, branding Terracotta Copper, inputs limpios en Inter y botón principal sólido.
 2. **Layout Base**: Sidebar persistente de 320px con User Card Bento y conmutador Sun/Moon.
 3. **Dashboard (`/dashboard`)**: Macro-tarjetas Bento de ingresos, ventas recientes y accesos táctiles.
 4. **POS (`/pos`)**: Grid de catálogo con fotos 4/3, Stepper táctil, carrito dinámico, pagos múltiples (Efectivo/Tarjeta/Transferencia) y modal de ticket térmico.

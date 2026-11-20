@@ -72,7 +72,7 @@ El layout `DashboardLayout` envuelve todas las páginas autenticadas: renderiza 
 - **`getApiErrorMessage(error, fallback)`** para extraer mensajes de error legibles de los errores de Axios.
 - **Cliente `api`** (`lib/api.ts`): singleton de Axios con inyección automática del JWT y redirección en respuestas `401`.
 - **Contextos**: `AuthContext` (usuario + JWT), `ThemeContext` (tema claro/oscuro) y `ToastContext` (notificaciones).
-- El tema usa variables CSS definidas en `globals.css` (`--primary` teal, `--terracotta` como acento) y fuentes Geist + JetBrains Mono self-hosted vía `next/font/local`.
+- El tema usa variables CSS definidas en `globals.css` (`--primary` teal, `--terracotta` como acento) y fuentes Inter + JetBrains Mono self-hosted vía `next/font/local`.
 
 ## Testing
 

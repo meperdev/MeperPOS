@@ -7,7 +7,7 @@ Resumen de la ejecución técnica sobre la rama `feat/redesign-kinetic-bento` co
 ## 📦 Commits Encadenados
 
 1. **`feat(ui): setup tokens, fonts and obsidian dark palette`**
-   - Configuración de `Geist`, `JetBrains Mono`, tokens Terracotta Copper y Obsidian Dark.
+   - Configuración de `Inter`, `JetBrains Mono`, tokens Terracotta Copper y Obsidian Dark.
 2. **`feat(ui): modernize atomic component library and steppers`**
    - Componentes `Button`, `Input`, `Badge` (dot único), `Card`, `Modal`, `ConfirmDialog`, `Pagination`, `FilterBar`, `Stepper`, `BentoSelect`.
 3. **`feat(layout): implement kinetic bento sidebar and elevated auth`**

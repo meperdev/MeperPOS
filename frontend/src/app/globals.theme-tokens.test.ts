@@ -77,12 +77,37 @@ describe("slice 1: green accent kept as documented commented secondary (ADR-3/D1
   });
 });
 
-describe("slice 1: layout font swap Manrope -> Geist (ADR-1)", () => {
-  it("applies the self-hosted Geist variable and leaves Manrope behind", () => {
-    expect(layoutTsx).toContain("geist-latin.woff2");
-    expect(layoutTsx).toContain("--font-geist");
-    expect(layoutTsx).toContain("geist.variable");
+describe("font swap: Inter replaces Geist as the sans family (D8)", () => {
+  it("loads the self-hosted Inter variable from the local WOFF2", () => {
+    expect(layoutTsx).toContain("inter-latin.woff2");
+    expect(layoutTsx).toContain('"--font-inter"');
+    expect(layoutTsx).toContain("inter.variable");
+    expect(layoutTsx).toContain('display: "swap"');
+    expect(layoutTsx).toContain('weight: "100 900"');
+  });
+
+  it("leaves no Geist loader or Geist variable behind", () => {
+    expect(layoutTsx).not.toContain("geist-latin.woff2");
+    expect(layoutTsx).not.toContain("--font-geist");
     expect(layoutTsx).not.toContain("Manrope");
+  });
+
+  it("maps --font-sans to Inter and never references the Geist variable", () => {
+    expect(globalsCss).toContain("--font-sans: var(--font-inter);");
+    expect(globalsCss).not.toContain("--font-geist");
+    // The family is declared by name wherever it is used, not only through the
+    // Tailwind token: body and the sidebar item carry it explicitly.
+    expect(globalsCss).toContain("font-family: var(--font-inter), system-ui, sans-serif;");
+  });
+
+  it("keeps JetBrains Mono as the code/mono family", () => {
+    expect(globalsCss).toContain("--font-mono: var(--font-jetbrains-mono);");
+    expect(layoutTsx).toContain("--font-jetbrains-mono");
+  });
+
+  it("renders Inter with grayscale smoothing and legibility tuning", () => {
+    expect(globalsCss).toContain("-webkit-font-smoothing: antialiased;");
+    expect(globalsCss).toContain("text-rendering: optimizeLegibility;");
   });
 });
 
