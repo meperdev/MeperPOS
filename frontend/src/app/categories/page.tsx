@@ -15,13 +15,18 @@ import type {
 } from "@/hooks/useCategories";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
+import {
+  COLLECTION_CONTENT_ENTER_CLASSES,
+  COLLECTION_GRID_CLASSES,
+  COLLECTION_PENDING_CLASSES,
+  COLLECTION_PENDING_OPACITY_CLASS,
+} from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { CategoryProductsModal } from "@/components/categories/CategoryProductsModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
-import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { CollectionSkeleton } from "@/components/ui/CollectionSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import {
@@ -43,6 +48,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
@@ -114,6 +120,7 @@ export default function CategoriesPage() {
   const {
     data,
     isLoading,
+    isFetching,
     isError: categoriesFailed,
     error: categoriesError,
     refetch: refetchCategories,
@@ -122,6 +129,8 @@ export default function CategoriesPage() {
     limit: pageSize,
     search: search || undefined,
   });
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(isLoading);
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
@@ -259,9 +268,14 @@ export default function CategoriesPage() {
             retryLabel="Reintentar"
             onRetry={() => void refetchCategories()}
           />
-        ) : isLoading ? (
-          <CardSkeleton count={6} label="Cargando categorías..." />
-        ) : categories.length === 0 ? (
+        ) : showSkeleton ? (
+          <CollectionSkeleton
+            viewMode={viewMode}
+            columns={5}
+            rows={6}
+            label="Cargando categorías..."
+          />
+        ) : isLoading ? null : categories.length === 0 ? (
           <EmptyState
             icon={<FolderTree className="w-5 h-5 text-muted-foreground" />}
             title={
@@ -278,7 +292,17 @@ export default function CategoriesPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
+              <div
+                ref={gridRef}
+                aria-busy={isFetching}
+                className={cn(
+                  COLLECTION_GRID_CLASSES,
+                  "flex-1 content-start",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 {categories.map((category, i) => {
                   const count = category.productCount ?? 0;
                   return (
@@ -376,7 +400,14 @@ export default function CategoriesPage() {
                 })}
               </div>
             ) : (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
+              <div
+                className={cn(
+                  "w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 <div ref={tableRef} className="overflow-x-auto">
                   <Table className="min-w-[640px]">
                     <TableHeader>

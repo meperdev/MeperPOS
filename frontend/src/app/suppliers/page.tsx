@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
 import { Pagination } from "@/components/ui/Pagination";
-import { TableSkeleton } from "@/components/ui/TableSkeleton";
+import { CollectionSkeleton } from "@/components/ui/CollectionSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
@@ -33,8 +33,14 @@ import {
 } from "@/components/ui/Table";
 import { cn } from "@/lib/utils";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
+import {
+  COLLECTION_CONTENT_ENTER_CLASSES,
+  COLLECTION_GRID_CLASSES,
+  COLLECTION_PENDING_CLASSES,
+  COLLECTION_PENDING_OPACITY_CLASS,
+} from "@/components/ui/collectionGrid";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
@@ -164,12 +170,14 @@ export default function SuppliersPage() {
     }
   };
 
-  const { data, isLoading } = useSuppliers({
+  const { data, isLoading, isFetching } = useSuppliers({
     page,
     limit: pageSize,
     search: search || undefined,
     status: statusFilter,
   });
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(isLoading);
   const createSupplier = useCreateSupplier();
   const updateSupplier = useUpdateSupplier();
   const deactivateSupplier = useDeactivateSupplier();
@@ -333,9 +341,14 @@ export default function SuppliersPage() {
         />
 
         {/* Content */}
-        {isLoading ? (
-          <TableSkeleton columns={4} rows={6} label="Cargando proveedores…" />
-        ) : suppliers.length === 0 ? (
+        {showSkeleton ? (
+          <CollectionSkeleton
+            viewMode={viewMode}
+            columns={6}
+            rows={6}
+            label="Cargando proveedores…"
+          />
+        ) : isLoading ? null : suppliers.length === 0 ? (
           <EmptyState
             icon={<Truck className="w-5 h-5 text-muted-foreground" />}
             title={
@@ -352,7 +365,17 @@ export default function SuppliersPage() {
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
+              <div
+                ref={gridRef}
+                aria-busy={isFetching}
+                className={cn(
+                  COLLECTION_GRID_CLASSES,
+                  "flex-1 content-start",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 {suppliers.map((supplier) => {
                   const hasContactInfo = Boolean(
                     supplier.contactName ||
@@ -548,7 +571,14 @@ export default function SuppliersPage() {
                 })}
               </div>
             ) : (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
+              <div
+                className={cn(
+                  "w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 <div ref={tableRef} className="overflow-x-auto">
                   <Table className="min-w-[720px]">
                     <TableHeader>

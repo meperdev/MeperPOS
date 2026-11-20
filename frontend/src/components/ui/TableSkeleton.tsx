@@ -1,5 +1,8 @@
 import { cn } from "@/lib/utils";
 
+/** One calm pulse shared by every skeleton bar: slower and lower contrast than the default. */
+const PULSE = "animate-pulse [animation-duration:2.4s] motion-reduce:animate-none";
+
 /**
  * Loading placeholder shaped like the data table that replaces it, so the
  * layout does not jump from a spinner to a full grid. The message stays in the
@@ -30,7 +33,7 @@ export function TableSkeleton({
           <div
             key={index}
             className={cn(
-              "h-2.5 rounded-full bg-muted-foreground/15",
+              "h-2.5 rounded-full bg-muted-foreground/10",
               index === 0 ? "w-24" : index === columns - 1 ? "w-16" : "w-20",
             )}
           />
@@ -45,7 +48,8 @@ export function TableSkeleton({
             <div
               key={column}
               className={cn(
-                "h-3 animate-pulse rounded-full bg-muted-foreground/20",
+                "h-3 rounded-full bg-muted-foreground/12",
+                PULSE,
                 column === 0
                   ? "w-28"
                   : column === columns - 1

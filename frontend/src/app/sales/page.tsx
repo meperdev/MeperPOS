@@ -11,10 +11,14 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { Modal } from "@/components/ui/Modal";
-import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
+import {
+  COLLECTION_CONTENT_ENTER_CLASSES,
+  COLLECTION_GRID_CLASSES,
+  COLLECTION_PENDING_CLASSES,
+  COLLECTION_PENDING_OPACITY_CLASS,
+} from "@/components/ui/collectionGrid";
 import { Pagination } from "@/components/ui/Pagination";
-import { CardSkeleton } from "@/components/ui/CardSkeleton";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { CollectionSkeleton, CollectionViewSkeleton } from "@/components/ui/CollectionSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   FilterBar,
@@ -25,6 +29,7 @@ import {
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
@@ -139,6 +144,7 @@ function SalesPageContent() {
   const {
     data,
     isLoading,
+    isFetching,
     isError: salesFailed,
     error: salesError,
     refetch: refetchSales,
@@ -151,6 +157,8 @@ function SalesPageContent() {
     search: search.trim() || undefined,
     customerId: customerId || undefined,
   });
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(isLoading);
   const sales = data?.data ?? [];
   const meta = data?.meta;
 
@@ -270,18 +278,27 @@ function SalesPageContent() {
             retryLabel="Reintentar"
             onRetry={() => void refetchSales()}
           />
-        ) : isLoading ? (
-          <CardSkeleton count={6} label="Cargando ventas..." />
-        ) : (
+        ) : showSkeleton ? (
+          <CollectionSkeleton
+            viewMode={viewMode}
+            columns={isAdmin ? 8 : 7}
+            rows={6}
+            label="Cargando ventas..."
+          />
+        ) : isLoading ? null : (
           <>
             {/* Cards View */}
             <div
               ref={gridRef}
+              aria-busy={isFetching}
               className={cn(
                 "flex-1",
                 viewMode === "grid"
                   ? cn(COLLECTION_GRID_CLASSES, "content-start")
                   : "md:hidden space-y-2",
+                COLLECTION_CONTENT_ENTER_CLASSES,
+                COLLECTION_PENDING_CLASSES,
+                isFetching && COLLECTION_PENDING_OPACITY_CLASS,
               )}
             >
               {sales.length === 0 ? (
@@ -357,7 +374,12 @@ function SalesPageContent() {
             {/* Desktop Table View */}
             {viewMode === "table" && (
             <div
-              className="hidden md:block w-full flex-1 rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden"
+              className={cn(
+                "hidden md:block w-full flex-1 rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden",
+                COLLECTION_CONTENT_ENTER_CLASSES,
+                COLLECTION_PENDING_CLASSES,
+                isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+              )}
             >
               <div ref={tableRef} className="overflow-x-auto">
                 {/* Min width only when there are rows: an empty state must not scroll sideways. */}
@@ -692,7 +714,11 @@ function SalesPageContent() {
 function SalesPageFallback() {
   return (
     <DashboardLayout>
-      <LoadingState icon={<Receipt className="w-4 h-4 text-primary/50" />} message="Cargando ventas..." />
+      <CollectionViewSkeleton
+        storageKey="sales"
+        columns={7}
+        label="Cargando ventas..."
+      />
     </DashboardLayout>
   );
 }

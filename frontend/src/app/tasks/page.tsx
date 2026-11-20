@@ -29,6 +29,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { COLLECTION_CONTENT_ENTER_CLASSES } from "@/components/ui/collectionGrid";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   ClipboardList,
@@ -132,6 +134,8 @@ export default function TasksPage() {
 
   // Queries & Mutations
   const tasksQuery = useTasks();
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(tasksQuery.isLoading);
   const taskList = tasksQuery.data?.tasks ?? [];
   const assigneesQuery = useTaskAssignees();
   const assignees = assigneesQuery.data ?? [];
@@ -397,7 +401,7 @@ export default function TasksPage() {
   if (tasksQuery.isLoading) {
     return (
       <DashboardLayout>
-        <CardSkeleton count={6} label="Cargando tareas del local…" />
+        {showSkeleton ? <CardSkeleton count={6} label="Cargando tareas del local…" /> : null}
       </DashboardLayout>
     );
   }
@@ -417,7 +421,7 @@ export default function TasksPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 lg:space-y-5">
+      <div className={cn("space-y-4 lg:space-y-5", COLLECTION_CONTENT_ENTER_CLASSES)}>
         <PageHeader
           title="Tareas del local"
           count={`${totalTasks} ${totalTasks === 1 ? "tarea" : "tareas"}`}
