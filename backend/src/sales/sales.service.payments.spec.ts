@@ -144,7 +144,16 @@ describe('SalesService payment rule (S3)', () => {
         { method: 'CASH', amount: 20000 },
       ]);
 
-      await create();
+      prismaMock.sale.findFirst.mockImplementation(async () => {
+        const { amountPaid, change } = tx.sale.create.mock.calls[0][0].data;
+        return { id: 'sale-new', amountPaid, change, items: [], payments: [] };
+      });
+
+      await expect(create()).resolves.toMatchObject({
+        id: 'sale-new',
+        amountPaid: 120000,
+        change: 7069,
+      });
 
       // paid 120.000 - total 112.931 = 7.069 in change; both tenders are needed
       // (100.000 alone and 20.000 alone each leave the total uncovered).

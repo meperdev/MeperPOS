@@ -133,7 +133,16 @@ describe('SalesService payment rule — cents boundary (S3)', () => {
   it('stores no change for a cash payment a fraction of a cent above the total', async () => {
     const create = prime([{ method: 'CASH', amount: displayedTotal }]);
 
-    await create();
+    prismaMock.sale.findFirst.mockImplementation(async () => {
+      const { amountPaid, change } = tx.sale.create.mock.calls[0][0].data;
+      return { id: 'sale-new', amountPaid, change, items: [], payments: [] };
+    });
+
+    await expect(create()).resolves.toMatchObject({
+      id: 'sale-new',
+      amountPaid: displayedTotal,
+      change: null,
+    });
 
     // A non-null residue would be persisted as 0.00 by DECIMAL(10,2) while the
     // receipt and the API reported a change that does not exist.
