@@ -91,7 +91,7 @@ export function ToastCard({
           : null),
       }}
       className={cn(
-        "group/toast w-full rounded-2xl border border-border bg-card p-3",
+        "group/toast w-full rounded-2xl border border-border bg-card p-3 pr-11",
         // One elevation only: a border, and a soft offset shadow tight enough
         // that it never washes over the cards peeking behind this one.
         "shadow-[0_10px_28px_-18px_rgba(0,0,0,0.45)] dark:shadow-[0_10px_28px_-18px_rgba(0,0,0,0.75)]",
@@ -110,7 +110,7 @@ export function ToastCard({
         }}
         aria-label="Cerrar notificación"
         className={cn(
-          "absolute -left-2 -top-2 z-20 flex h-[22px] w-[22px] items-center justify-center rounded-full",
+          "absolute right-1 top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full",
           "border border-border bg-card text-muted-foreground shadow-sm",
           "transition-opacity duration-150 hover:text-foreground",
           "opacity-0 group-hover/toast:opacity-100 group-focus-within/toast:opacity-100",

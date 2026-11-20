@@ -1,11 +1,13 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
 import { ExpenseStatusBadge } from "@/components/expenses/ExpenseStatusBadge";
+import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import { useExpenseHistory } from "@/hooks/useExpenses";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
-import { FileText, Image as ImageIcon } from "lucide-react";
+import { ArrowUpRight, FileText, Image as ImageIcon } from "lucide-react";
 import type { Expense, ExpensePayment } from "@/types";
 
 interface Props {
@@ -50,6 +52,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
     0,
   );
   const remaining = Math.max(Number(expense.total) - paidSum, 0);
+  const linkedOrder = expense.purchaseOrder;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Detalle del gasto" size="xl">
@@ -66,7 +69,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
                 <p className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight tabular-nums mt-0.5">
                   {formatCurrency(Number(expense.total))}
                 </p>
-                <p className="mt-1 text-[13px] text-muted-foreground tabular-nums">
+                <p className="mt-1 text-[13px] text-muted-foreground">
                   Fecha: {formatDate(expense.date)}
                 </p>
               </div>
@@ -80,22 +83,42 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
                 value={expense.label?.group?.name ? `${expense.label.group.name} / ${expense.label.name}` : expense.label?.name ?? "—"}
               />
               <InfoItem label="Proveedor" value={expense.supplier?.name ?? "—"} />
-              {expense.purchaseOrder ? (
-                <>
-                  <InfoItem
-                    label="Orden de compra"
-                    value={`OC-${expense.purchaseOrder.orderNumber}`}
-                  />
-                  <InfoItem label="Descripción" value={expense.description ?? "—"} />
-                </>
-              ) : (
-                <InfoItem
-                  label="Descripción"
-                  value={expense.description ?? "—"}
-                  className="col-span-2"
-                />
-              )}
+              <InfoItem
+                label="Descripción"
+                value={expense.description ?? "—"}
+                className="col-span-2"
+              />
             </div>
+
+            {/* Linked purchase order: the link is financial, so it says so. */}
+            {linkedOrder ? (
+              <div className="rounded-xl border border-border/70 bg-card p-4 space-y-2 shadow-2xs">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="text-xs font-semibold text-foreground tabular-nums">
+                      OC-{linkedOrder.orderNumber}
+                    </span>
+                    <PurchaseOrderStatusBadge status={linkedOrder.status} />
+                  </div>
+                  <Link
+                    href={`/purchase-orders/${linkedOrder.id}`}
+                    className="inline-flex shrink-0 items-center gap-1 rounded text-xs font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    Ver orden
+                    <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Link>
+                </div>
+                <div className="flex items-center justify-between text-xs tabular-nums">
+                  <span className="text-muted-foreground">Total de la orden</span>
+                  <span className="font-semibold text-foreground">
+                    {formatCurrency(Number(linkedOrder.total))}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Este gasto cuenta como pago de mercancía y no como gasto operativo.
+                </p>
+              </div>
+            ) : null}
 
             {/* Payments List */}
             <div className="rounded-xl border border-border/70 bg-card p-4 space-y-2 shadow-2xs">

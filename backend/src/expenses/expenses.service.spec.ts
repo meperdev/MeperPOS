@@ -134,7 +134,11 @@ describe('ExpensesService', () => {
         group: { organizationId: orgId, active: true },
       });
       prismaMock.supplier.findFirst.mockResolvedValue({ id: 'sup-1' });
-      prismaMock.purchaseOrder.findFirst.mockResolvedValue({ id: 'po-1' });
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue({
+        id: 'po-1',
+        status: 'PENDING',
+        supplierId: 'sup-1',
+      });
       txMock.expense.create.mockResolvedValue({ id: 'exp-1', status: 'PAID' });
 
       const result = await service.create(buildValidCreateDto(), userId, orgId);
@@ -203,7 +207,11 @@ describe('ExpensesService', () => {
         group: { organizationId: orgId, active: true },
       });
       prismaMock.supplier.findFirst.mockResolvedValue({ id: 'sup-1' });
-      prismaMock.purchaseOrder.findFirst.mockResolvedValue({ id: 'po-1' });
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue({
+        id: 'po-1',
+        status: 'PENDING',
+        supplierId: 'sup-1',
+      });
 
       await expect(
         service.create(
@@ -223,7 +231,11 @@ describe('ExpensesService', () => {
         group: { organizationId: orgId, active: true },
       });
       prismaMock.supplier.findFirst.mockResolvedValue({ id: 'sup-1' });
-      prismaMock.purchaseOrder.findFirst.mockResolvedValue({ id: 'po-1' });
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue({
+        id: 'po-1',
+        status: 'PENDING',
+        supplierId: 'sup-1',
+      });
 
       await expect(
         service.create(
@@ -350,6 +362,15 @@ describe('ExpensesService', () => {
         include: {
           label: { include: { group: true } },
           supplier: true,
+          purchaseOrder: {
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              total: true,
+              supplier: { select: { id: true, name: true } },
+            },
+          },
           payments: true,
         },
       });
@@ -383,7 +404,15 @@ describe('ExpensesService', () => {
         include: {
           label: { include: { group: true } },
           supplier: true,
-          purchaseOrder: true,
+          purchaseOrder: {
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              total: true,
+              supplier: { select: { id: true, name: true } },
+            },
+          },
           payments: { orderBy: { date: 'asc' } },
         },
       });

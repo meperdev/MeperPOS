@@ -27,6 +27,16 @@ vi.mock("@/hooks/useExpenses", () => ({
   useExpenseHistory: (id: string) => useExpenseHistoryMock(id),
 }));
 
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+  }: {
+    href: string;
+    children: ReactNode;
+  }) => <a href={href}>{children}</a>,
+}));
+
 import { ExpenseDetailModal } from "./ExpenseDetailModal";
 
 const expense = {
@@ -64,12 +74,9 @@ const expense = {
   purchaseOrder: {
     id: "po-1",
     orderNumber: 101,
-    supplierId: "sup-1",
-    createdById: "user-1",
     status: "RECEIVED",
-    subtotal: 0,
-    taxAmount: 0,
-    total: 0,
+    total: "1200000",
+    supplier: { id: "sup-1", name: "Proveedor Uno" },
   },
   description: "Renta agosto",
   date: "2026-08-01T00:00:00.000Z",
@@ -151,6 +158,43 @@ describe("ExpenseDetailModal", () => {
     expect(screen.getByText("Proveedor Uno")).toBeInTheDocument();
     expect(screen.getByText("OC-101")).toBeInTheDocument();
     expect(screen.getByText("Renta agosto")).toBeInTheDocument();
+  });
+
+  it("renders the linked order as a summary with status, total, link and the merchandise-cost note", () => {
+    render(<ExpenseDetailModal expense={expense} isOpen onClose={vi.fn()} />);
+
+    expect(screen.getByText("OC-101")).toBeInTheDocument();
+    expect(screen.getByText("Recibida")).toBeInTheDocument();
+    expect(screen.getByText("Total de la orden")).toBeInTheDocument();
+    expect(screen.getByText(/^\$\s1\.200\.000$/)).toBeInTheDocument();
+
+    const link = screen.getByRole("link", { name: /Ver orden/ });
+    expect(link).toHaveAttribute("href", "/purchase-orders/po-1");
+
+    expect(
+      screen.getByText(
+        "Este gasto cuenta como pago de mercancía y no como gasto operativo.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders no order block when the expense is not linked", () => {
+    render(
+      <ExpenseDetailModal
+        expense={
+          {
+            ...expense,
+            purchaseOrderId: null,
+            purchaseOrder: null,
+          } as unknown as Expense
+        }
+        isOpen
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/Ver orden/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Total de la orden")).not.toBeInTheDocument();
   });
 
   it("shows the receipt image when the expense has one", () => {

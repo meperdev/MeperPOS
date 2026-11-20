@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MobileCartDrawer } from "./MobileCartDrawer";
+import { formatCurrency } from "@/lib/utils";
 import type { CartItem, Product } from "@/types";
 
 const mockProduct: Product = {
@@ -174,5 +175,53 @@ describe("MobileCartDrawer", () => {
     rectSpy.mockRestore();
 
     expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders each drawer line through the shared compact CartLine", async () => {
+    const user = userEvent.setup();
+    const handleUpdateQuantity = vi.fn();
+    const handleOpenDiscountModal = vi.fn();
+
+    render(
+      <MobileCartDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        cart={[mockCartItem]}
+        subtotal={50000}
+        taxAmount={0}
+        discountAmount={0}
+        total={50000}
+        selectedCustomerName={null}
+        onOpenCustomerModal={vi.fn()}
+        pausedSalesCount={0}
+        onOpenPausedSales={vi.fn()}
+        onPauseSale={vi.fn()}
+        selectedPaymentMethod="CASH"
+        onPaymentMethodChange={vi.fn()}
+        onUpdateQuantity={handleUpdateQuantity}
+        onOpenDiscountModal={handleOpenDiscountModal}
+        onRemoveFromCart={vi.fn()}
+        onCheckout={vi.fn()}
+        onFinance={vi.fn()}
+        canFinance={false}
+      />,
+    );
+
+    // Same data as before the swap: unit price, quantity and the line total.
+    expect(screen.getByTestId("line-unit-price").textContent).toContain(
+      formatCurrency(25000),
+    );
+    expect(screen.getByRole("textbox", { name: "Cantidad" })).toHaveValue("2");
+    expect(screen.getByTestId("cart-line-total").textContent).toBe(
+      formatCurrency(50000),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Aumentar cantidad" }));
+    expect(handleUpdateQuantity).toHaveBeenCalledWith("prod-1", 3);
+
+    await user.click(
+      screen.getByRole("button", { name: "Descuento para Bujía NGK Racing" }),
+    );
+    expect(handleOpenDiscountModal).toHaveBeenCalledWith("prod-1");
   });
 });

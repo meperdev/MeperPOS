@@ -42,7 +42,7 @@ export function SectionShell({
             {title}
           </h2>
           {description && (
-            <span className="hidden min-w-0 truncate text-[13px] text-muted-foreground tabular-nums sm:inline">
+            <span className="hidden min-w-0 truncate text-[13px] text-muted-foreground sm:inline">
               {description}
             </span>
           )}

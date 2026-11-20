@@ -9,6 +9,7 @@ Implementación integral del sistema de diseño **Kinetic Bento** en el frontend
 ### Fase 1: Tokens Globales, Tipografía y Tema Dual
 - Inyección de `Inter` (subset latin) vía `next/font/local` en `frontend/src/app/layout.tsx`; sin `next/font/google` y sin familia monoespaciada (los identificadores usan `.id-text`, las cifras `.stat-number`).
 - Escala tipográfica: cuerpo y celdas de tabla `text-sm` (14px), etiquetas y metadatos `text-[13px]`, micro-etiquetas (chips, badges, atajos, encabezados de tabla) `text-xs` (12px, piso) y valores de resumen un paso por encima de su etiqueta (`text-xl` → `sm:text-[28px]`).
+- Fechas y horas en cifras proporcionales (sin `tabular-nums`): solo las líneas que mezclan una fecha con dinero o un conteo conservan cifras tabulares.
 - Definición de variables CSS en `:root` y `.dark` bajo `@theme inline` en `frontend/src/app/globals.css`.
 
 ### Fase 2: Biblioteca de Componentes Atómicos UI

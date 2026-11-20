@@ -9,14 +9,19 @@ import { useVehiclesModule } from "@/hooks/useBusinessModules";
 import { CustomerVehicles } from "./customer-vehicles";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
+import {
+  COLLECTION_CONTENT_ENTER_CLASSES,
+  COLLECTION_GRID_CLASSES,
+  COLLECTION_PENDING_CLASSES,
+  COLLECTION_PENDING_OPACITY_CLASS,
+} from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
 import { Pagination } from "@/components/ui/Pagination";
-import { TableSkeleton } from "@/components/ui/TableSkeleton";
+import { CollectionSkeleton } from "@/components/ui/CollectionSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import {
@@ -27,6 +32,7 @@ import {
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_CARD_FALLBACK_ROW_HEIGHT,
@@ -131,10 +137,13 @@ export default function CustomersPage() {
   const {
     data,
     isLoading,
+    isFetching,
     isError: customersFailed,
     error: customersError,
     refetch: refetchCustomers,
   } = useCustomers({ page, limit: pageSize, search: search || undefined, segment: segment || undefined });
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(isLoading);
   const createCustomer = useCreateCustomer();
   const updateCustomer = useUpdateCustomer();
   const deleteCustomer = useDeleteCustomer();
@@ -270,14 +279,29 @@ export default function CustomersPage() {
             retryLabel="Reintentar"
             onRetry={() => void refetchCustomers()}
           />
-        ) : isLoading ? (
-          <TableSkeleton columns={5} rows={8} label="Cargando clientes..." />
-        ) : customers.length === 0 ? (
+        ) : showSkeleton ? (
+          <CollectionSkeleton
+            viewMode={viewMode}
+            columns={6}
+            rows={8}
+            label="Cargando clientes..."
+          />
+        ) : isLoading ? null : customers.length === 0 ? (
           <EmptyState icon={<Users className="w-5 h-5 text-muted-foreground" />} title="No hay clientes" subtitle="Agrega tu primer cliente" />
         ) : (
           <>
             {viewMode === "grid" ? (
-              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
+              <div
+                ref={gridRef}
+                aria-busy={isFetching}
+                className={cn(
+                  COLLECTION_GRID_CLASSES,
+                  "flex-1 content-start",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 {customers.map((customer) => {
                   const seg = segmentConfig[customer.segment] || segmentConfig.OCCASIONAL;
                   const hasOptionalContact = Boolean(
@@ -417,7 +441,14 @@ export default function CustomersPage() {
                 })}
               </div>
             ) : (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
+              <div
+                className={cn(
+                  "w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 <div ref={tableRef} className="overflow-x-auto">
                   <Table variant="default" className="min-w-[680px]">
                     <TableHeader>

@@ -182,7 +182,7 @@ export default function BillingSettingsPage() {
               <Calendar className="w-3.5 h-3.5 shrink-0" />
               <span>
                 Fin de prueba:{" "}
-                <span className="font-semibold text-foreground tabular-nums">
+                <span className="font-semibold text-foreground">
                   {formatDate(billingStatus.trialEndsAt)}
                 </span>
               </span>
@@ -382,7 +382,7 @@ export default function BillingSettingsPage() {
                     <p className="text-[13px] font-semibold text-foreground tabular-nums">
                       {formatCurrency(Number(payment.amount))}
                     </p>
-                    <p className="text-[13px] text-muted-foreground tabular-nums">
+                    <p className="text-[13px] text-muted-foreground">
                       {formatDateShort(payment.date)}
                     </p>
                   </div>

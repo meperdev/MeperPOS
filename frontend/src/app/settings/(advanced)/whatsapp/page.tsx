@@ -516,7 +516,7 @@ function WhatsAppSettings() {
               {linkCode && (
                 <span className="text-[13px] text-muted-foreground">
                   Vence el{" "}
-                  <span className="tabular-nums text-foreground">
+                  <span className="text-foreground">
                     {formatDateTime(linkCode.expiresAt)}
                   </span>
                 </span>
@@ -742,7 +742,7 @@ function WhatsAppSettings() {
                               </TableCell>
                               <TableCell className="text-foreground">
                                 {single ? (
-                                  <span className="tabular-nums">
+                                  <span>
                                     {formatDateShort(attempt.reportDate)}
                                   </span>
                                 ) : (
@@ -768,7 +768,7 @@ function WhatsAppSettings() {
                                       <span className="block text-foreground">
                                         {groupHeadline(group)}
                                       </span>
-                                      <span className="block text-[13px] tabular-nums text-muted-foreground">
+                                      <span className="block text-[13px] text-muted-foreground">
                                         {groupRange(group)}
                                       </span>
                                     </span>
@@ -787,7 +787,7 @@ function WhatsAppSettings() {
                                     </span>
                                   )}
                               </TableCell>
-                              <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                              <TableCell className="whitespace-nowrap text-muted-foreground">
                                 {single && attempt.sentAt
                                   ? formatDateTime(attempt.sentAt)
                                   : "—"}
@@ -798,11 +798,11 @@ function WhatsAppSettings() {
                               group.members.map((day) => (
                                 <TableRow key={`${group.key}:${day.id}`}>
                                   <TableCell>{null}</TableCell>
-                                  <TableCell className="pl-6 text-sm tabular-nums text-muted-foreground">
+                                  <TableCell className="pl-6 text-sm text-muted-foreground">
                                     {formatDeliveryDay(day.reportDate)}
                                   </TableCell>
                                   <TableCell>{null}</TableCell>
-                                  <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                                  <TableCell className="whitespace-nowrap text-muted-foreground">
                                     {day.sentAt
                                       ? formatDateTime(day.sentAt)
                                       : "—"}

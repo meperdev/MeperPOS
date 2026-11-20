@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type {
   PurchaseOrder,
@@ -63,6 +63,9 @@ export function usePurchaseOrders(params?: PurchaseOrderFilters) {
           toQueryParams(params),
         )
         .then((res) => res.data),
+    // Paging, searching or filtering keeps the current rows on screen while the
+    // next page loads, instead of dropping the list back to a skeleton.
+    placeholderData: keepPreviousData,
   });
 }
 

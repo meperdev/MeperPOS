@@ -15,7 +15,12 @@ import {
 import { useCategories } from "@/hooks/useCategories";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { INVENTORY_GRID_CLASSES } from "@/components/ui/collectionGrid";
+import {
+  COLLECTION_CONTENT_ENTER_CLASSES,
+  COLLECTION_PENDING_CLASSES,
+  COLLECTION_PENDING_OPACITY_CLASS,
+  INVENTORY_GRID_CLASSES,
+} from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -23,7 +28,7 @@ import { ImageUpload } from "@/components/ui/ImageUpload";
 import { Select } from "@/components/ui/Select";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Pagination } from "@/components/ui/Pagination";
-import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { CollectionSkeleton } from "@/components/ui/CollectionSkeleton";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -40,6 +45,7 @@ import {
 import { ProductCard } from "@/components/products/ProductCard";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode, useMediaQuery } from "@/hooks/useEffectiveViewMode";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_GRID_GAP,
@@ -275,6 +281,8 @@ function InventoryContent() {
       numeric: true,
     }),
   );
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(isLoading);
 
   const closeEditor = () => {
     if (saveInProgressRef.current) return;
@@ -693,9 +701,15 @@ function InventoryContent() {
             retryLabel="Reintentar"
             onRetry={() => void refetchProducts()}
           />
-        ) : isLoading ? (
-          <CardSkeleton count={6} label="Cargando productos..." />
-        ) : displayProducts.length === 0 ? (
+        ) : showSkeleton ? (
+          <CollectionSkeleton
+            viewMode={viewMode}
+            gridClassName={INVENTORY_GRID_CLASSES}
+            columns={canManageInventory ? 8 : 7}
+            rows={6}
+            label="Cargando productos..."
+          />
+        ) : isLoading ? null : displayProducts.length === 0 ? (
           <EmptyState
             icon={<Package className="w-5 h-5 text-muted-foreground" />}
             title={hasFilter ? "No se encontraron productos" : "No hay productos aún"}
@@ -715,7 +729,13 @@ function InventoryContent() {
               <div
                 ref={gridRef}
                 style={gridRowStyle}
-                className={cn(INVENTORY_GRID_CLASSES, "flex-1 content-start justify-items-center")}
+                className={cn(
+                  INVENTORY_GRID_CLASSES,
+                  "flex-1 content-start justify-items-center",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
                 aria-busy={isFetching}
               >
                 {displayProducts.map((product) => (
@@ -740,7 +760,14 @@ function InventoryContent() {
                 ))}
               </div>
             ) : (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
+              <div
+                className={cn(
+                  "w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 <div ref={tableRef} className="overflow-x-auto">
                   <Table variant="default" className="min-w-[720px]">
                     <TableHeader>

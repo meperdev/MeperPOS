@@ -10,7 +10,7 @@ import { buttonClassName } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
-import { TableSkeleton } from "@/components/ui/TableSkeleton";
+import { CollectionSkeleton, CollectionViewSkeleton } from "@/components/ui/CollectionSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
@@ -18,8 +18,14 @@ import { FilterBar, FilterClearButton } from "@/components/ui/FilterBar";
 import { Select } from "@/components/ui/Select";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
+import {
+  COLLECTION_CONTENT_ENTER_CLASSES,
+  COLLECTION_GRID_CLASSES,
+  COLLECTION_PENDING_CLASSES,
+  COLLECTION_PENDING_OPACITY_CLASS,
+} from "@/components/ui/collectionGrid";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import { activationProps } from "@/lib/activation";
 import {
@@ -111,7 +117,7 @@ function PurchaseOrdersContent() {
   }, [pageSize, page]);
 
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
-  const { data, isLoading, isError, refetch } = usePurchaseOrders({
+  const { data, isLoading, isFetching, isError, refetch } = usePurchaseOrders({
     page,
     limit: pageSize,
     q: q.trim() || undefined,
@@ -120,6 +126,8 @@ function PurchaseOrdersContent() {
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
   });
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(isLoading);
 
   const orders = data?.data ?? [];
   const meta = data?.meta;
@@ -238,9 +246,14 @@ function PurchaseOrdersContent() {
         />
 
         {/* Content */}
-        {isLoading ? (
-          <TableSkeleton columns={6} rows={6} label="Cargando órdenes de compra…" />
-        ) : isError && !data ? (
+        {showSkeleton ? (
+          <CollectionSkeleton
+            viewMode={viewMode}
+            columns={6}
+            rows={6}
+            label="Cargando órdenes de compra…"
+          />
+        ) : isLoading ? null : isError && !data ? (
           <ErrorState
             message="No se pudieron cargar las órdenes de compra."
             retryLabel="Reintentar"
@@ -263,7 +276,14 @@ function PurchaseOrdersContent() {
         ) : (
           <>
             {viewMode === "table" ? (
-              <div className="w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1">
+              <div
+                className={cn(
+                  "w-full rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden flex-1",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 <div ref={tableRef} className="overflow-x-auto">
                   <Table className="min-w-[680px]">
                     <TableHeader>
@@ -298,7 +318,7 @@ function PurchaseOrdersContent() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm text-muted-foreground whitespace-nowrap tabular-nums">
+                            <span className="text-sm text-muted-foreground whitespace-nowrap">
                               {formatDateShort(order.createdAt)}
                             </span>
                           </TableCell>
@@ -321,7 +341,17 @@ function PurchaseOrdersContent() {
                 </div>
               </div>
             ) : (
-              <div ref={gridRef} className={cn(COLLECTION_GRID_CLASSES, "flex-1 content-start")}>
+              <div
+                ref={gridRef}
+                aria-busy={isFetching}
+                className={cn(
+                  COLLECTION_GRID_CLASSES,
+                  "flex-1 content-start",
+                  COLLECTION_CONTENT_ENTER_CLASSES,
+                  COLLECTION_PENDING_CLASSES,
+                  isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                )}
+              >
                 {orders.map((order) => (
                   <div
                     key={order.id}
@@ -354,7 +384,7 @@ function PurchaseOrdersContent() {
                         </div>
                         <div className="flex items-center gap-1.5 text-muted-foreground">
                           <Calendar className="w-3 h-3 shrink-0 text-muted-foreground/70" />
-                          <span className="tabular-nums text-muted-foreground">
+                          <span className="text-muted-foreground">
                             {formatDateShort(order.createdAt)}
                           </span>
                         </div>
@@ -405,7 +435,15 @@ function PurchaseOrdersContent() {
 export default function PurchaseOrdersPage() {
   return (
     <Suspense
-      fallback={<TableSkeleton rows={6} columns={6} label="Cargando órdenes de compra…" />}
+      fallback={
+        <DashboardLayout>
+          <CollectionViewSkeleton
+            storageKey="purchase-orders"
+            columns={6}
+            label="Cargando órdenes de compra…"
+          />
+        </DashboardLayout>
+      }
     >
       <PurchaseOrdersContent />
     </Suspense>

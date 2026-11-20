@@ -30,15 +30,21 @@ import {
   remapPageForPageSize,
 } from "@/lib/collection-grid";
 import { Button } from "@/components/ui/Button";
-import { COLLECTION_GRID_CLASSES } from "@/components/ui/collectionGrid";
+import {
+  COLLECTION_CONTENT_ENTER_CLASSES,
+  COLLECTION_GRID_CLASSES,
+  COLLECTION_PENDING_CLASSES,
+  COLLECTION_PENDING_OPACITY_CLASS,
+} from "@/components/ui/collectionGrid";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { Select } from "@/components/ui/Select";
-import { usePersistedViewMode } from "@/hooks/usePersistedViewMode";
+import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
-import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { CollectionSkeleton } from "@/components/ui/CollectionSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ExpenseStatusBadge } from "@/components/expenses/ExpenseStatusBadge";
@@ -126,7 +132,7 @@ export default function ExpensesPage() {
   const [status, setStatus] = useState<"" | ExpenseStatus>("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [viewMode, setViewMode] = usePersistedViewMode("expenses");
+  const [viewMode, setViewMode] = useEffectiveViewMode("expenses");
   const [exportFormat, setExportFormat] = useState<"excel" | "csv">("excel");
   const [showExportSection, setShowExportSection] = useState(false);
 
@@ -170,7 +176,7 @@ export default function ExpensesPage() {
   const { data: summary } = useExpenseSummary(month);
   const { data: groupsData } = useExpenseGroups();
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
-  const { data, isLoading, isError, error, refetch } = useExpenses({
+  const { data, isLoading, isFetching, isError, error, refetch } = useExpenses({
     page,
     limit: pageSize,
     month,
@@ -179,6 +185,8 @@ export default function ExpensesPage() {
     status: status || undefined,
     search: search.trim() || undefined,
   });
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(isLoading);
 
   const duplicateExpense = useDuplicateExpense();
   const uploadReceipt = useUploadExpenseReceipt();
@@ -407,9 +415,14 @@ export default function ExpensesPage() {
           }}
         />
 
-        {isLoading ? (
-          <CardSkeleton count={6} label="Cargando salidas…" />
-        ) : isError && !data ? (
+        {showSkeleton ? (
+          <CollectionSkeleton
+            viewMode={viewMode}
+            columns={7}
+            rows={6}
+            label="Cargando salidas…"
+          />
+        ) : isLoading ? null : isError && !data ? (
           <ErrorState
             message={getApiErrorMessage(error, "No se pudieron cargar las salidas")}
             retryLabel="Reintentar"
@@ -425,10 +438,14 @@ export default function ExpensesPage() {
             */}
             <div
               ref={gridRef}
+              aria-busy={isFetching}
               className={cn(
                 COLLECTION_GRID_CLASSES,
                 "flex-1 content-start",
                 viewMode === "table" && "md:hidden",
+                COLLECTION_CONTENT_ENTER_CLASSES,
+                COLLECTION_PENDING_CLASSES,
+                isFetching && COLLECTION_PENDING_OPACITY_CLASS,
               )}
             >
               {expenses.length === 0 ? (
@@ -460,7 +477,14 @@ export default function ExpensesPage() {
             {/* Desktop Table View */}
             {viewMode === "table" && (
               <div className="hidden md:block flex-1">
-                <div className="h-full rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
+                <div
+                  className={cn(
+                    "h-full rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs",
+                    COLLECTION_CONTENT_ENTER_CLASSES,
+                    COLLECTION_PENDING_CLASSES,
+                    isFetching && COLLECTION_PENDING_OPACITY_CLASS,
+                  )}
+                >
                   <div ref={tableRef} className="overflow-x-auto">
                     <Table className="min-w-[860px]">
                       <TableHeader>
@@ -521,7 +545,7 @@ export default function ExpensesPage() {
                                 )}
                                 className="cursor-pointer active:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
                               >
-                                <TableCell className="text-muted-foreground whitespace-nowrap text-sm tabular-nums">
+                                <TableCell className="text-muted-foreground whitespace-nowrap text-sm">
                                   {formatDateShort(expense.date)}
                                 </TableCell>
                                 <TableCell>

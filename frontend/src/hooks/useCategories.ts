@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Category, PaginatedResponse } from "@/types";
 
@@ -27,6 +27,9 @@ export function useCategories(params?: {
       api.get<PaginatedResponse<Category>>("/categories", params).then(
         (res) => res.data
       ),
+    // Paging or searching keeps the current rows on screen instead of dropping
+    // the list back to a skeleton.
+    placeholderData: keepPreviousData,
   });
 }
 

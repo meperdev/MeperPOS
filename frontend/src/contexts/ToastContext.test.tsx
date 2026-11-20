@@ -94,6 +94,46 @@ describe("toast smoke", () => {
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
+
+  it("pins the close button to the top-right corner of the card", () => {
+    render(
+      <ToastProvider>
+        <Harness />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByText("success"));
+    act(() => vi.advanceTimersByTime(20));
+
+    const button = screen.getByRole("button", { name: "Cerrar notificación" });
+    const card = button.closest("[role]") as HTMLElement;
+
+    // Inside the card, anchored to its top-right corner, and at least a 32px
+    // hit target with the shared focus ring.
+    expect(card.contains(button)).toBe(true);
+    expect(button.className).toContain("absolute");
+    expect(button.className).toContain("right-1");
+    expect(button.className).toContain("top-1");
+    expect(button.className).toContain("h-8");
+    expect(button.className).toContain("w-8");
+    expect(button.className).toContain("focus-visible:ring-2");
+    // A long message wraps before the button instead of running under it.
+    expect(card.className).toContain("pr-11");
+  });
+
+  it("dismisses the notification from that close button", () => {
+    render(
+      <ToastProvider>
+        <Harness />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByText("success"));
+    act(() => vi.advanceTimersByTime(20));
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar notificación" }));
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(screen.queryByText("guardado")).toBeNull();
+  });
 });
 
 describe("toast API", () => {

@@ -29,6 +29,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
+import { COLLECTION_CONTENT_ENTER_CLASSES } from "@/components/ui/collectionGrid";
+import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   ClipboardList,
@@ -151,6 +153,8 @@ export default function TasksPage() {
 
   // Queries & Mutations
   const tasksQuery = useTasks();
+  // Only the first load paints a skeleton, and only after a short grace period.
+  const showSkeleton = useDeferredLoading(tasksQuery.isLoading);
   const taskList = useMemo(() => tasksQuery.data?.tasks ?? [], [tasksQuery.data]);
   const assigneesQuery = useTaskAssignees();
   const assignees = assigneesQuery.data ?? [];
@@ -613,7 +617,7 @@ export default function TasksPage() {
   if (tasksQuery.isLoading) {
     return (
       <DashboardLayout>
-        <CardSkeleton count={6} label="Cargando tareas del local…" />
+        {showSkeleton ? <CardSkeleton count={6} label="Cargando tareas del local…" /> : null}
       </DashboardLayout>
     );
   }
@@ -633,7 +637,7 @@ export default function TasksPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 lg:space-y-5">
+      <div className={cn("space-y-4 lg:space-y-5", COLLECTION_CONTENT_ENTER_CLASSES)}>
         <PageHeader
           title="Tareas del local"
           count={`${totalTasks} ${totalTasks === 1 ? "tarea" : "tareas"}`}
@@ -923,7 +927,7 @@ export default function TasksPage() {
                                 {task.dueDate && (
                                   <Badge
                                     variant={isOverdue ? "danger" : "default"}
-                                    className="gap-1 px-2 text-xs font-medium tabular-nums"
+                                    className="gap-1 px-2 text-xs font-medium"
                                   >
                                     <Calendar className="h-3 w-3" />
                                     {formatDateShort(task.dueDate)}
@@ -931,7 +935,7 @@ export default function TasksPage() {
                                   </Badge>
                                 )}
 
-                                <span className="inline-flex items-center gap-1 text-[13px] text-muted-foreground tabular-nums ml-auto">
+                                <span className="inline-flex items-center gap-1 text-[13px] text-muted-foreground ml-auto">
                                   <Clock3 className="h-3 w-3" />
                                   {formatDateTime(task.updatedAt)}
                                 </span>
@@ -1132,7 +1136,7 @@ export default function TasksPage() {
                             <Calendar className="h-3.5 w-3.5 shrink-0" />
                             <span>Fecha límite</span>
                           </span>
-                          <span className="font-semibold text-foreground text-[13px] tabular-nums truncate block mt-1">
+                          <span className="font-semibold text-foreground text-[13px] truncate block mt-1">
                             {selectedTask.dueDate ? formatDateShort(selectedTask.dueDate) : "Sin fecha"}
                           </span>
                         </div>
@@ -1181,7 +1185,7 @@ export default function TasksPage() {
                                   </span>
                                 )}
                               </div>
-                              <span className="whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
+                              <span className="whitespace-nowrap text-[13px] text-muted-foreground">
                                 {formatDateTime(event.createdAt)}
                               </span>
                             </div>

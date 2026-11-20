@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type {
   Task,
@@ -65,6 +65,8 @@ export function useTasks(
       return { tasks: response.data, source: "remote" };
     },
     enabled: options?.enabled ?? true,
+    // Filtering keeps the current tasks on screen while the next list loads.
+    placeholderData: keepPreviousData,
   });
 }
 

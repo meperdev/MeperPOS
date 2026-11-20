@@ -48,13 +48,15 @@ const toneValueClasses: Record<MetricCardTone, string> = {
   blue: "text-foreground",
 };
 
-// Chart colours come from the status and brand tokens, never from palette hexes.
+// Chart colours come from the series-ink and brand tokens, never from palette
+// hexes. The status greens and blues are reserved for statuses; a chart drawn in
+// them read as neon beside the terracotta.
 const toneSparkColor: Record<MetricCardTone, string> = {
   primary: "var(--primary)",
-  accent: "var(--primary)",
-  rose: "var(--danger)",
-  green: "var(--success)",
-  blue: "var(--info)",
+  accent: "var(--chart-ink)",
+  rose: "var(--chart-danger)",
+  green: "var(--chart-ink)",
+  blue: "var(--chart-ink)",
 };
 
 const toneActionClasses: Record<MetricCardTone, string> = {
@@ -94,7 +96,7 @@ function MetricSparkline({ values, color }: { values: number[]; color: string })
           stroke={color}
           strokeWidth={2}
           fill={color}
-          fillOpacity={0.15}
+          fillOpacity={0.12}
           dot={false}
           activeDot={false}
           isAnimationActive={false}

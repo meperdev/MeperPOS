@@ -239,6 +239,29 @@ describe("useExpenses", () => {
       expect(apiMock.get).toHaveBeenCalledWith("/expense-groups");
       expect(result.current.data).toEqual(groups);
     });
+
+    it("keeps the previous rows on screen while the next page loads", async () => {
+      const firstPage = makePage([makeExpense({ id: "exp-a" })]);
+      apiMock.get.mockResolvedValueOnce({ data: firstPage });
+
+      const { result, rerender } = renderHook(
+        ({ params }: { params: { page: number; limit: number } }) =>
+          useExpenses(params),
+        {
+          wrapper: wrapperWith(makeQueryClient()),
+          initialProps: { params: { page: 1, limit: 10 } },
+        },
+      );
+
+      await waitFor(() => expect(result.current.data).toEqual(firstPage));
+
+      // The next page never settles, so anything on screen is the placeholder.
+      apiMock.get.mockReturnValue(new Promise(() => {}));
+      rerender({ params: { page: 2, limit: 10 } });
+
+      await waitFor(() => expect(result.current.isPlaceholderData).toBe(true));
+      expect(result.current.data).toEqual(firstPage);
+    });
   });
 
   describe("mutations", () => {
@@ -350,6 +373,37 @@ describe("useExpenses", () => {
 
       expect(apiMock.upload).toHaveBeenCalledWith("/expenses/exp-1/upload", file);
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["expenses"] });
+    });
+
+    it("can skip the per-request invalidation when a caller chains requests", async () => {
+      const queryClient = makeQueryClient();
+      const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+      apiMock.post.mockResolvedValue({ data: makeExpense() });
+      apiMock.upload.mockResolvedValue({ data: makeExpense() });
+
+      const create = renderHook(
+        () => useCreateExpense({ invalidate: false }),
+        { wrapper: wrapperWith(queryClient) },
+      );
+      const upload = renderHook(
+        () => useUploadExpenseReceipt({ invalidate: false }),
+        { wrapper: wrapperWith(queryClient) },
+      );
+
+      await create.result.current.mutateAsync({
+        labelId: "label-1",
+        description: "Arriendo agosto",
+        date: "2026-08-01",
+        total: 500000,
+        payments: [{ amount: 500000, method: "CASH", date: "2026-08-01" }],
+      });
+      await upload.result.current.mutateAsync({
+        id: "exp-1",
+        file: new File(["receipt"], "comprobante.jpg", { type: "image/jpeg" }),
+      });
+
+      // The chained caller refreshes once at the end, on its own.
+      expect(invalidateSpy).not.toHaveBeenCalled();
     });
 
     it("creates a group and invalidates taxonomy, expenses, and summary queries", async () => {

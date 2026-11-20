@@ -52,6 +52,24 @@ describe("PaymentMethodsCard (Recharts donut)", () => {
     expect(percentages).toEqual(["50%", "30%", "20%"]);
   });
 
+  it("takes its slice inks from the series tokens, never from the status greens and blues", () => {
+    render(<PaymentMethodsCard startDate="2026-08-16" endDate="2026-08-22" />);
+
+    const swatches = screen
+      .getAllByTestId("payment-method-row")
+      .map((row) => row.querySelector("span[style]")?.getAttribute("style") ?? "");
+
+    // Efectivo keeps the brand terracotta; Tarjeta takes the sand ink and
+    // Transferencia the muted sage, both defined as tokens.
+    expect(swatches[0]).toContain("var(--primary)");
+    expect(swatches[1]).toContain("var(--chart-ink)");
+    expect(swatches[2]).toContain("var(--chart-ink-muted)");
+
+    const inks = swatches.join(" ");
+    expect(inks).not.toContain("var(--success)");
+    expect(inks).not.toContain("var(--info)");
+  });
+
   it("shows the window total in the centre of the donut", () => {
     render(<PaymentMethodsCard startDate="2026-08-16" endDate="2026-08-22" />);
 

@@ -43,7 +43,8 @@ typography:
 - **Color Base Primario**: `Terracotta Copper` (`#c25e36`) con hover en `#a84d28`.
 - **Fondo de Acento Suave**: `#faece5` en Light / `#2c1d18` en Dark.
 - **Tipografía de Interfaz (UI / Títulos / Textos)**: `Inter` (subset latin self-hosted vía `next/font/local`).
-- **Cifras e Identificadores (Precios COP, SKUs, Fechas, Números de documento)**: la misma `Inter` con cifras tabulares (`.id-text` / `.stat-number`); no se carga familia monoespaciada alguna.
+- **Cifras e Identificadores (Precios COP, SKUs, Números de documento)**: la misma `Inter` con cifras tabulares (`.id-text` / `.stat-number`); no se carga familia monoespaciada alguna.
+- **Fechas y horas**: la misma `Inter` en cifras proporcionales — sin `tabular-nums`, sin `.stat-number` ni `.id-text` — para que los dígitos no lean como una columna monoespaciada; solo una línea que mezcla fecha con dinero o un conteo conserva cifras tabulares.
 - **Escala**: cuerpo y celdas de tabla `text-sm` (14px), etiquetas y metadatos `text-[13px]`, micro-etiquetas (chips, badges, atajos, encabezados de tabla) `text-xs` (12px, piso) y valores de resumen un paso por encima de su etiqueta (`text-xl` → `sm:text-[28px]`).
 - **Paleta Modo Oscuro**: `Obsidian Charcoal` neutro (`#111114` fondo, `#18181c` tarjetas, `#30303a` bordes).
 

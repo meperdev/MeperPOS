@@ -276,7 +276,14 @@ describe("DashboardLayout route gating for /expenses", () => {
     const column = mainElement.firstElementChild as HTMLElement;
     expect(column.className).toContain("flex-1");
     expect(column.className).toContain("flex-col");
-    expect(column.querySelector("p")!.parentElement).toBe(column);
+    // The page content sits one level deeper now: the enter wrapper is the
+    // column's flex child, and it passes the column's flex chain through so a
+    // page root can still grow and pin its paginator to the bottom.
+    const enter = column.lastElementChild as HTMLElement;
+    expect(enter).toHaveAttribute("data-page-enter");
+    expect(enter.className).toContain("flex-1");
+    expect(enter.className).toContain("flex-col");
+    expect(column.querySelector("p")!.parentElement).toBe(enter);
   });
 
   it("publishes the desktop vertical padding as a token, so a page can subtract the real space", () => {

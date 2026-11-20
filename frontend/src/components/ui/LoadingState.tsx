@@ -7,10 +7,15 @@ interface LoadingStateProps {
   className?: string;
 }
 
+/**
+ * The small, non-collection loading state (a modal body, an admin panel). List
+ * pages paint a shape-matched skeleton instead, so this stays deliberately
+ * quiet: one slow pulse on a single tile.
+ */
 export function LoadingState({ icon, message, className }: LoadingStateProps) {
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-[200px]", className)}>
-      <div className="w-10 h-10 rounded-lg bg-muted/50 border border-border/70 flex items-center justify-center text-muted-foreground animate-pulse [&_svg]:h-5 [&_svg]:w-5">
+      <div className="w-10 h-10 rounded-lg bg-muted/50 border border-border/70 flex items-center justify-center text-muted-foreground animate-pulse [animation-duration:2.4s] motion-reduce:animate-none [&_svg]:h-5 [&_svg]:w-5">
         {icon}
       </div>
       <p className="text-[13px] text-muted-foreground mt-2.5">{message}</p>

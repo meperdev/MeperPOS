@@ -7,12 +7,14 @@ import { formatCurrency, formatPaymentMethod } from "@/lib/utils";
 
 /**
  * The dashboard only ever reports three payment methods. There is no "Otros"
- * bucket: an unknown method is simply not invented here.
+ * bucket: an unknown method is simply not invented here. Inks come from the
+ * series tokens — terracotta, sand and sage — so the ring stays warm instead of
+ * borrowing the status green and blue.
  */
 const PAYMENT_METHODS = [
   { method: "CASH", label: formatPaymentMethod("CASH"), color: "var(--primary)" },
-  { method: "CARD", label: formatPaymentMethod("CARD"), color: "var(--info)" },
-  { method: "TRANSFER", label: formatPaymentMethod("TRANSFER"), color: "var(--success)" },
+  { method: "CARD", label: formatPaymentMethod("CARD"), color: "var(--chart-ink)" },
+  { method: "TRANSFER", label: formatPaymentMethod("TRANSFER"), color: "var(--chart-ink-muted)" },
 ] as const;
 
 interface PaymentSlice {

@@ -380,7 +380,7 @@ export default function OrganizationsPage() {
                         <TableCell className="text-right text-foreground tabular-nums">
                           {org.userCount ?? "—"}
                         </TableCell>
-                        <TableCell className="hidden text-right text-muted-foreground tabular-nums xl:table-cell">
+                        <TableCell className="hidden text-right text-muted-foreground xl:table-cell">
                           {formatDate(org.createdAt)}
                         </TableCell>
                         <TableCell className="text-right">

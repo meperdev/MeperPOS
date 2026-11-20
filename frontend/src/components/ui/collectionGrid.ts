@@ -8,6 +8,17 @@ export const COLLECTION_GRID_CLASSES = "grid gap-4 grid-cols-[repeat(auto-fill,m
 // INVENTORY_GRID_CLASSES); the constant above stays the shared phone-width track.
 export const PRODUCT_GRID_CLASSES = "grid gap-4 grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]";
 
+// Content that replaces a skeleton fades in once, so the swap reads as arrival
+// instead of a repaint. With `prefers-reduced-motion` it lands immediately.
+export const COLLECTION_CONTENT_ENTER_CLASSES =
+  "animate-[fade-in_200ms_ease-out_forwards] motion-reduce:animate-none";
+
+// A refetch keeps the current rows on screen; they dim instead of resetting to a
+// skeleton. Motion-safe only, it is decoration.
+export const COLLECTION_PENDING_CLASSES =
+  "transition-opacity duration-150 motion-reduce:transition-none";
+export const COLLECTION_PENDING_OPACITY_CLASS = "opacity-60";
+
 // /inventory only. Below `lg` this is the shared product grid above, untouched, so a
 // 358px phone still holds two cards. From `lg` the tracks widen to 12.5rem (200px) —
 // fewer, chubbier cards instead of a row of narrow ones — and the ROW tracks are written

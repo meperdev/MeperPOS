@@ -513,7 +513,9 @@ function InfoField({
       <p
         className={cn(
           "text-sm font-semibold text-foreground",
-          isDate && "tabular-nums",
+          // D7: a date value reads in proportional figures, so `isDate` only
+          // keeps it on one line instead of adding tabular-nums.
+          isDate && "whitespace-nowrap",
         )}
       >
         {value}

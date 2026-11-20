@@ -134,7 +134,19 @@ export const DashboardLayout = memo(function DashboardLayout({
               <UpdateAvailableBanner />
               <ConnectionStatus />
               <PlanLimitBanner />
-              {children}
+              {/* A section's content settles in on arrival. Keyed by pathname, so
+                  a query-string change (filters, pagination) keeps the same
+                  subtree mounted and does not replay the animation, while the
+                  shell around it never remounts. No exit animation: navigation
+                  is never delayed. The class carries no resting transform, so
+                  fixed descendants stay anchored to the viewport. */}
+              <div
+                key={pathname}
+                data-page-enter=""
+                className="flex flex-1 flex-col animate-page-enter"
+              >
+                {children}
+              </div>
             </div>
           </main>
         </>

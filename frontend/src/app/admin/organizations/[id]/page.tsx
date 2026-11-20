@@ -531,7 +531,7 @@ function OrganizationGeneralCard({
             Guardar cambios
           </Button>
           {organization.trialEndsAt && (
-            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[13px] text-muted-foreground tabular-nums">
+            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[13px] text-muted-foreground">
               Trial finaliza: {formatDate(organization.trialEndsAt)}
             </span>
           )}

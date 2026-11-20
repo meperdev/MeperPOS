@@ -90,7 +90,7 @@ export function RecentSalesCard() {
                   <TableCell className="id-text font-semibold tabular-nums">
                     {sale.saleNumber}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums text-sm">
+                  <TableCell className="whitespace-nowrap text-muted-foreground text-sm">
                     {formatDateTime(sale.createdAt)}
                   </TableCell>
                   <TableCell className="max-w-[12rem] truncate text-sm">
@@ -130,7 +130,7 @@ export function RecentSalesCard() {
                   <dl className="grid grid-cols-3 gap-x-3 text-[13px]">
                     <div className="min-w-0 space-y-0.5">
                       <dt className="text-muted-foreground">Fecha</dt>
-                      <dd className="whitespace-nowrap text-muted-foreground tabular-nums">{formatDateTime(sale.createdAt)}</dd>
+                      <dd className="whitespace-nowrap text-muted-foreground">{formatDateTime(sale.createdAt)}</dd>
                     </div>
                     <div className="min-w-0 space-y-0.5">
                       <dt className="text-muted-foreground">Pago</dt>

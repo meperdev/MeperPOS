@@ -58,7 +58,7 @@ export function HistoryModal({ expense, isOpen, onClose }: Props) {
                   {entry.user?.name ?? "—"}
                 </p>
               </div>
-              <span className="text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">
+              <span className="text-[13px] text-muted-foreground whitespace-nowrap">
                 {formatDateTime(entry.createdAt)}
               </span>
             </li>
