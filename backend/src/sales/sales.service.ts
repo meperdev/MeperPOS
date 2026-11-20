@@ -239,10 +239,35 @@ export class SalesService {
       );
     }
 
-    const cashPaid = payments
-      .filter((p) => p.method === 'CASH')
-      .reduce((sum, p) => sum + p.amount, 0);
-    const change = cashPaid > total ? cashPaid - total : null;
+    // An overpaid sale hands money back, and change only leaves the drawer as
+    // cash: a card or a transfer can never return it. Every tender must also be
+    // needed — one that could be dropped while the rest still covers the total
+    // is an overpayment the customer never made (S3: cash 112.931 plus a
+    // 100.000 transfer on a 112.931 total used to be accepted as a 212.931
+    // payment). Change is the overpaid amount itself.
+    //
+    // Cents are the unit a sale can store. The POS total is a JS float while
+    // each line tax is persisted rounded to cents, so a taxed price that is not
+    // a multiple of 10 leaves the two a fraction of a cent apart (net 1006 at
+    // 19% → 1197.1399999999999): without this rounding, paying that displayed
+    // total by card was refused as a 2e-13 surplus, and paying it in cash
+    // persisted a 2e-13 change that DECIMAL(10,2) stores as 0.00.
+    const overpay = Math.round((totalPaid - total) * 100) / 100;
+    if (overpay > 0) {
+      if (!payments.some((p) => p.method === 'CASH')) {
+        throw new BadRequestException(
+          `Change (${overpay}) can only be handed back in cash: card and transfer payments never return change`,
+        );
+      }
+      const unneeded = payments.find((p) => p.amount <= overpay);
+      if (unneeded) {
+        throw new BadRequestException(
+          `Payment ${unneeded.method} (${unneeded.amount}) is not needed: the other payments already cover the total (${total})`,
+        );
+      }
+    }
+
+    const change = overpay > 0 ? overpay : null;
 
     // The buyer identification is a fiscal fact of the sale, captured now
     // because the customer row may be edited afterwards.

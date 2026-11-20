@@ -84,14 +84,43 @@ vi.mock("@/components/pos/PaymentConfirmationModal", () => ({
   PaymentConfirmationModal: ({
     isOpen,
     onConfirm,
+    total,
+    onPaymentMethodChange,
   }: {
     isOpen: boolean;
     onConfirm: () => Promise<void>;
+    total: number;
+    onPaymentMethodChange: (
+      methods: { type: "CASH" | "CARD" | "TRANSFER"; amount: number }[],
+    ) => void;
   }) =>
     isOpen ? (
-      <button type="button" onClick={() => void onConfirm()}>
-        Confirmar pago
-      </button>
+      <div>
+        <button type="button" onClick={() => void onConfirm()}>
+          Confirmar pago
+        </button>
+        {/* The real modal edits the split; this stand-in reports an overpaid
+            split so the page's own guard can be observed (S3). */}
+        <button
+          type="button"
+          onClick={() =>
+            onPaymentMethodChange([
+              { type: "CASH", amount: total },
+              { type: "TRANSFER", amount: 100000 },
+            ])
+          }
+        >
+          Pago mixto con sobrante
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onPaymentMethodChange([{ type: "CARD", amount: total + 100000 }])
+          }
+        >
+          Pago solo con tarjeta de más
+        </button>
+      </div>
     ) : null,
 }));
 
@@ -1118,6 +1147,56 @@ describe("POS behavior evidence (#19, #18)", () => {
     render(<POSPage />);
 
     await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+  it("refuses a mixed payment that overpays with a tender the sale does not need (S3)", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Pago mixto con sobrante" }, { timeout: 3000 }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
+
+    // The server would answer 400; the page stops the request and says why, so the
+    // cashier sees the correction instead of a failed sale.
+    await waitFor(() => {
+      expect(toastState.error).toHaveBeenCalledWith(
+        "Sobra un pago: con los demás métodos ya se cubre el total",
+      );
+    });
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an overpayment that carries no cash, since nothing can give change (S3)", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Pago solo con tarjeta de más" }, { timeout: 3000 }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
+
+    await waitFor(() => {
+      expect(toastState.error).toHaveBeenCalledWith(
+        "Las tarjetas y transferencias no dan cambio",
+      );
+    });
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+  });
+
     await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
     await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
     await userEvent.click(

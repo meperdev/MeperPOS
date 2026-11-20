@@ -109,19 +109,18 @@ describe("PaymentConfirmationModal currency output", () => {
 });
 
 /**
- * The persisted `sale.change` is the contract: `SalesService.create` stores
- * `cashPaid > total ? cashPaid - total : null`. Change is CASH-ONLY and is measured
- * against the FULL total — a non-cash tender is never netted out of it. The preview
+ * The persisted `sale.change` is the contract (S3 / D1): `SalesService.create`
+ * stores the overpaid amount, and refuses an overpayment that cannot come back as
+ * cash or that carries a tender the rest of the payment already covers. The preview
  * therefore has to use the same rule, or the cashier reads a number the sale does not
- * carry.
+ * carry — or confirms a payment the server will reject.
  */
 describe("PaymentConfirmationModal change preview — server parity", () => {
   /** Mirrors the server formula exactly, so the two can be compared case by case. */
   const serverChange = (total: number, methods: PaymentMethod[]) => {
-    const cashPaid = methods
-      .filter((method) => method.type === "CASH")
-      .reduce((sum, method) => sum + method.amount, 0);
-    return cashPaid > total ? cashPaid - total : null;
+    const totalPaid = methods.reduce((sum, method) => sum + method.amount, 0);
+    const overpay = totalPaid - total;
+    return overpay > 0 ? overpay : null;
   };
 
   /**
@@ -135,38 +134,14 @@ describe("PaymentConfirmationModal change preview — server parity", () => {
   /** Same string, but with the literal NBSP that raw textContent preserves. */
   const fmtRaw = (amount: string) => `$${NBSP}${amount}`;
 
-  it("shows NO change when cash under-tenders the total and a card covers the rest", () => {
-    // total 100.000, cash 60.000, card 60.000 → fully covered, but the cash side is short.
+  it("shows the overpaid amount when a card covers most of it and cash tops it up", () => {
+    // total 100.000, cash 60.000, card 60.000 → each tender alone is short, so both
+    // are needed and the 20.000 surplus legitimately comes back as change.
     const paymentMethods = [
       { type: "CASH", amount: 60000 },
       { type: "CARD", amount: 60000 },
     ] as PaymentMethod[];
 
-    // The old formula netted the card off the total and printed a phantom $20.000.
-    expect(serverChange(100000, paymentMethods)).toBeNull();
-
-    render(
-      <PaymentConfirmationModal
-        {...baseProps}
-        total={100000}
-        paymentMethods={paymentMethods}
-      />,
-    );
-
-    expect(screen.queryByText("Cambio")).not.toBeInTheDocument();
-    // The sale is still payable: total covered, just not in cash.
-    expect(
-      screen.getByRole("button", { name: /Confirmar pago/i }),
-    ).toBeEnabled();
-  });
-
-  it("shows exactly cash - total when cash over-tenders alongside a card", () => {
-    const paymentMethods = [
-      { type: "CASH", amount: 120000 },
-      { type: "CARD", amount: 60000 },
-    ] as PaymentMethod[];
-
-    // Change is not netted against the card: it is the full 20.000 of surplus cash.
     expect(serverChange(100000, paymentMethods)).toBe(20000);
 
     render(
@@ -179,6 +154,167 @@ describe("PaymentConfirmationModal change preview — server parity", () => {
 
     expect(screen.getByText("Cambio")).toBeInTheDocument();
     expect(renderedChange()).toContain(fmtRaw("20.000"));
+    expect(
+      screen.getByRole("button", { name: /Confirmar pago/i }),
+    ).toBeEnabled();
+  });
+
+  it("shows the overpaid amount for the reported transfer-plus-cash split", () => {
+    // The S3 case: 100.000 transfer + 20.000 cash on a 112.931 total must hand back
+    // 7.069, not null (the old cash-only formula hid the surplus).
+    const paymentMethods = [
+      { type: "TRANSFER", amount: 100000 },
+      { type: "CASH", amount: 20000 },
+    ] as PaymentMethod[];
+
+    expect(serverChange(112931, paymentMethods)).toBe(7069);
+
+    render(
+      <PaymentConfirmationModal
+        {...baseProps}
+        subtotal={112931}
+        taxAmount={0}
+        total={112931}
+        paymentMethods={paymentMethods}
+      />,
+    );
+
+    expect(screen.getByText("Cambio")).toBeInTheDocument();
+    expect(renderedChange()).toContain(fmtRaw("7.069"));
+    expect(
+      screen.getByRole("button", { name: /Confirmar pago/i }),
+    ).toBeEnabled();
+  });
+
+  it("shows the overpaid amount when cash is the smaller of the two tenders", () => {
+    // 20.000 cash + 100.000 card on a 112.931 total: the excess is still change
+    // because cash is present and each tender alone leaves the total uncovered.
+    const paymentMethods = [
+      { type: "CASH", amount: 20000 },
+      { type: "CARD", amount: 100000 },
+    ] as PaymentMethod[];
+
+    expect(serverChange(112931, paymentMethods)).toBe(7069);
+
+    render(
+      <PaymentConfirmationModal
+        {...baseProps}
+        subtotal={112931}
+        taxAmount={0}
+        total={112931}
+        paymentMethods={paymentMethods}
+      />,
+    );
+
+    expect(screen.getByText("Cambio")).toBeInTheDocument();
+    expect(renderedChange()).toContain(fmtRaw("7.069"));
+    expect(
+      screen.queryByText("Las tarjetas y transferencias no dan cambio"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Sobra un pago: con los demás métodos ya se cubre el total"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Confirmar pago/i }),
+    ).toBeEnabled();
+  });
+
+  it("does not read a tax-rounded total a fraction off as change or as a problem", () => {
+    // The page total is a JS float (net 1006 + 19% → 1197.1399999999999) while the
+    // server persists the line tax rounded to cents. Paying the displayed total by
+    // card is an exact payment, never a surplus and never a missing cash tender.
+    const paymentMethods = [{ type: "CARD", amount: 1197.14 }] as PaymentMethod[];
+
+    render(
+      <PaymentConfirmationModal
+        {...baseProps}
+        subtotal={1006}
+        taxAmount={191.13999999999987}
+        total={1197.1399999999999}
+        paymentMethods={paymentMethods}
+      />,
+    );
+
+    expect(screen.queryByText("Cambio")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Las tarjetas y transferencias no dan cambio"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Confirmar pago/i }),
+    ).toBeEnabled();
+  });
+
+  it("disables the confirm and explains a surplus tender the rest already covers", () => {
+    const paymentMethods = [
+      { type: "CASH", amount: 112931 },
+      { type: "TRANSFER", amount: 100000 },
+    ] as PaymentMethod[];
+
+    render(
+      <PaymentConfirmationModal
+        {...baseProps}
+        subtotal={112931}
+        taxAmount={0}
+        total={112931}
+        paymentMethods={paymentMethods}
+      />,
+    );
+
+    // An unreachable preview must never print a change the server refuses.
+    expect(screen.queryByText("Cambio")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Sobra un pago: con los demás métodos ya se cubre el total"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Confirmar pago/i }),
+    ).toBeDisabled();
+  });
+
+  it("disables the confirm when only a card overpays, since cards give no change", () => {
+    const paymentMethods = [{ type: "CARD", amount: 120000 }] as PaymentMethod[];
+
+    render(
+      <PaymentConfirmationModal
+        {...baseProps}
+        subtotal={112931}
+        taxAmount={0}
+        total={112931}
+        paymentMethods={paymentMethods}
+      />,
+    );
+
+    expect(screen.queryByText("Cambio")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Las tarjetas y transferencias no dan cambio"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Confirmar pago/i }),
+    ).toBeDisabled();
+  });
+
+  it("disables the confirm when a transfer and a card overpay together", () => {
+    const paymentMethods = [
+      { type: "TRANSFER", amount: 50000 },
+      { type: "CARD", amount: 70000 },
+    ] as PaymentMethod[];
+
+    render(
+      <PaymentConfirmationModal
+        {...baseProps}
+        subtotal={112931}
+        taxAmount={0}
+        total={112931}
+        paymentMethods={paymentMethods}
+      />,
+    );
+
+    expect(screen.queryByText("Cambio")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Las tarjetas y transferencias no dan cambio"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Confirmar pago/i }),
+    ).toBeDisabled();
   });
 
   it("shows no change for a pure non-cash payment", () => {

@@ -809,6 +809,21 @@ export default function POSPage() {
     0,
   );
   const total = subtotal + taxAmount - discountAmount;
+    // Mirrors `SalesService.create` (S3 / D1). The server is the authority and
+    // rejects these splits anyway; answering here turns a 400 into the sentence
+    // that tells the cashier what to fix. Change is only ever cash, and no
+    // tender may be surplus on its own. The surplus is measured in cents, as the
+    // server does, so a tax-rounded total off by a fraction of a cent is not a
+    // surplus.
+    const overpay = Math.round((totalPaid - total) * 100) / 100;
+    if (overpay > 0 && !paymentMethods.some((method) => method.type === "CASH")) {
+      toast.error("Las tarjetas y transferencias no dan cambio");
+      return;
+    }
+    if (overpay > 0 && paymentMethods.some((method) => method.amount <= overpay)) {
+      toast.error("Sobra un pago: con los demás métodos ya se cubre el total");
+      return;
+    }
 
   const toggleFavoriteProduct = useCallback((productId: string) => {
     setFavoriteProductIds((current) =>

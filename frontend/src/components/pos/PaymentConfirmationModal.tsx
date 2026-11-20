@@ -109,15 +109,27 @@ export function PaymentConfirmationModal({
 
   const totalPaid = methods.reduce((sum, method) => sum + method.amount, 0);
   const remaining = Math.max(0, total - totalPaid);
-  const cashPaid = methods
-    .filter((method) => method.type === "CASH")
-    .reduce((sum, method) => sum + method.amount, 0);
-  // Change is cash-only and is measured against the FULL total, never netted against a
-  // non-cash tender: `SalesService.create` persists `cashPaid > total ? cashPaid - total : null`,
-  // so this preview must use the same rule or the cashier reads back a number the sale does
-  // not carry. Under-tendering the cash side yields no change at all, and the server stores null.
-  const change = cashPaid > total ? cashPaid - total : 0;
-  const canConfirm = totalPaid >= total && methods.some((method) => method.amount > 0);
+  // Mirrors `SalesService.create` (S3 / D1): a sale may only overpay when the
+  // surplus can come back as change, and change only leaves the drawer as cash.
+  // Every tender must also be needed — one that could be dropped while the rest
+  // still covers the total is an overpayment the customer never made. The preview
+  // never sends a change: the server derives and persists it. The surplus is
+  // measured in cents, like the server does, so the tax rounding that leaves this
+  // total a fraction of a cent away from the persisted one is not read as change.
+  const overpay = Math.round((totalPaid - total) * 100) / 100;
+  const paymentProblem =
+    overpay <= 0
+      ? null
+      : !methods.some((method) => method.type === "CASH")
+        ? "Las tarjetas y transferencias no dan cambio"
+        : methods.some((method) => method.amount <= overpay)
+          ? "Sobra un pago: con los demás métodos ya se cubre el total"
+          : null;
+  const change = overpay > 0 && !paymentProblem ? overpay : 0;
+  const canConfirm =
+    totalPaid >= total &&
+    !paymentProblem &&
+    methods.some((method) => method.amount > 0);
 
   const updateMethodAmount = (index: number, amount: number) => {
     const nextMethods = [...methods];
@@ -377,6 +389,15 @@ export function PaymentConfirmationModal({
               </div>
             )}
           </div>
+
+          {paymentProblem && (
+            <p
+              role="status"
+              className="rounded-lg border border-warning-text/40 bg-warning-text/10 px-3 py-2 text-sm text-warning-text"
+            >
+              {paymentProblem}
+            </p>
+          )}
 
           <div className="flex gap-3 pt-4">
             <Button
