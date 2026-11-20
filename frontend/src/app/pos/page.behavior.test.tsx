@@ -827,7 +827,7 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(container.querySelector(".lg\\:col-span-7, .lg\\:col-span-5")).toBeNull();
   });
 
-  it("lets a cart line name wrap to two lines and keeps quantity and total from shrinking", async () => {
+  it("gives a cart line a full-height thumbnail, a two-line name and a scaled total", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Arroz Integral Premium Paquete 5 kg")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
       isLoading: false,
@@ -838,38 +838,25 @@ describe("POS behavior evidence (#19, #18)", () => {
 
     const card = screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").closest<HTMLElement>("div.rounded-lg");
     expect(card).not.toBeNull();
-    expect(card!.className).toContain("flex-col");
 
-    // Row 1: fixed square thumbnail, flexible text block, total on the right.
-    const header = card!.firstElementChild as HTMLElement;
-    expect(header.className).toContain("items-start");
-    const thumb = header.firstElementChild as HTMLElement;
-    expect(thumb.className).toContain("h-10");
-    expect(thumb.className).toContain("w-10");
-    expect(thumb.className).toContain("shrink-0");
-    expect(thumb.className).not.toContain("self-stretch");
-    const textBlock = thumb.nextElementSibling as HTMLElement;
-    expect(textBlock.className).toContain("min-w-0");
-    expect(textBlock.className).toContain("flex-1");
-    const name = textBlock.querySelector("p")!;
+    // The image owns the full height of the line's left edge.
+    const thumb = screen.getByTestId("cart-line-image");
+    expect(thumb.className).toContain("self-stretch");
+    expect(thumb.className).toContain("w-20");
+
+    const name = screen.getByText("Arroz Integral Premium Paquete 5 kg", { selector: "p" });
     expect(name.className).toContain("line-clamp-2");
     expect(name.className).not.toContain("line-clamp-1");
-    expect(screen.getByText("× 1").className).toContain("whitespace-nowrap");
-    expect(screen.getByText("× 1").parentElement!.className).toContain("tabular-nums");
 
-    const totalColumn = header.lastElementChild as HTMLElement;
-    expect(totalColumn.className).toContain("shrink-0");
-    const total = totalColumn.firstElementChild as HTMLElement;
-    expect(total.className).toContain("font-semibold");
+    // Unit price is contextual; the money is the line total.
+    expect(screen.getByTestId("line-unit-price").textContent).toContain("c/u");
+    const total = screen.getByTestId("cart-line-total");
+    expect(total.className).toContain("text-lg");
     expect(total.className).toContain("tabular-nums");
     expect(total.className).toContain("whitespace-nowrap");
-    expect(total.className).not.toContain("stat-number");
 
-    // Row 2: stepper on the left; discount and delete on the right, 40px touch targets.
-    const actions = screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").parentElement!;
-    expect(actions.parentElement!.className).toContain("justify-between");
-    expect(screen.getByLabelText("Descuento para Arroz Integral Premium Paquete 5 kg").className).toContain("h-10 w-10");
-    expect(screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").className).toContain("h-10 w-10");
+    expect(screen.getByLabelText("Descuento para Arroz Integral Premium Paquete 5 kg").className).toContain("h-9 w-9");
+    expect(screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").className).toContain("h-9 w-9");
   });
 
 
@@ -1147,6 +1134,19 @@ describe("POS behavior evidence (#19, #18)", () => {
     render(<POSPage />);
 
     await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+    );
+
+    await waitFor(() => {
+      expect(createSaleMutateMock).toHaveBeenCalled();
+    });
+
+    expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
+  });
+
   it("refuses a mixed payment that overpays with a tender the sale does not need (S3)", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
@@ -1195,19 +1195,6 @@ describe("POS behavior evidence (#19, #18)", () => {
       );
     });
     expect(createSaleMutateMock).not.toHaveBeenCalled();
-  });
-
-    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
-    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
-    await userEvent.click(
-      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
-    );
-
-    await waitFor(() => {
-      expect(createSaleMutateMock).toHaveBeenCalled();
-    });
-
-    expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
   });
 
   it("opens the payment modal through the dynamic loading fallback (S1)", async () => {

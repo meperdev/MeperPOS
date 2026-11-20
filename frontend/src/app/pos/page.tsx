@@ -8,7 +8,6 @@ import {
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import Image from "next/image";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useProducts, useQuickSearchProduct } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
@@ -25,8 +24,6 @@ import { SearchField } from "@/components/ui/SearchField";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { Badge } from "@/components/ui/Badge";
-import { Stepper } from "@/components/ui/Stepper";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
@@ -39,6 +36,7 @@ import { shouldAutoFocusTextInput } from "@/lib/input-focus";
 import { useCartUndo } from "@/hooks/useCartUndo";
 import dynamic from "next/dynamic";
 import { PaymentMethodCards } from "@/components/pos/PaymentMethodCards";
+import { CartLine } from "@/components/pos/CartLine";
 import { MobileCartFloatingBar } from "@/components/pos/MobileCartFloatingBar";
 import { ProductCard } from "@/components/products/ProductCard";
 import {
@@ -49,7 +47,6 @@ import {
   Printer,
   FileDown,
   Package,
-  Percent,
   Pause,
   Play,
   User,
@@ -91,27 +88,6 @@ const PaymentConfirmationModal = dynamic(loadPaymentConfirmationModal, {
 const MobileCartDrawer = dynamic(loadMobileCartDrawer, {
   loading: () => <DynamicFallback />,
 });
-
-/**
- * Detect whether a cart line is carrying an active product promotion based on
- * the product's backend-computed effectiveSalePrice (not on a manual price
- * override). Returns the approximate whole-percent discount, or null when the
- * line is not on offer.
- */
-function cartItemOffer(item: CartItem) {
-  // effectiveSalePrice is null/undefined when there is NO active promotion;
-  // Number(null) would be 0, so guard the presence explicitly to avoid a
-  // bogus "-100%" offer. salePrice may arrive as a Decimal string.
-  const price = item.product?.effectiveSalePrice;
-  const listPrice = Number(item.product?.salePrice);
-  if (typeof price !== "number" || !Number.isFinite(listPrice)) return null;
-  if (price <= 0 || price >= listPrice) return null;
-  const percent = Math.max(
-    0,
-    Math.round(100 - (price / listPrice) * 100),
-  );
-  return percent > 0 ? { percent } : null;
-}
 
 /**
  * The price the SERVER would charge for this line: the promotion-aware
@@ -809,21 +785,6 @@ export default function POSPage() {
     0,
   );
   const total = subtotal + taxAmount - discountAmount;
-    // Mirrors `SalesService.create` (S3 / D1). The server is the authority and
-    // rejects these splits anyway; answering here turns a 400 into the sentence
-    // that tells the cashier what to fix. Change is only ever cash, and no
-    // tender may be surplus on its own. The surplus is measured in cents, as the
-    // server does, so a tax-rounded total off by a fraction of a cent is not a
-    // surplus.
-    const overpay = Math.round((totalPaid - total) * 100) / 100;
-    if (overpay > 0 && !paymentMethods.some((method) => method.type === "CASH")) {
-      toast.error("Las tarjetas y transferencias no dan cambio");
-      return;
-    }
-    if (overpay > 0 && paymentMethods.some((method) => method.amount <= overpay)) {
-      toast.error("Sobra un pago: con los demás métodos ya se cubre el total");
-      return;
-    }
 
   const toggleFavoriteProduct = useCallback((productId: string) => {
     setFavoriteProductIds((current) =>
@@ -846,6 +807,21 @@ export default function POSPage() {
     }
     if (paymentMethods.length === 0) {
       toast.error("Debes seleccionar al menos un metodo de pago");
+      return;
+    }
+    // Mirrors `SalesService.create` (S3 / D1). The server is the authority and
+    // rejects these splits anyway; answering here turns a 400 into the sentence
+    // that tells the cashier what to fix. Change is only ever cash, and no
+    // tender may be surplus on its own. The surplus is measured in cents, as the
+    // server does, so a tax-rounded total off by a fraction of a cent is not a
+    // surplus.
+    const overpay = Math.round((totalPaid - total) * 100) / 100;
+    if (overpay > 0 && !paymentMethods.some((method) => method.type === "CASH")) {
+      toast.error("Las tarjetas y transferencias no dan cambio");
+      return;
+    }
+    if (overpay > 0 && paymentMethods.some((method) => method.amount <= overpay)) {
+      toast.error("Sobra un pago: con los demás métodos ya se cubre el total");
       return;
     }
     try {
@@ -1285,127 +1261,13 @@ export default function POSPage() {
                 <EmptyState icon={<ShoppingCart className="w-6 h-6 text-muted-foreground/30" />} title="Carrito vacío" subtitle="Agrega productos para comenzar" />
               ) : (
                 cart.map((item) => (
-                  <div
+                  <CartLine
                     key={item.productId}
-                    className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 transition-colors duration-150"
-                  >
-                    <div className="flex items-start gap-3">
-                    <div className="relative h-10 w-10 shrink-0 bg-muted/60 border border-border/50 rounded-md flex items-center justify-center overflow-hidden">
-                      {item.product.imageUrl ? (
-                        <Image
-                          src={item.product.imageUrl}
-                          alt={item.product.name}
-                          fill
-                          sizes="40px"
-                          className="object-cover"
-                        />
-                      ) : (
-                        <Package className="w-4 h-4 text-muted-foreground/50" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-snug text-foreground line-clamp-2 break-words">
-                        {item.product.name}
-                      </p>
-                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground tabular-nums mt-0.5">
-                        {cartItemOffer(item) && (
-                          <Badge
-                            variant="danger"
-                            className="shrink-0 text-[11px] px-1.5 py-0.5 rounded-md"
-                          >
-                            Oferta -{cartItemOffer(item)!.percent}%
-                          </Badge>
-                        )}
-                        {cartItemPriceOverride(item) && (
-                          <span data-testid="price-overridden" className="shrink-0">
-                            <Badge
-                              variant="warning"
-                              className="text-[11px] px-1.5 py-0.5 rounded-md"
-                            >
-                              Precio ajustado
-                            </Badge>
-                          </span>
-                        )}
-                        {Number.isFinite(Number(item.originalUnitPrice)) &&
-                          Number(item.unitPrice) !==
-                            Number(item.originalUnitPrice) && (
-                            <s
-                              data-testid="original-unit-price"
-                              className="text-muted-foreground/60 line-through"
-                            >
-                              {formatCurrency(Number(item.originalUnitPrice))}
-                            </s>
-                          )}
-                        <span data-testid="line-unit-price">
-                          {formatCurrency(item.unitPrice)}
-                        </span>{" "}
-                        <span className="whitespace-nowrap">× {item.quantity}</span>
-                        {item.discountAmount > 0 && (
-                          <span
-                            data-testid="line-discount"
-                            className="ml-1.5 text-success-text"
-                          >
-                            (-{formatCurrency(item.discountAmount)}
-                            {item.discountPercent
-                              ? ` · ${item.discountPercent}%`
-                              : ""}
-                            )
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end text-right">
-                      <span className="text-sm font-semibold tabular-nums whitespace-nowrap text-foreground">
-                        {formatCurrency(
-                          item.quantity * item.unitPrice - item.discountAmount,
-                        )}
-                      </span>
-                      {item.discountAmount > 0 && (
-                        <s className="text-xs text-muted-foreground line-through tabular-nums whitespace-nowrap">
-                          {formatCurrency(item.quantity * item.unitPrice)}
-                        </s>
-                      )}
-                    </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Stepper
-                          value={item.quantity}
-                          min={1}
-                          max={item.availableStock}
-                          size="md"
-                          onChange={(value) =>
-                            updateQuantity(item.productId, value)
-                          }
-                        />
-                        {item.quantity >= item.availableStock && (
-                          <span className="text-xs font-medium text-warning-text">
-                            máx.
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openDiscountModal(item.productId)}
-                          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/70 active:bg-muted transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                          title="Descuento"
-                          aria-label={`Descuento para ${item.product.name}`}
-                        >
-                          <Percent className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeFromCart(item.productId)}
-                          className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                          title="Eliminar"
-                          aria-label={`Eliminar ${item.product.name}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                    item={item}
+                    onQuantityChange={updateQuantity}
+                    onDiscount={openDiscountModal}
+                    onRemove={removeFromCart}
+                  />
                 ))
               )}
             </div>
