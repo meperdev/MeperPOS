@@ -100,6 +100,16 @@ describe("TodayStats (today KPIs, low-stock strip, all-time totals)", () => {
     ).toHaveLength(0);
   });
 
+  it("inks the three growth sparklines with the sand series colour and Salidas with the softened danger", () => {
+    render(<TodayStatsInner today="2026-08-22" />);
+
+    const row1 = screen.getByTestId("kpi-row-1");
+    expect(row1.querySelectorAll('[stroke="var(--chart-ink)"]')).toHaveLength(3);
+    expect(row1.querySelectorAll('[stroke="var(--chart-danger)"]')).toHaveLength(1);
+    expect(row1.querySelectorAll('[stroke="var(--success)"]')).toHaveLength(0);
+    expect(row1.querySelectorAll('[stroke="var(--info)"]')).toHaveLength(0);
+  });
+
   it("shows today's real sales total, transactions count and average ticket", () => {
     render(<TodayStatsInner today="2026-08-22" />);
 

@@ -245,24 +245,26 @@ function ToastCard({
       onBlur={() => onResume(toast.id)}
       className={cn(
         "group pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg shadow-black/10",
-        "pl-3 pr-2.5 py-2.5",
+        // The right padding reserves the corner the close button owns, so a long
+        // message wraps instead of running underneath it.
+        "pl-3 pr-11 py-2.5",
         toast.leaving ? "animate-toast-out" : "animate-toast-in",
       )}
     >
       <div className="flex items-start gap-2">
         <span className={cn("mt-0.5 shrink-0", tone.iconClass)}>{tone.icon}</span>
-        <p className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
           {toast.message}
         </p>
-        <button
-          type="button"
-          onClick={() => onClose(toast.id)}
-          aria-label="Cerrar notificación"
-          className="-mr-1 -mt-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
       </div>
+      <button
+        type="button"
+        onClick={() => onClose(toast.id)}
+        aria-label="Cerrar notificación"
+        className="absolute right-1 top-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
 
       <span
         key={toast.version}

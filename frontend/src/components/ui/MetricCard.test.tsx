@@ -78,6 +78,65 @@ describe("MetricCard (DIA-5)", () => {
     expect(withoutSpark.querySelector('[data-testid="metric-sparkline"]')).toBeNull();
   });
 
+  it("paints the income, count and ticket sparklines with the sand series ink", () => {
+    // The neon success green and info blue are gone from the KPI row: every
+    // non-negative series shares one warm ink token.
+    for (const tone of ["green", "accent", "blue"] as const) {
+      const { container, unmount } = render(
+        <MetricCard
+          label="Ventas"
+          value="$ 100"
+          helper="hoy"
+          tone={tone}
+          sparkline={[1, 2, 3, 4]}
+        />,
+      );
+
+      expect(
+        container.querySelector('[stroke="var(--chart-ink)"]'),
+      ).toBeTruthy();
+      expect(container.querySelector('[stroke="var(--success)"]')).toBeNull();
+      expect(container.querySelector('[stroke="var(--info)"]')).toBeNull();
+      unmount();
+    }
+  });
+
+  it("keeps a softened danger ink for the outflow sparkline", () => {
+    const { container } = render(
+      <MetricCard
+        label="Salidas"
+        value="$ 100"
+        helper="hoy"
+        tone="rose"
+        sparkline={[1, 2, 3, 4]}
+      />,
+    );
+
+    expect(container.querySelector('[stroke="var(--chart-danger)"]')).toBeTruthy();
+    // The status red stays for text and pills; the sparkline must not use it.
+    expect(container.querySelector('[stroke="var(--danger)"]')).toBeNull();
+  });
+
+  it("keeps the sparkline fill subtle", () => {
+    const { container } = render(
+      <MetricCard
+        label="Ventas"
+        value="$ 100"
+        helper="hoy"
+        tone="green"
+        sparkline={[1, 2, 3, 4]}
+      />,
+    );
+
+    const fillOpacity = Number(
+      container
+        .querySelector("[fill-opacity]")
+        ?.getAttribute("fill-opacity"),
+    );
+    expect(fillOpacity).toBeGreaterThanOrEqual(0.1);
+    expect(fillOpacity).toBeLessThanOrEqual(0.14);
+  });
+
   it("renders the neutral path with a sparkline without requiring a tone", () => {
     const { container } = render(
       <MetricCard label="Ventas" value="$ 100" helper="hoy" sparkline={[3, 1, 4]} />,

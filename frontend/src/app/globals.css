@@ -44,6 +44,16 @@
     --chart-7: #A8456B;
     --chart-8: #78716C;
 
+    /*
+     * Series inks for the KPI sparklines and the payment-method donut. They are
+     * warmer and duller than the status tokens on purpose: a status green or
+     * blue read as neon next to the terracotta. Statuses keep --success/--info
+     * untouched; these three are chart-only.
+     */
+    --chart-ink: #8F7A5C;
+    --chart-ink-muted: #6E7D66;
+    --chart-danger: #AE5F55;
+
     --sidebar-bg: #FFFFFF;
     --sidebar-border: #D6D3D1;
     --sidebar-title: #1C1917;
@@ -91,6 +101,12 @@
     --chart-7: #D27499;
     --chart-8: #A8A29E;
 
+    /* Parchment sand instead of the neon green/blue: warm, desaturated, and
+       still a full step above the charcoal card it is drawn on. */
+    --chart-ink: #D6C7A9;
+    --chart-ink-muted: #8B9A82;
+    --chart-danger: #C9827A;
+
     --sidebar-bg: #18181C;
     --sidebar-border: #30303A;
     --sidebar-title: #F2F2F5;
@@ -135,6 +151,9 @@
     --color-chart-6: var(--chart-6);
     --color-chart-7: var(--chart-7);
     --color-chart-8: var(--chart-8);
+    --color-chart-ink: var(--chart-ink);
+    --color-chart-ink-muted: var(--chart-ink-muted);
+    --color-chart-danger: var(--chart-danger);
     --font-sans: var(--font-geist);
     --font-mono: var(--font-jetbrains-mono);
 }
