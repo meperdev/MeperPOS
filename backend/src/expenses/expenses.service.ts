@@ -23,9 +23,39 @@ export function deriveExpensePaymentStatus(
   return paymentsSum.gte(total) ? 'PAID' : 'PARTIAL';
 }
 
+/**
+ * The statuses an expense can be linked to. A DRAFT order is not a commitment
+ * yet and a CANCELLED one will never be fulfilled, so neither stands for
+ * merchandise an expense is paying for.
+ */
+export const LINKABLE_PURCHASE_ORDER_STATUSES: ReadonlySet<string> = new Set([
+  'PENDING',
+  'PARTIAL_RECEIVED',
+  'RECEIVED',
+]);
+
+/**
+ * The linked order projection the expense endpoints return. Only the fields the
+ * expense surfaces read (identity, state, total and the order's own supplier),
+ * so the list payload stays small.
+ */
+const LINKED_PURCHASE_ORDER_SELECT: Prisma.PurchaseOrderSelect = {
+  id: true,
+  orderNumber: true,
+  status: true,
+  total: true,
+  supplier: { select: { id: true, name: true } },
+};
+
 export interface CalendarDayFilter {
   gte?: Date;
   lte?: Date;
+}
+
+interface LinkedPurchaseOrder {
+  id: string;
+  status: string;
+  supplierId: string;
 }
 
 /**
@@ -103,13 +133,43 @@ export class ExpensesService {
   private async assertPurchaseOrderInOrganization(
     purchaseOrderId: string,
     organizationId: string,
-  ): Promise<void> {
+  ): Promise<LinkedPurchaseOrder> {
     const purchaseOrder = await this.prisma.purchaseOrder.findFirst({
       where: { id: purchaseOrderId, organizationId },
+      select: { id: true, status: true, supplierId: true },
     });
     if (!purchaseOrder) {
       throw new NotFoundException('Orden de compra no encontrada');
     }
+    return purchaseOrder;
+  }
+
+  /**
+   * One linked order has to be coherent with the expense. A cancelled or still
+   * draft order can never stand for the merchandise it pays for, and the order
+   * must belong to the expense's supplier — otherwise the link silently turns an
+   * unrelated expense into merchandise cost (the reports exclude linked expenses
+   * from operating expenses). Returns the supplier the expense must keep: the
+   * order's own supplier is adopted when the expense has none.
+   */
+  private resolveLinkedSupplier(
+    purchaseOrder: LinkedPurchaseOrder,
+    supplierId: string | null | undefined,
+  ): string {
+    if (!LINKABLE_PURCHASE_ORDER_STATUSES.has(purchaseOrder.status)) {
+      throw new BadRequestException(
+        'Solo puedes ligar una orden de compra pendiente, recibida parcialmente o recibida',
+      );
+    }
+    if (!supplierId) {
+      return purchaseOrder.supplierId;
+    }
+    if (supplierId !== purchaseOrder.supplierId) {
+      throw new BadRequestException(
+        'La orden de compra pertenece a otro proveedor. Elige una orden del proveedor de este gasto',
+      );
+    }
+    return supplierId;
   }
 
   private sumPayments(payments: { amount: Prisma.Decimal }[]): Prisma.Decimal {
@@ -176,8 +236,13 @@ export class ExpensesService {
     if (dto.supplierId) {
       await this.assertSupplierInOrganization(dto.supplierId, orgId);
     }
+    let supplierId = dto.supplierId;
     if (dto.purchaseOrderId) {
-      await this.assertPurchaseOrderInOrganization(dto.purchaseOrderId, orgId);
+      const purchaseOrder = await this.assertPurchaseOrderInOrganization(
+        dto.purchaseOrderId,
+        orgId,
+      );
+      supplierId = this.resolveLinkedSupplier(purchaseOrder, supplierId);
     }
 
     if (dto.payments.length === 0) {
@@ -206,7 +271,7 @@ export class ExpensesService {
         data: {
           organizationId: orgId,
           labelId: dto.labelId,
-          supplierId: dto.supplierId ?? null,
+          supplierId: supplierId ?? null,
           purchaseOrderId: dto.purchaseOrderId ?? null,
           description: dto.description ?? null,
           date: new Date(dto.date),
@@ -294,6 +359,7 @@ export class ExpensesService {
         include: {
           label: { include: { group: true } },
           supplier: true,
+          purchaseOrder: { select: LINKED_PURCHASE_ORDER_SELECT },
           payments: true,
         },
       }),
@@ -413,7 +479,7 @@ export class ExpensesService {
       include: {
         label: { include: { group: true } },
         supplier: true,
-        purchaseOrder: true,
+        purchaseOrder: { select: LINKED_PURCHASE_ORDER_SELECT },
         payments: { orderBy: { date: 'asc' } },
       },
     });
@@ -448,8 +514,31 @@ export class ExpensesService {
     if (dto.supplierId) {
       await this.assertSupplierInOrganization(dto.supplierId, orgId);
     }
-    if (dto.purchaseOrderId) {
-      await this.assertPurchaseOrderInOrganization(dto.purchaseOrderId, orgId);
+
+    // The form always sends `supplierId` and `purchaseOrderId`, so the link is
+    // validated only when one of them actually differs from the stored row. A
+    // legacy expense that already carries an incoherent link therefore stays
+    // editable without being forced through a validation it predates.
+    const nextPurchaseOrderId =
+      dto.purchaseOrderId !== undefined
+        ? dto.purchaseOrderId
+        : existing.purchaseOrderId;
+    const nextSupplierId =
+      dto.supplierId !== undefined ? dto.supplierId : existing.supplierId;
+    const linkChanged =
+      nextPurchaseOrderId !== existing.purchaseOrderId ||
+      nextSupplierId !== existing.supplierId;
+
+    let resolvedSupplierId = nextSupplierId;
+    if (nextPurchaseOrderId && linkChanged) {
+      const purchaseOrder = await this.assertPurchaseOrderInOrganization(
+        nextPurchaseOrderId,
+        orgId,
+      );
+      resolvedSupplierId = this.resolveLinkedSupplier(
+        purchaseOrder,
+        nextSupplierId,
+      );
     }
 
     const newTotal =
@@ -497,7 +586,9 @@ export class ExpensesService {
         where: { id },
         data: {
           ...(dto.labelId !== undefined && { labelId: dto.labelId }),
-          ...(dto.supplierId !== undefined && { supplierId: dto.supplierId }),
+          ...(resolvedSupplierId !== existing.supplierId && {
+            supplierId: resolvedSupplierId,
+          }),
           ...(dto.purchaseOrderId !== undefined && {
             purchaseOrderId: dto.purchaseOrderId,
           }),

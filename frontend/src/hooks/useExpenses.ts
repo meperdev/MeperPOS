@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type {
   Expense,
@@ -41,10 +41,27 @@ export interface ExpenseTaxonomyPayload {
   name: string;
 }
 
-function invalidateExpenseData(queryClient: ReturnType<typeof useQueryClient>) {
+/**
+ * Every expense surface reads from these three keys: the list (any filter or
+ * page), the monthly summary and the taxonomy. Exported so a flow that chains
+ * requests can refresh all of them once, after the last one settles.
+ */
+export function invalidateExpenseData(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
   void queryClient.invalidateQueries({ queryKey: ["expense-groups"] });
   void queryClient.invalidateQueries({ queryKey: ["expenses"] });
   void queryClient.invalidateQueries({ queryKey: ["expenses", "summary"] });
+}
+
+export interface ExpenseMutationOptions {
+  /**
+   * Refresh the expense queries when the request settles. Defaults to true.
+   * A caller that chains requests (create, then the receipt upload) turns it off
+   * and calls `invalidateExpenseData` once at the end, so the page refetches once
+   * instead of once per request.
+   */
+  invalidate?: boolean;
 }
 
 export function useExpenses(params?: ExpenseQueryParams) {
@@ -54,6 +71,9 @@ export function useExpenses(params?: ExpenseQueryParams) {
       api
         .get<PaginatedResponse<Expense>>("/expenses", params)
         .then((res) => res.data),
+    // Paging or filtering keeps the current rows on screen instead of blanking
+    // to a skeleton and back.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -95,24 +115,28 @@ export function useExpenseGroups() {
   });
 }
 
-export function useCreateExpense() {
+export function useCreateExpense({
+  invalidate = true,
+}: ExpenseMutationOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateExpensePayload) =>
       api.post<Expense>("/expenses", data).then((res) => res.data),
     onSuccess: () => {
-      invalidateExpenseData(queryClient);
+      if (invalidate) invalidateExpenseData(queryClient);
     },
   });
 }
 
-export function useUpdateExpense() {
+export function useUpdateExpense({
+  invalidate = true,
+}: ExpenseMutationOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateExpensePayload }) =>
       api.patch<Expense>(`/expenses/${id}`, data).then((res) => res.data),
     onSuccess: () => {
-      invalidateExpenseData(queryClient);
+      if (invalidate) invalidateExpenseData(queryClient);
     },
   });
 }
@@ -156,13 +180,15 @@ export function useDuplicateExpense() {
   });
 }
 
-export function useUploadExpenseReceipt() {
+export function useUploadExpenseReceipt({
+  invalidate = true,
+}: ExpenseMutationOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, file }: { id: string; file: File }) =>
       api.upload<Expense>(`/expenses/${id}/upload`, file).then((res) => res.data),
     onSuccess: () => {
-      invalidateExpenseData(queryClient);
+      if (invalidate) invalidateExpenseData(queryClient);
     },
   });
 }

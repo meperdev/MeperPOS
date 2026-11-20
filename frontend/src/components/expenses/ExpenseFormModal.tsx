@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
@@ -8,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import {
+  invalidateExpenseData,
   useCreateExpense,
   useExpenseGroups,
   useUpdateExpense,
@@ -17,9 +19,21 @@ import { useSuppliers } from "@/hooks/useSuppliers";
 import { usePurchaseOrders } from "@/hooks/usePurchaseOrders";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { formatCurrency, getBogotaDateInputValue } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDate,
+  getBogotaDateInputValue,
+} from "@/lib/utils";
 import { Plus, Trash2 } from "lucide-react";
 import type { Expense, ExpensePayment } from "@/types";
+
+/**
+ * An expense may only be linked to an order that stands for merchandise on its
+ * way or already received. The reports treat every linked expense as cost of
+ * goods, so a draft or cancelled order would quietly pull an unrelated expense
+ * out of the operating expenses.
+ */
+const LINKABLE_ORDER_STATUSES = new Set(["PENDING", "PARTIAL_RECEIVED", "RECEIVED"]);
 
 interface Props {
   isOpen: boolean;
@@ -56,19 +70,30 @@ function newRow(): PaymentRow {
 export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
   const toast = useToast();
   const uid = useId();
+  const queryClient = useQueryClient();
   const paymentsListRef = useRef<HTMLDivElement>(null);
 
-  const createExpense = useCreateExpense();
-  const updateExpense = useUpdateExpense();
-  const uploadReceipt = useUploadExpenseReceipt();
+  // The form owns the invalidation: a create followed by a receipt upload is two
+  // requests but one save, so the expense queries refresh once, at the end.
+  const createExpense = useCreateExpense({ invalidate: false });
+  const updateExpense = useUpdateExpense({ invalidate: false });
+  const uploadReceipt = useUploadExpenseReceipt({ invalidate: false });
+
+  /**
+   * One busy state for the whole submit. A create plus a receipt upload used to
+   * leave the footer looking idle for as long as the upload took; now the button
+   * names the step and nothing in the form can be changed, re-submitted or
+   * dismissed until both requests have settled.
+   */
+  const [isBusy, setIsBusy] = useState(false);
+  const [submitStep, setSubmitStep] = useState<"saving" | "uploading">("saving");
+  const isUploading = isBusy && submitStep === "uploading";
 
   const { data: groupsData, isLoading: isGroupsLoading } = useExpenseGroups();
   const { data: suppliersData } = useSuppliers({ limit: 200, status: "active" });
-  const { data: ordersData } = usePurchaseOrders({ limit: 200 });
 
   const groups = groupsData ?? [];
   const suppliers = suppliersData?.data ?? [];
-  const orders = ordersData?.data ?? [];
 
   const [groupId, setGroupId] = useState(expense?.label?.groupId ?? "");
   const [labelId, setLabelId] = useState(expense?.labelId ?? "");
@@ -87,6 +112,16 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(
     null,
   );
+
+  // The order list is only meaningful once a supplier anchors it. The server
+  // filters by supplier; without one it would send the organization's whole
+  // history for nothing, so only a single row is requested then.
+  const { data: ordersData } = usePurchaseOrders({
+    supplierId: supplierId || undefined,
+    limit: supplierId ? 200 : 1,
+  });
+
+  const orders = ordersData?.data ?? [];
 
   /**
    * Derived, not synced. A synchronous setState inside an effect body cascades
@@ -116,6 +151,42 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
         .filter((label) => label.active)
         .map((label) => ({ value: label.id, label: label.name }))
     : [];
+
+  /**
+   * Only the chosen supplier's linkable orders, newest first. The server already
+   * filters by supplier, but `keepPreviousData` keeps the previous supplier's
+   * rows on screen while the next request lands, so the supplier is checked here
+   * too. The status has no multi-value filter on the endpoint, so it is applied
+   * on this side.
+   */
+  const orderOptions = [...orders]
+    .filter(
+      (order) =>
+        order.supplierId === supplierId && LINKABLE_ORDER_STATUSES.has(order.status),
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    .map((order) => ({
+      value: order.id,
+      label: `OC-${order.orderNumber} · ${formatDate(order.createdAt)} · ${formatCurrency(Number(order.total))}`,
+    }));
+
+  // A legacy expense can carry an order that no longer matches the selected
+  // supplier or its status. Keeping it as its own option shows the real link
+  // instead of blanking it behind "Sin orden de compra".
+  const linkedOrderOption =
+    purchaseOrderId && !orderOptions.some((option) => option.value === purchaseOrderId)
+      ? [
+          {
+            value: purchaseOrderId,
+            label: expense?.purchaseOrder
+              ? `OC-${expense.purchaseOrder.orderNumber} · vínculo actual`
+              : "Vínculo actual",
+          },
+        ]
+      : [];
 
   const numericTotal = Number(total) || 0;
   const paymentsSum = rows.reduce(
@@ -159,7 +230,11 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
   };
 
   const handleSubmit = async () => {
-    if (error) return;
+    if (error || isBusy) return;
+    setIsBusy(true);
+    setSubmitStep("saving");
+    let saved = false;
+
     try {
       if (expense) {
         await updateExpense.mutateAsync({
@@ -173,6 +248,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             total: numericTotal,
           },
         });
+        saved = true;
         toast.success("Gasto actualizado");
       } else {
         const created = await createExpense.mutateAsync({
@@ -190,27 +266,43 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
               date: row.date,
             })),
         });
+        // The expense exists from here on: a failed receipt attach must never
+        // lead to a retry that creates it a second time.
+        saved = true;
         if (pendingReceiptFile) {
+          setSubmitStep("uploading");
           try {
             await uploadReceipt.mutateAsync({
               id: created.id,
               file: pendingReceiptFile,
             });
+            toast.success("Gasto registrado");
           } catch (err) {
             toast.error(
               getApiErrorMessage(
                 err,
-                "El gasto se creó pero no se pudo subir el comprobante",
+                "El gasto se registró, pero no se pudo subir el comprobante. Puedes adjuntarlo después desde la lista",
               ),
             );
           }
+        } else {
+          toast.success("Gasto registrado");
         }
-        toast.success("Gasto registrado");
       }
       onClose();
     } catch (err) {
       toast.error(getApiErrorMessage(err, "No se pudo guardar el gasto"));
+    } finally {
+      if (saved) invalidateExpenseData(queryClient);
+      setIsBusy(false);
+      setSubmitStep("saving");
     }
+  };
+
+  /** Escape, the backdrop and the header button all route here. */
+  const requestClose = () => {
+    if (isBusy) return;
+    onClose();
   };
 
   const updateRow = (tempId: string, patch: Partial<PaymentRow>) => {
@@ -222,7 +314,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={requestClose}
       title={expense ? "Editar gasto" : "Nuevo gasto"}
       size="lg"
     >
@@ -232,7 +324,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
           <Select
             label="Grupo"
             value={effectiveGroupId}
-            disabled={isGroupsLoading}
+            disabled={isGroupsLoading || isBusy}
             onChange={(value) => {
               setGroupId(value);
               setLabelId("");
@@ -248,7 +340,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
           <Select
             label="Etiqueta"
             value={effectiveLabelId}
-            disabled={isGroupsLoading || !effectiveGroupId}
+            disabled={isGroupsLoading || !effectiveGroupId || isBusy}
             onChange={(value) => {
               const belongsToGroup = labelOptions.some((label) => label.value === value);
               setLabelId(belongsToGroup ? value : "");
@@ -271,7 +363,17 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
           <Select
             label="Proveedor"
             value={supplierId}
-            onChange={(value) => setSupplierId(value)}
+            disabled={isBusy}
+            onChange={(value) => {
+              setSupplierId(value);
+              // The order link is only kept when the new supplier still owns it.
+              const linkedSupplierId = orders.find(
+                (order) => order.id === purchaseOrderId,
+              )?.supplierId;
+              if (purchaseOrderId && linkedSupplierId !== value) {
+                setPurchaseOrderId("");
+              }
+            }}
             options={[
               { value: "", label: "Sin proveedor" },
               ...suppliers.map((supplier) => ({
@@ -281,18 +383,24 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             ]}
           />
 
-          <Select
-            label="Orden de compra"
-            value={purchaseOrderId}
-            onChange={(value) => setPurchaseOrderId(value)}
-            options={[
-              { value: "", label: "Sin orden de compra" },
-              ...orders.map((order) => ({
-                value: order.id,
-                label: `OC-${order.orderNumber}`,
-              })),
-            ]}
-          />
+          <div>
+            <Select
+              label="Orden de compra"
+              value={purchaseOrderId}
+              disabled={!supplierId || isBusy}
+              onChange={(value) => setPurchaseOrderId(value)}
+              options={[
+                { value: "", label: "Sin orden de compra" },
+                ...orderOptions,
+                ...linkedOrderOption,
+              ]}
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {supplierId
+                ? "Al ligarla, este gasto cuenta como pago de mercancía y no como gasto operativo."
+                : "Elige un proveedor para ligar una orden de compra."}
+            </p>
+          </div>
 
           <div>
             <label
@@ -306,6 +414,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
               type="date"
               aria-label="Fecha"
               value={date}
+              disabled={isBusy}
               onChange={(e) => setDate(e.target.value)}
               className="tabular-nums"
             />
@@ -316,6 +425,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             label="Total (COP)"
             placeholder="Total del gasto"
             value={total}
+            disabled={isBusy}
             onChange={(value) => setTotal(value === 0 ? "" : String(value))}
           />
 
@@ -332,6 +442,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
               rows={3}
               placeholder="Descripción (opcional)"
               value={description}
+              disabled={isBusy}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
@@ -391,6 +502,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                   type="button"
                   variant="secondary"
                   onClick={handleAddRow}
+                  disabled={isBusy}
                   className="text-xs px-2"
                 >
                   <Plus className="w-3.5 h-3.5" /> Agregar pago
@@ -413,6 +525,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                         label="Valor"
                         placeholder="Valor del pago"
                         value={row.amount}
+                        disabled={isBusy}
                         onChange={(value) =>
                           updateRow(row.tempId, {
                             amount: value === 0 ? "" : String(value),
@@ -423,6 +536,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                         <Select
                           label="Método"
                           value={row.method}
+                          disabled={isBusy}
                           onChange={(value) =>
                             updateRow(row.tempId, {
                               method: value as ExpensePayment["method"],
@@ -443,6 +557,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                             type="date"
                             aria-label="Fecha del pago"
                             value={row.date}
+                            disabled={isBusy}
                             onChange={(e) =>
                               updateRow(row.tempId, { date: e.target.value })
                             }
@@ -457,7 +572,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                               prev.filter((r) => r.tempId !== row.tempId),
                             )
                           }
-                          disabled={rows.length === 1}
+                          disabled={rows.length === 1 || isBusy}
                           className="h-9 w-9 mb-0.5 rounded-lg flex items-center justify-center shrink-0 text-muted-foreground hover:text-danger-text hover:bg-danger/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -491,6 +606,8 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                       id: expense.id,
                       file,
                     });
+                    // This upload is its own save, so it refreshes right away.
+                    invalidateExpenseData(queryClient);
                     return updated.receiptUrl ?? "";
                   }}
                 />
@@ -514,16 +631,27 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
 
       {/* Sticky footer ensuring buttons never get buried */}
       <div className="sticky bottom-0 bg-card flex justify-end gap-2 pt-3 pb-[max(0.25rem,var(--safe-bottom))] border-t border-border/60 mt-4 z-10">
-        <Button type="button" variant="secondary" onClick={onClose}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={requestClose}
+          disabled={isBusy}
+        >
           Cancelar
         </Button>
         <Button
           type="button"
           onClick={handleSubmit}
-          disabled={!!error}
-          loading={createExpense.isPending || updateExpense.isPending}
+          disabled={!!error || isBusy}
+          loading={isBusy}
         >
-          {expense ? "Guardar cambios" : "Registrar gasto"}
+          {isUploading
+            ? "Subiendo comprobante…"
+            : isBusy
+              ? "Guardando gasto…"
+              : expense
+                ? "Guardar cambios"
+                : "Registrar gasto"}
         </Button>
       </div>
     </Modal>

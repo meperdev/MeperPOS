@@ -806,6 +806,19 @@ export interface ExpenseGroup {
   labels?: ExpenseLabel[];
 }
 
+/**
+ * The linked purchase order summary the expense endpoints project: identity,
+ * state, total and the order's own supplier. The full `PurchaseOrder` shape is
+ * only available from `/purchase-orders/:id`.
+ */
+export interface ExpensePurchaseOrderSummary {
+  id: string;
+  orderNumber: number;
+  status: PurchaseOrderStatus;
+  total: number;
+  supplier?: { id: string; name: string } | null;
+}
+
 export interface Expense {
   id: string;
   organizationId: string;
@@ -814,7 +827,7 @@ export interface Expense {
   supplierId: string | null;
   supplier?: Supplier | null;
   purchaseOrderId: string | null;
-  purchaseOrder?: PurchaseOrder | null;
+  purchaseOrder?: ExpensePurchaseOrderSummary | null;
   description: string | null;
   date: string;
   total: number;
