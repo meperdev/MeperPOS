@@ -40,6 +40,24 @@ const productsData: Product[] = [
     updatedAt: "2026-04-19T00:00:00.000Z",
     version: 1,
   },
+  {
+    id: "prod-2",
+    name: "Producto Dos",
+    sku: "SKU-2",
+    barcode: null,
+    description: null,
+    costPrice: 200,
+    salePrice: 260,
+    taxRate: 19,
+    stock: 4,
+    minStock: 1,
+    imageUrl: null,
+    categoryId: "cat-1",
+    active: true,
+    createdAt: "2026-04-19T00:00:00.000Z",
+    updatedAt: "2026-04-19T00:00:00.000Z",
+    version: 1,
+  },
 ];
 
 vi.mock("@/components/ui/Modal", () => ({
@@ -300,12 +318,12 @@ describe("Purchase order modals", () => {
 
     await user.click(
       within(screen.getByTestId("draft-item-list")).getByRole("button", {
-        name: "Eliminar Producto Uno",
+        name: "Quitar Producto Uno",
       }),
     );
 
     expect(
-      within(screen.getByTestId("draft-item-list")).getByText("Agrega productos"),
+      screen.getByText("Busca un producto para agregarlo"),
     ).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: /Guardar cambios/i }) as HTMLButtonElement).disabled,
@@ -339,5 +357,23 @@ describe("Purchase order modals", () => {
         ],
       },
     });
+  });
+
+  // S10: the draft editor and the new-order page share ONE item editor, so a
+  // product is searched and added the same way in both.
+  it("adds a product to the draft from the same search popover", async () => {
+    const user = userEvent.setup();
+
+    render(<EditDraftModal order={makeOrder()} isOpen onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole("combobox", { name: /buscar producto/i }));
+    await user.click(screen.getByRole("option", { name: /Producto Dos/i }));
+
+    const list = within(screen.getByTestId("draft-item-list"));
+    expect(list.getByText("Producto Dos")).toBeTruthy();
+    // Both layouts render the row; whichever one is on screen takes the caret.
+    expect(screen.getAllByLabelText("Cantidad de Producto Dos")).toContain(
+      document.activeElement,
+    );
   });
 });

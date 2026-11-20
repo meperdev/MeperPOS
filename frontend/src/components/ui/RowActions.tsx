@@ -76,7 +76,7 @@ export function RowActions({
 
   const itemClass = (disabled?: boolean, destructive?: boolean) =>
     cn(
-      "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors",
+      "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
       // A menu row is a touch target on a phone; desktop keeps its dense list.
       "max-sm:min-h-11",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
@@ -291,7 +291,7 @@ export function RowActions({
                   <span className="min-w-0">
                     <span className="block truncate">{item.label}</span>
                     {item.hint && (
-                      <span className="mt-0.5 block truncate text-[11px] font-normal text-muted-foreground">
+                      <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
                         {item.hint}
                       </span>
                     )}

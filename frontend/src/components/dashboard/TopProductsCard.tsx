@@ -48,7 +48,7 @@ export function TopProductsCard({
           onRetry={() => refetch()}
         />
       ) : products.length === 0 ? (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-3 text-[13px] text-muted-foreground">
           Sin ventas en el período
         </p>
       ) : (
@@ -57,20 +57,20 @@ export function TopProductsCard({
             <li
               key={product.productId}
               data-testid="top-product-row"
-              className="flex items-center gap-2 text-xs"
+              className="flex items-center gap-2 text-[13px]"
             >
               <span
                 data-testid="top-product-rank"
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground tabular-nums"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/50 text-xs font-semibold text-muted-foreground tabular-nums"
               >
                 {index + 1}
               </span>
               <span className="min-w-0 flex-1 truncate font-medium text-foreground">
                 {product.productName}
               </span>
-              <span className="shrink-0 font-mono text-[11px] font-semibold text-foreground tabular-nums">
+              <span className="shrink-0 text-xs font-semibold text-foreground tabular-nums">
                 <span data-testid="top-product-quantity">{product.quantity}</span>
-                <span className="ml-1 font-sans font-normal text-muted-foreground">
+                <span className="ml-1 font-normal text-muted-foreground">
                   und.
                 </span>
               </span>

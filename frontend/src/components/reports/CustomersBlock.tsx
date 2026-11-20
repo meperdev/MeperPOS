@@ -64,7 +64,7 @@ export function CustomersBlock({
 
   if (ranking.mode !== "table") {
     return (
-      <p className="rounded-xl bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+      <p className="rounded-xl bg-muted/30 px-4 py-3 text-[13px] text-muted-foreground">
         <span className="font-medium text-foreground">Mejores clientes</span>
         <span className="mx-1">·</span>
         {ranking.mode === "single" ? (
@@ -106,14 +106,14 @@ export function CustomersBlock({
             {ranking.rows.map((customer) => (
               <TableRow key={customer.customerId}>
                 <TableCell className="px-4 py-2">
-                  <span className="truncate text-xs font-medium text-foreground">
+                  <span className="truncate text-sm font-medium text-foreground">
                     {customer.customerName}
                   </span>
                 </TableCell>
-                <TableCell numeric className="px-4 py-2 text-xs text-muted-foreground">
+                <TableCell numeric className="px-4 py-2 text-sm text-muted-foreground">
                   {customer.totalSales}
                 </TableCell>
-                <TableCell numeric className="px-4 py-2 text-xs font-semibold text-foreground">
+                <TableCell numeric className="px-4 py-2 text-sm font-semibold text-foreground">
                   {formatCurrency(customer.totalRevenue)}
                 </TableCell>
               </TableRow>

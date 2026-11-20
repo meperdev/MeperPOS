@@ -78,7 +78,7 @@ Next.js App Router under `frontend/src/`:
 
 **Styling**: TailwindCSS v4 with CSS variables for theming. Variables defined in `globals.css` under `:root` (light) and `.dark` (dark mode). Key tokens: `--primary` (teal), `--terracotta` (accent), `--card`, `--border`, `--muted`. Theme toggled via `ThemeContext` which sets a `dark` class on `<html>`.
 
-**Fonts**: Inter (sans) + JetBrains Mono (mono, codes and IDs only) self-hosted via `next/font/local` from WOFF2 files in `frontend/src/app/fonts/`, exposed as CSS variables `--font-inter` and `--font-jetbrains-mono`. This keeps production builds independent of any Google Fonts request.
+**Fonts**: One family — Inter — self-hosted (latin subset) via `next/font/local` from `frontend/src/app/fonts/inter-latin.woff2`, exposed as `--font-sans-face`, so production builds never request Google Fonts. There is no mono family: `globals.css` declares no `--font-mono`, and identifiers (SKU, barcode, sale/PO/receipt numbers, NIT, phone, account and document numbers) ride Inter with tabular figures through `.id-text`; money, counts and percentages use `.stat-number` / `tabular-nums`. **Dates and times are the exception: they render in proportional figures** — no `tabular-nums`, no `.stat-number`, no `.id-text` — and only a line mixing a date with money or a count keeps tabular figures. The only fixed-width text is a literal command the reader may retype (`.code-text`), which borrows the platform stack. Scale: body and table cells `text-sm` (14px), labels/metadata/helpers `text-[13px]`, micro-labels (chips, badges, kbd hints, table header captions) `text-xs` (12px — the floor), summary values one step above their label (`text-xl`, `sm:text-[28px]`).
 
 **POS module**: Maintains client-side cart state with favorites (persisted to `localStorage` under `pos_favorite_product_ids`), paused sales, multi-payment splits, and invoice printing via `useInvoice`.
 
@@ -86,6 +86,7 @@ Next.js App Router under `frontend/src/`:
 
 ## Key Conventions
 
+- **Every authenticated, organization-scoped route MUST carry `@UseGuards(..., OrganizationRequiredGuard)` (plus `JwtAuthGuard` + `@Roles`).** This guard is the tenant boundary: without it, `user.organizationId` can arrive `undefined` and the Prisma fallback pattern `...(organizationId ? { organizationId } : {})` silently degrades into a **cross-tenant, all-organizations query** (see `docs/security/FINDINGS.md`, SEC-002). Only platform `SUPER_ADMIN` routes (`admin/*`, `whatsapp/intelligence`) and pre-auth routes (`auth/*`, WAHA webhook, health) may omit it. If you add a controller or endpoint, include the guard or there must be an explicit, commented reason; new services must scope every read AND every write (`where: { id, organizationId }`), never a conditional-org fallback. See `AGENTS.md` for the full convention set.
 - `cn()` from `lib/utils.ts` for conditional Tailwind class merging — always use this instead of string concatenation
 - `formatCurrency(amount)` for COP formatting; `formatDate/formatDateTime` for es-CO locale
 - `getApiErrorMessage(error, fallback)` for extracting user-facing error messages from Axios errors

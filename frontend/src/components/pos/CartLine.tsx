@@ -143,11 +143,11 @@ export function CartLine({
           >
             {item.product.name}
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs tabular-nums text-muted-foreground">
             {offer && (
               <Badge
                 variant="danger"
-                className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px]"
+                className="shrink-0 rounded-md px-1.5 py-0.5 text-xs"
               >
                 Oferta -{offer.percent}%
               </Badge>
@@ -156,7 +156,7 @@ export function CartLine({
               <span data-testid="price-overridden" className="shrink-0">
                 <Badge
                   variant="warning"
-                  className="rounded-md px-1.5 py-0.5 text-[11px]"
+                  className="rounded-md px-1.5 py-0.5 text-xs"
                 >
                   Precio ajustado
                 </Badge>
@@ -201,7 +201,7 @@ export function CartLine({
             onChange={(value) => onQuantityChange(item.productId, value)}
           />
           {atStockLimit && (
-            <span className="text-[11px] font-medium text-warning-text">
+            <span className="text-xs font-medium text-warning-text">
               máx.
             </span>
           )}

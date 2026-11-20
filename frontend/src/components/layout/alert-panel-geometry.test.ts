@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { computeAlertPanelGeometry } from "./alert-panel-geometry";
+import {
+  ALERT_PANEL_WIDTH,
+  computeAlertPanelGeometry,
+  computeHeaderAlertPanelGeometry,
+} from "./alert-panel-geometry";
 
 /**
  * The panel was cut off at the bottom because it always opened downward from
@@ -74,5 +78,65 @@ describe("computeAlertPanelGeometry", () => {
 
     expect(geometry.left).toBeGreaterThanOrEqual(12);
     expect(geometry.left + 352).toBeLessThanOrEqual(380);
+  });
+});
+
+/**
+ * The desktop header mounts the same bell at the top of the screen. There the
+ * rail's flyout math puts the panel over the header itself, hiding the bell and
+ * the avatar it sits next to, so the header placement hangs the panel under its
+ * own trigger and lines its right edge up with the account menu.
+ */
+describe("computeHeaderAlertPanelGeometry", () => {
+  it("hangs the panel below the bell, right-aligned with the header actions", () => {
+    const geometry = computeHeaderAlertPanelGeometry({
+      anchor: { top: 12, bottom: 44 },
+      alignRight: 1566,
+      viewportWidth: 1590,
+      viewportHeight: 913,
+    });
+
+    // 8px under the trigger, never over it.
+    expect(geometry.top).toBe(52);
+    expect(geometry.bottom).toBeUndefined();
+    // The account menu's right edge is the same line the panel ends on.
+    expect(geometry.left + ALERT_PANEL_WIDTH).toBe(1566);
+    // Same width as the rail flyout, so the two bells read as one panel.
+    expect(ALERT_PANEL_WIDTH).toBe(352);
+    // The cap stops short of the viewport floor; the list scrolls inside.
+    expect(geometry.top! + geometry.maxHeight).toBeLessThanOrEqual(913 - 12);
+    expect(geometry.maxHeight).toBeGreaterThanOrEqual(200);
+  });
+
+  it("never covers the bell, at any header height", () => {
+    for (const viewportHeight of [768, 913, 1440]) {
+      for (const anchorTop of [4, 8, 12, 16]) {
+        const anchor = { top: anchorTop, bottom: anchorTop + 32 };
+        const geometry = computeHeaderAlertPanelGeometry({
+          anchor,
+          alignRight: 900,
+          viewportWidth: 1366,
+          viewportHeight,
+        });
+
+        expect(geometry.top!).toBeGreaterThanOrEqual(anchor.bottom + 8);
+        expect(geometry.top! + geometry.maxHeight).toBeLessThanOrEqual(
+          viewportHeight,
+        );
+      }
+    }
+  });
+
+  it("stays inside the viewport when the header's edge is narrow", () => {
+    const geometry = computeHeaderAlertPanelGeometry({
+      anchor: { top: 8, bottom: 40 },
+      alignRight: 300,
+      viewportWidth: 380,
+      viewportHeight: 700,
+    });
+
+    expect(geometry.left).toBe(12);
+    expect(geometry.left + ALERT_PANEL_WIDTH).toBeLessThanOrEqual(380);
+    expect(geometry.top! + geometry.maxHeight).toBeLessThanOrEqual(700);
   });
 });

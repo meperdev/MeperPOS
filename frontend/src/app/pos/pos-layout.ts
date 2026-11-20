@@ -1,6 +1,6 @@
 const MAX_POS_COLUMNS = 4;
 const POS_COLUMN_GAP = 12;
-// Two cards must fit the products column beside the 18rem lg cart at a 1024px viewport with the 320px sidebar.
+// Two cards must fit the products column beside the 18rem lg cart at a 1024px viewport with the 256px sidebar.
 export const POS_MIN_CARD_WIDTH = 152;
 // A phone fits three tiles across: at 390px that is ~110px each, which is why
 // the card itself is a short fixed tile below sm (see ProductCard).

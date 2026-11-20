@@ -71,10 +71,10 @@ export default function ModulesPage() {
                   <TableRow key={module.id}>
                     <TableCell>
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-foreground">
+                        <p className="text-sm font-medium text-foreground">
                           {module.name}
                         </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
+                        <p className="mt-0.5 text-[13px] text-muted-foreground">
                           {module.description}
                         </p>
                       </div>

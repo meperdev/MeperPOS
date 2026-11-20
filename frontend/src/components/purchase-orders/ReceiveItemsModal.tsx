@@ -102,14 +102,14 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
         </p>
       ) : (
         <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Ingresa la cantidad recibida ahora por cada producto. Los valores no
             pueden superar la cantidad pendiente.
           </p>
 
           <div className="@container rounded-xl border border-border/70 bg-card overflow-hidden">
           <div className="hidden @2xl:block overflow-x-auto">
-            <table className="w-full min-w-[520px] text-xs">
+            <table className="w-full min-w-[520px] text-sm">
               <thead>
                 <tr className="bg-muted/35 border-b border-border/60">
                   <th scope="col" className="text-left py-2.5 px-4 text-xs font-medium text-muted-foreground">
@@ -139,17 +139,17 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                       <p className="text-sm font-medium text-foreground truncate max-w-[200px]">
                         {it.product?.name}
                       </p>
-                      <p className="text-[11px] text-muted-foreground font-mono">
+                      <p className="text-[13px] text-muted-foreground id-text">
                         {it.product?.sku}
                       </p>
                     </td>
-                    <td className="py-2 px-3 text-right text-xs text-foreground tabular-nums">
+                    <td className="py-2 px-3 text-right text-sm text-foreground tabular-nums">
                       {it.qtyOrdered}
                     </td>
-                    <td className="py-2 px-3 text-right text-xs text-muted-foreground tabular-nums">
+                    <td className="py-2 px-3 text-right text-sm text-muted-foreground tabular-nums">
                       {it.qtyReceived}
                     </td>
-                    <td className="py-2 px-3 text-right text-xs font-semibold text-warning-text tabular-nums">
+                    <td className="py-2 px-3 text-right text-sm font-semibold text-warning-text tabular-nums">
                       {it.pending}
                     </td>
                     <td className="py-2 px-4">{renderReceiveInput(it)}</td>
@@ -166,11 +166,11 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                   <p className="text-sm font-medium text-foreground break-words">
                     {it.product?.name}
                   </p>
-                  <p className="text-[11px] text-muted-foreground font-mono">
+                  <p className="text-[13px] text-muted-foreground id-text">
                     {it.product?.sku}
                   </p>
                 </div>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
                   <div className="space-y-0.5">
                     <dt className="text-muted-foreground">Ordenado</dt>
                     <dd className="text-foreground tabular-nums">{it.qtyOrdered}</dd>

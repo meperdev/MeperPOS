@@ -72,14 +72,14 @@ export function ProductProfitBlock({
                 return (
                   <TableRow key={product.productId}>
                     <TableCell className="px-4 py-2">
-                      <span className="truncate text-xs font-medium text-foreground">
+                      <span className="truncate text-sm font-medium text-foreground">
                         {product.productName}
                       </span>
                     </TableCell>
-                    <TableCell numeric className="px-4 py-2 text-xs text-muted-foreground">
+                    <TableCell numeric className="px-4 py-2 text-sm text-muted-foreground">
                       {product.quantity}
                     </TableCell>
-                    <TableCell numeric className="px-4 py-2 text-xs text-muted-foreground">
+                    <TableCell numeric className="px-4 py-2 text-sm text-muted-foreground">
                       {product.marginPercentage === null
                         ? "—"
                         : `${product.marginPercentage.toFixed(1)}%`}
@@ -87,7 +87,7 @@ export function ProductProfitBlock({
                     <TableCell
                       numeric
                       className={cn(
-                        "px-4 py-2 text-xs font-semibold",
+                        "px-4 py-2 text-sm font-semibold",
                         profit >= 0 ? "text-success-text" : "text-danger-text",
                       )}
                     >

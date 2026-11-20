@@ -57,7 +57,7 @@ function NarrativeSummary({ report }: { report: FinancialReport }) {
   return (
     <div className="mb-4 flex items-center gap-2 rounded-lg bg-muted/40 px-3.5 py-2.5">
       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} />
-      <p className="text-xs font-medium leading-relaxed text-foreground tabular-nums">
+      <p className="text-[13px] font-medium leading-relaxed text-foreground tabular-nums">
         {message}
       </p>
     </div>
@@ -80,11 +80,11 @@ function BreakdownCard({ report }: { report: FinancialReport }) {
   return (
     <div className="rounded-lg bg-muted/40 p-4">
       <div>
-        <p className="text-xs font-semibold text-foreground sm:text-sm">Desglose</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">El camino de tu plata</p>
+        <p className="text-[13px] font-semibold text-foreground sm:text-sm">Desglose</p>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">El camino de tu plata</p>
       </div>
 
-      <div className="mt-3 space-y-2 text-xs">
+      <div className="mt-3 space-y-2 text-[13px]">
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Ventas con costo conocido</span>
           <span className="font-semibold text-foreground tabular-nums">
@@ -131,7 +131,7 @@ function BreakdownCard({ report }: { report: FinancialReport }) {
       </div>
 
       {excludedItems > 0 && (
-        <p className="mt-3 border-t border-border/60 pt-2 text-[11px] text-muted-foreground tabular-nums">
+        <p className="mt-3 border-t border-border/60 pt-2 text-[13px] text-muted-foreground tabular-nums">
           {excludedItems} registro{excludedItems === 1 ? "" : "s"} sin costo registrado
           queda{excludedItems === 1 ? "" : "n"} fuera de este desglose.
         </p>
@@ -181,24 +181,24 @@ function ComparisonChart({
       <div className="space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold text-foreground sm:text-sm">
+            <p className="text-[13px] font-semibold text-foreground sm:text-sm">
               Comparación con período anterior
             </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
               Comparando el total vendido entre ambos períodos
             </p>
           </div>
-          <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
+          <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
             Granularidad: {granularity === "day" ? "día" : "mes"}
           </span>
         </div>
         <div className="space-y-2">
           {metrics.map((item) => (
             <div key={item.label} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center justify-between text-[13px]">
                 <span className="font-medium text-foreground">
                   {item.label}{" "}
-                  <span className="text-[11px] font-normal text-muted-foreground tabular-nums">
+                  <span className="text-[13px] font-normal text-muted-foreground tabular-nums">
                     ({item.sublabel})
                   </span>
                 </span>
@@ -219,26 +219,26 @@ function ComparisonChart({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
+      <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-[13px]">
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <span className="block text-[11px] text-muted-foreground">
+          <span className="block text-[13px] text-muted-foreground">
             Ganancia anterior
           </span>
-          <span className="mt-0.5 block text-xs font-semibold text-foreground tabular-nums">
+          <span className="mt-0.5 block text-[13px] font-semibold text-foreground tabular-nums">
             {formatReportMoney(previousProfit)}
           </span>
-          <span className="text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-[13px] text-muted-foreground tabular-nums">
             Actual: {formatReportMoney(currentProfit)}
           </span>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <span className="block text-[11px] text-muted-foreground">
+          <span className="block text-[13px] text-muted-foreground">
             Gastos anteriores
           </span>
-          <span className="mt-0.5 block text-xs font-semibold text-foreground tabular-nums">
+          <span className="mt-0.5 block text-[13px] font-semibold text-foreground tabular-nums">
             {formatReportMoney(previousExpenses)}
           </span>
-          <span className="text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-[13px] text-muted-foreground tabular-nums">
             Actual: {formatReportMoney(currentExpenses)}
           </span>
         </div>
@@ -314,7 +314,7 @@ export function EconomySection({ query }: { query: ReportQuery<FinancialOverview
                 className="mt-0.5 h-4 w-4 shrink-0 text-warning-text"
                 aria-hidden="true"
               />
-              <p role="status" className="text-xs text-warning-text tabular-nums">
+              <p role="status" className="text-[13px] text-warning-text tabular-nums">
                 <span className="font-semibold">
                   {current.dataQuality.snapshotBackedItems} registros con costo exacto
                 </span>

@@ -232,6 +232,36 @@ describe("OrganizationsPage", () => {
     );
   });
 
+  it("reveals the initial admin password through the toggle and guides its strength", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Crear organización" }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /crear administrador inicial/i }),
+    );
+
+    const password = screen.getByLabelText(
+      "Contraseña del admin",
+    ) as HTMLInputElement;
+    expect(password).toHaveAttribute("type", "password");
+
+    await user.type(password, "ClaveSegura123");
+
+    // A new password: the meter reads it while the field is still masked.
+    expect(screen.getByText("Fuerte")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar contraseña" }),
+    );
+
+    expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveValue("ClaveSegura123");
+    expect(
+      screen.getByRole("button", { name: "Ocultar contraseña" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("opens the dashboard scoped to the chosen organization", async () => {
     const user = userEvent.setup();
     renderPage();

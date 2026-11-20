@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MobileCartDrawer } from "./MobileCartDrawer";
 import { formatCurrency } from "@/lib/utils";
@@ -110,6 +110,70 @@ describe("MobileCartDrawer", () => {
 
     const closeButton = screen.getByRole("button", { name: /Cerrar carrito/i });
     await user.click(closeButton);
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("presents the cart as a drag-to-dismiss bottom sheet", () => {
+    const handleClose = vi.fn();
+    const rectSpy = vi
+      .spyOn(Element.prototype, "getBoundingClientRect")
+      .mockImplementation(
+        () =>
+          ({
+            top: 0,
+            bottom: 600,
+            left: 0,
+            right: 390,
+            width: 390,
+            height: 600,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      );
+
+    render(
+      <MobileCartDrawer
+        isOpen={true}
+        onClose={handleClose}
+        cart={[mockCartItem]}
+        subtotal={50000}
+        taxAmount={0}
+        discountAmount={0}
+        total={50000}
+        selectedCustomerName={null}
+        onOpenCustomerModal={vi.fn()}
+        pausedSalesCount={0}
+        onOpenPausedSales={vi.fn()}
+        onPauseSale={vi.fn()}
+        selectedPaymentMethod="CASH"
+        onPaymentMethodChange={vi.fn()}
+        onUpdateQuantity={vi.fn()}
+        onOpenDiscountModal={vi.fn()}
+        onRemoveFromCart={vi.fn()}
+        onCheckout={vi.fn()}
+        onFinance={vi.fn()}
+        canFinance={false}
+      />,
+    );
+
+    const sheet = screen.getByRole("dialog", { name: "Carrito de compras" });
+    expect(sheet).toHaveAttribute("aria-modal", "true");
+    expect(sheet.closest("[data-bottom-sheet]")).not.toBeNull();
+    expect(sheet.closest("[data-bottom-sheet]")!.className).toContain("lg:hidden");
+    expect(sheet.querySelector("[data-bottom-sheet-handle]")).not.toBeNull();
+    // The checkout bar is pinned outside the scrolling body.
+    expect(sheet.querySelector("[data-bottom-sheet-footer]")).not.toBeNull();
+
+    const handle = sheet.querySelector<HTMLElement>("[data-bottom-sheet-handle]")!;
+    const nowSpy = vi.spyOn(performance, "now").mockReturnValue(0);
+    fireEvent.pointerDown(handle, { clientY: 100, pointerId: 1, pointerType: "touch" });
+    fireEvent.pointerMove(handle, { clientY: 400, pointerId: 1, pointerType: "touch" });
+    nowSpy.mockReturnValue(600);
+    fireEvent.pointerUp(handle, { clientY: 400, pointerId: 1, pointerType: "touch" });
+    nowSpy.mockRestore();
+    rectSpy.mockRestore();
+
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 

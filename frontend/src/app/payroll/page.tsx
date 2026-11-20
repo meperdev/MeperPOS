@@ -299,23 +299,23 @@ export default function PayrollPage() {
                             const balance = Number(obligation.summary.balance);
                             return (
                               <TableRow key={obligation.id}>
-                                <TableCell className="text-xs font-semibold text-foreground">
+                                <TableCell className="text-sm font-semibold text-foreground">
                                   {name}
                                 </TableCell>
-                                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                                   {obligation.kind === "FIXED_PERIOD"
                                     ? "Pago fijo"
                                     : "Por jornadas"}
                                 </TableCell>
-                                <TableCell className="max-w-[260px] truncate text-xs text-muted-foreground">
+                                <TableCell className="max-w-[260px] truncate text-sm text-muted-foreground">
                                   {periodLabel(obligation)}
                                 </TableCell>
-                                <TableCell numeric className="text-xs">
+                                <TableCell numeric className="text-sm">
                                   {payrollMoney(obligation.summary.total)}
                                 </TableCell>
                                 <TableCell
                                   className={cn(
-                                    "text-right text-xs tabular-nums",
+                                    "text-right text-sm tabular-nums",
                                     balance > 0
                                       ? "text-foreground"
                                       : "text-muted-foreground",

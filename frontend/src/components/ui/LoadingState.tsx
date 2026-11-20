@@ -18,7 +18,7 @@ export function LoadingState({ icon, message, className }: LoadingStateProps) {
       <div className="w-10 h-10 rounded-lg bg-muted/50 border border-border/70 flex items-center justify-center text-muted-foreground animate-pulse [animation-duration:2.4s] motion-reduce:animate-none [&_svg]:h-5 [&_svg]:w-5">
         {icon}
       </div>
-      <p className="text-xs text-muted-foreground mt-2.5">{message}</p>
+      <p className="text-[13px] text-muted-foreground mt-2.5">{message}</p>
     </div>
   );
 }

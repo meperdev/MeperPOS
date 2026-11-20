@@ -52,8 +52,23 @@ export class UsersService {
     private readonly authService: AuthService,
   ) {}
 
-  async create(createUserDto: CreateUserDto, organizationId?: string) {
+  async create(
+    createUserDto: CreateUserDto,
+    organizationId?: string,
+    actor?: { role: OrgRole | 'SUPER_ADMIN'; isSuperAdmin: boolean },
+  ) {
     const { email, password, name, role } = createUserDto;
+
+    // SEC-001 guardrail: only an OWNER (or SUPER_ADMIN) may mint OWNER
+    // accounts. ADMIN is the route minimum, so without this check any ADMIN
+    // could fabricate an OWNER and control its password.
+    const actorIsOwner =
+      actor?.isSuperAdmin === true || actor?.role === OrgRole.OWNER;
+    if (role === OrgRole.OWNER && !actorIsOwner) {
+      throw new ForbiddenException(
+        'Only an OWNER or SUPER_ADMIN can create OWNER users',
+      );
+    }
 
     await this.ensureEmailAvailable(email);
 
@@ -213,9 +228,28 @@ export class UsersService {
     userId: string,
     dto: ResetUserPasswordDto,
     organizationId: string,
+    actor?: { role: OrgRole | 'SUPER_ADMIN'; isSuperAdmin: boolean },
   ) {
     const targetUser = await this.findUserOrThrow(userId, organizationId);
     await this.assertSingleOrgTarget(userId);
+
+    // SEC-001 guardrail: an ADMIN must not be able to take over an OWNER
+    // account by resetting its password. OWNER (and SUPER_ADMIN) keep full
+    // control; the target's role is resolved within the caller organization.
+    const actorIsOwner =
+      actor?.isSuperAdmin === true || actor?.role === OrgRole.OWNER;
+    if (!actorIsOwner) {
+      const targetOrgUser = await this.prisma.organizationUser.findFirst({
+        where: { userId, organizationId },
+        select: { role: true },
+      });
+      if (targetOrgUser?.role === OrgRole.OWNER) {
+        throw new ForbiddenException(
+          'An ADMIN cannot reset the password of an OWNER. Ask the organization OWNER (or support) to do it.',
+        );
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
 
     await this.prisma.user.update({
@@ -309,9 +343,10 @@ export class UsersService {
 
     return attachAuditContext(
       {
-        message: deletedGlobalUser || !organizationId
-          ? 'User deleted successfully'
-          : 'User removed from organization',
+        message:
+          deletedGlobalUser || !organizationId
+            ? 'User deleted successfully'
+            : 'User removed from organization',
       },
       {
         resource: 'User',
@@ -325,7 +360,8 @@ export class UsersService {
           targetUserName: user.name,
           active: user.active,
           ...(organizationId ? { organizationId } : {}),
-          removedFromOrganization: Boolean(organizationId) && !deletedGlobalUser,
+          removedFromOrganization:
+            Boolean(organizationId) && !deletedGlobalUser,
         },
       },
     );

@@ -57,17 +57,17 @@ export function SellerPerformanceBlock({
             {visible.map((seller) => (
               <TableRow key={seller.userId}>
                 <TableCell className="px-4 py-2">
-                  <span className="truncate text-xs font-medium text-foreground">
+                  <span className="truncate text-sm font-medium text-foreground">
                     {seller.userName}
                   </span>
                 </TableCell>
-                <TableCell numeric className="px-4 py-2 text-xs text-muted-foreground">
+                <TableCell numeric className="px-4 py-2 text-sm text-muted-foreground">
                   {seller.salesCount}
                 </TableCell>
-                <TableCell numeric className="px-4 py-2 text-xs text-muted-foreground">
+                <TableCell numeric className="px-4 py-2 text-sm text-muted-foreground">
                   {formatCurrency(seller.avgTicket)}
                 </TableCell>
-                <TableCell numeric className="px-4 py-2 text-xs font-semibold text-foreground">
+                <TableCell numeric className="px-4 py-2 text-sm font-semibold text-foreground">
                   {formatCurrency(seller.revenue)}
                 </TableCell>
               </TableRow>
@@ -76,7 +76,7 @@ export function SellerPerformanceBlock({
         </Table>
       </div>
       {remaining > 0 && (
-        <p className="border-t border-border/60 px-4 py-2 text-[11px] text-muted-foreground">
+        <p className="border-t border-border/60 px-4 py-2 text-[13px] text-muted-foreground">
           {remaining} {remaining === 1 ? "vendedor más" : "vendedores más"} con ventas en el
           período.
         </p>

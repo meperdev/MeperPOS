@@ -17,9 +17,8 @@ import {
   Moon,
   Sun,
   User as UserIcon,
-  Building2,
-  ChevronsLeft,
-  ChevronsRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   History,
   MoreVertical,
   X,
@@ -71,7 +70,7 @@ const footerIconButtonClass =
   "h-9 w-9 lg:h-9 lg:w-9 rounded-lg border-transparent bg-transparent text-muted-foreground transition-colors hover:border-transparent hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
 const avatarCircleClass =
-  "grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary";
+  "grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-[13px] font-semibold text-primary";
 
 /** The glyph each account destination keeps in the menu. */
 function accountMenuIcon(href: string) {
@@ -297,19 +296,21 @@ export function Sidebar() {
     <>
       {/* Block 1: Brand - logo and wordmark sized to read as one lockup. The
           drawer keeps a compact lockup so the brand and its 44px close control
-          share one row; the rail keeps the full size. */}
+          share one row; the rail keeps the full size. At the 256px rail the
+          lockup scales with it (44px mark, 24px wordmark) so the wordmark keeps
+          the same share of the column and never truncates. */}
       <div
         data-testid="sidebar-brand"
         className={cn(
           "border-b border-border/70 shrink-0",
           isCollapsed
             ? "px-2 py-4 flex flex-col items-center gap-3"
-            : "px-4 py-4 lg:px-5 lg:py-5 flex items-center justify-between gap-2 lg:gap-3"
+            : "px-4 py-4 lg:px-4 lg:py-4 flex items-center justify-between gap-2"
         )}
       >
         <div
           className={cn(
-            "flex items-center gap-3 min-w-0 lg:gap-3.5",
+            "flex items-center gap-3 min-w-0",
             isCollapsed && "justify-center"
           )}
         >
@@ -320,12 +321,12 @@ export function Sidebar() {
             height={192}
             className={cn(
               "shrink-0 object-contain drop-shadow-xs",
-              isCollapsed ? "w-11 h-11" : "w-10 h-10 lg:w-14 lg:h-14"
+              isCollapsed ? "w-11 h-11" : "w-10 h-10 lg:w-11 lg:h-11"
             )}
           />
           <p
             className={cn(
-              "text-2xl lg:text-[30px] font-bold text-foreground truncate leading-none tracking-tight",
+              "text-2xl font-bold text-foreground truncate leading-none tracking-tight",
               isCollapsed ? "sr-only" : "min-w-0"
             )}
           >
@@ -344,9 +345,9 @@ export function Sidebar() {
           title={isCollapsed ? "Expandir barra lateral (Ctrl+B)" : "Colapsar barra lateral (Ctrl+B)"}
         >
           {isCollapsed ? (
-            <ChevronsRight className="w-4 h-4" />
+            <PanelLeftOpen className="w-4 h-4" />
           ) : (
-            <ChevronsLeft className="w-4 h-4" />
+            <PanelLeftClose className="w-4 h-4" />
           )}
         </button>
         {/* The drawer's own way out. The tab bar's "Más" opens it, and a link or
@@ -421,8 +422,10 @@ export function Sidebar() {
                         // comes back with the rail; tailwind-merge drops the bare
                         // `flex` so `hidden` actually wins below lg.
                         mobileTabHrefs.has(item.href) && "hidden lg:flex",
+                        // Current section: a softer take on the palette's active row
+                        // (tinted primary at 60%, primary icon, label in foreground).
                         isActive
-                          ? "active bg-muted/70 text-foreground"
+                          ? "active bg-primary-light/60 text-foreground"
                           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                       )}
                       title={isCollapsed ? item.label : undefined}
@@ -430,7 +433,7 @@ export function Sidebar() {
                       <span
                         className={cn(
                           "shrink-0 flex items-center justify-center",
-                          isActive ? "text-foreground" : "text-muted-foreground"
+                          isActive ? "text-primary-text" : "text-muted-foreground"
                         )}
                       >
                         {item.icon}
@@ -469,48 +472,44 @@ export function Sidebar() {
         />
       </div>
 
-      {/* Block 3: Account - clock, identity and the account menu, fused */}
+      {/* Block 3: Account. The header owns the bell and the account on a
+          desktop, so the rail keeps only the tenant scope — the one thing with
+          no other home. Below lg the drawer is the account's only surface, so it
+          keeps the whole block it always had. */}
 
       {user && (
-        <div
-          data-testid="sidebar-user"
-          className={cn(
-            "border-t border-border/70 shrink-0",
-            isCollapsed ? "px-2 py-3" : "px-3 py-3"
-          )}
-        >
-          {isCollapsed ? (
-            <div className="flex flex-col items-center gap-1">
-              <AlertCenter
-                collapsed
-                className="hidden lg:inline-flex"
-                buttonClassName={footerIconButtonClass}
-              />
+        <>
+          <div data-testid="sidebar-user-rail" className="hidden shrink-0 lg:block">
+            {!isCollapsed &&
+              (user.isSuperAdmin ? (
+                <OrganizationSwitcher
+                  className="border-t border-border/70 px-3 py-3"
+                  placement="up"
+                  currentOrganizationId={selectedOrgId}
+                  onSwitch={async (orgId) => {
+                    setSelectedOrgId(orgId);
+                    applyOrganizationScope(queryClient, orgId);
+                  }}
+                  isSuperAdmin
+                  onSelectAll={() => {
+                    setSelectedOrgId(null);
+                    applyOrganizationScope(queryClient, null);
+                  }}
+                />
+              ) : (
+                <OrganizationSwitcher
+                  className="border-t border-border/70 px-3 py-3"
+                  placement="up"
+                  currentOrganizationId={user.organizationId ?? undefined}
+                  onSwitch={switchOrganization}
+                />
+              ))}
+          </div>
 
-              <RowActions
-                label="Opciones de cuenta"
-                menuOffset={RAIL_FLYOUT_GAP}
-                preferSide="right"
-                items={accountItems}
-                triggerClassName={cn(footerIconButtonClass, "rounded-full")}
-                triggerContent={
-                  <span aria-hidden="true" className={avatarCircleClass}>
-                    {initials}
-                  </span>
-                }
-              />
-
-              <button
-                type="button"
-                onClick={toggleCollapse}
-                className={cn(footerIconButtonClass, "flex items-center justify-center")}
-                aria-label="Mostrar organizaciones (expandir barra)"
-                title="Mostrar organizaciones (expandir barra)"
-              >
-                <Building2 className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          ) : (
+          <div
+            data-testid="sidebar-user"
+            className="shrink-0 border-t border-border/70 px-3 py-3 lg:hidden"
+          >
             <div className="flex flex-col gap-2">
               {/* The time leads the footer as one quiet line; the identity row
                   and its two actions sit under it. */}
@@ -543,7 +542,7 @@ export function Sidebar() {
                 </div>
 
                 <AlertCenter
-                  className="hidden shrink-0 lg:flex"
+                  className="shrink-0"
                   buttonClassName={footerIconButtonClass}
                 />
 
@@ -581,8 +580,8 @@ export function Sidebar() {
                 />
               )}
             </div>
-          )}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Floating tooltip for collapsed rail items */}
@@ -590,7 +589,7 @@ export function Sidebar() {
         <div
           data-testid="sidebar-rail-tooltip"
           style={{ top: hoveredTooltip.top }}
-          className="fixed left-[78px] -translate-y-1/2 z-[70] rounded-md border border-border/70 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-lg pointer-events-none whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150"
+          className="fixed left-[78px] -translate-y-1/2 z-[70] rounded-md border border-border/70 bg-card px-2.5 py-1.5 text-[13px] font-medium text-foreground shadow-lg pointer-events-none whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-150"
         >
           {hoveredTooltip.label}
         </div>
@@ -630,7 +629,7 @@ export function Sidebar() {
           "lg:border-r lg:border-border/80 lg:shadow-none",
           "lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto",
           "lg:transition-[width,transform] lg:duration-300 lg:ease-in-out",
-          isCollapsed ? "lg:w-[72px]" : "lg:w-[320px]",
+          isCollapsed ? "lg:w-[72px]" : "lg:w-[256px]",
         )}
       >
         <div className="flex flex-col flex-1 min-h-0">

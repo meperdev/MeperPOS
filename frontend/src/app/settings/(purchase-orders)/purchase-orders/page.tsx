@@ -53,7 +53,7 @@ function PurchaseOrderPreview({
     <Card className="overflow-hidden border-border/70 bg-card shadow-2xs">
       <div className="border-b border-border/60 px-4 py-3.5">
         <div className="flex items-start justify-between gap-3">
-          <h2 className="mt-0.5 text-xs sm:text-sm font-semibold tracking-tight text-foreground">
+          <h2 className="mt-0.5 text-sm sm:text-sm font-semibold tracking-tight text-foreground">
             Orden de compra de muestra
           </h2>
           <ClipboardList
@@ -61,7 +61,7 @@ function PurchaseOrderPreview({
             aria-hidden="true"
           />
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
           Se actualiza en vivo. El PDF que recibe el proveedor sale en tamaño
           carta con este contenido.
         </p>
@@ -95,7 +95,7 @@ function PurchaseOrderPreview({
                 <h3 className="break-words text-sm font-semibold tracking-tight text-foreground">
                   {organization.name || "Nombre de la organización"}
                 </h3>
-                <div className="text-[11px] leading-relaxed text-muted-foreground">
+                <div className="text-xs leading-relaxed text-muted-foreground">
                   {organization.taxId ? <p>NIT {organization.taxId}</p> : null}
                   {organization.phone ? <p>Tel. {organization.phone}</p> : null}
                   {organization.address ? <p>{organization.address}</p> : null}
@@ -106,10 +106,10 @@ function PurchaseOrderPreview({
               <p className="text-sm font-semibold text-foreground">
                 Orden de compra
               </p>
-              <p className="font-mono text-[11px] font-semibold tabular-nums text-foreground">
+              <p className="id-text text-xs font-semibold tabular-nums text-foreground">
                 OC-184
               </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {formatDate(new Date())}
               </p>
             </div>
@@ -117,20 +117,20 @@ function PurchaseOrderPreview({
 
           <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
             <section className="rounded-lg border border-border/70 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Proveedor
               </p>
               <p className="mt-1 font-semibold text-foreground">
                 Distribuidora de muestra
               </p>
-              <p className="text-[11px] text-muted-foreground">NIT 900111222-3</p>
+              <p className="text-xs text-muted-foreground">NIT 900111222-3</p>
             </section>
             <section className="space-y-1.5 rounded-lg border border-border/70 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Entrega y pago
               </p>
               <div>
-                <p className="text-[10px] font-medium text-muted-foreground">
+                <p className="text-xs font-medium text-muted-foreground">
                   Entregar en
                 </p>
                 <p
@@ -141,7 +141,7 @@ function PurchaseOrderPreview({
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-medium text-muted-foreground">
+                <p className="text-xs font-medium text-muted-foreground">
                   Condiciones de pago
                 </p>
                 {template.paymentTerms.trim() ? (
@@ -165,11 +165,11 @@ function PurchaseOrderPreview({
                   <p className="break-words font-medium text-foreground">
                     {item.name}
                   </p>
-                  <p className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                  <p className="id-text text-xs text-muted-foreground tabular-nums">
                     {item.quantity} × {formatCurrency(item.cost)} · SKU {item.sku}
                   </p>
                 </div>
-                <span className="shrink-0 font-mono font-semibold tabular-nums text-foreground">
+                <span className="shrink-0 id-text font-semibold tabular-nums text-foreground">
                   {formatCurrency(item.quantity * item.cost)}
                 </span>
               </div>
@@ -182,15 +182,15 @@ function PurchaseOrderPreview({
           >
             <div className="flex justify-between gap-3 text-muted-foreground">
               <span>Subtotal</span>
-              <span className="font-mono tabular-nums">{formatCurrency(subtotal)}</span>
+              <span className="id-text tabular-nums">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between gap-3 text-muted-foreground">
               <span>IVA</span>
-              <span className="font-mono tabular-nums">{formatCurrency(tax)}</span>
+              <span className="id-text tabular-nums">{formatCurrency(tax)}</span>
             </div>
             <div className="flex justify-between gap-3 border-t border-border/70 pt-1.5 text-sm font-semibold text-foreground">
               <span>Total</span>
-              <span className="font-mono tabular-nums">
+              <span className="id-text tabular-nums">
                 {formatCurrency(subtotal + tax)}
               </span>
             </div>
@@ -198,7 +198,7 @@ function PurchaseOrderPreview({
 
           {template.terms.trim() ? (
             <section className="mt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Términos y condiciones
               </p>
               <p className="mt-1 whitespace-pre-line break-words leading-relaxed text-foreground">
@@ -209,11 +209,11 @@ function PurchaseOrderPreview({
 
           <footer className="mt-4 border-t border-border/70 pt-3 text-center">
             {template.footer.trim() ? (
-              <p className="whitespace-pre-line break-words text-[11px] text-muted-foreground">
+              <p className="whitespace-pre-line break-words text-xs text-muted-foreground">
                 {template.footer}
               </p>
             ) : (
-              <p className="text-[11px] text-muted-foreground/60">
+              <p className="text-xs text-muted-foreground/60">
                 Pie de página
               </p>
             )}
@@ -271,7 +271,7 @@ export default function PurchaseOrderSettingsPage() {
         <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
           Órdenes de compra
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Lo que aparece en cada orden que le envías a un proveedor
         </p>
       </div>

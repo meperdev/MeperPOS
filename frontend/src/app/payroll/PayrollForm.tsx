@@ -31,7 +31,7 @@ function FormError({ message }: { message: string | null }) {
   return message ? (
     <p
       role="alert"
-      className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-xs font-medium text-danger-text"
+      className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-[13px] font-medium text-danger-text"
     >
       {message}
     </p>
@@ -112,14 +112,14 @@ export function PayrollFacts({
   return (
     <dl
       className={cn(
-        "grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-3 text-xs",
+        "grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-3 text-[13px]",
         columns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
         className,
       )}
     >
       {items.map((item) => (
         <div key={item.label} className="min-w-0">
-          <dt className="text-[11px] font-medium text-muted-foreground">
+          <dt className="text-[13px] font-medium text-muted-foreground">
             {item.label}
           </dt>
           <dd
@@ -147,7 +147,7 @@ export function ExpenseChoiceFields({
 }) {
   return (
     <div className="space-y-3">
-      <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+      <label className="flex items-center gap-2 text-[13px] font-medium text-foreground">
         <input
           type="checkbox"
           className="h-4 w-4 rounded border-border/70 accent-primary"
@@ -223,7 +223,7 @@ export function CheckRow({
   children: ReactNode;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs transition-colors hover:bg-muted/30">
+    <label className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-sm transition-colors hover:bg-muted/30">
       <input
         type="checkbox"
         className="mt-0.5 h-4 w-4 shrink-0 rounded border-border/70 accent-primary"

@@ -37,7 +37,7 @@ import {
 } from "@/hooks/useWhatsApp";
 import { getApiErrorMessage } from "@/lib/api";
 import { hasAnyRole } from "@/lib/auth";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatDateShort, formatDateTime } from "@/lib/utils";
 import type {
   WhatsAppDeliveryFailure,
   WhatsAppDeliveryKind,
@@ -132,7 +132,7 @@ function ReportOutcome({
         {copy.badge && (
           <StatusBadge domain="whatsapp-report" status={copy.badge} />
         )}
-        <p className="min-w-0 text-xs text-foreground">{message}</p>
+        <p className="min-w-0 text-[13px] text-foreground">{message}</p>
       </div>
       {outcome.status === "no_identity" && (
         <Button
@@ -156,7 +156,7 @@ function PageIntro() {
       <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
         WhatsApp
       </h2>
-      <p className="mt-0.5 text-xs text-muted-foreground">
+      <p className="mt-0.5 text-[13px] text-muted-foreground">
         Canal comercial, números vinculados y reporte diario
       </p>
     </div>
@@ -173,10 +173,10 @@ function RestrictedNotice() {
         description="Esta sección la administra tu organización"
         icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />}
       >
-        <p className="text-xs font-medium text-foreground">
+        <p className="text-[13px] font-medium text-foreground">
           Solo la administración gestiona WhatsApp
         </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Pide a un administrador de tu organización que abra esta sección.
         </p>
       </SettingsCard>
@@ -375,11 +375,11 @@ function WhatsAppSettings() {
                     status={sessionStatus}
                   />
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[13px] text-muted-foreground">
                     El canal todavía no reporta un estado.
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[13px] text-muted-foreground">
                   {linkedAccount ? (
                     <>
                       Cuenta del proveedor{" "}
@@ -421,10 +421,10 @@ function WhatsAppSettings() {
           <div className="border-t border-border/60 pt-4">
             <div className="flex flex-col gap-2 @md:flex-row @md:items-start @md:justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-foreground">
+                <p className="text-[13px] font-medium text-foreground">
                   Vinculación por código QR
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 text-[13px] text-muted-foreground">
                   El QR es una credencial de acceso: se pide aquí y cambia cada
                   vez que lo actualizas.
                 </p>
@@ -490,7 +490,7 @@ function WhatsAppSettings() {
       >
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               El asistente administrativo reconoce a una persona por este vínculo,
               nunca por una lista de teléfonos: sin un número verificado, el
               reporte diario no se envía a nadie.
@@ -514,7 +514,7 @@ function WhatsAppSettings() {
                 </Button>
               )}
               {linkCode && (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-[13px] text-muted-foreground">
                   Vence el{" "}
                   <span className="text-foreground">
                     {formatDateTime(linkCode.expiresAt)}
@@ -527,13 +527,13 @@ function WhatsAppSettings() {
                 role="status"
                 className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5"
               >
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[13px] text-muted-foreground">
                   Escribe este código desde WhatsApp al número administrativo. Se
                   muestra una sola vez.
                 </p>
                 <p
                   data-testid="whatsapp-link-code"
-                  className="mt-1 font-mono text-lg font-bold tabular-nums tracking-[0.2em] text-foreground"
+                  className="mt-1 id-text text-lg font-bold tabular-nums tracking-[0.2em] text-foreground"
                 >
                   {linkCode.code}
                 </p>
@@ -585,10 +585,10 @@ function WhatsAppSettings() {
                   className="flex flex-wrap items-center justify-between gap-2 py-2.5"
                 >
                   <div className="min-w-0 space-y-0.5">
-                    <p className="text-xs tabular-nums text-foreground">
+                    <p className="text-[13px] tabular-nums text-foreground">
                       {identity.phone}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-[13px] text-muted-foreground">
                       {identity.verifiedAt
                         ? `Verificado el ${formatDateTime(identity.verifiedAt)}`
                         : "Sin verificar"}
@@ -639,7 +639,7 @@ function WhatsAppSettings() {
           />
 
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               El envío manual va al número verificado más antiguo de tu usuario.
             </p>
             <Button
@@ -662,22 +662,22 @@ function WhatsAppSettings() {
           {deliveries.length > 0 && (
             <dl className="grid grid-cols-1 overflow-hidden rounded-lg border border-border/70 bg-muted/20 sm:grid-cols-3">
               <div className="min-w-0 border-b border-border/60 px-3 py-2.5 sm:border-b-0 sm:border-r">
-                <dt className="text-[11px] text-muted-foreground">Enviados</dt>
+                <dt className="text-[13px] text-muted-foreground">Enviados</dt>
                 <dd className="mt-0.5 text-sm tabular-nums text-foreground">
                   {sentCount}
                 </dd>
               </div>
               <div className="min-w-0 border-b border-border/60 px-3 py-2.5 sm:border-b-0 sm:border-r">
-                <dt className="text-[11px] text-muted-foreground">
+                <dt className="text-[13px] text-muted-foreground">
                   Último envío
                 </dt>
-                <dd className="mt-0.5 text-xs text-foreground">
-                  {lastDelivery ? formatDate(lastDelivery.reportDate) : "—"}
+                <dd className="mt-0.5 text-[13px] text-foreground">
+                  {lastDelivery ? formatDateShort(lastDelivery.reportDate) : "—"}
                 </dd>
               </div>
               {/* Failures are the quiet figure: the history below already says why. */}
               <div className="min-w-0 px-3 py-2.5">
-                <dt className="text-[11px] text-muted-foreground">
+                <dt className="text-[13px] text-muted-foreground">
                   Fallos recientes
                 </dt>
                 <dd className="mt-0.5 text-sm tabular-nums text-muted-foreground">
@@ -743,7 +743,7 @@ function WhatsAppSettings() {
                               <TableCell className="text-foreground">
                                 {single ? (
                                   <span>
-                                    {formatDate(attempt.reportDate)}
+                                    {formatDateShort(attempt.reportDate)}
                                   </span>
                                 ) : (
                                   <button
@@ -768,7 +768,7 @@ function WhatsAppSettings() {
                                       <span className="block text-foreground">
                                         {groupHeadline(group)}
                                       </span>
-                                      <span className="block text-[11px] text-muted-foreground">
+                                      <span className="block text-[13px] text-muted-foreground">
                                         {groupRange(group)}
                                       </span>
                                     </span>
@@ -782,12 +782,12 @@ function WhatsAppSettings() {
                                 />
                                 {group.status === "FAILED" &&
                                   group.failureReason && (
-                                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                                    <span className="mt-0.5 block text-[13px] text-muted-foreground">
                                       {FAILURE_LABELS[group.failureReason]}
                                     </span>
                                   )}
                               </TableCell>
-                              <TableCell className="text-muted-foreground">
+                              <TableCell className="whitespace-nowrap text-muted-foreground">
                                 {single && attempt.sentAt
                                   ? formatDateTime(attempt.sentAt)
                                   : "—"}
@@ -798,11 +798,11 @@ function WhatsAppSettings() {
                               group.members.map((day) => (
                                 <TableRow key={`${group.key}:${day.id}`}>
                                   <TableCell>{null}</TableCell>
-                                  <TableCell className="pl-6 text-[11px] text-muted-foreground">
+                                  <TableCell className="pl-6 text-sm text-muted-foreground">
                                     {formatDeliveryDay(day.reportDate)}
                                   </TableCell>
                                   <TableCell>{null}</TableCell>
-                                  <TableCell className="text-muted-foreground">
+                                  <TableCell className="whitespace-nowrap text-muted-foreground">
                                     {day.sentAt
                                       ? formatDateTime(day.sentAt)
                                       : "—"}

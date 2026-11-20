@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
+import { InlineConfirmButton } from "@/components/ui/InlineConfirmButton";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import {
@@ -405,7 +406,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
           <div>
             <label
               htmlFor={`${uid}-date`}
-              className="mb-1.5 block text-xs font-medium text-muted-foreground"
+              className="mb-1.5 block text-[13px] font-medium text-muted-foreground"
             >
               Fecha
             </label>
@@ -432,7 +433,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
           <div>
             <label
               htmlFor={`${uid}-description`}
-              className="mb-1.5 block text-xs font-medium text-muted-foreground"
+              className="mb-1.5 block text-[13px] font-medium text-muted-foreground"
             >
               Descripción
             </label>
@@ -454,23 +455,23 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
           {expense && (
             <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
               <div className="px-3.5 py-2.5 border-b border-border/60 bg-muted/30 flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">
+                <span className="text-[13px] font-semibold text-foreground">
                   Pagos registrados ({expense.payments?.length ?? 0})
                 </span>
-                <span className="text-xs font-medium text-success-text tabular-nums">
+                <span className="text-[13px] font-medium text-success-text tabular-nums">
                   {formatCurrency(existingPaymentsSum)}
                 </span>
               </div>
               <div className="p-3 space-y-1.5 max-h-44 overflow-y-auto scrollbar-app pr-1">
                 {(expense.payments ?? []).length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-1">
+                  <p className="text-[13px] text-muted-foreground py-1">
                     No hay pagos registrados aún.
                   </p>
                 ) : (
                   (expense.payments ?? []).map((p) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/40 text-xs tabular-nums"
+                      className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/40 text-sm tabular-nums"
                     >
                       <span className="font-medium text-foreground">
                         {PAYMENT_METHOD_OPTIONS.find((m) => m.value === p.method)?.label || p.method}
@@ -490,10 +491,10 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
             <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
               <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/60 bg-muted/30">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-foreground">
+                  <span className="text-[13px] font-semibold text-foreground">
                     Pagos
                   </span>
-                  <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60 tabular-nums">
+                  <span className="text-xs font-medium px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60 tabular-nums">
                     {rows.length} {rows.length === 1 ? "abono" : "abonos"}
                   </span>
                 </div>
@@ -503,7 +504,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                   variant="secondary"
                   onClick={handleAddRow}
                   disabled={isBusy}
-                  className="text-xs px-2"
+                  className="text-[13px] px-2"
                 >
                   <Plus className="w-3.5 h-3.5" /> Agregar pago
                 </Button>
@@ -542,13 +543,13 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                               method: value as ExpensePayment["method"],
                             })
                           }
-                          className="flex-1"
+                          className="flex-1 min-w-0"
                           options={PAYMENT_METHOD_OPTIONS}
                         />
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <label
                             htmlFor={`${uid}-paydate-${row.tempId}`}
-                            className="mb-1 block text-xs font-medium text-muted-foreground"
+                            className="mb-1 block text-[13px] font-medium text-muted-foreground"
                           >
                             Fecha pago
                           </label>
@@ -564,26 +565,28 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
                             className="tabular-nums"
                           />
                         </div>
-                        <button
-                          type="button"
-                          aria-label="Eliminar pago"
-                          onClick={() =>
+                        <InlineConfirmButton
+                          ariaLabel="Eliminar pago"
+                          title="Eliminar pago"
+                          confirmLabel="¿Quitar?"
+                          announce="Confirma para quitar el pago"
+                          disabled={rows.length === 1 || isBusy}
+                          onConfirm={() =>
                             setRows((prev) =>
                               prev.filter((r) => r.tempId !== row.tempId),
                             )
                           }
-                          disabled={rows.length === 1 || isBusy}
-                          className="h-9 w-9 mb-0.5 rounded-lg flex items-center justify-center shrink-0 text-muted-foreground hover:text-danger-text hover:bg-danger/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                          className="mb-0.5 shrink-0"
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                        </InlineConfirmButton>
                       </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="pt-2 border-t border-border/50 flex items-center justify-between shrink-0">
-                  <span className="text-xs text-muted-foreground">Total de pagos:</span>
+                  <span className="text-[13px] text-muted-foreground">Total de pagos:</span>
                   <span className="font-semibold text-foreground tabular-nums text-sm">
                     {formatCurrency(paymentsSum)}
                   </span>
@@ -593,7 +596,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
           )}
 
           <div>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+            <p className="mb-1.5 text-[13px] font-medium text-muted-foreground">
               Comprobante
             </p>
             <div className="max-w-[220px]">
@@ -626,7 +629,7 @@ export function ExpenseFormModal({ isOpen, onClose, expense }: Props) {
       </div>
 
       {error && (
-        <p className="mt-4 text-xs font-medium text-danger-text">{error}</p>
+        <p className="mt-4 text-[13px] font-medium text-danger-text">{error}</p>
       )}
 
       {/* Sticky footer ensuring buttons never get buried */}

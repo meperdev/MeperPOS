@@ -4,7 +4,7 @@ import { SalesService } from './sales.service';
 /**
  * S3 / D1: a mixed payment must never let the POS sell above the final price.
  * A sale may only overpay when the overpayment can come back as change, so
- * `SalesService.create` requires a CASH tender and every tender to be needed:
+ * `SalesService.create` requires cash and, on a positive total, every tender to be needed:
  * one that could be removed while the rest still covers the total is an
  * overpayment the customer never made. The persisted `change` is the overpaid
  * amount itself, not `cashPaid - total` (a transfer on top of exact cash used to
@@ -156,6 +156,20 @@ describe('SalesService payment rule (S3)', () => {
       expect(tx.payment.create).toHaveBeenCalledTimes(2);
     });
 
+    it('hands a cash tender back as change on a sale with nothing to collect', async () => {
+      // A fully discounted sale (SEC-015) has total 0: no tender can be
+      // "needed", so the needed-tender rule cannot apply. Cash still goes back.
+      const { create } = prime(0, [{ method: 'CASH', amount: 1000 }]);
+
+      await create();
+
+      expect(tx.sale.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ amountPaid: 1000, change: 1000 }),
+        }),
+      );
+    });
+
     it('stores no change when an exact split covers the total', async () => {
       const { create } = prime(112931, [
         { method: 'TRANSFER', amount: 100000 },
@@ -200,6 +214,18 @@ describe('SalesService payment rule (S3)', () => {
   });
 
   describe('rejected overpayments', () => {
+    it('rejects a non-cash tender on an overpaid zero-total sale', async () => {
+      const { create } = prime(0, [
+        { method: 'CASH', amount: 1000 },
+        { method: 'CARD', amount: 1000 },
+      ]);
+
+      await expect(create()).rejects.toThrow(
+        'Payment CARD (1000) is not needed: the other payments already cover the total (0)',
+      );
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
     it('rejects a surplus tender that the rest of the payment already covers', async () => {
       const { create } = prime(112931, [
         { method: 'CASH', amount: 112931 },

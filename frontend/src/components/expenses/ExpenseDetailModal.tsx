@@ -33,10 +33,10 @@ function InfoItem({
 }) {
   return (
     <div className={cn("rounded-lg bg-muted/40 px-3 py-2.5", className)}>
-      <p className="text-xs font-medium text-muted-foreground">
+      <p className="text-[13px] font-medium text-muted-foreground">
         {label}
       </p>
-      <p className="mt-0.5 text-xs font-semibold text-foreground break-words leading-snug">
+      <p className="mt-0.5 text-sm font-semibold text-foreground break-words leading-snug">
         {value}
       </p>
     </div>
@@ -63,13 +63,13 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
             {/* Header / Summary Card */}
             <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-muted-foreground">
+                <p className="text-[13px] font-medium text-muted-foreground">
                   Total registrado
                 </p>
                 <p className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight tabular-nums mt-0.5">
                   {formatCurrency(Number(expense.total))}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-[13px] text-muted-foreground">
                   Fecha: {formatDate(expense.date)}
                 </p>
               </div>
@@ -123,16 +123,16 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
             {/* Payments List */}
             <div className="rounded-xl border border-border/70 bg-card p-4 space-y-2 shadow-2xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">
+                <span className="text-[13px] font-semibold text-foreground">
                   Abonos y pagos ({payments.length})
                 </span>
-                <span className="text-xs font-medium text-success-text tabular-nums">
+                <span className="text-[13px] font-medium text-success-text tabular-nums">
                   Pagado: {formatCurrency(paidSum)}
                 </span>
               </div>
 
               {payments.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-1">
+                <p className="text-[13px] text-muted-foreground py-1">
                   No hay pagos registrados.
                 </p>
               ) : (
@@ -140,7 +140,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
                   {payments.map((p) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 text-xs tabular-nums"
+                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 text-sm tabular-nums"
                     >
                       <span className="font-medium text-foreground">
                         {PAYMENT_METHOD_LABELS[p.method] || p.method}
@@ -154,7 +154,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
               )}
 
               {remaining > 0 && (
-                <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs tabular-nums">
+                <div className="pt-2 border-t border-border/60 flex items-center justify-between text-sm tabular-nums">
                   <span className="text-muted-foreground font-medium">Pendiente:</span>
                   <span className="font-semibold text-warning-text">
                     {formatCurrency(remaining)}
@@ -169,7 +169,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
         <div className="rounded-xl border border-border/70 bg-card p-4 flex flex-col shadow-2xs">
           <div className="flex items-center gap-2 pb-2.5 border-b border-border/60 mb-3">
             <FileText className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs font-semibold text-foreground">
+            <span className="text-[13px] font-semibold text-foreground">
               Comprobante o factura adjunta
             </span>
           </div>
@@ -187,7 +187,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
             ) : (
               <div className="text-center p-4">
                 <ImageIcon className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[13px] text-muted-foreground">
                   Sin factura o comprobante adjunto
                 </p>
               </div>

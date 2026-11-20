@@ -77,37 +77,59 @@ describe("slice 1: green accent kept as documented commented secondary (ADR-3/D1
   });
 });
 
-describe("font swap: Inter replaces Geist as the sans family (D8)", () => {
-  it("loads the self-hosted Inter variable from the local WOFF2", () => {
+describe("slice 1: layout font swap -> self-hosted Inter (ADR-1)", () => {
+  it("applies the self-hosted Inter variable and leaves the previous sans face behind", () => {
     expect(layoutTsx).toContain("inter-latin.woff2");
-    expect(layoutTsx).toContain('"--font-inter"');
+    expect(layoutTsx).toContain("--font-sans-face");
     expect(layoutTsx).toContain("inter.variable");
-    expect(layoutTsx).toContain('display: "swap"');
-    expect(layoutTsx).toContain('weight: "100 900"');
-  });
-
-  it("leaves no Geist loader or Geist variable behind", () => {
     expect(layoutTsx).not.toContain("geist-latin.woff2");
-    expect(layoutTsx).not.toContain("--font-geist");
     expect(layoutTsx).not.toContain("Manrope");
   });
 
-  it("maps --font-sans to Inter and never references the Geist variable", () => {
-    expect(globalsCss).toContain("--font-sans: var(--font-inter);");
+  it("wires the sans face into the Tailwind font stack", () => {
+    expect(globalsCss).toContain("--font-sans: var(--font-sans-face);");
     expect(globalsCss).not.toContain("--font-geist");
-    // The family is declared by name wherever it is used, not only through the
-    // Tailwind token: body and the sidebar item carry it explicitly.
-    expect(globalsCss).toContain("font-family: var(--font-inter), system-ui, sans-serif;");
+  });
+});
+
+describe("typography roles: one sans family, identifiers in tabular figures", () => {
+  const cssNoComments = globalsCss.replace(/\/\*[\s\S]*?\*\//g, "");
+
+  function ruleBody(selector: string): string {
+    const start = cssNoComments.indexOf(`${selector} {`);
+    expect(start).toBeGreaterThan(-1);
+    const open = cssNoComments.indexOf("{", start);
+    const close = cssNoComments.indexOf("}", open);
+    return cssNoComments.slice(open + 1, close);
+  }
+
+  it("renders .stat-number in the sans face with tabular figures and no mono fallback", () => {
+    const rule = ruleBody(".stat-number");
+
+    expect(rule).toContain("var(--font-sans-face)");
+    expect(rule).toContain("font-variant-numeric: tabular-nums;");
+    expect(rule).not.toContain("monospace");
+    expect(rule).not.toContain("--font-jetbrains-mono");
   });
 
-  it("keeps JetBrains Mono as the code/mono family", () => {
-    expect(globalsCss).toContain("--font-mono: var(--font-jetbrains-mono);");
-    expect(layoutTsx).toContain("--font-jetbrains-mono");
+  it("loads one family only: no mono face in the layout, none in the theme", () => {
+    expect(layoutTsx.toLowerCase()).not.toContain("jetbrains");
+    expect(globalsCss.toLowerCase()).not.toContain("jetbrains");
+    expect(globalsCss).not.toMatch(/--font-mono\s*:/);
   });
 
-  it("renders Inter with grayscale smoothing and legibility tuning", () => {
-    expect(globalsCss).toContain("-webkit-font-smoothing: antialiased;");
-    expect(globalsCss).toContain("text-rendering: optimizeLegibility;");
+  it("sets identifiers in the sans face with tabular figures through .id-text", () => {
+    const rule = ruleBody(".id-text");
+
+    expect(rule).toContain("var(--font-sans-face)");
+    expect(rule).toContain("font-variant-numeric: tabular-nums;");
+    expect(rule).not.toContain("monospace");
+    expect(rule).not.toContain("slashed-zero");
+  });
+
+  it("sets headings at -0.015em tracking", () => {
+    const rule = ruleBody("h1,\nh2,\nh3,\nh4");
+    expect(rule).toContain("letter-spacing: -0.015em;");
   });
 });
 

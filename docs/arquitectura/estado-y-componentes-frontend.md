@@ -60,7 +60,9 @@ La inyección de estado de aplicación transversal se da vía React Contexts:
 3. **ToastContext**: Sistema de notificaciones *snackbars* usado globalmente para éxitos y errores.
 
 ### Tipografías
-Están inyectadas con `next/font/google`:
-- Fuente Sans: **Manrope** (`--font-manrope`).
-- Fuente Monoespaciada: **JetBrains Mono** (`--font-jetbrains-mono`).
+Están inyectadas con `next/font/local` desde `frontend/src/app/fonts/inter-latin.woff2`:
+- Fuente única: **Inter** (subset latin con los ejes `opsz` 14-32 y `wght` 100-900), expuesta como `--font-sans-face`.
+- Identificadores (SKU, códigos de venta y OC, NIT, teléfonos, cuentas, documentos) usan la misma familia con cifras tabulares mediante `.id-text`; montos, conteos, porcentajes y fechas, con `.stat-number` / `tabular-nums`.
+- No se carga ninguna familia monoespaciada: `globals.css` no declara `--font-mono`. El único texto en ancho fijo es un comando literal que el lector podría volver a escribir, y toma la pila del sistema con `.code-text`.
+- Escala: cuerpo y celdas de tabla `text-sm` (14px); etiquetas, metadatos y ayudas `text-[13px]`; micro-etiquetas (chips, badges, atajos de teclado, encabezados de tabla) `text-xs` (12px, piso); los valores de resumen van un paso por encima de su etiqueta (`text-xl` en móvil, `sm:text-[28px]` en escritorio).
 Evita hardcodear familias de fuentes y respeta las variables CSS de tipografía impuestas en la capa root.

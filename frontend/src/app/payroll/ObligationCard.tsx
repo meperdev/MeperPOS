@@ -48,11 +48,11 @@ function MoneyFact({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
+      <dt className="text-[13px] font-medium text-muted-foreground">{label}</dt>
       <dd
         data-testid={testId}
         className={cn(
-          "whitespace-nowrap text-xs font-semibold tabular-nums",
+          "whitespace-nowrap text-[13px] font-semibold tabular-nums",
           hasValue ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -185,7 +185,7 @@ export function ObligationCard({
             <h2 className="truncate text-sm font-semibold leading-tight text-foreground">
               {employeeName}
             </h2>
-            <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">
+            <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
               {KIND_LABELS[obligation.kind]}
             </p>
           </div>
@@ -206,7 +206,7 @@ export function ObligationCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground">
           <span className="inline-flex min-w-0 items-center gap-1">
             <CalendarDays className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="truncate">{period}</span>
@@ -231,7 +231,7 @@ export function ObligationCard({
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className="text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-[13px] text-muted-foreground tabular-nums">
             {progress}%
           </span>
         </div>
@@ -256,7 +256,7 @@ export function ObligationCard({
         </dl>
 
         <div className="space-y-1.5">
-          <h3 className="text-[11px] font-medium text-muted-foreground">
+          <h3 className="text-[13px] font-medium text-muted-foreground">
             Abonos
           </h3>
           {obligation.installments.length ? (
@@ -266,7 +266,7 @@ export function ObligationCard({
                   key={installment.id}
                   className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2.5 py-1.5"
                 >
-                  <span className="text-[11px] text-foreground tabular-nums">
+                  <span className="text-[13px] text-foreground tabular-nums">
                     {payrollDate(installment.outflow.date)} ·{" "}
                     {PAYMENT_METHODS[installment.outflow.method]} ·{" "}
                     {payrollMoney(installment.outflow.amount)}
@@ -275,7 +275,7 @@ export function ObligationCard({
                       day and method the money came back by; it never offers a
                       second return. */}
                   {installment.cashReturn && (
-                    <span className="text-[11px] font-medium text-muted-foreground">
+                    <span className="text-[13px] font-medium text-muted-foreground">
                       Devuelto el {payrollDate(installment.cashReturn.returnDate)}{" "}
                       · {PAYMENT_METHODS[installment.cashReturn.returnMethod]}
                     </span>
@@ -284,7 +284,7 @@ export function ObligationCard({
               ))}
             </ul>
           ) : (
-            <p className="text-[11px] text-muted-foreground">Sin abonos</p>
+            <p className="text-[13px] text-muted-foreground">Sin abonos</p>
           )}
         </div>
       </div>

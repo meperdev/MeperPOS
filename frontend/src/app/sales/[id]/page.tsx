@@ -122,7 +122,7 @@ export default function SaleDetailPage() {
               <CardContent className="space-y-5 pt-5">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
+                    <p className="text-[13px] font-medium text-muted-foreground">
                       Venta
                     </p>
                     <p className="mt-0.5 text-xl font-semibold text-foreground tabular-nums tracking-tight">
@@ -136,7 +136,7 @@ export default function SaleDetailPage() {
                         Financiado
                       </Badge>
                     )}
-                    <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
                       {formatDateTime(sale.createdAt)}
                     </span>
                   </div>
@@ -144,7 +144,7 @@ export default function SaleDetailPage() {
 
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                   <div className="p-3 rounded-lg bg-muted/30 border border-border/60">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                    <p className="text-[13px] font-medium text-muted-foreground mb-1">
                       Cliente
                     </p>
                     <p className="text-sm font-semibold text-foreground">
@@ -152,7 +152,7 @@ export default function SaleDetailPage() {
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/30 border border-border/60">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                    <p className="text-[13px] font-medium text-muted-foreground mb-1">
                       Vendedor
                     </p>
                     <p className="text-sm font-semibold text-foreground">
@@ -160,7 +160,7 @@ export default function SaleDetailPage() {
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/30 border border-border/60 md:col-span-2">
-                    <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                    <p className="text-[13px] font-medium text-muted-foreground mb-1.5">
                       Métodos de pago
                     </p>
                     <div className="flex flex-wrap gap-1.5">
@@ -177,12 +177,12 @@ export default function SaleDetailPage() {
                       ) : sale.financed ? (
                         <span className="inline-flex flex-col gap-0.5">
                           <Badge variant="primary">Financiado</Badge>
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-[13px] text-muted-foreground">
                             El cobro se registra en el préstamo asociado.
                           </span>
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Sin pago</span>
+                        <span className="text-[13px] text-muted-foreground">Sin pago</span>
                       )}
                     </div>
                   </div>
@@ -190,10 +190,10 @@ export default function SaleDetailPage() {
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-foreground">
+                    <p className="text-sm font-semibold text-foreground">
                       Productos de la venta
                     </p>
-                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                    <span className="text-[13px] text-muted-foreground tabular-nums">
                       {sale.items.length}{" "}
                       {sale.items.length === 1 ? "producto" : "productos"}
                     </span>
@@ -208,7 +208,7 @@ export default function SaleDetailPage() {
                           <p className="text-sm font-medium text-foreground truncate">
                             {item.product?.name || "Producto eliminado"}
                           </p>
-                          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+                          <p className="text-[13px] text-muted-foreground tabular-nums mt-0.5">
                             {formatCurrency(item.unitPrice)} × {item.quantity}
                           </p>
                         </div>
@@ -221,20 +221,20 @@ export default function SaleDetailPage() {
                 </div>
 
                 <div className="pt-4 border-t border-border/60 space-y-1.5">
-                  <div className="flex justify-between text-xs">
+                  <div className="flex justify-between text-[13px]">
                     <span className="text-muted-foreground">Subtotal</span>
                     <span className="font-medium text-foreground tabular-nums">
                       {formatCurrency(sale.subtotal)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-xs">
+                  <div className="flex justify-between text-[13px]">
                     <span className="text-muted-foreground">Impuestos</span>
                     <span className="font-medium text-foreground tabular-nums">
                       {formatCurrency(sale.taxAmount)}
                     </span>
                   </div>
                   {sale.discountAmount > 0 && (
-                    <div className="flex justify-between text-xs">
+                    <div className="flex justify-between text-[13px]">
                       <span className="text-muted-foreground">Descuento</span>
                       <span className="font-medium text-success-text tabular-nums">
                         -{formatCurrency(sale.discountAmount)}
@@ -242,8 +242,8 @@ export default function SaleDetailPage() {
                     </div>
                   )}
                   <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
-                    <span className="text-sm font-semibold text-foreground">Total</span>
-                    <span className="text-lg font-semibold text-foreground tabular-nums">
+                    <span className="text-[13px] font-semibold text-foreground">Total</span>
+                    <span className="text-xl font-semibold text-foreground tabular-nums">
                       {formatCurrency(sale.total)}
                     </span>
                   </div>

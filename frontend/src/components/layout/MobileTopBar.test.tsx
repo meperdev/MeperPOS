@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {
+  closeCommandPalette,
+  isCommandPaletteOpen,
+} from "@/lib/command-palette";
 import { MobileTopBar } from "./MobileTopBar";
 
 const pushMock = vi.fn();
@@ -29,11 +33,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   currentPathname = "/dashboard";
   setHistoryLength(1);
+  closeCommandPalette();
 });
 
 afterEach(() => {
   cleanup();
   setHistoryLength(1);
+  closeCommandPalette();
 });
 
 describe("MobileTopBar section title", () => {
@@ -125,6 +131,17 @@ describe("MobileTopBar chrome", () => {
     expect(
       screen.queryByRole("button", { name: /menú/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens the same search palette the desktop header opens", () => {
+    currentPathname = "/dashboard";
+    render(<MobileTopBar />);
+
+    expect(isCommandPaletteOpen()).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Buscar en MeperPOS" }));
+
+    expect(isCommandPaletteOpen()).toBe(true);
   });
 
   it("pays the notch on its own height and hides from lg up", () => {

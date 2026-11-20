@@ -111,9 +111,8 @@ export function PaymentConfirmationModal({
   const remaining = Math.max(0, total - totalPaid);
   // Mirrors `SalesService.create` (S3 / D1): a sale may only overpay when the
   // surplus can come back as change, and change only leaves the drawer as cash.
-  // Every tender must also be needed — one that could be dropped while the rest
-  // still covers the total is an overpayment the customer never made. The preview
-  // never sends a change: the server derives and persists it. The surplus is
+  // On a positive total every tender must also be needed; on a zero total,
+  // only cash may be handed back. The server derives and persists change. The surplus is
   // measured in cents, like the server does, so the tax rounding that leaves this
   // total a fraction of a cent away from the persisted one is not read as change.
   const overpay = Math.round((totalPaid - total) * 100) / 100;
@@ -122,7 +121,9 @@ export function PaymentConfirmationModal({
       ? null
       : !methods.some((method) => method.type === "CASH")
         ? "Las tarjetas y transferencias no dan cambio"
-        : methods.some((method) => method.amount <= overpay)
+        : methods.some((method) =>
+              total > 0 ? method.amount <= overpay : method.type !== "CASH",
+            )
           ? "Sobra un pago: con los demás métodos ya se cubre el total"
           : null;
   const change = overpay > 0 && !paymentProblem ? overpay : 0;
@@ -194,11 +195,11 @@ export function PaymentConfirmationModal({
                       {item.product.name}
                     </h4>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-muted-foreground tabular-nums">
+                      <span className="text-[13px] text-muted-foreground tabular-nums">
                         {formatCurrency(item.unitPrice)} x {item.quantity}
                       </span>
                       {item.discountAmount > 0 && (
-                        <Badge variant="success" className="text-xs">
+                        <Badge variant="success" className="text-[13px]">
                           -{formatCurrency(item.discountAmount)}
                           {item.discountPercent ? ` (${item.discountPercent}%)` : ""}
                         </Badge>
@@ -335,7 +336,7 @@ export function PaymentConfirmationModal({
                       if (cashIndex === -1) return;
                       updateMethodAmount(cashIndex, amount);
                     }}
-                    className="text-xs"
+                    className="text-[13px]"
                   >
                     {formatCurrency(amount)}
                   </Button>

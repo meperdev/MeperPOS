@@ -1,7 +1,7 @@
 # ODD: UI polish batch (November)
 
 Objective: eleven targeted UI adjustments across POS, dashboard, sales, inventory, suppliers, purchase orders and expenses.
-Branch: `ui/polish-batch-nov`. Delivery: ask-on-risk. Runner: Vitest (`cd frontend && npx vitest run <file>`).
+Branch: `ui/polish-batch-nov` (main tree), continued in worktree `../MeperPOS-worktrees/ui-polish-batch-nov` on `ui/polish-batch-nov-2`. Delivery: ask-on-risk. Runner: Vitest (`cd frontend && npx vitest run <file>`).
 
 ## Specs
 
@@ -21,15 +21,20 @@ Branch: `ui/polish-batch-nov`. Delivery: ask-on-risk. Runner: Vitest (`cd fronte
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S1, S2 | inline | pending | |
-| T2 | S3, S4 | inline | pending | |
-| T3 | S5, S6, S7 | inline | pending | |
-| T4 | S8 | inline | pending | |
-| T5 | S9 | inline | pending | |
-| T6 | S11 | inline | pending | |
-| T7 | S10 | inline | pending | |
+| T1 | S1, S2 | inline | done | 8e53f53 |
+| T2 | S3, S4 | inline | done | 0966c9b |
+| T3 | S5, S6, S7 | inline | done | a9451b9 |
+| T4 | S8 | delegated (parallel) | done | a94d8e4 |
+| T5 | S9 | delegated (parallel) | done | b9b869a |
+| T6 | S11 | delegated (parallel) | done | 2a3a5a2 |
+| T7 | S10 | delegated (parallel) | done | c4508c2 |
+| T8 | S6 regression | delegated (parallel) | done | 5c0c7ce |
 
 ## Log
 
 - L1 (2026-11-18) User request verbatim: "TEngo cambios puntuales de UI: 1. El POS regreso a cuando era mas grande la parte de Porductos que el Carrito? ... 11. saca el boton del ojo para ver el detalle y solo hazla clickeable como las demas. Una cosa esa pagina hace un refresh raro debajo de la barra de paginador cuando entro a ver el detalle de una Salida por primera vez, mas o menos asi lo he replicado." (full text quoted in S1-S11; screenshots supplied in chat).
 - L2 Route: all inline; no Writer trigger reason (units are small and share layout code). Skills: impeccable (refinement on incumbent design), project unslop-ui.
+- L3 T1-T3 done inline. Visual check: POS 60/40 and 4 columns render; sale detail tiles OK. Regression found: /customers in table view throws "Maximum update depth exceeded" (absent on base) -> T8.
+- L4 (2026-11-18) User: "tu debes orquestar ... decides el maldito mejor cambio del mundo y se lo pasas al worker". Remaining tasks delegated as parallel units with disjoint surfaces. Main tree was left with stash@{0} accidentally applied (agent error); `git reset --hard` is blocked by runtime permission, so work continues in a clean worktree from a9451b9.
+- L5 Workers returned; parent reviewed screenshots (inventory 9x3 at 1890x1037, PO editor, popover). Seam check: vitest 179 files / 1688 tests passed, tsc clean. T8 root cause: table answer fell back to `min` while the table unmounted for its skeleton, re-keying the query in a loop.
+- L6 Test data left in dev DB `inventario_po_docs`: expense "Prueba visual S11"; supplier "Proveedor Prueba UI" (NIT 900999888); draft OC-1 (b04d80aa-...). Open decision: zero-cost line blocks saving in create and edit-draft flows.

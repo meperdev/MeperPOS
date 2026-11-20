@@ -110,8 +110,8 @@ function ExportTile({ type, title, description, hasDates }: ExportTileDefinition
       className="flex flex-col justify-between gap-3 rounded-lg bg-muted/40 p-3.5"
     >
       <div>
-        <h3 className="text-xs sm:text-sm font-semibold text-foreground">{title}</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        <h3 className="text-sm sm:text-sm font-semibold text-foreground">{title}</h3>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>
       </div>
 
       <Select
@@ -230,7 +230,7 @@ export default function ImportDataSettingsPage() {
         <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
           Importar y exportar datos
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Carga masiva en Excel y descarga de respaldos operativos
         </p>
       </div>
@@ -270,10 +270,10 @@ export default function ImportDataSettingsPage() {
               <div className="rounded-lg bg-muted/40 p-3.5 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground">
+                    <p className="text-[13px] font-medium text-muted-foreground">
                       Archivo
                     </p>
-                    <p className="text-xs sm:text-sm font-semibold text-foreground truncate mt-0.5">
+                    <p className="text-sm sm:text-sm font-semibold text-foreground truncate mt-0.5">
                       {selectedFile?.name ?? "Importación en curso"}
                     </p>
                   </div>
@@ -319,7 +319,7 @@ export default function ImportDataSettingsPage() {
                 <div className="flex items-center justify-end gap-2">
                   <div className="flex-1" />
                   {status?.status === "COMPLETED" && (
-                    <div className="flex items-center gap-1.5 text-xs text-success-text">
+                    <div className="flex items-center gap-1.5 text-[13px] text-success-text">
                       <CheckCircle2 className="w-4 h-4" />
                       Importación finalizada
                     </div>
@@ -336,7 +336,7 @@ export default function ImportDataSettingsPage() {
             </>
           )}
 
-          <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+          <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-[13px] text-muted-foreground">
             <FileSpreadsheet className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
             <span>
               El archivo debe contener las hojas Productos, Clientes, Proveedores y
@@ -353,7 +353,7 @@ export default function ImportDataSettingsPage() {
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="max-w-xl text-xs sm:text-sm text-muted-foreground">
+            <p className="max-w-xl text-sm sm:text-sm text-muted-foreground">
               Exporta productos, ventas, clientes, movimientos, gastos y el reporte
               económico consolidado.
             </p>

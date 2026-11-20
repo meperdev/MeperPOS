@@ -49,7 +49,7 @@ export function CancelPurchaseOrderModal({
       size="sm"
     >
       <div className="space-y-4">
-        <p className="text-xs text-muted-foreground leading-relaxed">
+        <p className="text-sm text-muted-foreground leading-relaxed">
           Esta acción no se puede deshacer. Indica el motivo de la cancelación
           (mínimo 5 caracteres).
         </p>

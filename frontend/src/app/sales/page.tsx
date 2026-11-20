@@ -242,7 +242,6 @@ function SalesPageContent() {
                 options={[
                   { value: "", label: "Todos los estados" },
                   { value: "COMPLETED", label: "Completada" },
-                  { value: "RETURNED_PARTIAL", label: "Parcial" },
                   { value: "CANCELLED", label: "Cancelada" },
                 ]}
               />
@@ -314,16 +313,16 @@ function SalesPageContent() {
                     className="cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-3 transition-colors hover:border-border active:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-foreground tabular-nums">
+                      <span className="text-[13px] font-semibold text-foreground tabular-nums">
                         #{sale.saleNumber}
                       </span>
                       <StatusBadge domain="sale" status={sale.status} dot={false} />
                     </div>
 
-                    <div className="space-y-1.5 text-xs">
+                    <div className="space-y-1.5 text-[13px]">
                       <SaleCardRow label="Cliente" truncate>{sale.customer?.name || "Sin cliente"}</SaleCardRow>
                       <SaleCardRow label="Fecha">
-                        <span className="leading-tight text-[11px]">{formatDateTime(sale.createdAt)}</span>
+                        <span className="leading-tight text-[13px]">{formatDateTime(sale.createdAt)}</span>
                       </SaleCardRow>
                       {isAdmin && sale.user?.name && (
                         <SaleCardRow label="Vendedor">{sale.user.name}</SaleCardRow>
@@ -337,7 +336,7 @@ function SalesPageContent() {
 
                     <div className="flex items-center justify-between pt-2.5 border-t border-border/60">
                       <div>
-                        <p className="text-[11px] font-medium text-muted-foreground">Total</p>
+                        <p className="text-[13px] font-medium text-muted-foreground">Total</p>
                         <p className="text-sm font-semibold text-foreground tabular-nums">
                           {formatCurrency(sale.total)}
                         </p>
@@ -429,32 +428,32 @@ function SalesPageContent() {
                           className="cursor-pointer active:bg-muted/40 focus-visible:outline-none focus-visible:bg-muted/40"
                         >
                           <TableCell>
-                            <span className="text-xs font-semibold text-foreground tabular-nums">
+                            <span className="text-sm font-semibold text-foreground tabular-nums">
                               #{sale.saleNumber}
                             </span>
                           </TableCell>
                           <TableCell className="text-muted-foreground whitespace-nowrap">
                             {formatDateTime(sale.createdAt)}
                           </TableCell>
-                          <TableCell className="max-w-[140px] truncate">
+                          <TableCell className="max-w-[180px] truncate">
                             {sale.customer?.name ? (
-                              <span className="text-xs font-medium text-foreground">
+                              <span className="text-sm font-medium text-foreground">
                                 {sale.customer.name}
                               </span>
                             ) : (
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-[13px] text-muted-foreground">
                                 Sin cliente
                               </span>
                             )}
                           </TableCell>
                           {isAdmin && (
-                            <TableCell className="max-w-[130px] truncate">
+                            <TableCell className="max-w-[150px] truncate">
                               {sale.user?.name ? (
-                                <span className="text-xs text-muted-foreground">
+                                <span className="text-[13px] text-muted-foreground">
                                   {sale.user.name}
                                 </span>
                               ) : (
-                                <span className="text-xs text-muted-foreground/60">
+                                <span className="text-[13px] text-muted-foreground/60">
                                   Sin asignar
                                 </span>
                               )}
@@ -467,7 +466,7 @@ function SalesPageContent() {
                             <StatusBadge domain="sale" status={sale.status} dot={false} />
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className="text-xs font-semibold text-foreground tabular-nums">
+                            <span className="text-sm font-semibold text-foreground tabular-nums">
                               {formatCurrency(sale.total)}
                             </span>
                           </TableCell>
@@ -556,20 +555,22 @@ function SalesPageContent() {
                   key={label}
                   className="p-3 rounded-lg bg-muted/30 border border-border/60 min-w-0"
                 >
-                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                  <p className="text-[13px] font-medium text-muted-foreground mb-1">
                     {label}
                   </p>
                   {isNode ? (
                     value
                   ) : (
-                    <p className="text-xs font-semibold text-foreground truncate">
+                    /* D7: the only numeric value here is the date, which reads
+                       in proportional figures — no tabular-nums. */
+                    <p className="text-sm font-semibold text-foreground truncate">
                       {value as string}
                     </p>
                   )}
                 </div>
               ))}
               <div className="col-span-2 min-w-0 p-3 rounded-lg bg-muted/30 border border-border/60">
-                <p className="text-xs font-medium text-muted-foreground mb-1">
+                <p className="text-[13px] font-medium text-muted-foreground mb-1">
                   Método de pago
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -597,7 +598,7 @@ function SalesPageContent() {
                       Financiado · el cobro va al préstamo asociado
                     </span>
                   ) : (
-                    <span className="text-xs text-muted-foreground">Sin pago</span>
+                    <span className="text-[13px] text-muted-foreground">Sin pago</span>
                   )}
                 </div>
               </div>
@@ -605,10 +606,10 @@ function SalesPageContent() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-foreground">
+                <p className="text-sm font-semibold text-foreground">
                   Productos de la venta
                 </p>
-                <span className="text-[11px] text-muted-foreground tabular-nums">
+                <span className="text-[13px] text-muted-foreground tabular-nums">
                   {selectedSale.items.length}{" "}
                   {selectedSale.items.length === 1 ? "producto" : "productos"}
                 </span>
@@ -620,14 +621,14 @@ function SalesPageContent() {
                     className="flex items-center justify-between px-3.5 py-2.5"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
+                      <p className="text-sm font-medium text-foreground truncate">
                         {item.product?.name || "Producto eliminado"}
                       </p>
-                      <p className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
+                      <p className="text-[13px] text-muted-foreground tabular-nums mt-0.5">
                         {formatCurrency(item.unitPrice)} × {item.quantity}
                       </p>
                     </div>
-                    <span className="text-xs sm:text-sm font-semibold text-foreground tabular-nums ml-4">
+                    <span className="text-sm font-semibold text-foreground tabular-nums ml-4">
                       {formatCurrency(item.total)}
                     </span>
                   </div>
@@ -655,7 +656,7 @@ function SalesPageContent() {
                     ]
                   : []),
               ].map(({ label, value, accent }) => (
-                <div key={label} className="flex justify-between text-xs">
+                <div key={label} className="flex justify-between text-[13px]">
                   <span className="text-muted-foreground">{label}</span>
                   <span
                     className={cn(
@@ -670,13 +671,13 @@ function SalesPageContent() {
                 </div>
               ))}
               <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
-                <span className="text-sm font-semibold text-foreground">Total</span>
-                <span className="text-lg font-semibold text-foreground tabular-nums">
+                <span className="text-[13px] font-semibold text-foreground">Total</span>
+                <span className="text-xl font-semibold text-foreground tabular-nums">
                   {formatCurrency(selectedSale.total)}
                 </span>
               </div>
               {selectedSale.amountPaid != null && selectedSale.amountPaid > 0 && (
-                <div className="flex justify-between text-xs pt-1">
+                <div className="flex justify-between text-[13px] pt-1">
                   <span className="text-muted-foreground">Recibido</span>
                   <span className="font-medium text-foreground tabular-nums">
                     {formatCurrency(selectedSale.amountPaid)}
@@ -684,7 +685,7 @@ function SalesPageContent() {
                 </div>
               )}
               {selectedSale.change != null && selectedSale.change > 0 && (
-                <div className="flex justify-between text-xs">
+                <div className="flex justify-between text-[13px]">
                   <span className="text-muted-foreground">Cambio</span>
                   <span className="font-semibold text-success-text tabular-nums">
                     {formatCurrency(selectedSale.change)}

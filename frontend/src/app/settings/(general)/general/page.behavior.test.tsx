@@ -46,6 +46,10 @@ vi.mock("@/contexts/ToastContext", () => ({
   }),
 }));
 
+vi.mock("@/contexts/ThemeContext", () => ({
+  useTheme: () => ({ theme: "light", toggleTheme: vi.fn() }),
+}));
+
 import GeneralSettingsPage from "./page";
 
 describe("General settings page", () => {
@@ -172,5 +176,17 @@ describe("General settings page", () => {
     expect(screen.queryByLabelText(/moneda/i)).toBeNull();
     expect(screen.queryByLabelText(/impuesto/i)).toBeNull();
     expect(screen.queryByLabelText(/prefijo/i)).toBeNull();
+  });
+
+  it("offers the appearance card with the theme radiogroup", () => {
+    render(<GeneralSettingsPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "Apariencia" })
+    ).toBeInTheDocument();
+
+    const group = screen.getByRole("radiogroup", { name: "Tema de la interfaz" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((item) => item.textContent)).toEqual(["Claro", "Oscuro"]);
   });
 });

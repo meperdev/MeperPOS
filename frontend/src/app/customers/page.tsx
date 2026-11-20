@@ -340,7 +340,7 @@ export default function CustomersPage() {
                               <h3 className="text-sm font-semibold text-foreground truncate leading-tight">
                                 {customer.name}
                               </h3>
-                              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground tabular-nums">
                                 <span>{customer.documentType}</span>
                                 <span>·</span>
                                 <span className="text-foreground/90 font-medium truncate">
@@ -357,13 +357,13 @@ export default function CustomersPage() {
                         {/* Details */}
                         <div className="mt-3 border-t border-border/50 pt-2.5">
                           {!hasOptionalContact ? (
-                            <p className="text-xs text-muted-foreground/70">
+                            <p className="text-[13px] text-muted-foreground/70">
                               Sin datos de contacto adicionales
                             </p>
                           ) : (
                             <div className="space-y-1.5">
                               {(customer.phone || (vehiclesEnabled && customer.placaMoto)) && (
-                                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
                                   {customer.phone ? (
                                     <span className="inline-flex items-center gap-1.5 min-w-0">
                                       <Phone className="w-3.5 h-3.5 shrink-0" />
@@ -375,7 +375,7 @@ export default function CustomersPage() {
                                     <span />
                                   )}
                                   {vehiclesEnabled && customer.placaMoto && (
-                                    <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-semibold text-foreground tracking-tight shrink-0">
+                                    <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-xs font-semibold text-foreground tracking-tight shrink-0">
                                       <Bike className="w-3 h-3 text-muted-foreground shrink-0" />
                                       {customer.placaMoto}
                                     </span>
@@ -383,19 +383,19 @@ export default function CustomersPage() {
                                 </div>
                               )}
                               {customer.email && (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
                                   <Mail className="w-3.5 h-3.5 shrink-0" />
                                   <span className="truncate">{customer.email}</span>
                                 </div>
                               )}
                               {customer.address && (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
                                   <MapPin className="w-3.5 h-3.5 shrink-0" />
                                   <span className="truncate">{customer.address}</span>
                                 </div>
                               )}
                               {customer.referencia && (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
                                   <Bookmark className="w-3.5 h-3.5 shrink-0" />
                                   <span className="truncate">Ref: {customer.referencia}</span>
                                 </div>
@@ -486,7 +486,7 @@ export default function CustomersPage() {
                               <div className="flex items-center gap-2 min-w-0">
                                 <CustomerAvatar name={customer.name} />
                                 <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-foreground truncate max-w-[180px]">
+                                  <p className="text-sm font-semibold text-foreground truncate max-w-[210px]">
                                     {canEdit ? (
                                       <button
                                         type="button"
@@ -504,14 +504,14 @@ export default function CustomersPage() {
                                     )}
                                   </p>
                                   {customer.address && (
-                                    <p className="text-[11px] text-muted-foreground truncate max-w-[180px]">
+                                    <p className="text-[13px] text-muted-foreground truncate max-w-[210px]">
                                       {customer.address}
                                     </p>
                                   )}
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="whitespace-nowrap text-xs tabular-nums">
+                            <TableCell className="whitespace-nowrap text-sm tabular-nums">
                               <span className="text-muted-foreground mr-1.5">
                                 {customer.documentType}
                               </span>
@@ -520,7 +520,7 @@ export default function CustomersPage() {
                               </span>
                             </TableCell>
                             <TableCell>
-                              <div className="space-y-0.5 text-xs">
+                              <div className="space-y-0.5 text-[13px]">
                                 {customer.phone && (
                                   <p className="text-foreground tabular-nums">
                                     {customer.phone}
@@ -539,18 +539,18 @@ export default function CustomersPage() {
                             <TableCell>
                               <div className="flex flex-wrap items-center gap-1.5">
                                 {vehiclesEnabled && customer.placaMoto && (
-                                  <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[11px] font-semibold text-foreground">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-xs font-semibold text-foreground">
                                     <Bike className="w-3 h-3 text-muted-foreground" />
                                     {customer.placaMoto}
                                   </span>
                                 )}
                                 {customer.referencia && (
-                                  <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+                                  <span className="text-[13px] text-muted-foreground truncate max-w-[120px]">
                                     Ref: {customer.referencia}
                                   </span>
                                 )}
                                 {!(vehiclesEnabled && customer.placaMoto) && !customer.referencia && (
-                                  <span className="text-xs text-muted-foreground/60">—</span>
+                                  <span className="text-[13px] text-muted-foreground/60">—</span>
                                 )}
                               </div>
                             </TableCell>
@@ -626,7 +626,7 @@ export default function CustomersPage() {
             <Input label="Dirección" value={formData.address || ""} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
             <Select label="Segmento" value={formData.segment || "OCCASIONAL"} onChange={(value) => setFormData({ ...formData, segment: value as Customer["segment"] })} options={[{ value: "OCCASIONAL", label: "Ocasional" }, { value: "FREQUENT", label: "Frecuente" }, { value: "VIP", label: "VIP" }, { value: "INACTIVE", label: "Inactivo" }]} />
             <Input label="Referencia" value={formData.referencia || ""} onChange={(e) => setFormData({ ...formData, referencia: e.target.value })} />
-            {vehiclesEnabled && <div><Input label="Placa de la moto" value={formData.placaMoto || ""} onChange={(e) => setFormData({ ...formData, placaMoto: e.target.value })} /><p className="mt-1 text-xs text-muted-foreground">Placa anterior; se conserva por compatibilidad.</p></div>}
+            {vehiclesEnabled && <div><Input label="Placa de la moto" value={formData.placaMoto || ""} onChange={(e) => setFormData({ ...formData, placaMoto: e.target.value })} /><p className="mt-1 text-[13px] text-muted-foreground">Placa anterior; se conserva por compatibilidad.</p></div>}
           </div>
           {vehiclesEnabled && editingCustomer && <CustomerVehicles key={editingCustomer.id} customerId={editingCustomer.id} />}
           <div className="flex flex-col sm:flex-row gap-2 justify-end pt-3.5 border-t border-border/60">

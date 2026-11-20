@@ -163,7 +163,7 @@ export function EmployeeFormDialog({
             }}
           />
           {nameError && (
-            <p id="employee-name-error" role="alert" className="mt-1.5 text-xs text-danger-text">
+            <p id="employee-name-error" role="alert" className="mt-1.5 text-[13px] text-danger-text">
               Ingresa un nombre válido
             </p>
           )}

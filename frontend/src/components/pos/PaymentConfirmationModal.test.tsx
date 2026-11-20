@@ -134,6 +134,44 @@ describe("PaymentConfirmationModal change preview — server parity", () => {
   /** Same string, but with the literal NBSP that raw textContent preserves. */
   const fmtRaw = (amount: string) => `$${NBSP}${amount}`;
 
+  it("hands cash back as change on a sale with nothing to collect", () => {
+    // A fully discounted sale has total 0: no tender can be "needed", so the
+    // server (SEC-015) accepts the cash and returns it whole.
+    const paymentMethods = [{ type: "CASH", amount: 1000 }] as PaymentMethod[];
+
+    render(
+      <PaymentConfirmationModal
+        {...baseProps}
+        subtotal={0}
+        taxAmount={0}
+        total={0}
+        paymentMethods={paymentMethods}
+      />,
+    );
+
+    expect(renderedChange()).toContain(fmtRaw("1.000"));
+    expect(screen.queryByText(/no dan cambio|Sobra un pago/)).not.toBeInTheDocument();
+  });
+
+  it("blocks change on a zero-total sale with both cash and a non-cash tender", () => {
+    render(
+      <PaymentConfirmationModal
+        {...baseProps}
+        subtotal={0}
+        taxAmount={0}
+        total={0}
+        paymentMethods={[
+          { type: "CASH", amount: 1000 },
+          { type: "CARD", amount: 1000 },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/Sobra un pago/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirmar pago/i })).toBeDisabled();
+    expect(renderedChange()).toBeNull();
+  });
+
   it("shows the overpaid amount when a card covers most of it and cash tops it up", () => {
     // total 100.000, cash 60.000, card 60.000 → each tender alone is short, so both
     // are needed and the 20.000 surplus legitimately comes back as change.

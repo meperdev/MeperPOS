@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import type { User } from "@/types";
 
@@ -82,6 +83,46 @@ describe("Users list responsive layout", () => {
     expect(actions.className).toContain("flex-wrap");
     expect(actions.className).toContain("@2xl:shrink-0");
     expect(actions.className).toContain("@2xl:justify-end");
+  });
+
+  it("offers a reveal toggle and strength guidance when creating a user", async () => {
+    const user = userEvent.setup();
+    render(<UsersPage />);
+
+    await user.click(screen.getByRole("button", { name: /Nuevo usuario/ }));
+
+    const password = screen.getByLabelText(/^Contraseña/) as HTMLInputElement;
+    expect(password).toHaveAttribute("type", "password");
+
+    await user.type(password, "ClaveSegura123");
+    expect(screen.getByText("Fuerte")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar contraseña" }),
+    );
+
+    expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveValue("ClaveSegura123");
+  });
+
+  it("offers the same toggle on the reset-password field", async () => {
+    const user = userEvent.setup();
+    render(<UsersPage />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Restablecer contraseña de Caja Uno" }),
+    );
+
+    const password = screen.getByLabelText(
+      /^Nueva contraseña/,
+    ) as HTMLInputElement;
+    expect(password).toHaveAttribute("type", "password");
+
+    await user.click(
+      screen.getByRole("button", { name: "Mostrar contraseña" }),
+    );
+
+    expect(password).toHaveAttribute("type", "text");
   });
 
   it("renders the role label inside its badge without wrapping or shrinking it", () => {

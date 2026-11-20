@@ -38,7 +38,7 @@ export function InstallAppCard() {
     >
       {canPromptInstall ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             Instala {APP_NAME} en este dispositivo para abrirlo a pantalla
             completa.
           </p>
@@ -49,10 +49,10 @@ export function InstallAppCard() {
         </div>
       ) : (
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             En iPhone y iPad la instalación se hace desde Safari:
           </p>
-          <ol className="space-y-2 text-xs text-foreground">
+          <ol className="space-y-2 text-[13px] text-foreground">
             <li className="flex gap-2">
               <span className="font-semibold text-primary">1.</span>
               <span>

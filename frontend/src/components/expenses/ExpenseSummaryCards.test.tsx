@@ -58,10 +58,12 @@ describe("ExpenseSummaryCards", () => {
     const region = summaryRegion();
     expect(within(region).getByText("Total del mes")).toBeInTheDocument();
 
-    // The total is the largest figure in the block: display scale, tabular digits.
+    // The total leads the block, one step above the group rows (master's
+    // summary-value convention) and tabular so the digits align.
     const total = within(region).getByText(/3\.420\.000/);
     expect(total.className).toContain("tabular-nums");
-    expect(total.className).toMatch(/text-(3|4)xl/);
+    expect(total.className).toContain("text-xl");
+    expect(total.className).toContain("sm:text-[28px]");
 
     // The period reads as a month, never as the raw `YYYY-MM` input value.
     expect(within(region).getByText(/noviembre de 2026/i)).toBeInTheDocument();
@@ -130,6 +132,20 @@ describe("ExpenseSummaryCards", () => {
     expect(bar.getAttribute("aria-label")).toMatch(
       /Gastos de empleados 58\s*%/,
     );
+  });
+
+  it("keeps every text inside the type scale: 12px floor, no micro-print", () => {
+    render(<ExpenseSummaryCards month="2026-11" summary={summary} />);
+
+    const region = summaryRegion();
+    // The rows sit at 13px; nothing in the block drops to 10px or 11px.
+    expect(within(region).getByText("Gastos de empleados")).toHaveClass(
+      "text-[13px]",
+    );
+    const offenders = Array.from(
+      region.querySelectorAll<HTMLElement>('[class*="text-["]'),
+    ).filter((el) => /text-\[1[01]px\]/.test(el.className));
+    expect(offenders).toHaveLength(0);
   });
 
   it("keeps the group labels short and says how many more there are", () => {

@@ -19,7 +19,7 @@ import {
   COLLECTION_CONTENT_ENTER_CLASSES,
   COLLECTION_PENDING_CLASSES,
   COLLECTION_PENDING_OPACITY_CLASS,
-  PRODUCT_GRID_CLASSES,
+  INVENTORY_GRID_CLASSES,
 } from "@/components/ui/collectionGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
@@ -44,15 +44,18 @@ import {
 } from "@/components/ui/Table";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
-import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
+import { useEffectiveViewMode, useMediaQuery } from "@/hooks/useEffectiveViewMode";
 import { useDeferredLoading } from "@/hooks/useDeferredLoading";
 import { useResponsivePageSize } from "@/hooks/useResponsivePageSize";
 import {
   COLLECTION_GRID_GAP,
+  INVENTORY_CARD_MIN_WIDTH,
+  INVENTORY_WIDE_TRACK_QUERY,
   MAX_COLLECTION_PAGE_SIZE,
   MIN_VISIBLE_ROWS,
   PRODUCT_CARD_MIN_ROW_HEIGHT,
   PRODUCT_CARD_MIN_WIDTH,
+  inventoryGridRows,
   remapPageForPageSize,
 } from "@/lib/collection-grid";
 import { shouldAutoFocusTextInput } from "@/lib/input-focus";
@@ -79,10 +82,12 @@ const TABLE_PAGE_SIZE = 10;
 function InventoryContent() {
   const searchParams = useSearchParams();
   const urlLowStock = searchParams?.get("filter") === "lowStock";
+  // The command palette links a product hit here with `?search=<sku>`.
+  const urlSearch = searchParams?.get("search") ?? "";
   const toast = useToast();
   const { user } = useAuth();
   const canManageInventory = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => urlSearch);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<
     "active" | "inactive" | "all"
@@ -93,11 +98,22 @@ function InventoryContent() {
   });
   const urlFilterChanged = lowStockFilter.urlValue !== urlLowStock;
   const showLowStockOnly = urlFilterChanged ? urlLowStock : lowStockFilter.enabled;
+  // Only the URL's value, so a manual edit of the field is never overwritten.
+  const [urlSearchState, setUrlSearchState] = useState(urlSearch);
+  const urlSearchChanged = urlSearchState !== urlSearch;
 
   // Adjust only on URL transitions: unrelated renders must preserve manual toggles.
   // Resolve the new query immediately, without fetching a stale page/filter first.
   if (urlFilterChanged) {
     setLowStockFilter({ urlValue: urlLowStock, enabled: urlLowStock });
+    setPage(1);
+  }
+
+  // Same rule for the palette's arrival: adopt `?search=` on the transition and
+  // land on the first page of it, without discarding the filters already set.
+  if (urlSearchChanged) {
+    setUrlSearchState(urlSearch);
+    setSearch(urlSearch);
     setPage(1);
   }
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -152,21 +168,45 @@ function InventoryContent() {
 
   // Card view asks the grid how many cards fit; table view fits whole rows
   // between the table top and the pager. Both answer TABLE_PAGE_SIZE until measured.
+  // The grid's track widens from `lg` (see INVENTORY_GRID_CLASSES), so the width the
+  // page counts with follows the same breakpoint; when the viewport cannot be
+  // measured the narrower track stands, which just asks for fewer columns.
+  const wideInventoryTracks = useMediaQuery(INVENTORY_WIDE_TRACK_QUERY, false);
   const {
     pageSize: gridPageSize,
+    columns: gridColumns,
+    rows: gridRows,
     containerRef: gridRef,
     footerRef,
     tableRef,
   } = useResponsivePageSize({
-    minCardWidth: PRODUCT_CARD_MIN_WIDTH,
+    minCardWidth: wideInventoryTracks ? INVENTORY_CARD_MIN_WIDTH : PRODUCT_CARD_MIN_WIDTH,
     gap: COLLECTION_GRID_GAP,
     rowHeight: PRODUCT_CARD_MIN_ROW_HEIGHT,
+    // Rows stretch to the space above the pager, so a rendered card is taller than
+    // its row: measuring it would ask for fewer rows, which stretches it further.
+    measureRowHeight: false,
     minRows: MIN_VISIBLE_ROWS,
     min: TABLE_PAGE_SIZE,
     max: MAX_COLLECTION_PAGE_SIZE,
     enabled: viewMode === "grid",
   });
-  const pageSize = gridPageSize;
+  // From `lg` the grid stretches its rows into the height above the pager, so the page
+  // must hold exactly the cards that fit: the hook's floor would add a row that scrolls
+  // under the pinned pager (1366x768 fits four columns and two rows, not ten cards).
+  // Below `lg` the floor stands, so a phone keeps the list it always had.
+  const pageSize =
+    wideInventoryTracks && gridColumns > 0
+      ? Math.min(gridColumns * gridRows, MAX_COLLECTION_PAGE_SIZE)
+      : gridPageSize;
+  // One equal track per row, written inline: CSS `auto-fill` would choose its own track
+  // count and leave the leftover height unevenly distributed. The track count is the
+  // measured one whatever the card count, so a short last page keeps a full page's card
+  // height instead of one tall row.
+  const gridRowStyle =
+    wideInventoryTracks && gridRows > 0
+      ? { gridTemplateRows: inventoryGridRows(gridRows) }
+      : undefined;
 
   // Server-side pagination: every request — filtered or not — is bounded to
   // one page of rows. Low stock and alphabetical order are resolved by the
@@ -179,7 +219,7 @@ function InventoryContent() {
     error: productsError,
     refetch: refetchProducts,
   } = useProducts({
-    page: urlFilterChanged ? 1 : page,
+    page: urlFilterChanged || urlSearchChanged ? 1 : page,
     limit: pageSize,
     search: search || undefined,
     categoryId: selectedCategory || undefined,
@@ -593,7 +633,7 @@ function InventoryContent() {
                 {lowStockCount > 0 && (
                   <span
                     className={cn(
-                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-[11px] font-semibold tabular-nums shrink-0",
+                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-xs font-semibold tabular-nums shrink-0",
                       showLowStockOnly
                         ? "bg-danger text-white"
                         : "bg-danger/15 text-danger-text",
@@ -616,7 +656,7 @@ function InventoryContent() {
             hasFilter ? (
               <div className="flex items-center gap-2 mt-2 pt-2 px-1 border-t border-border/60">
                 <SlidersHorizontal className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground">
+                <span className="text-[13px] text-muted-foreground">
                   <span className="font-semibold text-foreground tabular-nums">
                     {displayProducts.length}
                   </span>{" "}
@@ -664,7 +704,7 @@ function InventoryContent() {
         ) : showSkeleton ? (
           <CollectionSkeleton
             viewMode={viewMode}
-            gridClassName={PRODUCT_GRID_CLASSES}
+            gridClassName={INVENTORY_GRID_CLASSES}
             columns={canManageInventory ? 8 : 7}
             rows={6}
             label="Cargando productos..."
@@ -688,8 +728,9 @@ function InventoryContent() {
             {viewMode === "grid" ? (
               <div
                 ref={gridRef}
+                style={gridRowStyle}
                 className={cn(
-                  PRODUCT_GRID_CLASSES,
+                  INVENTORY_GRID_CLASSES,
                   "flex-1 content-start justify-items-center",
                   COLLECTION_CONTENT_ENTER_CLASSES,
                   COLLECTION_PENDING_CLASSES,
@@ -780,7 +821,7 @@ function InventoryContent() {
                               product.active === false && "opacity-60",
                             )}
                           >
-                            <TableCell>
+                            <TableCell className="text-sm">
                               {canManageInventory ? (
                                 <button
                                   type="button"
@@ -799,26 +840,26 @@ function InventoryContent() {
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
+                            <TableCell className="id-text text-xs text-muted-foreground">
                               {product.sku}
                             </TableCell>
                             <TableCell>
-                              <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
+                              <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-[13px] font-medium text-foreground">
                                 {product.category?.name || "Sin categoría"}
                               </span>
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                            <TableCell className="text-sm text-right tabular-nums text-muted-foreground">
                               {formatCurrency(toFiniteNumber(product.costPrice))}
                             </TableCell>
-                            <TableCell className="text-right font-semibold tabular-nums text-foreground">
+                            <TableCell className="text-sm text-right font-semibold tabular-nums text-foreground">
                               {formatCurrency(sellingPrice)}
                               {hasPromo && (
-                                <s className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                                <s className="ml-1.5 text-xs font-normal text-muted-foreground">
                                   {formatCurrency(toFiniteNumber(product.salePrice))}
                                 </s>
                               )}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">
+                            <TableCell className="text-sm text-right tabular-nums">
                               {isSrv ? (
                                 <span className="text-muted-foreground">Servicio</span>
                               ) : isUntracked ? (
@@ -932,10 +973,10 @@ function InventoryContent() {
         >
           <fieldset disabled={isSaving} className="m-0 w-full min-w-0 space-y-5 border-0 p-0">
           <div role="group" aria-label="Identidad" className="min-w-0 space-y-3">
-            <h3 className="text-xs font-semibold text-foreground">Datos del producto</h3>
+            <h3 className="text-[13px] font-semibold text-foreground">Datos del producto</h3>
             <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-[minmax(0,19.5rem)_minmax(0,1fr)]">
               <div className="w-full min-w-0">
-                <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                <p className="mb-1.5 text-[13px] font-medium text-muted-foreground">
                   Imagen del producto
                 </p>
                 <ImageUpload
@@ -1016,7 +1057,7 @@ function InventoryContent() {
                   />
                 </div>
                 <div role="group" aria-label="Oferta" className="sm:col-span-2 min-w-0 space-y-1.5">
-                  <h3 className="text-xs font-medium text-muted-foreground">Oferta</h3>
+                  <h3 className="text-[13px] font-medium text-muted-foreground">Oferta</h3>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                     <div className="w-full min-w-0 sm:flex-1">
                       <Select
@@ -1085,7 +1126,7 @@ function InventoryContent() {
 
           <div role="group" aria-label="Precios" className="min-w-0 space-y-3 border-t border-border/60 pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold text-foreground">Precios e impuesto</h3>
+              <h3 className="text-[13px] font-semibold text-foreground">Precios e impuesto</h3>
               {(() => {
                 const cost = toFiniteNumber(formData.costPrice);
                 const sale = toFiniteNumber(formData.salePrice);
@@ -1096,7 +1137,7 @@ function InventoryContent() {
                 return (
                   <Badge
                     variant={isNegative ? "danger" : "success"}
-                    className="gap-1.5 text-[11px] tabular-nums"
+                    className="gap-1.5 text-xs tabular-nums"
                   >
                     <span>Utilidad: {profit >= 0 ? "+" : ""}{formatCurrency(profit)}</span>
                     {sale > 0 && <span>· {marginPct}%</span>}
@@ -1134,7 +1175,7 @@ function InventoryContent() {
           {!isService(formData) && (
             <div role="group" aria-label="Inventario" className="min-w-0 space-y-3 border-t border-border/60 pt-4">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xs font-semibold text-foreground">Inventario</h3>
+                <h3 className="text-[13px] font-semibold text-foreground">Inventario</h3>
                 <label
                   htmlFor="tracksStock"
                   className="inline-flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none"

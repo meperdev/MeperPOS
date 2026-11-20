@@ -358,7 +358,7 @@ describe("Select bottom sheet below sm", () => {
     const trigger = screen.getByRole("button", { name: "Categoría" });
     fireEvent.click(trigger);
 
-    fireEvent.click(document.querySelector("[data-select-sheet-overlay]")!);
+    fireEvent.click(document.querySelector("[data-bottom-sheet-scrim]")!);
 
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();

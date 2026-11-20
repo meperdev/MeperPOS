@@ -47,7 +47,7 @@ export default function SettingsLayout({
                         scroll={false}
                         aria-current={isActive ? "page" : undefined}
                         className={cn(
-                          "inline-flex @4xl:flex h-9 items-center gap-2 rounded-lg px-3 text-xs whitespace-nowrap transition-colors duration-150",
+                          "inline-flex @4xl:flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] whitespace-nowrap transition-colors duration-150",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                           isActive
                             ? "bg-muted/70 text-foreground font-semibold border border-border/70 shadow-2xs"

@@ -1,11 +1,12 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useRef, useState } from "react";
 import { OrganizationModulesCard } from "./organization-modules-card";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -27,6 +28,7 @@ import {
 import type { Organization } from "@/hooks/useAdmin";
 import { formatDate } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api";
+import { useToast } from "@/contexts/ToastContext";
 import {
   planLabels,
   planOptions,
@@ -62,10 +64,19 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
   const updateMemberRole = useUpdateMemberRole();
   const removeMember = useRemoveOrganizationMember();
   const deleteOrg = useDeleteOrganization();
+  const toast = useToast();
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [memberToRemove, setMemberToRemove] = useState<{
+    userId: string;
+    name: string;
+  } | null>(null);
+  // ConfirmDialog closes itself once `onConfirm` resolves, so a failed removal
+  // consumes one close and leaves the dialog up: the toast carries the reason
+  // and the reader decides again (retry or Cancelar).
+  const keepRemovalDialogOpen = useRef(false);
   const [newMember, setNewMember] = useState({ email: "", name: "", role: "CASHIER" });
   const [addMemberError, setAddMemberError] = useState("");
   const [deleteError, setDeleteError] = useState("");
@@ -106,13 +117,23 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
 
   const renderOwner = (ou: OrgMember) =>
     ou.isPrimaryOwner ? (
-      <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
+      <span className="inline-flex items-center gap-1.5 text-[13px] text-foreground">
         <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
         Sí
       </span>
     ) : (
-      <span className="text-xs text-muted-foreground">—</span>
+      <span className="text-[13px] text-muted-foreground">—</span>
     );
+
+  const handleRemoveMember = async () => {
+    if (!memberToRemove) return;
+    try {
+      await removeMember.mutateAsync({ orgId: org.id, userId: memberToRemove.userId });
+    } catch (error) {
+      keepRemovalDialogOpen.current = true;
+      toast.error(getApiErrorMessage(error, "No se pudo quitar el miembro"));
+    }
+  };
 
   const renderMemberActions = (ou: OrgMember) => (
     <RowActions
@@ -127,7 +148,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             ? "El propietario no se puede quitar"
             : undefined,
           onSelect: () =>
-            removeMember.mutate({ orgId: org.id, userId: ou.user.id }),
+            setMemberToRemove({ userId: ou.user.id, name: ou.user.name }),
         },
       ]}
     />
@@ -172,7 +193,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
                 Cambiar estado
               </label>
               <Select
@@ -183,7 +204,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
                 Cambiar plan
               </label>
               <Select
@@ -221,7 +242,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <h3 className="text-sm font-medium text-foreground">
                 Usuarios de la organización
               </h3>
-              <span className="rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground tabular-nums">
+              <span className="rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[13px] text-muted-foreground tabular-nums">
                 {members.length}
               </span>
             </div>
@@ -258,8 +279,8 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                     {members.map((ou) => (
                       <TableRow key={ou.id}>
                         <TableCell>
-                          <p className="text-xs font-medium text-foreground">{ou.user.name}</p>
-                          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                          <p className="text-sm font-medium text-foreground">{ou.user.name}</p>
+                          <p className="mt-0.5 id-text text-[13px] text-muted-foreground">
                             {ou.user.email}
                           </p>
                         </TableCell>
@@ -279,14 +300,14 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                   <div key={ou.id} data-testid="org-member-row" className="px-4 py-3 space-y-2.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-foreground break-words">{ou.user.name}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground break-all">
+                        <p className="text-sm font-medium text-foreground break-words">{ou.user.name}</p>
+                        <p className="mt-0.5 id-text text-[13px] text-muted-foreground break-all">
                           {ou.user.email}
                         </p>
                       </div>
                       <div className="shrink-0">{renderMemberActions(ou)}</div>
                     </div>
-                    <dl className="grid grid-cols-2 gap-3 text-xs">
+                    <dl className="grid grid-cols-2 gap-3 text-[13px]">
                       <div className="space-y-1">
                         <dt className="text-muted-foreground">Rol</dt>
                         <dd>{renderRole(ou)}</dd>
@@ -382,15 +403,15 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <p className="text-sm font-medium text-danger-text">
                 Esta acción es irreversible
               </p>
-              <p className="mt-1 text-xs text-danger-text">
+              <p className="mt-1 text-[13px] text-danger-text">
                 Todos los datos de la organización serán eliminados permanentemente,
                 incluyendo productos, ventas, clientes y usuarios.
               </p>
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            Escribe <strong className="font-mono text-foreground">{org.name}</strong> para confirmar:
+          <p className="text-[13px] text-muted-foreground">
+            Escribe <strong className="font-semibold text-foreground">{org.name}</strong> para confirmar:
           </p>
 
           <Input
@@ -430,6 +451,21 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={memberToRemove !== null}
+        onClose={() => {
+          if (keepRemovalDialogOpen.current) {
+            keepRemovalDialogOpen.current = false;
+            return;
+          }
+          setMemberToRemove(null);
+        }}
+        onConfirm={handleRemoveMember}
+        title="Quitar miembro"
+        message={`${memberToRemove?.name ?? ""} perderá el acceso a ${org.name}.`}
+        confirmText="Quitar"
+      />
     </div>
   );
 }
@@ -495,7 +531,7 @@ function OrganizationGeneralCard({
             Guardar cambios
           </Button>
           {organization.trialEndsAt && (
-            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
+            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[13px] text-muted-foreground">
               Trial finaliza: {formatDate(organization.trialEndsAt)}
             </span>
           )}
@@ -504,8 +540,8 @@ function OrganizationGeneralCard({
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border/70 pt-4 sm:grid-cols-4">
           {metadata.map((item) => (
             <div key={item.label}>
-              <dt className="text-[11px] text-muted-foreground">{item.label}</dt>
-              <dd className="mt-0.5 truncate text-[13px] text-foreground">
+              <dt className="text-[13px] text-muted-foreground">{item.label}</dt>
+              <dd className="mt-0.5 truncate text-[13px] text-foreground tabular-nums">
                 {item.value}
               </dd>
             </div>

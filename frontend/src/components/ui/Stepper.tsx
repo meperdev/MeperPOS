@@ -48,9 +48,9 @@ export function Stepper({
 
   const sizes = {
     sm: {
-      container: "p-0.5 rounded-lg text-xs",
-      btn: "w-8 h-8 rounded-md text-xs",
-      input: "w-10 text-xs",
+      container: "p-0.5 rounded-lg text-[13px]",
+      btn: "w-8 h-8 rounded-md text-[13px]",
+      input: "w-10 text-[13px]",
     },
     md: {
       container: "p-1 rounded-xl text-sm",

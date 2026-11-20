@@ -9,6 +9,7 @@ function Harness() {
       <button onClick={() => toast.success("guardado")}>success</button>
       <button onClick={() => toast.error("falló")}>error</button>
       <button onClick={() => toast.info("dato")}>info</button>
+      <button onClick={() => toast.warning("cuidado")}>warning</button>
       <button
         onClick={() => {
           toast.info("uno");
@@ -20,7 +21,24 @@ function Harness() {
         burst
       </button>
       <button onClick={() => toast.info("corto", 1000)}>short</button>
+      <button onClick={() => toast.success("subido", { description: "Se guardó el archivo" })}>
+        described
+      </button>
+      <button onClick={() => toast.error("subida falló", { action: { label: "Reintentar", onClick: () => {} } })}>
+        with action
+      </button>
+      <button onClick={() => toast.success("con acción", { action: { label: "Reintentar", onClick: () => {} } })}>
+        success with action
+      </button>
     </div>
+  );
+}
+
+function renderHarness() {
+  render(
+    <ToastProvider>
+      <Harness />
+    </ToastProvider>,
   );
 }
 
@@ -29,11 +47,7 @@ describe("toast smoke", () => {
   afterEach(() => vi.useRealTimers());
 
   it("caps the stack at three and refreshes duplicates", () => {
-    render(
-      <ToastProvider>
-        <Harness />
-      </ToastProvider>,
-    );
+    renderHarness();
     fireEvent.click(screen.getByText("burst"));
     act(() => vi.advanceTimersByTime(250));
 
@@ -46,11 +60,7 @@ describe("toast smoke", () => {
   });
 
   it("shows one card for a repeated message", () => {
-    render(
-      <ToastProvider>
-        <Harness />
-      </ToastProvider>,
-    );
+    renderHarness();
     fireEvent.click(screen.getByText("success"));
     fireEvent.click(screen.getByText("success"));
     act(() => vi.advanceTimersByTime(20));
@@ -59,11 +69,7 @@ describe("toast smoke", () => {
   });
 
   it("pauses the countdown while hovered", () => {
-    render(
-      <ToastProvider>
-        <Harness />
-      </ToastProvider>,
-    );
+    renderHarness();
     fireEvent.click(screen.getByText("short"));
     act(() => vi.advanceTimersByTime(600));
 
@@ -80,11 +86,7 @@ describe("toast smoke", () => {
   });
 
   it("uses alert for errors and status for the rest", () => {
-    render(
-      <ToastProvider>
-        <Harness />
-      </ToastProvider>,
-    );
+    renderHarness();
     fireEvent.click(screen.getByText("error"));
     fireEvent.click(screen.getByText("info"));
     act(() => vi.advanceTimersByTime(20));
@@ -131,5 +133,97 @@ describe("toast smoke", () => {
     act(() => vi.advanceTimersByTime(200));
 
     expect(screen.queryByText("guardado")).toBeNull();
+  });
+});
+
+describe("toast API", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("offers a warning level with its own tile", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("warning"));
+    act(() => vi.advanceTimersByTime(20));
+
+    const card = screen.getByText("cuidado").closest("[data-testid='toast-card']")!;
+    expect(card).not.toBeNull();
+    expect(screen.getByTestId("toast-icon-tile").className).toContain("bg-toast-warning");
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("takes an options object and still accepts a bare number as duration", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("described"));
+    act(() => vi.advanceTimersByTime(20));
+    expect(screen.getByText("Se guardó el archivo")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("short"));
+    act(() => vi.advanceTimersByTime(20));
+    // 1000ms as a number still means the duration, not a description.
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.queryByText("corto")).toBeNull();
+  });
+
+  it("dedupes on title plus description", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("described"));
+    fireEvent.click(screen.getByText("described"));
+    act(() => vi.advanceTimersByTime(20));
+
+    expect(screen.getAllByText("subido")).toHaveLength(1);
+    expect(screen.getAllByText("Se guardó el archivo")).toHaveLength(1);
+  });
+
+  it("holds an error longer than a success", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("error"));
+    fireEvent.click(screen.getByText("success"));
+
+    act(() => vi.advanceTimersByTime(4200));
+    expect(screen.queryByText("guardado")).toBeNull();
+    expect(screen.getByText("falló")).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(2000));
+    expect(screen.queryByText("falló")).toBeNull();
+  });
+
+  it("never auto-dismisses a toast with an action before eight seconds", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("success with action"));
+
+    act(() => vi.advanceTimersByTime(7000));
+    expect(screen.getByText("con acción")).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.queryByText("con acción")).toBeNull();
+  });
+
+  it("runs the action and dismisses the toast", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("with action"));
+    act(() => vi.advanceTimersByTime(20));
+
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(screen.queryByText("subida falló")).toBeNull();
+  });
+
+  it("keeps the stack open while hovered and resumes everything on leave", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("burst"));
+    act(() => vi.advanceTimersByTime(20));
+
+    const stack = screen.getByTestId("toast-stack");
+    fireEvent.mouseEnter(stack);
+    expect(stack.dataset.expanded).toBe("true");
+
+    act(() => vi.advanceTimersByTime(10000));
+    expect(screen.getByText("cuatro")).toBeInTheDocument();
+
+    fireEvent.mouseLeave(stack);
+    expect(stack.dataset.expanded).toBe("false");
+    act(() => vi.advanceTimersByTime(4200));
+    expect(screen.queryByText("cuatro")).toBeNull();
   });
 });

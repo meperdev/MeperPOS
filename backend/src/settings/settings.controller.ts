@@ -5,6 +5,7 @@ import {
   Post,
   Patch,
   Body,
+  HttpStatus,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -28,6 +29,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { OrganizationRequiredGuard } from '../common/guards/organization-required.guard';
 import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organization.interceptor';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ParseFilePipeBuilder } from '@nestjs/common';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
 
@@ -69,7 +71,22 @@ export class SettingsController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload company logo' })
   async uploadLogo(
-    @UploadedFile() file: Express.Multer.File,
+    // SEC-003 remediation: the logo used to accept ANY file (a text/plain
+    // .txt upload returned 201). Enforce image-only types and a 2MB cap,
+    // same contract as the product image uploads.
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({
+          fileType: /(jpg|jpeg|png|gif|webp|svg)$/,
+        })
+        .addMaxSizeValidator({
+          maxSize: 2 * 1024 * 1024, // 2MB
+        })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        }),
+    )
+    file: Express.Multer.File,
     @CurrentUser() user: RequestUser,
   ) {
     return this.settingsService.uploadLogo(user.organizationId, file);

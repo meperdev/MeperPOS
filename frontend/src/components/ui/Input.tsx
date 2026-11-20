@@ -76,7 +76,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
     };
 
     const commonClasses = cn(
-      "w-full rounded-lg border bg-card px-3.5 py-2 text-base sm:text-xs text-foreground",
+      "w-full rounded-lg border bg-card px-3.5 py-2 text-base sm:text-sm text-foreground",
       // Single-line fields share the 40px touch / 36px desktop control height.
       !textarea && "h-10 sm:h-9",
       "placeholder:text-muted-foreground/60",
@@ -99,7 +99,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
         {label && (
           <label
             htmlFor={inputId}
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
+            className="mb-1.5 block text-[13px] font-medium text-muted-foreground"
           >
             {label}
             {required && <span className="ml-0.5 text-danger-text">*</span>}
@@ -112,7 +112,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
             </span>
           )}
           {prefixText && (
-            <span className="absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-xs font-medium text-muted-foreground tabular-nums pointer-events-none">
+            <span className="absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-sm font-medium text-muted-foreground tabular-nums pointer-events-none">
               {prefixText}
             </span>
           )}
@@ -206,7 +206,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
           )}
         </div>
         {error && (
-          <span className="mt-1.5 block text-xs font-medium text-danger-text">
+          <span className="mt-1.5 block text-[13px] font-medium text-danger-text">
             {error}
           </span>
         )}

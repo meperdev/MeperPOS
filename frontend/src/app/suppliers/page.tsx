@@ -416,7 +416,7 @@ export default function SuppliersPage() {
                               <h3 className="text-sm font-semibold text-foreground truncate leading-snug">
                                 {supplier.name}
                               </h3>
-                              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground font-mono tabular-nums">
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground id-text tabular-nums">
                                 <span>NIT</span>
                                 <span>·</span>
                                 <span className="text-foreground/90 font-medium truncate">
@@ -437,13 +437,13 @@ export default function SuppliersPage() {
                         {/* Contact Details */}
                         <div className="mt-3 border-t border-border/50 pt-2.5">
                           {!hasContactInfo ? (
-                            <p className="text-xs text-muted-foreground/50">
+                            <p className="text-[13px] text-muted-foreground/50">
                               Sin datos de contacto adicionales
                             </p>
                           ) : (
                             <div className="space-y-1.5">
                               {(supplier.contactName || supplier.phone) && (
-                                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
                                   {supplier.contactName ? (
                                     <span className="inline-flex items-center gap-1.5 min-w-0">
                                       <UserRound className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
@@ -455,7 +455,7 @@ export default function SuppliersPage() {
                                     <span />
                                   )}
                                   {supplier.phone && (
-                                    <span className="inline-flex items-center gap-1 font-mono text-foreground/90 tabular-nums shrink-0">
+                                    <span className="inline-flex items-center gap-1 id-text text-foreground/90 tabular-nums shrink-0">
                                       <Phone className="w-3 h-3 shrink-0 text-muted-foreground/70" />
                                       {supplier.phone}
                                     </span>
@@ -463,7 +463,7 @@ export default function SuppliersPage() {
                                 </div>
                               )}
                               {supplier.email && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
                                   <Mail className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
                                   <span className="truncate">
                                     {supplier.email}
@@ -471,7 +471,7 @@ export default function SuppliersPage() {
                                 </div>
                               )}
                               {supplier.address && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
                                   <MapPin className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
                                   <span className="truncate">
                                     {supplier.address}
@@ -483,86 +483,91 @@ export default function SuppliersPage() {
                         </div>
                       </div>
 
-                      {/* Card Footer: Bank Account & Actions */}
-                      <div className="mt-3 border-t border-border/50 pt-2.5 flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
-                          <CreditCard className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          {hasBankInfo ? (
-                            <>
-                              {supplier.bank && (
-                                <span
-                                  className={cn(
-                                    "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
-                                    getBankChipStyle(supplier.bank),
-                                  )}
-                                >
-                                  {supplier.bank}
+                      {/* Card Footer: bank identity and actions, then the account on its own line. */}
+                      <div className="mt-3 border-t border-border/50 pt-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px]">
+                            <CreditCard className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            {hasBankInfo ? (
+                              <>
+                                {supplier.bank && (
+                                  <span
+                                    className={cn(
+                                      "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 text-xs font-medium",
+                                      getBankChipStyle(supplier.bank),
+                                    )}
+                                  >
+                                    {supplier.bank}
+                                  </span>
+                                )}
+                                <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+                                  {supplier.accountType === "SAVINGS"
+                                    ? "Ahorros"
+                                    : supplier.accountType === "CHECKING"
+                                      ? "Corriente"
+                                      : "Cuenta"}
                                 </span>
-                              )}
-                              <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground tabular-nums">
-                                {supplier.accountType === "SAVINGS"
-                                  ? "Ahorros"
-                                  : supplier.accountType === "CHECKING"
-                                    ? "Corriente"
-                                    : "Cuenta"}
-                                {supplier.accountNumber
-                                  ? `: ${supplier.accountNumber}`
-                                  : ""}
+                              </>
+                            ) : (
+                              <span className="text-[13px] text-muted-foreground/50">
+                                Sin cuenta bancaria
                               </span>
-                              {supplier.accountNumber && (
+                            )}
+                          </div>
+
+                          {canManage && (
+                            <div className="relative z-10 flex shrink-0 items-center gap-1">
+                              {supplier.active ? (
                                 <button
                                   type="button"
-                                  onClick={(e) =>
-                                    handleCopyAccount(e, supplier)
-                                  }
-                                  className="relative z-10 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                                  title="Copiar número de cuenta"
-                                  aria-label={`Copiar cuenta de ${supplier.name}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAskDeactivate(supplier.id);
+                                  }}
+                                  className="flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-danger-text hover:border-danger/30 hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                                  title="Desactivar"
+                                  aria-label={`Desactivar ${supplier.name}`}
                                 >
-                                  {copiedSupplierId === supplier.id ? (
-                                    <Check className="w-3.5 h-3.5 text-success-text" />
-                                  ) : (
-                                    <Copy className="w-3.5 h-3.5" />
-                                  )}
+                                  <PowerOff className="w-3.5 h-3.5" />
                                 </button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReactivate(supplier.id);
+                                  }}
+                                  className="text-success-text"
+                                >
+                                  <Power className="w-3 h-3" /> Reactivar
+                                </Button>
                               )}
-                            </>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/50">
-                              Sin cuenta bancaria
-                            </span>
+                            </div>
                           )}
                         </div>
 
-                        {canManage && (
-                          <div className="relative z-10 flex shrink-0 items-center gap-1">
-                            {supplier.active ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAskDeactivate(supplier.id);
-                                }}
-                                className="flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:text-danger-text hover:border-danger/30 hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                                title="Desactivar"
-                                aria-label={`Desactivar ${supplier.name}`}
-                              >
-                                <PowerOff className="w-3.5 h-3.5" />
-                              </button>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleReactivate(supplier.id);
-                                }}
-                                className="text-success-text"
-                              >
-                                <Power className="w-3 h-3" /> Reactivar
-                              </Button>
-                            )}
+                        {hasBankInfo && supplier.accountNumber && (
+                          <div className="mt-1 flex min-w-0 items-center gap-1 pl-5">
+                            {/* The account number gets its own line, indented to the bank chip,
+                                with the copy action hugging it instead of the card's edge. */}
+                            <span className="min-w-0 wrap-anywhere text-sm tabular-nums text-foreground/90">
+                              {supplier.accountNumber}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyAccount(e, supplier)}
+                              className="relative z-10 -my-1.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                              title="Copiar número de cuenta"
+                              aria-label={`Copiar cuenta de ${supplier.name}`}
+                            >
+                              {copiedSupplierId === supplier.id ? (
+                                <Check className="w-3.5 h-3.5 text-success-text" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
                           </div>
                         )}
                       </div>
@@ -617,7 +622,7 @@ export default function SuppliersPage() {
                           <div className="flex items-center gap-2 min-w-0">
                             <SupplierAvatar name={supplier.name} />
                             <div className="min-w-0">
-                              <p className="text-xs font-semibold text-foreground truncate">
+                              <p className="text-sm font-semibold text-foreground truncate">
                                 {canManage ? (
                                   <button
                                     type="button"
@@ -634,7 +639,7 @@ export default function SuppliersPage() {
                                   supplier.name
                                 )}
                               </p>
-                              <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                              <p className="id-text text-[13px] text-muted-foreground tabular-nums">
                                 NIT · {supplier.documentNumber}
                               </p>
                             </div>
@@ -644,7 +649,7 @@ export default function SuppliersPage() {
                           {supplier.contactName ||
                           supplier.phone ||
                           supplier.email ? (
-                            <div className="space-y-0.5 text-xs">
+                            <div className="space-y-0.5 text-[13px]">
                               {supplier.contactName && (
                                 <p className="font-medium text-foreground">
                                   {supplier.contactName}
@@ -652,7 +657,7 @@ export default function SuppliersPage() {
                               )}
                               <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
                                 {supplier.phone && (
-                                  <span className="font-mono tabular-nums">
+                                  <span className="id-text tabular-nums">
                                     {supplier.phone}
                                   </span>
                                 )}
@@ -664,18 +669,18 @@ export default function SuppliersPage() {
                               </div>
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground/45">
+                            <span className="text-[13px] text-muted-foreground/45">
                               Sin contacto
                             </span>
                           )}
                         </TableCell>
                         <TableCell className="max-w-[220px]">
                           {supplier.address ? (
-                            <span className="text-xs text-muted-foreground line-clamp-1">
+                            <span className="text-[13px] text-muted-foreground line-clamp-1">
                               {supplier.address}
                             </span>
                           ) : (
-                            <span className="text-xs text-muted-foreground/45">
+                            <span className="text-[13px] text-muted-foreground/45">
                               Sin dirección
                             </span>
                           )}
@@ -686,14 +691,14 @@ export default function SuppliersPage() {
                               {supplier.bank && (
                                 <span
                                   className={cn(
-                                    "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium",
+                                    "block max-w-[9rem] shrink-0 truncate rounded-md border px-2 py-0.5 text-xs font-medium",
                                     getBankChipStyle(supplier.bank),
                                   )}
                                 >
                                   {supplier.bank}
                                 </span>
                               )}
-                              <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
+                              <span className="text-muted-foreground id-text text-[13px] tabular-nums">
                                 {supplier.accountType === "SAVINGS"
                                   ? "Ahorros"
                                   : supplier.accountType === "CHECKING"
@@ -722,7 +727,7 @@ export default function SuppliersPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground/45">
+                            <span className="text-[13px] text-muted-foreground/45">
                               Sin cuenta
                             </span>
                           )}
@@ -803,7 +808,7 @@ export default function SuppliersPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Commercial & Contact Info */}
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-foreground">
+            <h3 className="text-sm font-semibold text-foreground">
               Datos comerciales y contacto
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -865,7 +870,7 @@ export default function SuppliersPage() {
 
           {/* Bank Info */}
           <div className="space-y-3 pt-4 border-t border-border/60">
-            <h3 className="text-xs font-semibold text-foreground">
+            <h3 className="text-sm font-semibold text-foreground">
               Datos bancarios y pagos
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

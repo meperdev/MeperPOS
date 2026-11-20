@@ -167,7 +167,7 @@ export default function PurchaseOrderDetailPage() {
                   overdue={Boolean(order.overdue)}
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-[13px] text-muted-foreground mt-0.5">
                 Detalle y seguimiento de la orden de compra
               </p>
             </div>
@@ -295,7 +295,7 @@ export default function PurchaseOrderDetailPage() {
 
             <div className="@container rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
               <div className="px-4 py-3 border-b border-border/60">
-                <h2 className="text-xs font-semibold text-foreground">
+                <h2 className="text-sm font-semibold text-foreground">
                   Productos en la orden
                 </h2>
               </div>
@@ -322,25 +322,25 @@ export default function PurchaseOrderDetailPage() {
                     {(order.items ?? []).map((it) => (
                       <TableRow key={it.id}>
                         <TableCell>
-                          <p className="text-xs font-semibold text-foreground truncate max-w-[240px]">
+                          <p className="text-sm font-semibold text-foreground truncate max-w-[280px]">
                             {it.product?.name ?? "Producto eliminado"}
                           </p>
-                          <p className="text-[11px] text-muted-foreground font-mono">
+                          <p className="text-[13px] text-muted-foreground id-text">
                             {it.product?.sku}
                           </p>
                         </TableCell>
-                        <TableCell className="text-right text-xs tabular-nums">
+                        <TableCell className="text-right text-sm tabular-nums">
                           <span className={receivedToneClass(it.qtyReceived, it.qtyOrdered)}>
                             {it.qtyReceived} / {it.qtyOrdered}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right text-xs text-foreground tabular-nums">
+                        <TableCell className="text-right text-sm text-foreground tabular-nums">
                           {formatCurrency(it.unitCost)}
                         </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
+                        <TableCell className="text-right text-sm text-muted-foreground tabular-nums">
                           {it.taxRate}%
                         </TableCell>
-                        <TableCell className="text-right text-xs font-semibold text-foreground tabular-nums whitespace-nowrap">
+                        <TableCell className="text-right text-sm font-semibold text-foreground tabular-nums whitespace-nowrap">
                           {formatCurrency(it.subtotal + it.taxAmount)}
                         </TableCell>
                       </TableRow>
@@ -353,14 +353,14 @@ export default function PurchaseOrderDetailPage() {
                 {(order.items ?? []).map((it) => (
                   <div key={it.id} data-testid="po-item-row" className="px-4 py-3 space-y-2.5">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground break-words">
+                      <p className="text-sm font-semibold text-foreground break-words">
                         {it.product?.name ?? "Producto eliminado"}
                       </p>
-                      <p className="text-[11px] text-muted-foreground font-mono">
+                      <p className="text-[13px] text-muted-foreground id-text">
                         {it.product?.sku}
                       </p>
                     </div>
-                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
                       <div className="space-y-0.5">
                         <dt className="text-muted-foreground">Recibido / Ordenado</dt>
                         <dd className={cn("tabular-nums", receivedToneClass(it.qtyReceived, it.qtyOrdered))}>
@@ -391,11 +391,11 @@ export default function PurchaseOrderDetailPage() {
               <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
                 <div className="flex items-center gap-2 mb-1.5">
                   <StickyNote className="w-3.5 h-3.5 text-muted-foreground" />
-                  <h2 className="text-xs font-semibold text-foreground">
+                  <h2 className="text-sm font-semibold text-foreground">
                     Observaciones
                   </h2>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                <p className="text-[13px] text-muted-foreground leading-relaxed whitespace-pre-wrap">
                   {order.notes}
                 </p>
               </div>
@@ -404,34 +404,34 @@ export default function PurchaseOrderDetailPage() {
 
           <aside>
             <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs sticky top-[calc(var(--mobile-header)+var(--safe-top)+1rem)] lg:top-4">
-              <h3 className="text-xs font-semibold text-foreground">
+              <h3 className="text-sm font-semibold text-foreground">
                 Resumen de costos
               </h3>
               <div className="space-y-2 pt-1">
-                <div className="flex justify-between text-xs">
+                <div className="flex justify-between text-[13px]">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="text-foreground tabular-nums">
                     {formatCurrency(order.subtotal)}
                   </span>
                 </div>
-                <div className="flex justify-between text-xs">
+                <div className="flex justify-between text-[13px]">
                   <span className="text-muted-foreground">Impuestos</span>
                   <span className="text-foreground tabular-nums">
                     {formatCurrency(order.taxAmount)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
-                  <span className="text-xs font-semibold text-foreground">
+                  <span className="text-[13px] font-semibold text-foreground">
                     Total
                   </span>
-                  <span className="text-base font-semibold text-foreground tabular-nums">
+                  <span className="text-lg font-semibold text-foreground tabular-nums">
                     {formatCurrency(order.total)}
                   </span>
                 </div>
               </div>
 
               {(isReceived || isCancelled) && (
-                <p className="text-[11px] text-muted-foreground pt-2 border-t border-border/60">
+                <p className="text-[13px] text-muted-foreground pt-2 border-t border-border/60">
                   Esta orden es de solo lectura.
                 </p>
               )}
@@ -507,18 +507,20 @@ function InfoField({
 }) {
   return (
     <div className="p-3 rounded-lg bg-muted/30 border border-border/60">
-      <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+      <p className="text-[13px] font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
         {icon} <span>{label}</span>
       </p>
       <p
         className={cn(
           "text-sm font-semibold text-foreground",
-          isDate && "text-xs",
+          // D7: a date value reads in proportional figures, so `isDate` only
+          // keeps it on one line instead of adding tabular-nums.
+          isDate && "whitespace-nowrap",
         )}
       >
         {value}
       </p>
-      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+      {sub && <p className="text-[13px] text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   computeAlertPanelGeometry,
+  computeHeaderAlertPanelGeometry,
   type AlertPanelGeometry,
 } from "@/components/layout/alert-panel-geometry";
 import { useAuth } from "@/contexts/AuthContext";
@@ -75,15 +76,26 @@ function writeSeen(key: string, seen: SeenLedger): void {
 
 const emptySubscribe = () => () => {};
 
+/**
+ * Where the panel opens from. `auto` is the pair the bell had before the
+ * desktop header existed: the rail footer's flyout on wide screens, the pinned
+ * sheet under the phone's top bar below `lg`. `header` is the mount site saying
+ * "I am the top-right corner of the page", where the flyout math would open the
+ * panel over the bar instead of under it.
+ */
+export type AlertPanelPlacement = "auto" | "header";
+
 export function AlertCenter({
   className,
   buttonClassName,
   collapsed = false,
+  placement = "auto",
 }: {
   className?: string;
   /** Trigger surface; the rail styles it as a tile instead of a bare glyph. */
   buttonClassName?: string;
   collapsed?: boolean;
+  placement?: AlertPanelPlacement;
 }) {
   const { user, organization } = useAuth();
   const alerts = useAlerts();
@@ -142,7 +154,11 @@ export function AlertCenter({
       setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      // Escape is a dismissal, not a jump to the top of the page: the operator
+      // stays where they were, on the bell that opened the panel.
+      buttonRef.current?.focus();
     };
     // The geometry is measured once; a viewport change would leave it stale.
     const onResize = () => setOpen(false);
@@ -162,7 +178,20 @@ export function AlertCenter({
       return;
     }
     const element = buttonRef.current;
-    if (element && window.innerWidth >= 1024) {
+    if (element && placement === "header") {
+      // The actions cluster is the header's right content edge — the same line
+      // the account menu ends on. Reading it from the mount site keeps the two
+      // popovers aligned without either knowing the other exists.
+      const actions = element.closest<HTMLElement>("[data-app-header-actions]");
+      setCoords(
+        computeHeaderAlertPanelGeometry({
+          anchor: element.getBoundingClientRect(),
+          alignRight: (actions ?? element).getBoundingClientRect().right,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        }),
+      );
+    } else if (element && window.innerWidth >= 1024) {
       const rect = element.getBoundingClientRect();
       const sidebar = element.closest("[data-sidebar-root]");
       const railRight = sidebar
@@ -233,7 +262,10 @@ export function AlertCenter({
             aria-label="Alertas"
             style={coords ?? undefined}
             className={cn(
-              "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg shadow-black/10",
+              // The account menu's surface, one family: same radius, hairline,
+              // shadow, and the same 0.3s fade. The panel sits above the page
+              // chrome because it is portaled to the body, not nested in a bar.
+              "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg shadow-black/10 animate-fade-in",
               coords
                 ? "w-[22rem]"
                 : // Pinned under the mobile header and inside the side insets, never
@@ -244,9 +276,9 @@ export function AlertCenter({
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5">
               <div className="flex items-center gap-2">
                 <Bell className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                <h2 className="text-xs font-semibold text-foreground">Alertas</h2>
+                <h2 className="text-[13px] font-semibold text-foreground">Alertas</h2>
                 {openedUnread.length > 0 && (
-                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground tabular-nums">
+                  <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
                     {openedUnread.length}
                   </span>
                 )}
@@ -256,8 +288,8 @@ export function AlertCenter({
             {alerts.length === 0 ? (
               <div className="px-3.5 py-8 text-center">
                 <Check className="mx-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <p className="mt-2 text-xs font-medium text-foreground">Todo en orden</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                <p className="mt-2 text-sm font-medium text-foreground">Todo en orden</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   No hay alertas pendientes.
                 </p>
               </div>
@@ -282,7 +314,7 @@ export function AlertCenter({
               <Link
                 href="/alerts"
                 onClick={() => setOpen(false)}
-                className="text-[11px] font-medium text-primary hover:underline"
+                className="text-[13px] font-medium text-primary hover:underline"
               >
                 Ver historial de notificaciones
               </Link>
@@ -322,10 +354,10 @@ function AlertRow({
         {CATEGORY_ICON[alert.category]}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold text-foreground">
+        <span className="block truncate text-sm font-semibold text-foreground">
           {alert.title}
         </span>
-        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
           {alert.detail}
         </span>
       </span>

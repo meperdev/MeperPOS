@@ -40,13 +40,13 @@ export function PageHeader({
             {title}
           </h1>
           {count !== undefined && count !== null && count !== "" && (
-            <span className="hidden shrink-0 items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums lg:inline-flex">
+            <span className="hidden shrink-0 items-center rounded-md border border-border/70 bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums lg:inline-flex">
               {count}
             </span>
           )}
         </div>
         {subtitle && (
-          <p className="mt-0.5 hidden text-xs text-muted-foreground lg:block">
+          <p className="mt-0.5 hidden text-[13px] text-muted-foreground lg:block">
             {subtitle}
           </p>
         )}

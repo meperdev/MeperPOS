@@ -13,23 +13,23 @@ import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar"
 import { buildPwaMetadata, buildPwaViewport } from "@/lib/pwa";
 
 /**
- * Inter (sans) and JetBrains Mono (mono) are self-hosted as latin variable
- * WOFF2 files so production builds never depend on a Google Fonts request.
- * The `next/font/google` loader downloads fonts at build time and fails the
- * whole build whenever that request returns an unexpected payload.
+ * One family for the whole product: Inter, self-hosted as a latin WOFF2 file so
+ * production builds never depend on a Google Fonts request. The `next/font/google`
+ * loader downloads fonts at build time and fails the whole build whenever that
+ * request returns an unexpected payload.
+ *
+ * The face is Inter's variable font, subset to latin with both axes
+ * (opsz 14-32, wght 100-900) and the features the UI uses kept: tabular
+ * numbers (tnum), contextual alternates (calt), cv11 and ss01. Identifiers —
+ * SKU, barcode, sale and purchase-order numbers, NIT, phone — ride this same
+ * face with tabular figures (`.id-text` in globals.css); no second family is
+ * loaded for them.
  */
 const inter = localFont({
   src: "./fonts/inter-latin.woff2",
-  variable: "--font-inter",
+  variable: "--font-sans-face",
   display: "swap",
   weight: "100 900",
-});
-
-const jetbrainsMono = localFont({
-  src: "./fonts/jetbrains-mono-latin.woff2",
-  variable: "--font-jetbrains-mono",
-  display: "swap",
-  weight: "100 800",
 });
 
 export const metadata: Metadata = buildPwaMetadata();
@@ -43,9 +43,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body
-        className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
-      >
+      <body className={`${inter.variable} antialiased`}>
         <QueryProvider>
           <ThemeProvider>
             <ToastProvider>

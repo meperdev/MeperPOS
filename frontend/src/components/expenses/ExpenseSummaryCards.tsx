@@ -61,7 +61,7 @@ function ExpenseSummaryPlaceholder() {
     >
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
         <div className="min-w-0 lg:w-[min(45%,20rem)] lg:shrink-0">
-          <p className="text-[11px] text-muted-foreground">Total del mes</p>
+          <p className="text-xs text-muted-foreground">Total del mes</p>
           <div className={`mt-2 h-8 w-44 rounded-md bg-muted-foreground/12 sm:h-9 ${PULSE}`} />
           <div className={`mt-2.5 h-2.5 w-32 rounded-full bg-muted-foreground/10 ${PULSE}`} />
           <div className={`mt-4 h-2.5 w-full rounded-full bg-muted ${PULSE}`} />
@@ -81,6 +81,10 @@ function ExpenseSummaryPlaceholder() {
   );
 }
 
+/**
+ * The hero total and the ranked rows are the design; the component adds no
+ * money of its own — every figure comes from the summary endpoint.
+ */
 export function ExpenseSummaryCards({ month, summary }: Props) {
   if (!summary) return <ExpenseSummaryPlaceholder />;
 
@@ -123,8 +127,8 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
     >
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
         <div className="min-w-0 lg:w-[min(45%,20rem)] lg:shrink-0">
-          <p className="text-[11px] text-muted-foreground">Total del mes</p>
-          <p className="mt-1 text-3xl font-semibold tracking-tight text-foreground tabular-nums sm:text-4xl">
+          <p className="text-xs text-muted-foreground">Total del mes</p>
+          <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums sm:text-[28px]">
             {formatCurrency(total)}
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -182,7 +186,7 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
                       <span className="block truncate text-[13px] text-foreground">
                         {entry.group.name}
                       </span>
-                      <span className="mt-0.5 flex items-baseline gap-1 text-[11px] text-muted-foreground">
+                      <span className="mt-0.5 flex items-baseline gap-1 text-xs text-muted-foreground">
                         <span className="truncate">
                           {inlineLabels.length === 0
                             ? "Sin etiquetas"
@@ -200,7 +204,7 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
                     <span className="shrink-0 text-right text-[13px] font-medium text-foreground tabular-nums">
                       {formatCurrency(entry.amount)}
                     </span>
-                    <span className="w-9 shrink-0 text-right text-[11px] text-muted-foreground tabular-nums">
+                    <span className="w-9 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
                       {formatShare(entry.share)}
                     </span>
                   </li>

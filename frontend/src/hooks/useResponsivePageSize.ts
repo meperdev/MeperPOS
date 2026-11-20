@@ -22,12 +22,19 @@ export interface ResponsivePageSizeOptions {
   gap: number;
   /** Card height used until a rendered card can be measured. */
   rowHeight: number;
+  /**
+   * `false` when the grid stretches its rows to fill the space above the pager.
+   * The rendered card is then TALLER than its row minimum, so measuring it would
+   * count fewer rows, which stretches the cards further — a feedback loop. With
+   * this off, `rowHeight` always decides the row count. Default `true`.
+   */
+  measureRowHeight?: boolean;
   minRows?: number;
   /** The page's fixed default: the floor, so phones keep their current list. */
   min: number;
   /** The endpoint's ceiling for `limit`. */
   max: number;
-  /** Table view opts out and keeps the fixed page size. */
+  /** `false` in table view, where the table's own geometry sets the size. */
   enabled?: boolean;
   debounceMs?: number;
 }
@@ -47,7 +54,9 @@ export interface ResponsivePageSize {
   footerRef: (element: HTMLElement | null) => void;
   /**
    * Attach to the box that holds the table view. Rows are then fitted between
-   * its top edge and the pager; until it mounts, table view keeps `min`.
+   * its top edge and the pager; until the first measurement, table view keeps
+   * `min`. The last measurement outlives the element, so a page that swaps the
+   * table for a loading skeleton never loses its page size.
    */
   tableRef: (element: HTMLElement | null) => void;
 }
@@ -90,6 +99,7 @@ export function useResponsivePageSize({
   minCardWidth,
   gap,
   rowHeight,
+  measureRowHeight = true,
   minRows = MIN_VISIBLE_ROWS,
   min,
   max,
@@ -132,7 +142,9 @@ export function useResponsivePageSize({
       const width = container.clientWidth || box.width;
       if (!(width > 0)) return;
 
-      const cardHeight = container.firstElementChild?.getBoundingClientRect().height;
+      const cardHeight = measureRowHeight
+        ? container.firstElementChild?.getBoundingClientRect().height
+        : undefined;
       const footerHeight = footer ? outsideHeight(footer) : 0;
       const top = box.top + scrollOffset();
       const availableHeight = viewportHeight() - top - footerHeight - gap;
@@ -200,6 +212,7 @@ export function useResponsivePageSize({
     minCardWidth,
     gap,
     rowHeight,
+    measureRowHeight,
     minRows,
     min,
     max,
@@ -265,7 +278,13 @@ export function useResponsivePageSize({
     };
   }, [table, footer, gap, max, enabled, debounceMs]);
 
+  // The measured count is the page's `limit`. A page that swaps the table for a
+  // loading skeleton — which is what a new `limit` causes — detaches the ref, so
+  // answering from the element's presence would drop back to `min`, change the
+  // `limit` again and refetch, oscillating between the two sizes forever. Only a
+  // new measurement replaces the number, and the measurement reads the table's
+  // position, never its height.
   const tableAnswer =
-    table && tableRows !== null ? { ...tableSize, pageSize: tableRows, rows: tableRows } : tableSize;
+    tableRows === null ? tableSize : { ...tableSize, pageSize: tableRows, rows: tableRows };
   return { ...(enabled ? size : tableAnswer), containerRef, footerRef, tableRef };
 }

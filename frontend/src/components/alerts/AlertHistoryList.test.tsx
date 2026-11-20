@@ -95,7 +95,8 @@ describe("AlertHistoryList", () => {
 
     const row = rowOf("Café molido 500 g");
     const sku = within(row).getByText("BEB-003");
-    expect(sku).toHaveClass("font-mono", "tabular-nums");
+    expect(sku).toHaveClass("id-text");
+    expect(sku).not.toHaveClass("font-mono");
 
     const episode = within(row).getByText("episodio 7");
     expect(episode).toHaveClass("tabular-nums");

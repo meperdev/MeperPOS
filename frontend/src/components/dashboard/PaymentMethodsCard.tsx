@@ -100,12 +100,12 @@ export function PaymentMethodsCard({
             </Pie>
           </PieChart>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[11px] font-medium text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               Total
             </span>
             <span
               data-testid="payment-methods-total"
-              className="max-w-[82px] truncate px-1 text-center font-mono text-xs font-semibold tracking-tight text-foreground tabular-nums sm:text-[13px]"
+              className="max-w-[82px] truncate px-1 text-center text-[13px] font-semibold tracking-tight text-foreground tabular-nums"
             >
               {formatCurrency(total)}
             </span>
@@ -117,7 +117,7 @@ export function PaymentMethodsCard({
             <li
               key={slice.method}
               data-testid="payment-method-row"
-              className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,5.5rem)] items-center gap-2 text-xs"
+              className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,5.5rem)] items-center gap-2 text-[13px]"
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span
@@ -130,13 +130,13 @@ export function PaymentMethodsCard({
               </span>
               <span
                 data-testid="payment-method-percentage"
-                className="inline-flex w-10 items-center justify-center rounded-md border border-border/60 bg-muted/50 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground tabular-nums"
+                className="inline-flex w-10 items-center justify-center rounded-md border border-border/60 bg-muted/50 py-0.5 text-xs font-semibold text-muted-foreground tabular-nums"
               >
                 {slice.percentage}%
               </span>
               <span
                 title={formatCurrency(slice.value)}
-                className="min-w-0 truncate text-left font-mono text-[11px] font-semibold text-foreground tabular-nums"
+                className="min-w-0 truncate text-left text-xs font-semibold text-foreground tabular-nums"
               >
                 {formatCurrency(slice.value)}
               </span>

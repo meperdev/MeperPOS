@@ -37,18 +37,18 @@ export function TopProductsBlock({
           <div key={product.productId} className="space-y-1.5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-[11px] font-semibold text-muted-foreground tabular-nums">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-xs font-semibold text-muted-foreground tabular-nums">
                   {index + 1}
                 </span>
-                <span className="truncate text-xs font-medium text-foreground sm:text-sm">
+                <span className="truncate text-sm font-medium text-foreground sm:text-sm">
                   {product.productName}
                 </span>
               </div>
               <div className="flex shrink-0 items-baseline gap-2">
-                <span className="text-[11px] text-muted-foreground tabular-nums">
+                <span className="text-[13px] text-muted-foreground tabular-nums">
                   {product.quantity} vendidos
                 </span>
-                <span className="text-xs font-semibold text-foreground tabular-nums">
+                <span className="text-[13px] font-semibold text-foreground tabular-nums">
                   {formatCurrency(product.total)}
                 </span>
               </div>

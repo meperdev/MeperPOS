@@ -7,7 +7,7 @@ Documentación oficial del sistema de diseño **Kinetic Bento** para el frontend
 ## 📚 Índice de Documentación
 
 1. **[Especificación Canónica del Sistema (`KINETIC_BENTO_SPEC.md`)](./KINETIC_BENTO_SPEC.md)**  
-   Definición completa de tokens de diseño, tipografía combinada (`Inter` + `JetBrains Mono` para códigos), paleta dual (Light / Obsidian Charcoal Dark), reglas atómicas y especificación de los 15 módulos del sistema.
+   Definición completa de tokens de diseño, tipografía única (`Inter`, subset latin self-hosted, con `.id-text` para identificadores y cifras tabulares), paleta dual (Light / Obsidian Charcoal Dark), reglas atómicas y especificación de los 15 módulos del sistema.
 
 2. **[Plan de Implementación Técnica (`IMPLEMENTATION_PLAN.md`)](./IMPLEMENTATION_PLAN.md)**  
    Estructura en 5 fases de implementación, mapa de archivos afectados y criterios de verificación.
@@ -28,8 +28,9 @@ Documentación oficial del sistema de diseño **Kinetic Bento** para el frontend
 | **Dark Background (Obsidian)** | `#111114` | Fondo de página en modo oscuro (sin tintes azules) |
 | **Dark Cards / Containers** | `#18181c` | Tarjetas Bento en modo oscuro |
 | **Dark Borders** | `#30303a` | Micro-bordes en modo oscuro |
-| **Font Sans** | `Inter` | Títulos, textos generales de UI y navegación |
-| **Font Mono** | `JetBrains Mono` | Códigos, SKUs, IDs y precios COP completos |
+| **Font Sans** | `Inter` | Única familia: títulos, textos de UI y navegación |
+| **Font Identifiers** | `Inter` + cifras tabulares (`.id-text`) | Códigos, SKUs, IDs y precios COP; no se carga familia monoespaciada |
+| **Fechas y horas** | `Inter` proporcional | Sin `tabular-nums`, sin `.stat-number` ni `.id-text`; solo una línea que mezcla fecha con dinero o un conteo conserva cifras tabulares |
 
 ---
 

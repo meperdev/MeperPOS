@@ -27,6 +27,19 @@ vi.mock("./Sidebar", () => ({
   Sidebar: () => <div data-testid="sidebar" />,
 }));
 
+// The header and the palette mount real data hooks (the alert feed queries the
+// server), and this suite is about the page-enter element's identity, not the
+// shell's chrome. Stub them where `DashboardLayout.test.tsx` does.
+vi.mock("./AppHeader", () => ({
+  AppHeader: ({ isCollapsed }: { isCollapsed: boolean }) => (
+    <div data-testid="app-header" data-collapsed={String(isCollapsed)} />
+  ),
+}));
+
+vi.mock("./CommandPalette", () => ({
+  CommandPalette: () => <div data-testid="command-palette" />,
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     children,

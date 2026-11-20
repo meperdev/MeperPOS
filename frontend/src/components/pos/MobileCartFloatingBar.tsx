@@ -32,12 +32,12 @@ export function MobileCartFloatingBar({
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-white shrink-0">
             <ShoppingCart className="h-5 w-5" />
-            <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent text-[11px] font-semibold tabular-nums text-white px-1 shadow-xs ring-2 ring-primary">
+            <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent text-xs font-semibold tabular-nums text-white px-1 shadow-xs ring-2 ring-primary">
               {totalItems}
             </span>
           </div>
           <div className="text-left min-w-0">
-            <p className="text-xs font-medium text-white/80 leading-none mb-1">
+            <p className="text-[13px] font-medium text-white/80 leading-none mb-1">
               Ver carrito
             </p>
             <p className="stat-number text-base font-semibold tabular-nums text-white leading-none truncate">
@@ -46,7 +46,7 @@ export function MobileCartFloatingBar({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 bg-white/15 px-3 py-1.5 rounded-xl font-semibold text-xs text-white">
+        <div className="flex items-center gap-1.5 shrink-0 bg-white/15 px-3 py-1.5 rounded-xl font-semibold text-[13px] text-white">
           <span>Abrir</span>
           <ChevronUp className="h-4 w-4" />
         </div>

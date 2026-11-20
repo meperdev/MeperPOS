@@ -19,6 +19,7 @@ import {
   sumExpensesOnDate,
 } from "@/lib/dashboard";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 /**
  * KPI window: the last 7 days ending today. Yesterday — the delta baseline —
@@ -109,6 +110,7 @@ export function TodayStatsInner({ today }: { today: string }) {
           tone="green"
           sparkline={salesSeries}
           delta={computeDelta(todayMetrics.sales, yesterdayMetrics.sales)}
+          animateValue
         />
         <MetricCard
           label="Salidas hoy"
@@ -117,6 +119,7 @@ export function TodayStatsInner({ today }: { today: string }) {
           tone="rose"
           sparkline={expensesSeries}
           delta={computeDelta(expensesToday, expensesYesterday)}
+          animateValue
         />
         <MetricCard
           label="Transacciones"
@@ -125,6 +128,7 @@ export function TodayStatsInner({ today }: { today: string }) {
           tone="accent"
           sparkline={transactionsSeries}
           delta={computeDelta(todayMetrics.transactions, yesterdayMetrics.transactions)}
+          animateValue
         />
         <MetricCard
           label="Ticket promedio"
@@ -133,6 +137,7 @@ export function TodayStatsInner({ today }: { today: string }) {
           tone="blue"
           sparkline={ticketSeries}
           delta={computeDelta(todayMetrics.ticket, yesterdayMetrics.ticket)}
+          animateValue
         />
       </div>
 
@@ -148,7 +153,7 @@ export function TodayStatsInner({ today }: { today: string }) {
         <div className={cn("grid grid-cols-3", lowStockCount > 0 && "md:grid-cols-4")}>
           {totals.map((total, index) => (
             <div key={total.label} className={cn("flex min-w-0 flex-col px-3 py-3", index > 0 && "border-l border-border")}>
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-[13px] font-medium text-muted-foreground">
                 {total.label}
               </p>
               {/* `mt-auto` keeps the three values on one baseline when a label
@@ -157,7 +162,7 @@ export function TodayStatsInner({ today }: { today: string }) {
                 className="mt-auto pt-1 truncate text-lg font-semibold text-foreground tabular-nums"
                 title={total.value}
               >
-                {total.value}
+                <AnimatedNumber value={total.value} />
               </p>
             </div>
           ))}
@@ -169,7 +174,7 @@ export function TodayStatsInner({ today }: { today: string }) {
               className="group col-span-3 flex min-w-0 items-center justify-between gap-3 border-t border-border bg-danger/10 px-3 py-3 text-danger-text transition-colors hover:bg-danger/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 md:col-span-1 md:border-l md:border-t-0"
             >
               <span className="flex min-w-0 flex-col">
-                <span className="text-xs font-medium">Stock crítico</span>
+                <span className="text-[13px] font-medium">Stock crítico</span>
                 <span className="mt-auto truncate pt-1 text-lg font-semibold tabular-nums">
                   {lowStockLabel}
                 </span>

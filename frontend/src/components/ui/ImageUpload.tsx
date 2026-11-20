@@ -181,8 +181,8 @@ export function ImageUpload({
                 <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground shadow-2xs">
                   <ImageIcon className="h-5 w-5" aria-hidden="true" />
                 </div>
-                <span className="text-xs font-medium text-foreground">Seleccionar imagen</span>
-                <span className="mt-1 text-[11px] leading-relaxed text-muted-foreground">JPG, PNG, GIF o WEBP · Máx. 5 MB</span>
+                <span className="text-[13px] font-medium text-foreground">Seleccionar imagen</span>
+                <span className="mt-1 text-xs leading-relaxed text-muted-foreground">JPG, PNG, GIF o WEBP · Máx. 5 MB</span>
               </>
             )}
           </button>
@@ -242,8 +242,8 @@ export function ImageUpload({
               <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground shadow-2xs">
                 <ImageIcon className="w-5 h-5" />
               </div>
-              <span className="text-xs font-medium text-foreground">Seleccionar imagen</span>
-              <span className="text-[11px] text-muted-foreground mt-1 leading-relaxed">JPG, PNG, GIF o WEBP · Máx. 5 MB</span>
+              <span className="text-[13px] font-medium text-foreground">Seleccionar imagen</span>
+              <span className="text-xs text-muted-foreground mt-1 leading-relaxed">JPG, PNG, GIF o WEBP · Máx. 5 MB</span>
             </>
           )}
         </button>

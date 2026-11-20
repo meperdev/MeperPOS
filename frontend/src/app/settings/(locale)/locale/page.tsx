@@ -40,7 +40,7 @@ export default function LocaleSettingsPage() {
         <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
           Moneda y región
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
           Valores fijos definidos por la plataforma
         </p>
       </div>
@@ -56,10 +56,10 @@ export default function LocaleSettingsPage() {
               key={item.label}
               className="flex items-center justify-between px-3.5 py-2.5"
             >
-              <dt className="text-xs font-medium text-muted-foreground">
+              <dt className="text-[13px] font-medium text-muted-foreground">
                 {item.label}
               </dt>
-              <dd className="text-xs font-semibold text-foreground tabular-nums">
+              <dd className="text-[13px] font-semibold text-foreground tabular-nums">
                 {item.value}
               </dd>
             </div>

@@ -16,6 +16,8 @@ const EDGE = 12;
 const PREFER_BELOW_MIN = 320;
 /** Floor so a very short viewport still yields a usable scroll area. */
 const MIN_PANEL_HEIGHT = 200;
+/** The gap the account menu leaves under its avatar; the bell matches it. */
+const HEADER_GAP = 8;
 
 export interface AlertPanelAnchor {
   /** Viewport-relative top edge of the trigger. */
@@ -66,6 +68,43 @@ export function computeAlertPanelGeometry({
   }
 
   const top = Math.max(EDGE, anchor.top - 4);
+  return {
+    left,
+    top,
+    maxHeight: Math.max(MIN_PANEL_HEIGHT, viewportHeight - top - EDGE),
+  };
+}
+
+/**
+ * The header placement: the same bell, mounted at the top right of the desktop
+ * bar. The rail's math treats the trigger as the page's left edge and opens the
+ * panel over the bar, hiding the bell and the avatar beside it. Here the panel
+ * hangs under the trigger and ends on the header's right content edge — the line
+ * the account menu already ends on, so the two popovers read as one family.
+ */
+export function computeHeaderAlertPanelGeometry({
+  anchor,
+  alignRight,
+  viewportWidth,
+  viewportHeight,
+}: {
+  anchor: AlertPanelAnchor;
+  /** Viewport x of the header's right content edge (the account menu's edge). */
+  alignRight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}): AlertPanelGeometry {
+  // Never above the trigger's own bottom edge, so the bell and the avatar it
+  // sits next to stay visible and clickable while the panel is open.
+  const top = Math.max(EDGE, anchor.bottom + HEADER_GAP);
+  const left = Math.max(
+    EDGE,
+    Math.min(
+      alignRight - ALERT_PANEL_WIDTH,
+      viewportWidth - ALERT_PANEL_WIDTH - EDGE,
+    ),
+  );
+
   return {
     left,
     top,

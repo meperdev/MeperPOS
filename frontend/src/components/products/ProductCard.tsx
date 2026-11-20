@@ -93,7 +93,7 @@ function StatusChip({ status }: { status: StatusKey }) {
     <span
       data-testid={statusTestId(status)}
       className={cn(
-        "inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium leading-none sm:text-xs",
+        "inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium leading-none sm:text-[13px]",
         STATUS_TONE[status],
       )}
     >
@@ -111,7 +111,7 @@ function StatusChip({ status }: { status: StatusKey }) {
 
 function OfferBadge({ discount }: { discount: number }) {
   return (
-    <span className="inline-flex max-w-full items-center whitespace-nowrap rounded-md border border-danger/30 bg-card/90 px-2 py-1 text-[11px] font-medium leading-none tabular-nums text-danger-text sm:text-xs">
+    <span className="inline-flex max-w-full items-center whitespace-nowrap rounded-md border border-danger/30 bg-card/90 px-2 py-1 text-xs font-medium leading-none tabular-nums text-danger-text sm:text-[13px]">
       Oferta{discount > 0 ? ` -${discount}%` : ""}
     </span>
   );
@@ -235,7 +235,17 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
   return (
     <div
       className={cn(
-        "group relative isolate flex w-full max-w-[22rem] aspect-[4/5] max-h-[22rem] min-h-[15.5rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-2xs transition-colors duration-150 hover:border-primary/40",
+        "group relative isolate flex w-full max-w-[22rem] aspect-[4/5] max-h-[22rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-2xs transition-colors duration-150 hover:border-primary/40",
+        // Inventory is the short card: three rows of it have to fit a 1080p
+        // viewport between the filters and the pager (see
+        // PRODUCT_CARD_MIN_ROW_HEIGHT). POS keeps the taller poster.
+        // From `lg` the inventory grid stretches every row to the height left above
+        // the pager, so the card gives up its poster aspect and its height cap there
+        // and takes the row's height. The photo is an edge-to-edge layer, so that
+        // extra height becomes more photo; the sheet stays docked at the bottom.
+        isInventory
+          ? "min-h-[13.5rem] lg:h-full lg:aspect-auto lg:max-h-none"
+          : "min-h-[15.5rem]",
         compactPos &&
           "max-sm:min-h-[7rem] max-sm:max-h-none max-sm:aspect-auto max-sm:max-w-none max-sm:rounded-xl",
         barePhoneTile && "max-sm:bg-card",
@@ -334,7 +344,11 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
       <div
         data-testid="product-sheet"
         className={cn(
-          "relative mt-auto flex w-full min-w-0 flex-col border-t border-border bg-card px-3 pb-3 pt-3 text-foreground",
+          "relative mt-auto flex w-full min-w-0 flex-col border-t border-border bg-card px-3 text-foreground",
+          // The inventory sheet is the tight one: a shorter card means less
+          // photo band, not less information, so the padding gives a few pixels
+          // back. POS keeps its roomier panel.
+          isInventory ? "px-2.5 pb-2.5 pt-2.5" : "pb-3 pt-3",
           compactPos && "max-sm:px-2 max-sm:pb-1.5 max-sm:pt-1.5",
           // The tile starts at the sheet's own top edge: no strip above it, and
           // therefore no divider to mark one. The name, stock and price spread
@@ -344,8 +358,12 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
       >
         <h3
           className={cn(
-            "line-clamp-2 min-h-[2.25rem] min-w-0 break-words text-sm sm:text-[15px] font-semibold leading-snug text-foreground",
-            compactPos && "max-sm:min-h-0 max-sm:text-xs",
+            "line-clamp-2 min-h-[2.25rem] min-w-0 break-words text-sm font-semibold leading-snug text-foreground",
+            // The inventory tile is the narrow one: at nine columns its name
+            // column cannot afford the POS poster's 15px without clamping a
+            // title that used to fit, so it stays on the body step.
+            !isInventory && "sm:text-[15px]",
+            compactPos && "max-sm:min-h-0 max-sm:text-[13px]",
           )}
         >
           {product.name}
@@ -355,8 +373,9 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
           <div className="mt-1 flex min-w-0 items-center justify-between gap-2 max-sm:mt-0.5 max-sm:flex-wrap">
             {product.sku && (
               <span
+                data-testid="product-sku"
                 className={cn(
-                  "min-w-0 truncate font-mono text-[11px] text-muted-foreground",
+                  "min-w-0 truncate id-text text-xs text-muted-foreground",
                   // The tile has room for the name, the price and the stock — not the SKU.
                   compactPos && "max-sm:hidden",
                 )}
@@ -368,7 +387,9 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
               <span
                 data-testid="product-stock"
                 className={cn(
-                  "ml-auto shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium leading-none tabular-nums",
+                  // The pill is the line's fixed fact: it never shrinks and its
+                  // count never breaks, so a long identifier ellipsizes instead.
+                  "ml-auto shrink-0 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium leading-none tabular-nums",
                   // On a phone tile the count is its own line, reading from the left.
                   compactPos && "max-sm:ml-0",
                   STOCK_TONE[status] ?? "border-border bg-muted text-foreground",
@@ -382,7 +403,7 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
               // place at the end of the stock line and wraps instead of shrinking.
               <span
                 data-testid="offer-compact"
-                className="ml-auto hidden shrink-0 items-center rounded-md border border-danger/30 bg-danger/10 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-danger-text max-sm:inline-flex"
+                className="ml-auto hidden shrink-0 items-center rounded-md border border-danger/30 bg-danger/10 px-1.5 py-0.5 text-xs font-semibold leading-none tabular-nums text-danger-text max-sm:inline-flex"
               >
                 -{discount}%
               </span>
@@ -399,8 +420,13 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
           )}
         >
           <span
+            data-testid="product-category"
             className={cn(
-              "block w-fit max-w-full truncate rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-[11px] font-semibold leading-none text-primary-text",
+              // The chip owns a whole line at the tile's full width: a long
+              // category name is shown whole when the tile allows it and
+              // ellipsized from the right when it cannot, never compressed by
+              // the price row underneath.
+              "block w-fit max-w-full truncate rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-xs font-semibold leading-none text-primary-text",
               compactPos && "max-sm:hidden",
             )}
           >
@@ -425,7 +451,7 @@ export function ProductCard({ product, mode, onClick, onDelete, onReactivate, is
             {hasPromo && (
               <s
                 data-testid="offer-list-price"
-                className="whitespace-nowrap text-xs tabular-nums text-muted-foreground line-through"
+                className="whitespace-nowrap text-[13px] tabular-nums text-muted-foreground line-through"
               >
                 {formatCurrency(Number(product.salePrice))}
               </s>

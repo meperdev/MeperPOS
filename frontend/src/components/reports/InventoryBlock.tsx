@@ -51,12 +51,12 @@ export function InventoryBlock({
       >
         {figures.map((figure) => (
           <div key={figure.label} className="bg-card px-3 py-2.5">
-            <p className="text-[11px] text-muted-foreground">{figure.label}</p>
+            <p className="text-[13px] text-muted-foreground">{figure.label}</p>
             <p
               className={
                 figure.tone === "success"
-                  ? "mt-1 truncate text-base font-semibold tracking-tight text-success-text tabular-nums"
-                  : "mt-1 truncate text-base font-semibold tracking-tight text-foreground tabular-nums"
+                  ? "mt-1 truncate text-lg font-semibold tracking-tight text-success-text tabular-nums"
+                  : "mt-1 truncate text-lg font-semibold tracking-tight text-foreground tabular-nums"
               }
             >
               {figure.value}
