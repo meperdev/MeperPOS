@@ -154,6 +154,12 @@ describe('SalesService payment rule (S3)', () => {
         }),
       );
       expect(tx.payment.create).toHaveBeenCalledTimes(2);
+      expect(
+        tx.fiscalDocument.create.mock.calls[0][0].data.snapshot,
+      ).toMatchObject({
+        amountPaid: '120000.00',
+        change: '7069.00',
+      });
     });
 
     it('hands a cash tender back as change on a sale with nothing to collect', async () => {
