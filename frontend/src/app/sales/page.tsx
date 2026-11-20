@@ -411,7 +411,7 @@ function SalesPageContent() {
                               #{sale.saleNumber}
                             </span>
                           </TableCell>
-                          <TableCell className="text-muted-foreground whitespace-nowrap tabular-nums">
+                          <TableCell className="text-muted-foreground whitespace-nowrap">
                             {formatDateTime(sale.createdAt)}
                           </TableCell>
                           <TableCell className="max-w-[140px] truncate">
@@ -523,14 +523,13 @@ function SalesPageContent() {
                 {
                   label: "Fecha",
                   value: formatDateTime(selectedSale.createdAt),
-                  mono: true,
                 },
                 {
                   label: "Estado",
                   value: <StatusBadge domain="sale" status={selectedSale.status} dot={false} />,
                   isNode: true,
                 },
-              ].map(({ label, value, isNode, mono }) => (
+              ].map(({ label, value, isNode }) => (
                 <div
                   key={label}
                   className="p-3 rounded-lg bg-muted/30 border border-border/60 min-w-0"
@@ -541,12 +540,7 @@ function SalesPageContent() {
                   {isNode ? (
                     value
                   ) : (
-                    <p
-                      className={cn(
-                        "text-xs font-semibold text-foreground truncate",
-                        mono && " tabular-nums",
-                      )}
-                    >
+                    <p className="text-xs font-semibold text-foreground truncate">
                       {value as string}
                     </p>
                   )}

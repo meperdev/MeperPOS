@@ -266,7 +266,7 @@ export function DailyReportSection({
                           <span className="shrink-0 text-[11px] font-medium text-muted-foreground tabular-nums">
                             #{row.saleNumber}
                           </span>
-                          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
                             {row.time}
                           </span>
                           <span className="truncate text-xs text-foreground">

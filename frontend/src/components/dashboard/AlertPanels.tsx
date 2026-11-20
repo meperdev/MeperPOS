@@ -144,7 +144,7 @@ export function AlertPanels() {
                           {task.status === "IN_PROGRESS" ? "En progreso" : "Pendiente"}
                         </Badge>
                         {task.dueDate && (
-                          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                          <span className="text-[11px] text-muted-foreground">
                             {formatDate(task.dueDate)}
                           </span>
                         )}

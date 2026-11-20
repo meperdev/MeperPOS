@@ -66,7 +66,7 @@ export function ExpenseDetailModal({ expense, isOpen, onClose }: Props) {
                 <p className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight tabular-nums mt-0.5">
                   {formatCurrency(Number(expense.total))}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Fecha: {formatDate(expense.date)}
                 </p>
               </div>

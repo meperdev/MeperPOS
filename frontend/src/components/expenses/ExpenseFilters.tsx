@@ -73,7 +73,7 @@ export function ExpenseFilters({
               aria-label="Mes"
               value={month}
               onChange={(event) => onMonthChange(event.target.value)}
-              className="w-full cursor-pointer tabular-nums"
+              className="w-full cursor-pointer"
             />
           </div>
           <Select

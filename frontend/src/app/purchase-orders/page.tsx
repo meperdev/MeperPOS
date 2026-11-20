@@ -300,7 +300,7 @@ function PurchaseOrdersContent() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {formatDate(order.createdAt)}
                             </span>
                           </TableCell>
@@ -370,7 +370,7 @@ function PurchaseOrdersContent() {
                         </div>
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Calendar className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-                          <span className="tabular-nums text-muted-foreground">
+                          <span className="text-muted-foreground">
                             {formatDate(order.createdAt)}
                           </span>
                         </div>

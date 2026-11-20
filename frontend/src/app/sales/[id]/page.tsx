@@ -136,7 +136,7 @@ export default function SaleDetailPage() {
                         Financiado
                       </Badge>
                     )}
-                    <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
+                    <span className="inline-flex items-center rounded-md border border-border/70 bg-muted/50 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                       {formatDateTime(sale.createdAt)}
                     </span>
                   </div>

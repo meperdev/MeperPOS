@@ -104,7 +104,7 @@ function AlertHistoryRow({ item }: { item: StockAlertHistoryItem }) {
       <div className="flex shrink-0 flex-col items-end gap-1">
         <time
           dateTime={item.createdAt}
-          className="text-[11px] tabular-nums text-muted-foreground"
+          className="text-[11px] text-muted-foreground"
         >
           {formatReportClockTime(item.createdAt)}
         </time>

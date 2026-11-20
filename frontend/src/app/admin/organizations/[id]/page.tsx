@@ -495,7 +495,7 @@ function OrganizationGeneralCard({
             Guardar cambios
           </Button>
           {organization.trialEndsAt && (
-            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground tabular-nums">
+            <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
               Trial finaliza: {formatDate(organization.trialEndsAt)}
             </span>
           )}
@@ -505,7 +505,7 @@ function OrganizationGeneralCard({
           {metadata.map((item) => (
             <div key={item.label}>
               <dt className="text-[11px] text-muted-foreground">{item.label}</dt>
-              <dd className="mt-0.5 truncate text-[13px] text-foreground tabular-nums">
+              <dd className="mt-0.5 truncate text-[13px] text-foreground">
                 {item.value}
               </dd>
             </div>

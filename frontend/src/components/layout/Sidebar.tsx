@@ -520,7 +520,7 @@ export function Sidebar() {
                   <time
                     data-testid="sidebar-clock"
                     dateTime={clockIso}
-                    className="truncate text-xs tabular-nums text-muted-foreground"
+                    className="truncate text-xs text-muted-foreground"
                   >
                     {clockLabel}
                   </time>

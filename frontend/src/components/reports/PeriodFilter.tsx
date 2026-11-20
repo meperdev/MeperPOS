@@ -90,7 +90,7 @@ export function PeriodFilter({
           </div>
         </div>
 
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground tabular-nums">
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground">
           <Calendar className="h-3 w-3 shrink-0" aria-hidden="true" />
           {appliedLabel}
         </span>

@@ -63,7 +63,7 @@ export function ExpenseCard({
         </div>
         <div className="flex items-center justify-between gap-2">
           <dt className="text-muted-foreground">Fecha</dt>
-          <dd className="inline-flex items-center gap-1.5 tabular-nums text-foreground">
+          <dd className="inline-flex items-center gap-1.5 text-foreground">
             {formatDate(expense.date)}
             {expense.receiptUrl && (
               <FileCheck

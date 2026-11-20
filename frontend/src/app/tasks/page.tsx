@@ -700,7 +700,7 @@ export default function TasksPage() {
                                 {task.dueDate && (
                                   <Badge
                                     variant={isOverdue ? "danger" : "default"}
-                                    className="gap-1 px-2 text-[11px] font-medium tabular-nums"
+                                    className="gap-1 px-2 text-[11px] font-medium"
                                   >
                                     <Calendar className="h-3 w-3" />
                                     {formatDate(task.dueDate)}
@@ -708,7 +708,7 @@ export default function TasksPage() {
                                   </Badge>
                                 )}
 
-                                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums ml-auto">
+                                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground ml-auto">
                                   <Clock3 className="h-3 w-3" />
                                   {formatDateTime(task.updatedAt)}
                                 </span>
@@ -909,7 +909,7 @@ export default function TasksPage() {
                             <Calendar className="h-3.5 w-3.5 shrink-0" />
                             <span>Fecha límite</span>
                           </span>
-                          <span className="font-semibold text-foreground text-xs tabular-nums truncate block mt-1">
+                          <span className="font-semibold text-foreground text-xs truncate block mt-1">
                             {selectedTask.dueDate ? formatDate(selectedTask.dueDate) : "Sin fecha"}
                           </span>
                         </div>
@@ -958,7 +958,7 @@ export default function TasksPage() {
                                   </span>
                                 )}
                               </div>
-                              <span className="whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
+                              <span className="whitespace-nowrap text-[11px] text-muted-foreground">
                                 {formatDateTime(event.createdAt)}
                               </span>
                             </div>

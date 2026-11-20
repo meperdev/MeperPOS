@@ -509,7 +509,7 @@ export default function ExpensesPage() {
 
                             return (
                               <TableRow key={expense.id}>
-                                <TableCell className="text-muted-foreground whitespace-nowrap text-xs tabular-nums">
+                                <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
                                   {formatDate(expense.date)}
                                 </TableCell>
                                 <TableCell>

@@ -794,7 +794,7 @@ export default function LoansPage() {
                             </span>
                           )}
                         </div>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
                           <span>{formatDateTime(event.createdAt)}</span>
                           <span className="mx-1.5">·</span>
                           <span>{event.createdBy.name}</span>

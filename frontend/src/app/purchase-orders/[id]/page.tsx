@@ -513,7 +513,7 @@ function InfoField({
       <p
         className={cn(
           "text-sm font-semibold text-foreground",
-          isDate && "tabular-nums text-xs",
+          isDate && "text-xs",
         )}
       >
         {value}

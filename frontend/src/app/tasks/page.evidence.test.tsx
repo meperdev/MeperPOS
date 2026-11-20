@@ -253,7 +253,10 @@ describe("Tasks module evidence", () => {
     const row = label.closest("div.flex.items-start")!;
     expect(label.className).toContain("break-words");
     expect(label.className).not.toContain("truncate");
-    expect(row.querySelector(".tabular-nums")!.className).not.toContain("shrink-0");
+    // The timestamp shares the row; it must not reserve space with shrink-0.
+    const stamp = row.querySelector("span.text-muted-foreground.whitespace-nowrap")!;
+    expect(stamp).not.toBeNull();
+    expect(stamp.className).not.toContain("shrink-0");
   });
 
   it("stacks the detail header by panel width so the title keeps its room beside the actions", () => {

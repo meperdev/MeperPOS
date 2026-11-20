@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
@@ -231,6 +231,62 @@ describe("Sales table width (min-w only with rows)", () => {
 
     expect(screen.getByRole("table").className).not.toContain("min-w-[680px]");
     expect(screen.getAllByText("No hay ventas registradas").length).toBeGreaterThan(0);
+  });
+});
+
+describe("Sales rows keep dates out of tabular figures (S11/D7)", () => {
+  const sale = {
+    id: "sale-1",
+    saleNumber: 42,
+    status: "PAID",
+    total: 100,
+    createdAt: "2026-03-24T10:00:00Z",
+    customer: { name: "Ana Perez" },
+    payments: [],
+    financed: false,
+    user: { name: "Admin" },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentSearchParams = new URLSearchParams();
+    window.localStorage.setItem("meperpos:view-mode:sales", "table");
+    // The table view measures its list height; jsdom has no ResizeObserver.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem("meperpos:view-mode:sales");
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("renders the date cell without tabular-nums while the total keeps it", () => {
+    useSalesMock.mockReturnValue({
+      data: { data: [sale], meta: { total: 1, page: 1, limit: 10, totalPages: 1 } },
+      isLoading: false,
+    });
+
+    render(<SalesPage />);
+
+    const table = within(screen.getByRole("table"));
+
+    const dateCell = table
+      .getAllByText("2026-03-24T10:00:00Z")[0]
+      .closest("td");
+    expect(dateCell).not.toBeNull();
+    expect(dateCell!.className).not.toContain("tabular-nums");
+    // Right alignment stays; only the equal-width digits go away.
+    expect(dateCell!.className).toContain("whitespace-nowrap");
+
+    expect(table.getByText("$100").className).toContain("tabular-nums");
   });
 });
 
