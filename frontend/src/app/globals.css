@@ -286,6 +286,28 @@ h4 {
     animation: sheet-up 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Section enter: a route's content settles in instead of snapping. Deliberately
+   has no base `opacity: 0` and no `will-change`: `backwards` fills the start of
+   the animation and then leaves the element with no style of its own, so the
+   transform never lingers. A resting transform (or a `both`/`forwards` fill)
+   would make this element the containing block of every `position: fixed`
+   descendant — modal, drawer, POS cart bar — and pull them off the viewport. */
+@keyframes page-enter {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-page-enter {
+    animation: page-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation-fill-mode: backwards;
+}
+
 
 /* Notifications: drop from the top edge, leave the same way. */
 @keyframes toast-in {
@@ -337,7 +359,8 @@ h4 {
     .animate-fade-in,
     .animate-slide-in-left,
     .animate-slide-in-bottom,
-    .animate-sheet-up {
+    .animate-sheet-up,
+    .animate-page-enter {
         animation: none;
         opacity: 1;
         transform: none;
