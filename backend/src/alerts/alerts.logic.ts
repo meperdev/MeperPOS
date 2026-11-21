@@ -208,7 +208,10 @@ export function buildAlerts(signals: AlertSignals): OrgAlert[] {
     const items = signals.lowStock;
     const depleted = items.filter((item) => item.stock === 0).length;
     alerts.push({
-      id: depleted > 0 ? 'stock:depleted' : 'stock:low',
+      // The id names the condition, not the event: a product crossing to zero
+      // flips severity and title but must not look like a new alert, so the
+      // depleted count rides in the revision instead.
+      id: 'stock:low',
       category: 'stock',
       severity: depleted > 0 ? 'critical' : 'warning',
       title:
@@ -217,9 +220,10 @@ export function buildAlerts(signals: AlertSignals): OrgAlert[] {
           : 'Stock bajo',
       detail: `${items.length} ${plural(items.length, 'producto', 'productos')} por debajo del mínimo.`,
       href: '/inventory?filter=lowStock',
-      revision: fingerprint(
-        items.map((item) => `${item.id}:${item.stock}:${item.minStock}`),
-      ),
+      revision: fingerprint([
+        ...items.map((item) => `${item.id}:${item.stock}:${item.minStock}`),
+        `depleted:${depleted}`,
+      ]),
     });
   }
 
