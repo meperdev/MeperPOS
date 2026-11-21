@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AxiosHeaders } from "axios";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { api } from "@/lib/api";
+import { guardOrganizationScopeChange } from "@/lib/organizationScope";
 import { ToastProvider } from "./ToastContext";
 import {
   getAccessToken,
@@ -264,6 +266,41 @@ describe("AuthContext - in-memory session migration (issue #48 slice C2)", () =>
   });
 
   describe("switchOrganization", () => {
+    it("does not POST, replace the session or navigate until the POS cart veto is released", async () => {
+      routePostBy(async (url) => {
+        if (url === "/auth/refresh") return { data: { accessToken: "token-a" } };
+        if (url === "/auth/select-org") return { data: { accessToken: "token-b", user: testUser } };
+        throw new Error(`Unexpected POST ${url}`);
+      });
+      vi.mocked(api.get).mockResolvedValue({
+        data: { ...testUser, organizationId: "org-a" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      });
+      const { invalidateSpy } = renderHarness();
+      await waitFor(() => expect(screen.getByTestId("authenticated")).toHaveTextContent("true"));
+
+      const release = guardOrganizationScopeChange(() => false);
+      const switchButton = screen.getByRole("button", { name: /Cambiar organizacion/i });
+      try {
+        await userEvent.click(switchButton);
+        expect(api.post).not.toHaveBeenCalledWith("/auth/select-org", { organizationId: "org-b" });
+        expect(getAccessToken()).toBe("token-a");
+        expect(JSON.parse(localStorage.getItem("user") ?? "{}").organizationId).toBe("org-a");
+        expect(pushMock).not.toHaveBeenCalled();
+        expect(invalidateSpy).not.toHaveBeenCalled();
+      } finally {
+        release();
+      }
+
+      await userEvent.click(switchButton);
+      expect(api.post).toHaveBeenCalledWith("/auth/select-org", { organizationId: "org-b" });
+      await waitFor(() => expect(getAccessToken()).toBe("token-b"));
+      expect(pushMock).toHaveBeenCalledWith("/dashboard");
+    });
+
     it("calls POST /auth/select-org, stores the new token pair only in memory, invalidates non-admin queries, and redirects to /dashboard", async () => {
       routePostBy(async (url) => {
         if (url === "/auth/refresh") {

@@ -116,6 +116,7 @@ describe("OrganizationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     searchParamsRef.current = new URLSearchParams();
+    applyOrganizationScopeMock.mockReturnValue(true);
     setupMocks();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -271,6 +272,18 @@ describe("OrganizationsPage", () => {
 
     expect(applyOrganizationScopeMock).toHaveBeenCalledWith(expect.anything(), "org-1");
     expect(pushMock).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("keeps the dashboard closed when the POS cart vetoes the scope change", async () => {
+    applyOrganizationScopeMock.mockReturnValueOnce(false);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Acciones de Cafetería Demo" }));
+    await user.click(screen.getByText("Abrir como organización"));
+
+    expect(applyOrganizationScopeMock).toHaveBeenCalledWith(expect.anything(), "org-1");
+    expect(pushMock).not.toHaveBeenCalledWith("/dashboard");
   });
 
   it("copies the slug to the clipboard", async () => {

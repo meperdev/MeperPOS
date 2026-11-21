@@ -7,7 +7,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { OrganizationSwitcher } from "@/components/auth/OrganizationSwitcher";
 import { AlertCenter } from "@/components/layout/AlertCenter";
 import { useQueryClient } from "@tanstack/react-query";
-import { applyOrganizationScope } from "@/lib/organizationScope";
+import {
+  applyOrganizationScope,
+  readOrganizationScope,
+  subscribeOrganizationScope,
+} from "@/lib/organizationScope";
 
 export { applyOrganizationScope };
 import { SELECTED_ORGANIZATION_KEY } from "@/lib/session";
@@ -96,6 +100,16 @@ export function Sidebar() {
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(() => {
     return safeGetItem(SELECTED_ORGANIZATION_KEY);
   });
+  // The switcher is a view of the stored scope, not a copy taken at mount:
+  // another tab can move the session while this one is open, and a picker still
+  // showing the previous organization invites a switch to where we already are.
+  useEffect(
+    () =>
+      subscribeOrganizationScope(() =>
+        setSelectedOrgId(readOrganizationScope()),
+      ),
+    [],
+  );
   // The drawer's open state is shared: the tab bar's "Más" opens the drawer this
   // component renders, so neither can own the other's state.
   const { isOpen: isMobileMenuOpen, close: closeMobileMenu } = useMobileDrawer();
@@ -487,13 +501,15 @@ export function Sidebar() {
                   placement="up"
                   currentOrganizationId={selectedOrgId}
                   onSwitch={async (orgId) => {
-                    setSelectedOrgId(orgId);
-                    applyOrganizationScope(queryClient, orgId);
+                    if (applyOrganizationScope(queryClient, orgId)) {
+                      setSelectedOrgId(orgId);
+                    }
                   }}
                   isSuperAdmin
                   onSelectAll={() => {
-                    setSelectedOrgId(null);
-                    applyOrganizationScope(queryClient, null);
+                    if (applyOrganizationScope(queryClient, null)) {
+                      setSelectedOrgId(null);
+                    }
                   }}
                 />
               ) : (
@@ -563,13 +579,15 @@ export function Sidebar() {
                   placement="up"
                   currentOrganizationId={selectedOrgId}
                   onSwitch={async (orgId) => {
-                    setSelectedOrgId(orgId);
-                    applyOrganizationScope(queryClient, orgId);
+                    if (applyOrganizationScope(queryClient, orgId)) {
+                      setSelectedOrgId(orgId);
+                    }
                   }}
                   isSuperAdmin
                   onSelectAll={() => {
-                    setSelectedOrgId(null);
-                    applyOrganizationScope(queryClient, null);
+                    if (applyOrganizationScope(queryClient, null)) {
+                      setSelectedOrgId(null);
+                    }
                   }}
                 />
               ) : (

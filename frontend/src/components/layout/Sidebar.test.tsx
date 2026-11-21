@@ -11,6 +11,8 @@ import {
 import { SidebarProvider, SIDEBAR_COLLAPSED_KEY } from "@/contexts/SidebarContext";
 import { closeMobileDrawer, openMobileDrawer } from "./mobile-drawer";
 import { safeGetItem, safeSetItem } from "@/lib/utils";
+import { guardOrganizationScopeChange } from "@/lib/organizationScope";
+import { SELECTED_ORGANIZATION_KEY } from "@/lib/session";
 import { api } from "@/lib/api";
 
 const pushMock = vi.fn();
@@ -364,6 +366,168 @@ describe("Sidebar", () => {
     await waitFor(() => {
       expect(queryClient.getQueryData(scopedKey)).toBeUndefined();
     });
+  });
+
+  it("honours the POS cart veto in both SuperAdmin organization switchers", async () => {
+    // A previous test can leave a selected scope behind; this case proves the
+    // veto keeps storage empty, so start from a clean scope.
+    localStorage.removeItem(SELECTED_ORGANIZATION_KEY);
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "admin-1",
+        email: "admin@example.com",
+        role: "ADMIN",
+        active: true,
+        isSuperAdmin: true,
+        organizationId: null,
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: [
+        { id: "org-a", name: "Org A", plan: "BASIC", status: "ACTIVE" },
+        { id: "org-b", name: "Org B", plan: "PRO", status: "ACTIVE" },
+      ],
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const scopedKey = ["products", { page: 1, limit: 10 }];
+    queryClient.setQueryData(scopedKey, { data: [{ id: "product-from-org-a" }] });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/admin/organizations");
+    });
+
+    const rail = within(screen.getByTestId("sidebar-user-rail"));
+    const drawer = within(screen.getByTestId("sidebar-user"));
+    const release = guardOrganizationScopeChange(() => false);
+    try {
+      await userEvent.click(
+        await rail.findByRole("button", { name: "Seleccionar organización" })
+      );
+      await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
+
+      expect(safeGetItem(SELECTED_ORGANIZATION_KEY)).toBeNull();
+      expect(
+        rail.getByRole("button", { name: "Seleccionar organización" })
+      ).toHaveTextContent("Todas las organizaciones");
+      expect(queryClient.getQueryData(scopedKey)).toBeDefined();
+
+      await userEvent.click(
+        await drawer.findByRole("button", { name: "Seleccionar organización" })
+      );
+      await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
+
+      expect(safeGetItem(SELECTED_ORGANIZATION_KEY)).toBeNull();
+      expect(
+        drawer.getByRole("button", { name: "Seleccionar organización" })
+      ).toHaveTextContent("Todas las organizaciones");
+      expect(queryClient.getQueryData(scopedKey)).toBeDefined();
+    } finally {
+      release();
+    }
+
+    await userEvent.click(
+      await drawer.findByRole("button", { name: "Seleccionar organización" })
+    );
+    await userEvent.click(await screen.findByRole("button", { name: /Org B/ }));
+
+    await waitFor(() => {
+      expect(safeGetItem(SELECTED_ORGANIZATION_KEY)).toBe("org-b");
+    });
+    expect(queryClient.getQueryData(scopedKey)).toBeUndefined();
+    expect(
+      drawer.getByRole("button", { name: "Seleccionar organización" })
+    ).toHaveTextContent("Org B");
+  });
+
+  it("keeps a stale organization picker on the session's real scope without resetting its data", async () => {
+    // The shared cookie/session can move to another organization from another
+    // tab while this one is mounted, so the picker is a view of the stored
+    // scope instead of a copy taken at mount.
+    localStorage.removeItem(SELECTED_ORGANIZATION_KEY);
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "admin-1",
+        email: "admin@example.com",
+        role: "ADMIN",
+        active: true,
+        isSuperAdmin: true,
+        organizationId: null,
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: [
+        { id: "org-a", name: "Org A", plan: "BASIC", status: "ACTIVE" },
+        { id: "org-b", name: "Org B", plan: "PRO", status: "ACTIVE" },
+      ],
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const scopedKey = ["products", { page: 1, limit: 10 }];
+    queryClient.setQueryData(scopedKey, { data: [{ id: "product-from-org-a" }] });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+    const rail = within(screen.getByTestId("sidebar-user-rail"));
+    try {
+      await waitFor(() => {
+        expect(api.get).toHaveBeenCalledWith("/admin/organizations");
+      });
+      expect(
+        await rail.findByRole("button", { name: "Seleccionar organización" })
+      ).toHaveTextContent("Todas las organizaciones");
+
+      // Another tab switched the session to Org A.
+      act(() => {
+        safeSetItem(SELECTED_ORGANIZATION_KEY, "org-a");
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: SELECTED_ORGANIZATION_KEY,
+            oldValue: null,
+            newValue: "org-a",
+          })
+        );
+      });
+
+      await waitFor(() => {
+        expect(
+          rail.getByRole("button", { name: "Seleccionar organización" })
+        ).toHaveTextContent("Org A");
+      });
+
+      // Selecting the organization the session is already in is not a change.
+      await userEvent.click(
+        rail.getByRole("button", { name: "Seleccionar organización" })
+      );
+      await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
+
+      expect(safeGetItem(SELECTED_ORGANIZATION_KEY)).toBe("org-a");
+      expect(queryClient.getQueryData(scopedKey)).toEqual({
+        data: [{ id: "product-from-org-a" }],
+      });
+      expect(
+        rail.getByRole("button", { name: "Seleccionar organización" })
+      ).toHaveTextContent("Org A");
+    } finally {
+      localStorage.removeItem(SELECTED_ORGANIZATION_KEY);
+      queryClient.clear();
+    }
   });
 
   it("drops a mounted page's rows when the organization scope changes", async () => {

@@ -195,8 +195,9 @@ export default function OrganizationsPage() {
   };
 
   const openAsOrganization = (organization: Organization) => {
-    applyOrganizationScope(queryClient, organization.id);
-    router.push("/dashboard");
+    if (applyOrganizationScope(queryClient, organization.id)) {
+      router.push("/dashboard");
+    }
   };
 
   const copySlug = (organization: Organization) => {
