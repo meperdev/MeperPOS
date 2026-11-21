@@ -1,6 +1,6 @@
 import { CATEGORY_CHART_PALETTE } from "@/lib/dashboard";
 import { LOCALE } from "@/lib/constants";
-import { formatCurrency, toFiniteNumber } from "@/lib/utils";
+import { cn, formatCurrency, toFiniteNumber } from "@/lib/utils";
 import type { ExpenseMonthlySummary } from "@/types";
 
 interface Props {
@@ -8,8 +8,8 @@ interface Props {
   summary?: ExpenseMonthlySummary;
 }
 
-/** Two labels read inline; anything past that collapses into a count. */
-const MAX_INLINE_LABELS = 2;
+/** Three labels fit beside their amounts; the remainder collapses into a count. */
+const MAX_INLINE_LABELS = 3;
 
 const percentFormatter = new Intl.NumberFormat(LOCALE, {
   style: "percent",
@@ -41,10 +41,33 @@ function formatShare(share: number) {
 }
 
 /**
- * Monthly summary as a hero total plus a ranked list: the month reads in words,
- * one bar carries the proportion, and every group repeats its segment colour.
- * Every number here comes from the summary endpoint; the component adds no
- * money of its own.
+ * Track count for the cells that exist, so a strip of three never paints a
+ * fourth, empty cell. The one-row layout waits for `xl`: at `lg` (1024px) six
+ * cells would be too narrow for a currency amount to survive whole, so the
+ * strip stays three across until there is room. Past six cells it wraps in
+ * fours. Every class is written out because Tailwind cannot see an
+ * interpolated name.
+ */
+const STRIP_COLUMNS: Record<number, string> = {
+  1: "grid-cols-2 md:grid-cols-1 xl:grid-cols-1",
+  2: "grid-cols-2 md:grid-cols-2 xl:grid-cols-2",
+  3: "grid-cols-2 md:grid-cols-3 xl:grid-cols-3",
+  4: "grid-cols-2 md:grid-cols-3 xl:grid-cols-4",
+  5: "grid-cols-2 md:grid-cols-3 xl:grid-cols-5",
+  6: "grid-cols-2 md:grid-cols-3 xl:grid-cols-6",
+};
+const STRIP_FALLBACK_COLUMNS = "grid-cols-2 md:grid-cols-3 xl:grid-cols-4";
+
+/**
+ * One cell of the strip: a hairline on its right and bottom edge, no plate and
+ * no fill of its own, so the strip reads as one surface divided up.
+ */
+const CELL_CLASSES = "min-w-0 border-b border-r border-border/60 p-4";
+
+/**
+ * Monthly summary as one ranked strip: the month total opens it, then one cell
+ * per group carrying its amount and the labels behind it. Every number comes
+ * from the summary endpoint; the component adds no money of its own.
  */
 const PULSE = "animate-pulse [animation-duration:2.4s] motion-reduce:animate-none";
 
@@ -57,34 +80,38 @@ function ExpenseSummaryPlaceholder() {
     <section
       aria-label="Resumen del mes"
       aria-busy="true"
-      className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs sm:p-5"
+      className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs"
     >
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
-        <div className="min-w-0 lg:w-[min(45%,20rem)] lg:shrink-0">
-          <p className="text-xs text-muted-foreground">Total del mes</p>
-          <div className={`mt-2 h-8 w-44 rounded-md bg-muted-foreground/12 sm:h-9 ${PULSE}`} />
-          <div className={`mt-2.5 h-2.5 w-32 rounded-full bg-muted-foreground/10 ${PULSE}`} />
-          <div className={`mt-4 h-2.5 w-full rounded-full bg-muted ${PULSE}`} />
-        </div>
-        <div className="min-w-0 flex-1 space-y-3 pt-1" aria-hidden="true">
-          {[0, 1, 2].map((row) => (
-            <div key={row} className="flex items-center gap-3">
-              <span className={`h-1.5 w-1.5 rounded-full bg-muted-foreground/15 ${PULSE}`} />
-              <span className={`h-2.5 w-1/3 rounded-full bg-muted-foreground/12 ${PULSE}`} />
-              <span className={`ml-auto h-2.5 w-20 rounded-full bg-muted-foreground/12 ${PULSE}`} />
-            </div>
-          ))}
-        </div>
+      <div
+        aria-hidden="true"
+        className="-mb-px -mr-px grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+      >
+        {[0, 1, 2, 3].map((cell) => (
+          <div
+            key={cell}
+            className={cn(
+              CELL_CLASSES,
+              cell === 0 && "col-span-2 md:col-span-1",
+            )}
+          >
+            {cell === 0 ? (
+              <>
+                <p className="text-[13px] text-muted-foreground">Total del mes</p>
+                <div className={`mt-1.5 h-7 w-40 rounded-md bg-muted-foreground/12 ${PULSE}`} />
+              </>
+            ) : (
+              <div className={`h-3 w-2/3 rounded-full bg-muted-foreground/12 ${PULSE}`} />
+            )}
+            <div className={`mt-2 h-5 w-24 rounded-md bg-muted-foreground/12 ${PULSE}`} />
+            <div className={`mt-2 h-2.5 w-full rounded-full bg-muted-foreground/10 ${PULSE}`} />
+          </div>
+        ))}
       </div>
       <span className="sr-only">Cargando resumen del mes…</span>
     </section>
   );
 }
 
-/**
- * The hero total and the ranked rows are the design; the component adds no
- * money of its own — every figure comes from the summary endpoint.
- */
 export function ExpenseSummaryCards({ month, summary }: Props) {
   if (!summary) return <ExpenseSummaryPlaceholder />;
 
@@ -100,7 +127,7 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
       };
     });
 
-  // A stale or absent top-level total must not zero the bar for real groups.
+  // A stale or absent top-level total must not zero the shares for real groups.
   const groupTotal = ranked.reduce((sum, entry) => sum + entry.amount, 0);
   const total = toFiniteNumber(summary?.total) || groupTotal;
   const entries = ranked.map((entry) => ({
@@ -108,111 +135,107 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
     share: total > 0 ? entry.amount / total : 0,
   }));
 
+  const columns = STRIP_COLUMNS[entries.length + 1] ?? STRIP_FALLBACK_COLUMNS;
   const period = formatMonthLabel(month ?? summary?.month);
   const groupCount = `${groups.length} ${
     groups.length === 1 ? "grupo" : "grupos"
   }`;
 
-  const distributionLabel =
-    entries.length === 0
-      ? "Distribución del mes: sin grupos con gastos"
-      : `Distribución del mes: ${entries
-          .map((entry) => `${entry.group.name} ${formatShare(entry.share)}`)
-          .join(", ")}`;
-
   return (
     <section
       aria-label="Resumen del mes"
-      className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs sm:p-5"
+      className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs"
     >
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
-        <div className="min-w-0 lg:w-[min(45%,20rem)] lg:shrink-0">
-          <p className="text-xs text-muted-foreground">Total del mes</p>
-          <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums sm:text-[28px]">
+      {/*
+        Cells of one surface, not cards: the hairlines are each cell's own right
+        and bottom edge, pulled one pixel past the card so `overflow-hidden`
+        trims them into the outer border, and the card's surface fills the last
+        row when the cell count does not fill it.
+      */}
+      <div
+        data-testid="expense-summary-strip"
+        className={cn("-mb-px -mr-px grid", columns)}
+      >
+        <div className={cn(CELL_CLASSES, "col-span-2 md:col-span-1")}>
+          <p className="text-[13px] text-muted-foreground">Total del mes</p>
+          <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground tabular-nums sm:text-[28px]">
             {formatCurrency(total)}
           </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-muted-foreground">
             {period && <span className="truncate">{period}</span>}
             {period && (
               <span aria-hidden className="h-1 w-1 rounded-full bg-border" />
             )}
             <span className="tabular-nums">{groupCount}</span>
-          </div>
-
-          {/*
-            One proportion, not a chart: the segments share a single track, each
-            one a categorical chart token so it repeats on its row below.
-          */}
-          <div
-            role="img"
-            aria-label={distributionLabel}
-            className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
-          >
-            {entries.map((entry) => (
-              <span
-                key={entry.group.groupId}
-                className="block h-full"
-                style={{
-                  backgroundColor: entry.color,
-                  width: `${entry.share * 100}%`,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          {entries.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
+          </p>
+          {entries.length === 0 && (
+            <p className="mt-2 text-[13px] text-muted-foreground">
               Sin grupos con gastos este mes.
             </p>
-          ) : (
-            <ol className="divide-y divide-border/60">
-              {entries.map((entry) => {
-                const labels = entry.group.labels ?? [];
-                const inlineLabels = labels.slice(0, MAX_INLINE_LABELS);
-                const hiddenLabels = labels.length - inlineLabels.length;
-                return (
-                  <li
-                    key={entry.group.groupId}
-                    className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
-                  >
-                    <span
-                      aria-hidden
-                      className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: entry.color }}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] text-foreground">
-                        {entry.group.name}
-                      </span>
-                      <span className="mt-0.5 flex items-baseline gap-1 text-xs text-muted-foreground">
-                        <span className="truncate">
-                          {inlineLabels.length === 0
-                            ? "Sin etiquetas"
-                            : inlineLabels
-                                .map((label) => label.name)
-                                .join(" · ")}
-                        </span>
-                        {hiddenLabels > 0 && (
-                          <span className="shrink-0 tabular-nums">
-                            +{hiddenLabels}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-right text-[13px] font-medium text-foreground tabular-nums">
-                      {formatCurrency(entry.amount)}
-                    </span>
-                    <span className="w-9 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-                      {formatShare(entry.share)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
           )}
         </div>
+
+        {/* `contents` lets the list items be cells of the strip's own grid. */}
+        <ol className="contents">
+          {entries.map((entry) => {
+            const labels = entry.group.labels ?? [];
+            const inlineLabels = labels.slice(0, MAX_INLINE_LABELS);
+            const hiddenLabels = labels.length - inlineLabels.length;
+            return (
+              <li key={entry.group.groupId} className={CELL_CLASSES}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span
+                      title={entry.group.name}
+                      className="truncate text-[13px] font-medium text-foreground"
+                    >
+                      {entry.group.name}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                    {formatShare(entry.share)}
+                  </span>
+                </div>
+
+                <p className="mt-1 truncate text-xl font-semibold tracking-tight text-foreground tabular-nums">
+                  {formatCurrency(entry.amount)}
+                </p>
+
+                <div className="mt-2 space-y-1 text-[13px]">
+                  {inlineLabels.length === 0 ? (
+                    <p className="truncate text-muted-foreground">
+                      Sin etiquetas
+                    </p>
+                  ) : (
+                    inlineLabels.map((label) => (
+                      <div
+                        key={label.labelId}
+                        className="flex items-baseline justify-between gap-2"
+                      >
+                        <span className="truncate text-muted-foreground">
+                          {label.name}
+                        </span>
+                        <span className="shrink-0 font-medium text-foreground/80 tabular-nums">
+                          {formatCurrency(toFiniteNumber(label.total))}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                  {hiddenLabels > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      +{hiddenLabels} más
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
       </div>
     </section>
   );
