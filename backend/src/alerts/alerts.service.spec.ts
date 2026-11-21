@@ -357,4 +357,100 @@ describe('AlertsService', () => {
       expect(overdue?.title).toBe('2 préstamos vencidos');
     });
   });
+
+  /**
+   * `Task.dueDate` is not a single shape: the tasks page stores the picked
+   * calendar day at midnight UTC, while the API accepts a real instant. A
+   * day-shaped task due today must not fire the alert at 19:00 in Bogotá, and
+   * the revision must not move either — otherwise the bell re-alerts five hours
+   * early and then again tomorrow.
+   */
+  describe('overdue tasks on the Bogotá business day', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    /** Stands in for the database: applies the `dueDate` comparison it is asked for. */
+    function buildWithTasks(dueDates: readonly string[]) {
+      const built = build();
+      const tasks = dueDates.map((due) => ({
+        id: `task-${due}`,
+        dueDate: new Date(due),
+      }));
+      built.prisma.task.findMany.mockImplementation(
+        (args: { where: { dueDate: { lt: Date } } }) =>
+          Promise.resolve(
+            tasks.filter(
+              (task) =>
+                task.dueDate.getTime() < args.where.dueDate.lt.getTime(),
+            ),
+          ),
+      );
+      return built;
+    }
+
+    it('leaves a day-shaped task due today alone at 21:00 in Bogotá', async () => {
+      // 2026-11-20T02:00Z is 21:00 on 19 November in Bogotá.
+      jest.useFakeTimers({ now: new Date('2026-11-20T02:00:00.000Z') });
+      const { service } = buildWithTasks([
+        '2026-11-19T00:00:00.000Z',
+        '2026-11-18T00:00:00.000Z',
+      ]);
+
+      const alerts = await service.list(user());
+
+      const overdue = alerts.find((alert) => alert.id === 'tasks:overdue');
+      expect(overdue?.title).toBe('1 tarea vencida');
+      expect(overdue?.revision).toBe(
+        fingerprint(['task-2026-11-18T00:00:00.000Z']),
+      );
+    });
+
+    it('counts the day-shaped task due today once the shop is on the next day', async () => {
+      // 2026-11-20T05:30Z is 00:30 on 20 November in Bogotá.
+      jest.useFakeTimers({ now: new Date('2026-11-20T05:30:00.000Z') });
+      const { service } = buildWithTasks([
+        '2026-11-19T00:00:00.000Z',
+        '2026-11-18T00:00:00.000Z',
+      ]);
+
+      const alerts = await service.list(user());
+
+      const overdue = alerts.find((alert) => alert.id === 'tasks:overdue');
+      expect(overdue?.title).toBe('2 tareas vencidas');
+      expect(overdue?.revision).toBe(
+        fingerprint([
+          'task-2026-11-18T00:00:00.000Z',
+          'task-2026-11-19T00:00:00.000Z',
+        ]),
+      );
+    });
+
+    it('counts a task with a real time of day only after its hour', async () => {
+      // 2026-11-19T16:00Z is 11:00 in Bogotá, the same calendar day.
+      jest.useFakeTimers({ now: new Date('2026-11-19T16:00:00.000Z') });
+      const { service } = buildWithTasks([
+        '2026-11-19T15:00:00.000Z',
+        '2026-11-19T17:00:00.000Z',
+        '2026-11-19T00:00:00.000Z',
+      ]);
+
+      const alerts = await service.list(user());
+
+      const overdue = alerts.find((alert) => alert.id === 'tasks:overdue');
+      expect(overdue?.title).toBe('1 tarea vencida');
+      expect(overdue?.revision).toBe(
+        fingerprint(['task-2026-11-19T15:00:00.000Z']),
+      );
+    });
+
+    it('drops the task alert entirely when nothing is overdue yet', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-20T02:00:00.000Z') });
+      const { service } = buildWithTasks(['2026-11-19T00:00:00.000Z']);
+
+      const alerts = await service.list(user());
+
+      expect(alerts.map((alert) => alert.id)).not.toContain('tasks:overdue');
+    });
+  });
 });
