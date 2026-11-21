@@ -47,6 +47,9 @@ vi.mock("@/lib/utils", async () => {
     // Deterministic so the modal/history date assertions prove `formatDateTime`
     // is fed the server timestamp without depending on the runner timezone.
     formatDateTime: (value: string | Date) => `DT ${String(value)}`,
+    // Same reason: the card footer must read the compact day the server sent.
+    formatCalendarDay: (value: string | Date) => `D ${String(value)}`,
+    formatCalendarDayShort: (value: string | Date) => `DS ${String(value)}`,
   };
 });
 
@@ -136,7 +139,10 @@ beforeEach(() => {
   completeMock.mockResolvedValue({});
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("Loans page", () => {
   it("lists loans as cards through useLoans with server-owned money values", () => {
@@ -187,6 +193,180 @@ describe("Loans page", () => {
     expect(screen.getByText("Distribuidora Sur")).toBeTruthy();
     expect(screen.getByText("Servicio")).toBeTruthy();
     expect(screen.getByText("Cerrado")).toBeTruthy();
+  });
+
+  it("summarises how much of the loan is paid on the card", () => {
+    render(<LoansPage />);
+
+    const card = within(screen.getAllByTestId("loan-card")[0]);
+    // 50 of 150 paid: the percentage is display-only, the money stays the
+    // server's (amount/collected/balance arrive already computed).
+    const progress = card.getByRole("progressbar");
+    expect(progress.getAttribute("aria-valuenow")).toBe("33");
+    expect(card.getByText(/Abonado 33%/)).toBeTruthy();
+    expect(card.getByText("Saldo COP 100")).toBeTruthy();
+    expect(card.getByTestId("loan-progress-fill").className).toContain("bg-primary");
+  });
+
+  it("replaces the bar with the settled strip once the loan is settled", () => {
+    loansMock.mockReturnValue({
+      data: page([
+        makeLoan({
+          status: "CLOSED",
+          collected: "150.00",
+          balance: "0.00",
+          paymentStatus: "PAID",
+        }),
+      ]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(<LoansPage />);
+
+    const card = within(screen.getAllByTestId("loan-card")[0]);
+    expect(card.queryByRole("progressbar")).toBeNull();
+    // The list payload carries no closing or last-collection day, so the strip
+    // states the settled verdict alone.
+    const strip = card.getByTestId("loan-settled-line");
+    expect(strip.textContent).toBe("Saldado");
+    expect(strip).toHaveClass("h-7", "w-full", "bg-muted/40");
+    // The money triple below still states the zero balance.
+    expect(card.getByText("COP 0")).toBeTruthy();
+  });
+
+  it("settles a loan whose balance reached zero before its status flipped", () => {
+    loansMock.mockReturnValue({
+      data: page([
+        makeLoan({ status: "OPEN", collected: "150.00", balance: "0.00" }),
+      ]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(<LoansPage />);
+
+    const card = within(screen.getAllByTestId("loan-card")[0]);
+    expect(card.queryByRole("progressbar")).toBeNull();
+    expect(card.getByTestId("loan-settled-line")).toBeTruthy();
+  });
+
+  // Cancelled is not paid: cancelling a loan writes the debt off, so a zero
+  // balance there says nothing about the money coming back in.
+  it("never reads a cancelled loan as settled, even with a zero balance", () => {
+    loansMock.mockReturnValue({
+      data: page([
+        makeLoan({
+          status: "CANCELLED",
+          collected: "50.00",
+          balance: "0.00",
+          paymentStatus: "UNPAID",
+        }),
+      ]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(<LoansPage />);
+
+    const card = within(screen.getAllByTestId("loan-card")[0]);
+    expect(card.queryByTestId("loan-settled-line")).toBeNull();
+
+    // It keeps the bar and the caption it always carried: 50 of 150 collected.
+    const progress = card.getByRole("progressbar");
+    expect(progress.getAttribute("aria-valuenow")).toBe("33");
+    expect(card.getByText("Abonado 33%")).toBeTruthy();
+    expect(card.getByText("Saldo COP 0")).toBeTruthy();
+    expect(card.getByTestId("loan-progress-fill").className).toContain(
+      "bg-primary",
+    );
+  });
+
+  it("shows the issue and due dates in the card footer", () => {
+    loansMock.mockReturnValue({
+      // Far enough ahead that the card cannot read as overdue whatever the day
+      // the suite runs on.
+      data: page([makeLoan({ dueAt: "2099-04-01T00:00:00.000Z" })]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(<LoansPage />);
+
+    const card = within(screen.getAllByTestId("loan-card")[0]);
+    expect(card.getByText("Inicio")).toBeTruthy();
+    // The narrow footer cell reads the compact day; the prose wording stays
+    // reachable in the `title`.
+    const issued = card.getByText("DS 2026-03-01T00:00:00.000Z");
+    expect(issued).toHaveAttribute("title", "D 2026-03-01T00:00:00.000Z");
+    expect(card.queryByText("D 2026-03-01T00:00:00.000Z")).toBeNull();
+    expect(card.getByText("Vence")).toBeTruthy();
+    const due = card.getByText("DS 2099-04-01T00:00:00.000Z");
+    expect(due).toHaveAttribute("title", "D 2099-04-01T00:00:00.000Z");
+    expect(card.queryByText("Vencido")).toBeNull();
+  });
+
+  it("marks an open loan whose due day has passed as overdue", () => {
+    loansMock.mockReturnValue({
+      data: page([makeLoan({ dueAt: "2020-01-01T00:00:00.000Z" })]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(<LoansPage />);
+
+    const card = within(screen.getAllByTestId("loan-card")[0]);
+    expect(card.getByText("Vencido")).toBeTruthy();
+    expect(card.getByText("DS 2020-01-01T00:00:00.000Z").className).toContain(
+      "text-danger-text",
+    );
+  });
+
+  it("keeps a loan due today out of overdue late in the shop's evening", () => {
+    // Bogotá is UTC-5, so 21:00 there is already 02:00Z of the next day. The
+    // due day is a calendar day in shop time: today's deadline is not late yet.
+    vi.useFakeTimers({ now: new Date("2026-11-21T02:00:00.000Z") });
+    loansMock.mockReturnValue({
+      data: page([
+        makeLoan({ dueAt: "2026-11-20T00:00:00.000Z" }),
+        makeLoan({ id: "loan-2", dueAt: "2026-11-19T00:00:00.000Z" }),
+      ]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(<LoansPage />);
+
+    const [dueToday, dueYesterday] = screen
+      .getAllByTestId("loan-card")
+      .map((card) => within(card));
+    expect(dueToday.queryByText("Vencido")).toBeNull();
+    // The boundary still moves at the shop's midnight, not later.
+    expect(dueYesterday.getByText("Vencido")).toBeTruthy();
+  });
+
+  it("leaves a past due date on a closed loan unmarked", () => {
+    loansMock.mockReturnValue({
+      data: page([
+        makeLoan({
+          status: "CLOSED",
+          collected: "150.00",
+          balance: "0.00",
+          paymentStatus: "PAID",
+          dueAt: "2020-01-01T00:00:00.000Z",
+        }),
+      ]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(<LoansPage />);
+
+    const card = within(screen.getAllByTestId("loan-card")[0]);
+    expect(card.queryByText("Vencido")).toBeNull();
+    expect(card.getByText("DS 2020-01-01T00:00:00.000Z").className).not.toContain(
+      "text-danger-text",
+    );
   });
 
   it("shows the loading state while the list is pending", () => {

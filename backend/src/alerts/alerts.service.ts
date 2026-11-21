@@ -11,6 +11,7 @@ import type {
 } from '../plan-limits/plan-limits.constants';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { bogotaToday } from '../purchase-orders/purchase-order-status';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { alertVisibility, buildAlerts } from './alerts.logic';
 import type {
@@ -197,6 +198,15 @@ export class AlertsService {
     });
   }
 
+  /**
+   * Loans still open whose due day is behind today's business day.
+   *
+   * `dueAt` is a `@db.Date` column, so Prisma stores the calendar day at
+   * midnight UTC and compares that raw value. Handing it the current instant
+   * turned a loan due today into an overdue one from 19:00 in Bogotá — five
+   * hours before its own day starts — so the cutoff is midnight UTC of today's
+   * Bogotá day, the same day boundary the loans page reads.
+   */
   private overdueLoans(
     organizationId: string,
     now: Date,
@@ -205,7 +215,7 @@ export class AlertsService {
       where: {
         organizationId,
         status: MoneyLoanStatus.OPEN,
-        dueAt: { lt: now },
+        dueAt: { lt: bogotaToday(now) },
       },
       select: { id: true, dueAt: true },
     }) as Promise<Array<{ id: string; dueAt: Date }>>;

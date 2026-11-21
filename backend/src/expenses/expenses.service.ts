@@ -386,7 +386,11 @@ export class ExpensesService {
       where: {
         organizationId: orgId,
         active: true,
-        date: { gte: start, lte: end },
+        // `date` stores the calendar day, not an instant, so the Bogotá
+        // timestamp bounds would drop the first day of the month and pull in
+        // the first day of the next one. The stored-day window keeps exactly
+        // this month's days.
+        date: buildStoredDateWindow({ gte: start, lte: end }),
       },
       _sum: { total: true },
     });

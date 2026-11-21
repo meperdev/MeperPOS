@@ -54,6 +54,25 @@ describe("TopProductsCard (ranked list)", () => {
     expect(first.getByTestId("top-product-quantity").textContent).toBe("10");
   });
 
+  it("sets the name and unit count one step above the old 13px, with roomier rows", () => {
+    render(<TopProductsCard startDate="2026-08-16" endDate="2026-08-22" />);
+
+    const rows = screen.getAllByTestId("top-product-row");
+    const row = rows[0];
+    expect(row.className).toContain("text-sm");
+    expect(row.className).toContain("py-1");
+    expect(within(row).getByTestId("top-product-rank").className).toContain("text-xs");
+
+    const list = row.parentElement as HTMLElement;
+    expect(list.className.split(" ")).toContain("space-y-1");
+
+    const quantity = within(row).getByTestId("top-product-quantity");
+    const units = quantity.parentElement as HTMLElement;
+    expect(units.className).toContain("text-sm");
+    expect(units.className).toContain("font-semibold");
+    expect(units.className).toContain("tabular-nums");
+  });
+
   it("renders no image element (the endpoint returns none)", () => {
     const { container } = render(
       <TopProductsCard startDate="2026-08-16" endDate="2026-08-22" />,

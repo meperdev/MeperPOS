@@ -729,8 +729,8 @@ describe('ExpensesService', () => {
           organizationId: orgId,
           active: true,
           date: {
-            gte: new Date('2026-08-01T05:00:00.000Z'),
-            lte: new Date('2026-09-01T04:59:59.999Z'),
+            gte: new Date('2026-08-01T00:00:00.000Z'),
+            lte: new Date('2026-08-31T23:59:59.999Z'),
           },
         },
         _sum: { total: true },

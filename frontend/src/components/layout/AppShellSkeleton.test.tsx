@@ -78,6 +78,33 @@ describe("AppShellSkeleton desktop", () => {
     );
   });
 
+  it("reserves the theme control the header now carries", () => {
+    const { container } = render(<AppShellSkeleton isCollapsed={false} />);
+
+    const header = screen.getByTestId("app-shell-skeleton-header");
+    // Search + the three action slots: theme, bell, avatar.
+    expect(header.querySelectorAll("div.h-8.w-8")).toHaveLength(3);
+    expect(container.querySelector("aside")).toBeInTheDocument();
+  });
+
+  it("mirrors the brand row at the header height, in both rail states", () => {
+    const expanded = render(<AppShellSkeleton isCollapsed={false} />);
+    const expandedRow = expanded.container.querySelector(
+      '[data-testid="app-shell-skeleton-brand-row"]',
+    )!;
+    expect(expandedRow.className).toContain("lg:h-[var(--app-header-height)]");
+    expect(expandedRow.className).toContain("lg:py-0");
+
+    expanded.unmount();
+
+    const collapsed = render(<AppShellSkeleton isCollapsed />);
+    const collapsedRow = collapsed.container.querySelector(
+      '[data-testid="app-shell-skeleton-brand-row"]',
+    )!;
+    expect(collapsedRow.className).toContain("h-[var(--app-header-height)]");
+    expect(collapsedRow.className).toContain("border-b");
+  });
+
   it("keeps the rail and its margin untouched", () => {
     const { container } = render(<AppShellSkeleton isCollapsed />);
 

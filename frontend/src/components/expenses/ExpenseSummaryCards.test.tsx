@@ -58,17 +58,21 @@ describe("ExpenseSummaryCards", () => {
     const region = summaryRegion();
     expect(within(region).getByText("Total del mes")).toBeInTheDocument();
 
-    // The total leads the block, one step above the group rows (master's
-    // summary-value convention) and tabular so the digits align.
+    // The total leads the strip, a step above the group cells and tabular so
+    // the digits align.
     const total = within(region).getByText(/3\.420\.000/);
     expect(total.className).toContain("tabular-nums");
-    expect(total.className).toContain("text-xl");
+    expect(total.className).toContain("text-2xl");
     expect(total.className).toContain("sm:text-[28px]");
 
     // The period reads as a month, never as the raw `YYYY-MM` input value.
     expect(within(region).getByText(/noviembre de 2026/i)).toBeInTheDocument();
     expect(within(region).queryByText(/2026-11/)).toBeNull();
-    expect(within(region).getByText(/5 grupos/)).toBeInTheDocument();
+    const groupCount = within(region).getByText(/5 grupos/);
+    expect(groupCount).toBeInTheDocument();
+
+    // The meta line sits one step above the floor, not at table-caption size.
+    expect(groupCount.closest("p")?.className).toContain("text-[13px]");
   });
 
   it("ranks the groups by amount so the largest reads first", () => {
@@ -88,7 +92,7 @@ describe("ExpenseSummaryCards", () => {
       expect(within(rows[index]).getByText(name)).toBeInTheDocument();
     });
 
-    // Every amount the server returned stays visible, on its own row.
+    // Every amount the server returned stays visible, on its own cell.
     [
       /2\.000\.000$/,
       /1\.000\.000$/,
@@ -96,7 +100,9 @@ describe("ExpenseSummaryCards", () => {
       /120\.000$/,
       /50\.000$/,
     ].forEach((amount, index) => {
-      expect(within(rows[index]).getByText(amount)).toBeInTheDocument();
+      expect(
+        within(rows[index]).getByText(amount, { selector: "p" }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -112,70 +118,164 @@ describe("ExpenseSummaryCards", () => {
     expect(within(rows[4]).getByText(/1\s*%/)).toBeInTheDocument();
   });
 
-  it("draws one stacked bar segment per group from the categorical chart scale", () => {
+  it("keeps the groups as hairline cells of one card, never as floating tiles", () => {
     render(<ExpenseSummaryCards month="2026-11" summary={summary} />);
 
-    const bar = within(summaryRegion()).getByRole("img", {
-      name: /Distribución del mes/i,
-    });
+    const region = summaryRegion();
+    expect(region.className).toContain("bg-card");
+    expect(region.className).toContain("overflow-hidden");
 
-    const segments = Array.from(bar.children) as HTMLElement[];
-    expect(segments).toHaveLength(summary.groups.length);
+    const cells = within(region).getAllByRole("listitem");
+    expect(cells).toHaveLength(5);
+    for (const cell of cells) {
+      // Cells of one surface: a hairline, never another plate inside the card.
+      expect(cell.className).not.toContain("bg-card");
+      expect(cell.className).not.toContain("bg-muted");
+      expect(cell.className).not.toContain("rounded");
+      expect(cell.className).not.toMatch(/shadow/);
+      expect(cell.className).toContain("border-r");
+      expect(cell.className).toContain("border-b");
+      expect(cell.className).toContain("border-border/60");
+      expect(cell.className).toContain("p-4");
+    }
+  });
 
-    // Category colours, never status tokens and never literal hex values.
-    segments.forEach((segment, index) => {
-      expect(segment.style.backgroundColor).toBe(`var(--chart-${index + 1})`);
-      expect(Number.parseFloat(segment.style.width)).toBeGreaterThan(0);
-    });
-
-    // The bar carries its own readable summary for assistive tech.
-    expect(bar.getAttribute("aria-label")).toMatch(
-      /Gastos de empleados 58\s*%/,
+  it("lays up to six cells in one row only once there is room, and wraps longer months", () => {
+    const { unmount } = render(
+      <ExpenseSummaryCards month="2026-11" summary={summary} />,
     );
+
+    // Five groups plus the total make six cells. The strip stays two across on
+    // a phone and three across at `lg`, where six tracks would squeeze a
+    // currency amount; it only reaches one row from `xl`.
+    const strip = screen.getByTestId("expense-summary-strip");
+    expect(strip.className).toContain("grid");
+    expect(strip.className).toContain("grid-cols-2");
+    expect(strip.className).toContain("md:grid-cols-3");
+    expect(strip.className).toContain("xl:grid-cols-6");
+    expect(strip.className).not.toContain("lg:grid-cols");
+
+    const totalCell = within(summaryRegion())
+      .getByText("Total del mes")
+      .closest("div") as HTMLElement;
+    expect(totalCell.className).toContain("col-span-2");
+    expect(totalCell.className).toContain("md:col-span-1");
+
+    unmount();
+
+    // Seven groups plus the total cannot fit one row even at `xl`: four columns
+    // wrap instead of eight.
+    render(
+      <ExpenseSummaryCards
+        month="2026-11"
+        summary={{
+          ...summary,
+          groups: [
+            ...summary.groups,
+            { groupId: "g6", name: "Servicios", total: 40000, labels: [] },
+            { groupId: "g7", name: "Papelería", total: 30000, labels: [] },
+          ],
+        }}
+      />,
+    );
+
+    const wrapped = screen.getByTestId("expense-summary-strip");
+    expect(wrapped.className).toContain("md:grid-cols-3");
+    expect(wrapped.className).toContain("xl:grid-cols-4");
+    expect(wrapped.className).not.toContain("xl:grid-cols-8");
+  });
+
+  it("draws no proportion bars at all, only the coloured identity dot", () => {
+    render(<ExpenseSummaryCards month="2026-11" summary={summary} />);
+
+    const region = summaryRegion();
+
+    // No stacked bar and no per-group bar: nothing in the block carries a
+    // computed width.
+    expect(within(region).queryByRole("img")).toBeNull();
+    const sized = Array.from(
+      region.querySelectorAll<HTMLElement>("[style]"),
+    ).filter((el) => el.style.width !== "");
+    expect(sized).toHaveLength(0);
+
+    // The colour survives as the dot that identifies each group.
+    const dots = Array.from(
+      region.querySelectorAll<HTMLElement>('[style*="background-color"]'),
+    );
+    expect(dots).toHaveLength(summary.groups.length);
+    dots.forEach((dot, index) => {
+      expect(dot.style.backgroundColor).toBe(`var(--chart-${index + 1})`);
+      expect(dot.className).toContain("rounded-full");
+      expect(dot.className).toContain("h-2");
+      expect(dot.className).toContain("w-2");
+    });
   });
 
   it("keeps every text inside the type scale: 12px floor, no micro-print", () => {
     render(<ExpenseSummaryCards month="2026-11" summary={summary} />);
 
     const region = summaryRegion();
-    // The rows sit at 13px; nothing in the block drops to 10px or 11px.
-    expect(within(region).getByText("Gastos de empleados")).toHaveClass(
-      "text-[13px]",
-    );
+    const cells = within(region).getAllByRole("listitem");
+
+    // The group name reads at a size that is actually visible, the amount leads
+    // its cell, and the share stays on the 12px floor.
+    const name = within(cells[0]).getByText("Gastos de empleados");
+    expect(name).toHaveClass("text-[13px]");
+    expect(name).toHaveClass("font-medium");
+    expect(within(cells[0]).getByText(/58\s*%/)).toHaveClass("text-xs");
+    expect(within(cells[0]).getByText(/2\.000\.000/)).toHaveClass("text-xl");
+
     const offenders = Array.from(
       region.querySelectorAll<HTMLElement>('[class*="text-["]'),
     ).filter((el) => /text-\[1[01]px\]/.test(el.className));
     expect(offenders).toHaveLength(0);
   });
 
-  it("keeps the group labels short and says how many more there are", () => {
-    render(<ExpenseSummaryCards month="2026-11" summary={summary} />);
-
-    const [employees, , transport] = within(summaryRegion()).getAllByRole(
-      "listitem",
+  it("lists each group's labels beside their own amounts and counts the rest", () => {
+    const { unmount } = render(
+      <ExpenseSummaryCards month="2026-11" summary={summary} />,
     );
 
-    // Two labels fit inline, the remainder collapses into a single count.
-    expect(within(employees).getByText("Sueldos · Prestaciones")).toBeTruthy();
-    expect(within(employees).getByText("+1")).toBeTruthy();
-    expect(within(employees).queryByText("Bonificaciones")).toBeNull();
+    const employees = within(summaryRegion()).getAllByRole("listitem")[0];
 
-    expect(within(transport).getByText("Combustible · Peajes")).toBeTruthy();
-    expect(within(transport).queryByText(/^\+/)).toBeNull();
-  });
+    // Three labels fit as rows, each beside the amount it explains.
+    expect(within(employees).getByText("Sueldos")).toBeInTheDocument();
+    expect(within(employees).getByText("Prestaciones")).toBeInTheDocument();
+    expect(within(employees).getByText("Bonificaciones")).toBeInTheDocument();
+    expect(within(employees).getByText(/1\.500\.000/)).toBeInTheDocument();
+    expect(within(employees).getByText(/400\.000/)).toBeInTheDocument();
+    expect(within(employees).queryByText(/^\+/)).toBeNull();
 
-  it("keeps the groups as rows of one card instead of separate cards", () => {
-    render(<ExpenseSummaryCards month="2026-11" summary={summary} />);
+    unmount();
 
-    const region = summaryRegion();
-    expect(region.className).toContain("bg-card");
+    render(
+      <ExpenseSummaryCards
+        month="2026-11"
+        summary={{
+          month: "2026-11",
+          total: 100000,
+          groups: [
+            {
+              groupId: "many",
+              name: "Operación",
+              total: 100000,
+              labels: [
+                { labelId: "m1", name: "Uno", total: 40000 },
+                { labelId: "m2", name: "Dos", total: 25000 },
+                { labelId: "m3", name: "Tres", total: 20000 },
+                { labelId: "m4", name: "Cuatro", total: 10000 },
+                { labelId: "m5", name: "Cinco", total: 5000 },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
 
-    // A row that is a rounded, shadowed card would rebuild the floating cards
-    // this summary replaces; the rows only carry dividers.
-    for (const row of within(region).getAllByRole("listitem")) {
-      expect(row.className).not.toMatch(/rounded|shadow/);
-      expect(row.className).not.toContain("bg-card");
-    }
+    const many = within(summaryRegion()).getByRole("listitem");
+    expect(within(many).getByText("Tres")).toBeInTheDocument();
+    expect(within(many).queryByText("Cuatro")).toBeNull();
+    expect(within(many).getByText("+2 más")).toBeInTheDocument();
   });
 
   it("keeps a tiny group from reading as no share at all", () => {
@@ -194,11 +294,11 @@ describe("ExpenseSummaryCards", () => {
 
     const row = within(summaryRegion()).getByRole("listitem");
     // 0.2 % of the month rounds to zero, so it is stated as a floor instead.
-    expect(row.lastElementChild?.textContent).toBe("<1 %");
+    expect(within(row).getByText("<1 %")).toBeInTheDocument();
     expect(within(row).getByText("Sin etiquetas")).toBeInTheDocument();
   });
 
-  it("says the month is empty instead of drawing a bar with no groups", () => {
+  it("says the month is empty instead of drawing cells with no groups", () => {
     render(
       <ExpenseSummaryCards
         month="2026-11"
@@ -213,10 +313,6 @@ describe("ExpenseSummaryCards", () => {
       within(region).getByText(/Sin grupos con gastos este mes/),
     ).toBeInTheDocument();
 
-    const bar = within(region).getByRole("img", {
-      name: /Distribución del mes/i,
-    });
-    expect(bar.children).toHaveLength(0);
     expect(within(region).queryAllByRole("listitem")).toHaveLength(0);
   });
 

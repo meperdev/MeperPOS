@@ -48,29 +48,39 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
         )}
       >
         <div className="flex flex-col flex-1 min-h-0">
-          {/* Brand lockup — the same proportions the real rail draws at 256px */}
-          <div
-            className={cn(
-              "shrink-0 border-b border-border/70",
-              isCollapsed
-                ? "px-2 py-4 flex flex-col items-center gap-3"
-                : "px-4 py-4 flex items-center justify-between gap-2"
-            )}
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className={cn(
-                  "rounded-xl bg-muted",
-                  pulse,
-                  isCollapsed ? "h-11 w-11" : "h-10 w-10 lg:h-11 lg:w-11"
+          {/* Brand lockup — same proportions and same row the real rail draws:
+              at lg the bordered row is the header's height, so the two borders
+              swap without a jump. */}
+          <div className={cn("shrink-0", isCollapsed && "flex flex-col")}>
+            <div
+              data-testid="app-shell-skeleton-brand-row"
+              className={cn(
+                "flex items-center border-b border-border/70",
+                isCollapsed
+                  ? "h-[var(--app-header-height)] w-full justify-center lg:px-2"
+                  : "justify-between gap-2 px-4 py-4 lg:h-[var(--app-header-height)] lg:px-4 lg:py-0"
+              )}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={cn(
+                    "rounded-xl bg-muted",
+                    pulse,
+                    isCollapsed ? "h-11 w-11" : "h-10 w-10 lg:h-11 lg:w-11"
+                  )}
+                />
+                {!isCollapsed && (
+                  <div className={cn("h-6 w-28 rounded bg-muted", pulse)} />
                 )}
-              />
+              </div>
               {!isCollapsed && (
-                <div className={cn("h-6 w-28 rounded bg-muted", pulse)} />
+                <div className={cn("h-7 w-7 rounded-lg bg-muted/70", pulse)} />
               )}
             </div>
-            {!isCollapsed && (
-              <div className={cn("h-7 w-7 rounded-lg bg-muted/70", pulse)} />
+            {isCollapsed && (
+              <div className="mt-3 flex justify-center">
+                <div className={cn("h-9 w-9 rounded-lg bg-muted/70", pulse)} />
+              </div>
             )}
           </div>
 
@@ -161,8 +171,12 @@ export function AppShellSkeleton({ isCollapsed }: { isCollapsed: boolean }) {
           <div className="flex flex-1 justify-center">
             <div className={cn("h-9 w-full max-w-md rounded-lg bg-muted", pulse)} />
           </div>
-          <div className={cn("h-8 w-8 rounded-md bg-muted", pulse)} />
-          <div className={cn("h-8 w-8 rounded-full bg-muted", pulse)} />
+          {/* Theme, bell, avatar — the header's three action slots, at its gap. */}
+          <div className={cn("flex items-center gap-1", pulse)}>
+            <div className="h-8 w-8 rounded-md bg-muted" />
+            <div className="h-8 w-8 rounded-md bg-muted" />
+            <div className="h-8 w-8 rounded-full bg-muted" />
+          </div>
         </div>
       </div>
 

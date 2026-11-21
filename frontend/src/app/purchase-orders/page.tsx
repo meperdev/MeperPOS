@@ -16,6 +16,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { FilterBar, FilterClearButton } from "@/components/ui/FilterBar";
 import { Select } from "@/components/ui/Select";
+import { SettledStrip } from "@/components/ui/SettledStrip";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import {
@@ -40,11 +41,18 @@ import {
   Plus,
   ClipboardList,
   Truck,
-  Calendar,
 } from "lucide-react";
-import { cn, formatCurrency, formatDateShort } from "@/lib/utils";
+import {
+  cn,
+  formatCalendarDay,
+  formatCalendarDayShort,
+  formatCurrency,
+  formatDate,
+  formatDateShort,
+  toFiniteNumber,
+} from "@/lib/utils";
 import { hasAnyRole } from "@/lib/auth";
-import type { PurchaseOrderStatusFilter } from "@/types";
+import type { PurchaseOrder, PurchaseOrderStatusFilter } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 
 const statusOptions: Array<{ value: "" | PurchaseOrderStatusFilter; label: string }> = [
@@ -69,6 +77,245 @@ const TABLE_PAGE_SIZE = 10;
 function statusFromUrl(value: string | null | undefined): "" | PurchaseOrderStatusFilter {
   const match = statusOptions.find((option) => option.value !== "" && option.value === value);
   return match ? match.value : "";
+}
+
+/**
+ * How much of the order already arrived, read from the item quantities the list
+ * payload already carries. Display only: the server owns those quantities, so
+ * the percentage never travels and never feeds a stored figure.
+ *
+ * A draft shows no progress at all, and an order with nothing ordered has no
+ * progress to state.
+ */
+function receptionProgress(order: PurchaseOrder): {
+  ordered: number;
+  received: number;
+  percentage: number;
+} | null {
+  const items = order.items ?? [];
+  const ordered = items.reduce(
+    (total, item) => total + toFiniteNumber(item.qtyOrdered),
+    0,
+  );
+  if (ordered <= 0) return null;
+
+  const received = items.reduce(
+    (total, item) => total + toFiniteNumber(item.qtyReceived),
+    0,
+  );
+  if (order.status === "DRAFT") return { ordered, received, percentage: 0 };
+
+  const percentage = Math.min(
+    Math.max(Math.round((received / ordered) * 100), 0),
+    100,
+  );
+  return { ordered, received, percentage };
+}
+
+/** The amounts row keeps one column per figure it actually carries. */
+function amountGridColumns(count: number): string {
+  if (count >= 3) return "grid-cols-3";
+  if (count === 2) return "grid-cols-2";
+  return "grid-cols-1";
+}
+
+/** One centered figure inside the card's amounts row. */
+function AmountCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 px-1 text-center">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className="mt-0.5 truncate text-sm font-semibold text-foreground tabular-nums"
+        title={value}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * One purchase order as a scannable card: the supplier and its number up top,
+ * how much of it already arrived, the money and volume figures, and the dates
+ * that make the order legible without opening it.
+ */
+function PurchaseOrderCard({
+  order,
+  onOpen,
+}: {
+  order: PurchaseOrder;
+  onOpen: () => void;
+}) {
+  const progress = receptionProgress(order);
+  // Fully received: the status says so, or the quantities do before the status
+  // has caught up. Either way the bar has nothing left to say. A draft keeps
+  // its grey bar, as it has nothing received to report.
+  const fullyReceived =
+    progress !== null &&
+    order.status !== "DRAFT" &&
+    (order.status === "RECEIVED" ||
+      (progress.received > 0 && progress.received >= progress.ordered));
+  const overdue = Boolean(order.overdue);
+  // The footer cells are half-width, so each reads the compact day and keeps the
+  // prose wording reachable in its `title`. `expectedDeliveryDate` is a calendar
+  // day (`@db.Date`) while `createdAt` and `sentAt` are instants, and the two
+  // read through different formatters.
+  const createdLabel = formatDateShort(order.createdAt);
+  const createdLabelLong = formatDate(order.createdAt);
+  const deliveryLabel = order.expectedDeliveryDate ? "Entrega" : "Enviada";
+  const deliveryValue = order.expectedDeliveryDate
+    ? formatCalendarDayShort(order.expectedDeliveryDate)
+    : order.sentAt
+      ? formatDateShort(order.sentAt)
+      : null;
+  const deliveryValueLong = order.expectedDeliveryDate
+    ? formatCalendarDay(order.expectedDeliveryDate)
+    : order.sentAt
+      ? formatDate(order.sentAt)
+      : null;
+
+  const amounts = [
+    {
+      label: "Total compra",
+      value: formatCurrency(toFiniteNumber(order.total)),
+    },
+    ...(order.items
+      ? [
+          {
+            label: "Productos",
+            value: order.items.length.toLocaleString("es-CO"),
+          },
+        ]
+      : []),
+    ...(progress
+      ? [
+          {
+            label: "Unidades",
+            value: progress.ordered.toLocaleString("es-CO"),
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <div
+      {...activationProps(onOpen, `Ver orden OC-${order.orderNumber}`)}
+      className="group flex h-full cursor-pointer flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background active:bg-muted/60"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/50 text-muted-foreground">
+            <Truck className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold leading-tight text-foreground">
+              {order.supplier?.name ?? "Sin proveedor"}
+            </p>
+            <p className="id-text mt-0.5 text-[13px] text-muted-foreground">
+              OC-{order.orderNumber}
+            </p>
+          </div>
+        </div>
+        <PurchaseOrderStatusBadge
+          status={order.status}
+          sent={Boolean(order.sentAt)}
+          overdue={overdue}
+        />
+      </div>
+
+      {/* Received against ordered; the bar reads at a glance what the numbers
+          of the amounts row then state exactly. A fully received order replaces
+          it with the shared settled strip at the same height. */}
+      {progress &&
+        (fullyReceived ? (
+          <SettledStrip
+            testId="po-settled-line"
+            label="Recibida completa"
+            date={order.receivedAt ? formatDateShort(order.receivedAt) : null}
+          />
+        ) : (
+          <div>
+            <div
+              role="progressbar"
+              aria-label="Recibido"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress.percentage}
+              className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            >
+              <div
+                data-testid="po-progress-fill"
+                className={cn(
+                  "h-full rounded-full",
+                  order.status === "DRAFT"
+                    ? "bg-muted-foreground/30"
+                    : "bg-primary",
+                )}
+                style={{ width: `${progress.percentage}%` }}
+              />
+            </div>
+            <div className="mt-1.5 flex items-baseline justify-between gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                Recibido {progress.percentage}%
+              </span>
+              <span className="truncate text-xs font-semibold text-foreground tabular-nums">
+                {progress.received} de {progress.ordered} und.
+              </span>
+            </div>
+          </div>
+        ))}
+
+      <div
+        className={cn(
+          "grid divide-x divide-border/60",
+          amountGridColumns(amounts.length),
+        )}
+      >
+        {amounts.map((cell) => (
+          <AmountCell key={cell.label} label={cell.label} value={cell.value} />
+        ))}
+      </div>
+
+      <div className="mt-auto border-t border-border/60 pt-3">
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Creada</dt>
+            <dd
+              className="mt-0.5 truncate text-xs font-medium text-foreground"
+              title={createdLabelLong}
+            >
+              {createdLabel}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+              {deliveryLabel}
+              {overdue && (
+                <span className="font-semibold text-danger-text">Vencida</span>
+              )}
+            </dt>
+            <dd
+              className={cn(
+                "mt-0.5 truncate text-xs font-medium",
+                overdue ? "text-danger-text" : "text-foreground",
+              )}
+              title={deliveryValueLong ?? undefined}
+            >
+              {deliveryValue ?? "—"}
+            </dd>
+          </div>
+        </dl>
+        {order.notes && (
+          <p
+            className="mt-1.5 min-w-0 truncate text-xs text-muted-foreground"
+            title={order.notes}
+          >
+            {order.notes}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function PurchaseOrdersContent() {
@@ -353,59 +600,11 @@ function PurchaseOrdersContent() {
                 )}
               >
                 {orders.map((order) => (
-                  <div
+                  <PurchaseOrderCard
                     key={order.id}
-                    {...activationProps(
-                      () => router.push(`/purchase-orders/${order.id}`),
-                      `Ver orden OC-${order.orderNumber}`,
-                    )}
-                    className="group flex cursor-pointer flex-col justify-between rounded-xl border border-border/70 bg-card p-4 shadow-2xs transition-colors hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background active:bg-muted/60"
-                  >
-                    <div>
-                      {/* Header */}
-                      <div className="flex items-center justify-between gap-2 mb-2.5">
-                        <span className="text-[13px] font-semibold text-foreground tracking-tight tabular-nums">
-                          OC-{order.orderNumber}
-                        </span>
-                        <PurchaseOrderStatusBadge
-                          status={order.status}
-                          sent={Boolean(order.sentAt)}
-                          overdue={Boolean(order.overdue)}
-                        />
-                      </div>
-
-                      {/* Supplier and Date */}
-                      <div className="space-y-1.5 mt-3 pt-2.5 border-t border-border/50 text-[13px]">
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <Truck className="w-3 h-3 shrink-0 text-muted-foreground/70" />
-                          <span className="-mr-2 min-w-0 truncate font-semibold text-foreground">
-                            {order.supplier?.name ?? "Sin proveedor"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <Calendar className="w-3 h-3 shrink-0 text-muted-foreground/70" />
-                          <span className="text-muted-foreground">
-                            {formatDateShort(order.createdAt)}
-                          </span>
-                        </div>
-                        {order.notes && (
-                          <p className="text-[13px] text-muted-foreground/70 line-clamp-1 pt-0.5">
-                            {order.notes}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="mt-3.5 border-t border-border/60 pt-3">
-                      <p className="text-[13px] font-medium text-muted-foreground">
-                        Total compra
-                      </p>
-                      <p className="text-sm font-semibold text-foreground tabular-nums">
-                        {formatCurrency(order.total)}
-                      </p>
-                    </div>
-                  </div>
+                    order={order}
+                    onOpen={() => router.push(`/purchase-orders/${order.id}`)}
+                  />
                 ))}
               </div>
             )}

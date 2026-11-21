@@ -52,12 +52,12 @@ export function TopProductsCard({
           Sin ventas en el período
         </p>
       ) : (
-        <ol className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-hidden">
+        <ol className="mt-3 min-h-0 flex-1 space-y-1 overflow-hidden">
           {products.map((product, index) => (
             <li
               key={product.productId}
               data-testid="top-product-row"
-              className="flex items-center gap-2 text-[13px]"
+              className="flex items-center gap-2 py-1 text-sm"
             >
               <span
                 data-testid="top-product-rank"
@@ -68,7 +68,7 @@ export function TopProductsCard({
               <span className="min-w-0 flex-1 truncate font-medium text-foreground">
                 {product.productName}
               </span>
-              <span className="shrink-0 text-xs font-semibold text-foreground tabular-nums">
+              <span className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
                 <span data-testid="top-product-quantity">{product.quantity}</span>
                 <span className="ml-1 font-normal text-muted-foreground">
                   und.

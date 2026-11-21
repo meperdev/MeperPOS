@@ -198,8 +198,9 @@ vi.mock("@/components/ui/Input", () => {
       onKeyDown?: (e: ReactKeyboardEvent<HTMLInputElement>) => void;
       placeholder?: string;
       disabled?: boolean;
+      label?: string;
     }
-  >(function MockInput({ value, onChange, onKeyDown, placeholder, disabled }, ref) {
+  >(function MockInput({ value, onChange, onKeyDown, placeholder, disabled, label }, ref) {
     const [mounted, setMounted] = useState(inputMountState.delayMs === 0);
 
     useEffect(() => {
@@ -223,6 +224,7 @@ vi.mock("@/components/ui/Input", () => {
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         disabled={disabled}
+        aria-label={label}
       />
     );
   });
@@ -247,11 +249,19 @@ vi.mock("@/components/ui/Modal", () => ({
     isOpen,
     title,
     children,
+    footer,
   }: {
     isOpen: boolean;
     title?: string;
     children: ReactNode;
-  }) => (isOpen ? <section aria-label={title}>{children}</section> : null),
+    footer?: ReactNode;
+  }) =>
+    isOpen ? (
+      <section aria-label={title}>
+        {children}
+        {footer}
+      </section>
+    ) : null,
 }));
 
 // ConfirmDialog is the shared warning dialog. The mock mirrors its documented
@@ -883,6 +893,9 @@ describe("POS behavior evidence (#19, #18)", () => {
     const thumb = screen.getByTestId("cart-line-image");
     expect(thumb.className).toContain("self-stretch");
     expect(thumb.className).toContain("w-20");
+    expect(thumb.className).toContain("@min-[19rem]:block");
+    expect(thumb.className).toContain("@min-[24rem]:w-24");
+    expect(thumb.className).toContain("@min-[26rem]:w-28");
 
     const name = screen.getByText("Arroz Integral Premium Paquete 5 kg", { selector: "p" });
     expect(name.className).toContain("line-clamp-2");
@@ -895,8 +908,8 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(total.className).toContain("tabular-nums");
     expect(total.className).toContain("whitespace-nowrap");
 
-    expect(screen.getByLabelText("Descuento para Arroz Integral Premium Paquete 5 kg").className).toContain("h-9 w-9");
-    expect(screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").className).toContain("h-9 w-9");
+    expect(screen.getByLabelText("Descuento para Arroz Integral Premium Paquete 5 kg").className).toContain("h-8 w-8");
+    expect(screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").className).toContain("h-8 w-8");
   });
 
 
@@ -1566,7 +1579,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Producto Precio" }));
 
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "45000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1584,7 +1598,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Producto Precio" }));
 
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "55000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1602,7 +1617,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Producto Precio" }));
 
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     // CurrencyInput strips non-digit characters, so "-500" reaches the page as 500.
     await userEvent.type(priceInput, "-500");
@@ -1624,10 +1640,12 @@ describe("POS item price override (pos-edit-item-price)", () => {
     // Apply a 10% percentage discount on quantity 2.
     await openDiscountModal();
     await userEvent.click(screen.getByRole("button", { name: "10%" }));
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     // Edit price down to 40000.
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "40000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1643,12 +1661,13 @@ describe("POS item price override (pos-edit-item-price)", () => {
 
     // Apply a fixed 5000 discount.
     await openDiscountModal();
-    await userEvent.type(screen.getByPlaceholderText("0.00"), "5000");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     // Edit price down to 45000.
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "45000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1662,8 +1681,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     renderWithSingleProduct("Producto Descontado", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Descontado" }));
     await openDiscountModal();
-    await userEvent.type(screen.getByPlaceholderText("0.00"), "5000");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     const card = screen.getByLabelText("Eliminar Producto Descontado").closest<HTMLElement>("div.rounded-lg")!;
     const struck = card.querySelector<HTMLElement>("s");
@@ -1681,12 +1700,13 @@ describe("POS item price override (pos-edit-item-price)", () => {
 
     // Apply a fixed 5000 discount.
     await openDiscountModal();
-    await userEvent.type(screen.getByPlaceholderText("0.00"), "5000");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     // Drop price below the fixed discount (5000) to 3000.
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "3000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1713,7 +1733,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
 
     // Edit the price down to 45000.
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "45000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1745,7 +1766,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     expect(screen.queryByTestId("price-overridden")).toBeNull();
 
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "45000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1789,47 +1811,52 @@ describe("POS price override permission (explicit roles)", () => {
     await openDiscountModal();
 
     // The discount half of the modal still works for restricted roles...
-    expect(screen.getByPlaceholderText("0.00")).toBeTruthy();
-    // ...but the price override is not offered at all.
+    expect(screen.getByLabelText("Monto del descuento")).toBeTruthy();
+    // ...but the price override is not offered at all, not even as a mode.
+    expect(screen.queryByRole("button", { name: "Precio final" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Aplicar precio" })).toBeNull();
-    expect(screen.queryByPlaceholderText("Precio")).toBeNull();
+    expect(screen.queryByLabelText("Nuevo precio unitario")).toBeNull();
   }
 
-  it("shows the Aplicar precio control to a CASHIER", async () => {
+  it("offers the final-price mode to a CASHIER", async () => {
     authState.role = "CASHIER";
     renderWithSingleProduct("Producto Cajero", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Cajero" }));
     await openDiscountModal();
 
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
     expect(screen.getByRole("button", { name: "Aplicar precio" })).toBeTruthy();
+    expect(screen.getByLabelText("Nuevo precio unitario")).toBeTruthy();
   });
 
-  it("hides the Aplicar precio control from a MEMBER", async () => {
+  it("hides the final-price mode from a MEMBER", async () => {
     authState.role = "MEMBER";
     await expectNoPriceControl("Producto Miembro");
   });
 
-  it("hides the Aplicar precio control when there is no user", async () => {
+  it("hides the final-price mode when there is no user", async () => {
     authState.role = "";
     await expectNoPriceControl("Producto Anonimo");
   });
 
-  it("shows the Aplicar precio control to an ADMIN", async () => {
+  it("offers the final-price mode to an ADMIN", async () => {
     authState.role = "ADMIN";
     renderWithSingleProduct("Producto Admin", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Admin" }));
     await openDiscountModal();
 
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
     expect(screen.getByRole("button", { name: "Aplicar precio" })).toBeTruthy();
   });
 
-  it("shows the Aplicar precio control to an OWNER (inherits ADMIN)", async () => {
+  it("offers the final-price mode to an OWNER (inherits ADMIN)", async () => {
     // Mirrors RolesGuard.getInheritedRoles, where OWNER inherits ADMIN.
     authState.role = "OWNER";
     renderWithSingleProduct("Producto Owner", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Owner" }));
     await openDiscountModal();
 
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
     expect(screen.getByRole("button", { name: "Aplicar precio" })).toBeTruthy();
   });
 
@@ -1958,12 +1985,22 @@ describe("POS promotion pricing (#74)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Producto Tope" }));
 
     await userEvent.click(screen.getByTitle("Descuento"));
-    await userEvent.type(screen.getByPlaceholderText("0.00"), "99999");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    // More than the line is rejected before it can ever reach the cart.
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "99999");
+    expect(
+      screen.getByRole("button", { name: "Aplicar descuento" }),
+    ).toBeDisabled();
 
-    // Rebate caps at the offer gross (8000 × 1) — line total floors at $0.
+    // The offer gross (8000 × 1) is the whole line — total floors at $0.
+    await userEvent.clear(screen.getByLabelText("Monto del descuento"));
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "8000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
+
     const discount = screen.getByTestId("line-discount");
     expect(discount.textContent).toContain(formatCurrency(8000));
+    expect(screen.getByTestId("cart-line-total").textContent).toBe(
+      formatCurrency(0),
+    );
     expect(screen.getByTestId("line-unit-price").textContent).toContain(
       formatCurrency(8000),
     );
@@ -1984,6 +2021,7 @@ describe("POS promotion pricing (#74)", () => {
 
     await userEvent.click(screen.getByTitle("Descuento"));
     await userEvent.click(screen.getByRole("button", { name: "10%" }));
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     // Offer gross at qty 2 is 16000 → 10% rebate = 1600, anchored to the
     // promotional unitPrice (not the 10000 list price, which would give 2000).
