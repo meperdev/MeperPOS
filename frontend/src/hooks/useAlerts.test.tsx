@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/api", () => ({
@@ -51,17 +51,43 @@ describe("useAlerts", () => {
 
     const { result } = renderHook(() => useAlerts(), { wrapper });
 
-    await waitFor(() => expect(result.current).toEqual([alert]));
+    await waitFor(() => expect(result.current.alerts).toEqual([alert]));
     expect(api.get).toHaveBeenCalledWith("/alerts");
   });
 
-  it("returns an empty list instead of throwing when the feed fails", async () => {
+  it("reports the failure instead of pretending the feed is empty", async () => {
     vi.mocked(api.get).mockRejectedValue(new Error("network"));
 
     const { result } = renderHook(() => useAlerts(), { wrapper });
 
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.alerts).toEqual([]);
+  });
+
+  it("stays error-free while the feed is still loading", async () => {
+    vi.mocked(api.get).mockReturnValue(new Promise(() => {}));
+
+    const { result } = renderHook(() => useAlerts(), { wrapper });
+
     await waitFor(() => expect(api.get).toHaveBeenCalled());
-    expect(result.current).toEqual([]);
+    expect(result.current.isError).toBe(false);
+    expect(result.current.alerts).toEqual([]);
+  });
+
+  it("re-asks the backend when the caller retries", async () => {
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(respond([alert]));
+
+    const { result } = renderHook(() => useAlerts(), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    await waitFor(() => expect(result.current.alerts).toEqual([alert]));
+    expect(api.get).toHaveBeenCalledTimes(2);
   });
 
   it("returns each alert with its revision", async () => {
@@ -69,7 +95,9 @@ describe("useAlerts", () => {
 
     const { result } = renderHook(() => useAlerts(), { wrapper });
 
-    await waitFor(() => expect(result.current[0]?.revision).toBe("abc123"));
+    await waitFor(() =>
+      expect(result.current.alerts[0]?.revision).toBe("abc123"),
+    );
   });
 
   it("does not ask for a feed without an organization scope", async () => {
@@ -80,14 +108,16 @@ describe("useAlerts", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(api.get).not.toHaveBeenCalled();
-    expect(result.current).toEqual([]);
+    // A disabled query is not a failure: the bell shows the empty state.
+    expect(result.current.alerts).toEqual([]);
+    expect(result.current.isError).toBe(false);
   });
 
   it("keys the cache by organization so a switch cannot serve the previous tenant", async () => {
     vi.mocked(api.get).mockResolvedValue(respond([alert]));
 
     const { result, rerender } = renderHook(() => useAlerts(), { wrapper });
-    await waitFor(() => expect(result.current).toEqual([alert]));
+    await waitFor(() => expect(result.current.alerts).toEqual([alert]));
 
     authState.current = { user: { organizationId: "org-2" } };
     rerender();

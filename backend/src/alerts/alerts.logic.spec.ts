@@ -76,7 +76,7 @@ describe('alerts.logic — stock', () => {
     );
 
     expect(alert).toMatchObject({
-      id: 'stock:depleted',
+      id: 'stock:low',
       category: 'stock',
       severity: 'critical',
       title: '1 producto agotado',
@@ -96,6 +96,25 @@ describe('alerts.logic — stock', () => {
       title: 'Stock bajo',
       detail: '1 producto por debajo del mínimo.',
     });
+  });
+
+  // The id identifies the condition, not the event: one product crossing to
+  // zero must not read as a different alert, only as a changed revision.
+  it('keeps the id when a product crosses to depleted and re-alerts through the revision', () => {
+    const before = buildAlerts(
+      signals({ lowStock: [{ id: 'p1', stock: 1, minStock: 5 }] }),
+    )[0];
+    const after = buildAlerts(
+      signals({ lowStock: [{ id: 'p1', stock: 0, minStock: 5 }] }),
+    )[0];
+
+    expect(before.id).toBe('stock:low');
+    expect(after.id).toBe('stock:low');
+    expect(before.severity).toBe('warning');
+    expect(after.severity).toBe('critical');
+    expect(before.title).toBe('Stock bajo');
+    expect(after.title).toBe('1 producto agotado');
+    expect(after.revision).not.toBe(before.revision);
   });
 
   it('hides stock from a role without the inventory capability', () => {

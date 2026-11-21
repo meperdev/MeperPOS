@@ -183,6 +183,29 @@ describe("useCreatePosLoan", () => {
     expect(body.issuedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
+  it("issues the loan on the Bogotá day, not the UTC day", async () => {
+    // 02:00 UTC on the 21st is 21:00 on the 20th in Bogotá: an evening sale
+    // used to be recorded as issued tomorrow.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-21T02:00:00Z") });
+    try {
+      const { result } = renderHook(() => useCreatePosLoan(), { wrapper });
+
+      await result.current.mutateAsync(baseInput());
+
+      expect(postedBody().issuedAt).toBe("2026-11-20");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a caller-pinned issuedAt", async () => {
+    const { result } = renderHook(() => useCreatePosLoan(), { wrapper });
+
+    await result.current.mutateAsync(baseInput({ issuedAt: "2026-03-24" }));
+
+    expect(postedBody().issuedAt).toBe("2026-03-24");
+  });
+
   it("passes ids, quantities and the line discount through, keeping unitPrice only for a deliberate override", async () => {
     const { result } = renderHook(() => useCreatePosLoan(), { wrapper });
 
