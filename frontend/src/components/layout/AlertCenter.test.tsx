@@ -122,6 +122,38 @@ describe("AlertCenter", () => {
     expect(screen.getAllByTestId("alert-unread-dot")).toHaveLength(2);
   });
 
+  it("dresses each row with a severity tile and a trailing chevron", () => {
+    render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+
+    const critical = screen.getByText("Suscripción vencida").closest("a")!;
+    const warning = screen.getByText("2 tareas vencidas").closest("a")!;
+
+    const criticalTile = critical.querySelector("span.grid")!;
+    expect(criticalTile.className).toContain("h-8");
+    expect(criticalTile.className).toContain("w-8");
+    expect(criticalTile.className).toContain("bg-danger/10");
+    expect(criticalTile.className).toContain("text-danger-text");
+
+    const warningTile = warning.querySelector("span.grid")!;
+    expect(warningTile.className).toContain("bg-warning/10");
+    expect(warningTile.className).toContain("text-warning-text");
+
+    // The chevron only appears under the pointer or the keyboard, so the row
+    // reads as quiet until it is the row being read.
+    const chevron = critical.querySelector("svg.lucide-chevron-right")!;
+    expect(chevron.getAttribute("class")).toContain("opacity-0");
+    expect(chevron.getAttribute("class")).toContain(
+      "group-hover:opacity-100",
+    );
+
+    // The unread dot keeps its place, ahead of the chevron.
+    const dot = critical.querySelector('[data-testid="alert-unread-dot"]')!;
+    expect(
+      dot.compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("closes the panel when following an alert", () => {
     render(<AlertCenter />);
     fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
@@ -134,13 +166,33 @@ describe("AlertCenter", () => {
     });
   });
 
-  it("links to the notification history from the panel", () => {
+  it("links to the notification history from the panel header", () => {
     render(<AlertCenter />);
     fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
 
-    expect(
+    const history = screen.getByRole("link", {
+      name: "Ver historial de notificaciones",
+    });
+    expect(history).toHaveAttribute("href", "/alerts");
+    // The header carries the door now, worded for the space it has; the footer
+    // block that used to hold it is gone.
+    expect(history.textContent).toBe("Ver historial");
+    const panel = screen.getByRole("dialog", { name: "Alertas" });
+    expect(panel.firstElementChild?.contains(history)).toBe(true);
+    expect(panel.lastElementChild?.tagName).toBe("UL");
+  });
+
+  it("closes the panel when following the history link", () => {
+    render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+
+    fireEvent.click(
       screen.getByRole("link", { name: "Ver historial de notificaciones" }),
-    ).toHaveAttribute("href", "/alerts");
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "Alertas" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the quiet empty state when nothing is pending", () => {

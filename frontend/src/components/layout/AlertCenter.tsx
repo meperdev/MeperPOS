@@ -10,8 +10,10 @@ import {
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
+  ArrowRight,
   Bell,
   Check,
+  ChevronRight,
   ClipboardList,
   CreditCard,
   Gauge,
@@ -274,7 +276,7 @@ export function AlertCenter({
             )}
           >
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5">
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <Bell className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <h2 className="text-[13px] font-semibold text-foreground">Alertas</h2>
                 {openedUnread.length > 0 && (
@@ -283,6 +285,18 @@ export function AlertCenter({
                   </span>
                 )}
               </div>
+              {/* The way out of the panel, worded for the room the header has.
+                  The footer block that used to hold this link is gone: it was a
+                  second slab of chrome under rows that already end the panel. */}
+              <Link
+                href="/alerts"
+                onClick={() => setOpen(false)}
+                aria-label="Ver historial de notificaciones"
+                className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+              >
+                Ver historial
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
             </div>
 
             {alerts.length === 0 ? (
@@ -309,16 +323,6 @@ export function AlertCenter({
                 ))}
               </ul>
             )}
-
-            <div className="border-t border-border/60 px-3.5 py-2">
-              <Link
-                href="/alerts"
-                onClick={() => setOpen(false)}
-                className="text-[13px] font-medium text-primary hover:underline"
-              >
-                Ver historial de notificaciones
-              </Link>
-            </div>
           </div>,
           document.body,
         )}
@@ -339,16 +343,18 @@ function AlertRow({
     <Link
       href={alert.href}
       onClick={onOpen}
-      className="flex items-start gap-2 px-3.5 py-2.5 transition-colors duration-150 hover:bg-muted/40"
+      className="group flex items-center gap-3 px-3.5 py-3 transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50"
     >
+      {/* One tile per category, tinted by severity: the row's first read is how
+          urgent it is, not which module raised it. */}
       <span
         className={cn(
-          "mt-0.5 shrink-0",
+          "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
           alert.severity === "critical"
-            ? "text-danger-text"
+            ? "bg-danger/10 text-danger-text"
             : alert.severity === "warning"
-              ? "text-warning-text"
-              : "text-muted-foreground",
+              ? "bg-warning/10 text-warning-text"
+              : "bg-muted text-muted-foreground",
         )}
       >
         {CATEGORY_ICON[alert.category]}
@@ -357,7 +363,7 @@ function AlertRow({
         <span className="block truncate text-sm font-semibold text-foreground">
           {alert.title}
         </span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+        <span className="mt-0.5 block text-[13px] leading-snug text-muted-foreground">
           {alert.detail}
         </span>
       </span>
@@ -365,9 +371,15 @@ function AlertRow({
         <span
           aria-hidden="true"
           data-testid="alert-unread-dot"
-          className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
         />
       )}
+      {/* Quiet until the row is the one being read, so a list of alerts keeps
+          the shape of a list of messages instead of a list of buttons. */}
+      <ChevronRight
+        aria-hidden="true"
+        className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+      />
     </Link>
   );
 }

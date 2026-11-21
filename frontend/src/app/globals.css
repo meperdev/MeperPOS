@@ -527,8 +527,12 @@ h4 {
      * content column that starts below it and the POS page that fits itself to
      * the viewport. Hand-copying the number is how they drift apart, and a page
      * that sized itself to `100dvh` without it always overflowed by the bar.
+     *
+     * 4rem (64px) is the meeting point: the rail's 44px brand mark fits with
+     * 10px of air above and below, so the brand border lands on the header's
+     * border without either the logo shrinking or the bar growing taller.
      */
-    --app-header-height: 3.5rem;
+    --app-header-height: 4rem;
     /*
      * Height of the fixed mobile tab bar, excluding the home-indicator inset it
      * pays on top. Every fixed surface that shares the bottom edge below `lg`

@@ -808,6 +808,68 @@ describe("Sidebar", () => {
     expect(wordmark).toHaveClass("sr-only");
   });
 
+  // The rail's brand border and the header's border have to land on the same
+  // pixel row, or the two bars read as two different heights. One token owns
+  // the height; the brand row takes it and drops its own padding at lg, so the
+  // 44px mark fits without growing the bar to fit the mark.
+  it("puts the brand border on the header's pixel row", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <SidebarProvider>
+          <Sidebar />
+        </SidebarProvider>
+      </QueryClientProvider>
+    );
+
+    const brand = await screen.findByTestId("sidebar-brand");
+    const row = brand.querySelector<HTMLElement>(
+      '[data-testid="sidebar-brand-row"]'
+    )!;
+
+    expect(row.className).toContain("lg:h-[var(--app-header-height)]");
+    expect(row.className).toContain("lg:py-0");
+    expect(row.className).toContain("border-b");
+    // The mark keeps its full size: the row grew, the logo did not shrink.
+    expect(row.querySelector("img")?.className).toContain("lg:h-11");
+  });
+
+  it("keeps the collapsed border under the logo with the toggle below it", async () => {
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { organizations: [organizations[0]] },
+    });
+    safeSetItem(SIDEBAR_COLLAPSED_KEY, "true");
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <SidebarProvider>
+          <Sidebar />
+        </SidebarProvider>
+      </QueryClientProvider>
+    );
+
+    const brand = await screen.findByTestId("sidebar-brand");
+    const row = brand.querySelector<HTMLElement>(
+      '[data-testid="sidebar-brand-row"]'
+    )!;
+
+    expect(row.className).toContain("h-[var(--app-header-height)]");
+    expect(row.className).toContain("border-b");
+
+    // The expand control sits below the border so the bordered row holds only
+    // the mark, and the rail's border starts where the header's does.
+    const toggle = await screen.findByTestId("sidebar-collapse-toggle");
+    expect(row.contains(toggle)).toBe(false);
+    expect(toggle.closest("[data-testid='sidebar-brand-row']")).toBeNull();
+  });
+
   describe("rail scrolling", () => {
     // The rail paints no scrollbar, so overflow is signalled by edge fades and
     // the offset has to survive the session shell remounting around it.
