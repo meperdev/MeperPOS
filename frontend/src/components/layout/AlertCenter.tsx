@@ -128,12 +128,18 @@ export function AlertCenter({
 
   const markSeen = useCallback(
     (entries: AppAlert[]) => {
-      const next: SeenLedger = { ...seen };
-      for (const entry of entries) next[entry.id] = entry.revision;
-      setSeen(next);
-      writeSeen(storageKey, next);
+      // The header, the rail and the phone's bar each mount a bell over one
+      // shared ledger. A functional update composes acknowledgements made before
+      // the next render; spreading the render-time `seen` let the second write
+      // overwrite the first and the alert rang again.
+      setSeen((prev) => {
+        const next: SeenLedger = { ...prev };
+        for (const entry of entries) next[entry.id] = entry.revision;
+        writeSeen(storageKey, next);
+        return next;
+      });
     },
-    [seen, storageKey],
+    [storageKey],
   );
 
   // Another mounted bell (desktop rail vs mobile header) may have written first.
