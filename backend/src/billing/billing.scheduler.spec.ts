@@ -1,5 +1,7 @@
 import { BillingScheduler } from './billing.scheduler';
 import { OrgStatus } from '@prisma/client';
+import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
+import { TIMEZONE } from '../common/constants/locale.constants';
 
 describe('BillingScheduler', () => {
   let scheduler: BillingScheduler;
@@ -28,6 +30,16 @@ describe('BillingScheduler', () => {
 
   it('should be defined', () => {
     expect(scheduler).toBeDefined();
+  });
+
+  it('is wired for midnight in America/Bogota, not 19:00 local', () => {
+    const options = Reflect.getMetadata(
+      SCHEDULE_CRON_OPTIONS,
+      BillingScheduler.prototype.handleBillingTransitions,
+    ) as { cronTime: string; timeZone: string };
+
+    expect(options).toEqual({ cronTime: '0 0 * * *', timeZone: TIMEZONE });
+    expect(TIMEZONE).toBe('America/Bogota');
   });
 
   describe('handleBillingTransitions', () => {

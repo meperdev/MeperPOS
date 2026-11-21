@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { OrgRole } from '@prisma/client';
+import { formatDateInBogota } from '../common/utils/bogota-date';
+import {
+  bogotaToday,
+  toCalendarDay,
+} from '../purchase-orders/purchase-order-status';
 import type {
   AlertCategory,
   AlertSeverity,
@@ -78,11 +83,20 @@ const CATEGORY_RANK: Record<AlertCategory, number> = {
   tasks: 4,
 };
 
-const daysBetween = (from: Date, to: Date): number =>
-  Math.ceil((to.getTime() - from.getTime()) / 86_400_000);
-
 const plural = (count: number, one: string, many: string): string =>
   count === 1 ? one : many;
+
+/**
+ * Whole calendar days in Bogotá from the day of `from` to the day of `to`.
+ *
+ * Both ends are reduced to the midnight-UTC value of their Bogotá day — the
+ * shape `@db.Date` columns carry — so the result ticks at the shop's midnight
+ * instead of trailing the current instant by a rounding step.
+ */
+const bogotaDaysBetween = (from: Date, to: Date): number =>
+  (toCalendarDay(formatDateInBogota(to)).getTime() -
+    bogotaToday(from).getTime()) /
+  86_400_000;
 
 function limitAlerts(limits: AlertSignals['limits']): OrgAlert[] {
   const alerts: OrgAlert[] = [];
@@ -164,15 +178,17 @@ export function buildAlerts(signals: AlertSignals): OrgAlert[] {
         revision: fingerprint(['PAST_DUE']),
       });
     } else if (organization.status === 'TRIAL' && trialEndsAt) {
-      const daysLeft = daysBetween(now, trialEndsAt);
+      const daysLeft = bogotaDaysBetween(now, trialEndsAt);
       alerts.push({
         id: 'billing:trial',
         category: 'billing',
         severity: daysLeft <= 3 ? 'warning' : 'info',
         title:
-          daysLeft <= 0
+          daysLeft < 0
             ? 'Tu prueba terminó'
-            : `Tu prueba termina en ${daysLeft} ${plural(daysLeft, 'día', 'días')}`,
+            : daysLeft === 0
+              ? 'Tu prueba termina hoy'
+              : `Tu prueba termina en ${daysLeft} ${plural(daysLeft, 'día', 'días')}`,
         detail: 'Actualiza a PRO para desbloquear todos los límites.',
         href: '/settings/billing',
         revision: fingerprint([

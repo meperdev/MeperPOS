@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 
 type AlertFixture = {
   id: string;
@@ -201,6 +207,32 @@ describe("AlertCenter", () => {
     fireEvent.click(screen.getByRole("button", { name: "Alertas" }));
 
     expect(screen.getByText("Todo en orden")).toBeInTheDocument();
+  });
+
+  it("keeps both acknowledgements made in the same tick", () => {
+    // Nothing to acknowledge yet, so opening the panel writes no ledger entry.
+    alertsState.current = [];
+    const { rerender } = render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas" }));
+    expect(ledger()).toEqual({});
+
+    // A refetch brings the alerts in while the panel is already open: two rows
+    // can now be followed before React re-renders, which is how the header and
+    // the rail (one ledger, two bells) race each other.
+    alertsState.current = twoAlerts;
+    rerender(<AlertCenter />);
+
+    const first = screen.getByText("Suscripción vencida").closest("a")!;
+    const second = screen.getByText("2 tareas vencidas").closest("a")!;
+    act(() => {
+      first.click();
+      second.click();
+    });
+
+    expect(ledger()).toEqual({
+      "billing:past-due": "rev-billing",
+      "tasks:overdue": "rev-tasks",
+    });
   });
 });
 

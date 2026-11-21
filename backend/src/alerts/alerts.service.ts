@@ -12,6 +12,7 @@ import type {
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { bogotaToday } from '../purchase-orders/purchase-order-status';
+import { isTaskOverdue } from '../tasks/task-due';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { alertVisibility, buildAlerts } from './alerts.logic';
 import type {
@@ -221,18 +222,34 @@ export class AlertsService {
     }) as Promise<Array<{ id: string; dueAt: Date }>>;
   }
 
-  private overdueTasks(
+  /**
+   * Tasks still open whose due date has passed.
+   *
+   * `Task.dueDate` carries two shapes — a picked calendar day at midnight UTC
+   * and a real instant — so `isTaskOverdue` decides each one. The query keeps a
+   * strict superset (`dueDate < now`, since today's Bogotá midnight is never
+   * after `now`) so the feed never loads every open task to filter it, and the
+   * surviving ids are what `buildAlerts` fingerprints: a task due today changes
+   * nothing until tomorrow, when it becomes overdue once.
+   */
+  private async overdueTasks(
     organizationId: string,
     now: Date,
   ): Promise<Array<{ id: string }>> {
-    return this.prisma.task.findMany({
+    const candidates = await this.prisma.task.findMany({
       where: {
         organizationId,
         deletedAt: null,
         status: { notIn: [TaskStatus.COMPLETED, TaskStatus.CANCELLED] },
         dueDate: { lt: now },
       },
-      select: { id: true },
+      select: { id: true, dueDate: true },
     });
+
+    return candidates
+      .filter(
+        (task) => task.dueDate !== null && isTaskOverdue(task.dueDate, now),
+      )
+      .map((task) => ({ id: task.id }));
   }
 }
