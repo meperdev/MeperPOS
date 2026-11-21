@@ -30,6 +30,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { Select } from "@/components/ui/Select";
+import { SettledStrip } from "@/components/ui/SettledStrip";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode } from "@/hooks/useEffectiveViewMode";
@@ -43,8 +44,16 @@ import {
   remapPageForPageSize,
 } from "@/lib/collection-grid";
 import { useToast } from "@/contexts/ToastContext";
+import { TIMEZONE } from "@/lib/constants";
 import { getApiErrorMessage } from "@/lib/api";
-import { cn, formatCurrency, formatDateTime, toFiniteNumber } from "@/lib/utils";
+import {
+  cn,
+  formatCalendarDay,
+  formatCalendarDayShort,
+  formatCurrency,
+  formatDateTime,
+  toFiniteNumber,
+} from "@/lib/utils";
 import type {
   CollectLoanInput,
   Loan,
@@ -127,71 +136,203 @@ function DetailField({
   );
 }
 
-/** One money figure inside a loan card; the balance carries the visual weight. */
-function MoneyStat({
+/**
+ * One money figure inside a loan card. The title keeps the whole amount
+ * reachable when a long COP value has to truncate in a narrow column.
+ */
+function MoneyCell({
   label,
   value,
-  emphasis = false,
+  muted = false,
 }: {
   label: string;
   value: string;
-  emphasis?: boolean;
+  muted?: boolean;
 }) {
-  const hasBalance = emphasis && toFiniteNumber(value) > 0;
+  const formatted = money(value);
   return (
-    <div
-      className={cn(
-        "min-w-0 rounded-lg px-2 py-2",
-        emphasis ? "bg-muted/60" : "bg-muted/40",
-      )}
-    >
-      <p className="text-[13px] font-medium text-muted-foreground">
-        {label}
-      </p>
+    <div className="min-w-0 px-1 text-center">
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p
         className={cn(
-          "mt-0.5 truncate text-[13px] font-semibold tabular-nums",
-          hasBalance ? "text-warning-text" : "text-foreground",
+          "mt-0.5 truncate text-sm font-semibold tabular-nums",
+          muted ? "text-muted-foreground" : "text-foreground",
         )}
+        title={formatted}
       >
-        {money(value)}
+        {formatted}
       </p>
     </div>
   );
 }
 
 /**
- * One loan as a scannable card: type and status up top, the counterparty below
- * and the server-owned money triple at the foot, mirroring the detail modal.
+ * How much of the loan is already covered, for the card's progress bar. Display
+ * only: the server owns `amount`, `collected` and `balance`, so the percentage
+ * never travels and never feeds a stored figure.
+ */
+function collectedPercentage(loan: Loan): number {
+  const amount = toFiniteNumber(loan.amount);
+  const collected = toFiniteNumber(loan.collected);
+  if (amount <= 0) return 0;
+  return Math.min(Math.max(Math.round((collected / amount) * 100), 0), 100);
+}
+
+/** The shop's calendar day, independent of the machine and the browser's zone. */
+const BUSINESS_DAY_FORMAT = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * The shop's calendar day, `YYYY-MM-DD` in `America/Bogota`. Cash closes on the
+ * business day, not on the UTC one: at 21:00 local UTC is already tomorrow.
+ */
+function businessDay(now: Date): string {
+  const parts = BUSINESS_DAY_FORMAT.formatToParts(now);
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
+}
+
+/**
+ * A loan is overdue once its due day is behind the current one while it is still
+ * open — the day boundary the alert feed uses (`status: OPEN` plus a due day
+ * behind today), read on the shop's calendar instead of the UTC instant, so a
+ * loan due today is not "Vencido" five hours early every evening.
+ * `dueAt` is a calendar day (`@db.Date`), so only its first ten characters
+ * matter; `formatCalendarDay` renders that same day.
+ */
+function isLoanOverdue(loan: Loan, now: Date = new Date()): boolean {
+  if (loan.status !== "OPEN" || !loan.dueAt) return false;
+  return loan.dueAt.slice(0, 10) < businessDay(now);
+}
+
+/**
+ * One loan as a scannable card: the counterparty and its status up top, how much
+ * is paid so far, the server-owned money triple, and the dates and motive that
+ * make the loan legible without opening it.
  */
 function LoanCard({ loan, onOpen }: { loan: Loan; onOpen: () => void }) {
   const TypeIcon = loan.type === "MONEY" ? HandCoins : Wrench;
+  const percentage = collectedPercentage(loan);
+  const hasBalance = toFiniteNumber(loan.balance) > 0;
+  // A loan is settled only when it is closed, or still open with nothing left
+  // to collect: the bar has nothing to say and becomes the settled strip.
+  // Cancelled is deliberately excluded — cancelling writes the debt off, so a
+  // zero balance there is not money that came back in, and the card keeps the
+  // bar and caption it always carried.
+  const settled =
+    loan.status === "CLOSED" || (loan.status === "OPEN" && !hasBalance);
+  const overdue = isLoanOverdue(loan);
+  // Half-width footer cells read the compact day; the prose wording the long
+  // formatter owns stays reachable in each cell's `title`.
+  const issuedDay = formatCalendarDayShort(loan.issuedAt);
+  const issuedDayLong = formatCalendarDay(loan.issuedAt);
+  const dueDay = loan.dueAt ? formatCalendarDayShort(loan.dueAt) : null;
+  const dueDayLong = loan.dueAt ? formatCalendarDay(loan.dueAt) : null;
 
   return (
-    <Card onClick={onOpen} className="flex h-full flex-col justify-between p-4 active:bg-muted/40">
-      <div>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/50 text-muted-foreground">
-              <TypeIcon className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-foreground leading-tight">
-                {counterpartyName(loan)}
-              </p>
-              <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
-                {TYPE_LABELS[loan.type]}
-              </p>
-            </div>
+    <Card onClick={onOpen} className="flex h-full flex-col gap-3 p-4 active:bg-muted/40">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/50 text-muted-foreground">
+            <TypeIcon className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground leading-tight">
+              {counterpartyName(loan)}
+            </p>
+            <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
+              {TYPE_LABELS[loan.type]}
+            </p>
           </div>
-          <StatusBadge domain="loan" status={loan.status} />
         </div>
+        <StatusBadge domain="loan" status={loan.status} />
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-1.5 border-t border-border/50 pt-3">
-        <MoneyStat label="Monto" value={loan.amount} />
-        <MoneyStat label="Abonado" value={loan.collected} />
-        <MoneyStat label="Saldo" value={loan.balance} emphasis />
+      {/* Paid so far against the agreed amount; the bar reads at a glance what
+          the money triple then states exactly. A settled loan replaces it with
+          the shared settled strip at the same height. */}
+      {settled ? (
+        <SettledStrip testId="loan-settled-line" label="Saldado" />
+      ) : (
+        <div>
+          <div
+            role="progressbar"
+            aria-label="Abonado"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percentage}
+            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+          >
+            <div
+              data-testid="loan-progress-fill"
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+          <div className="mt-1.5 flex items-baseline justify-between gap-2">
+            <span className="text-xs text-muted-foreground tabular-nums">
+              Abonado {percentage}%
+            </span>
+            <span
+              className={cn(
+                "truncate text-xs font-semibold tabular-nums",
+                hasBalance ? "text-warning-text" : "text-muted-foreground",
+              )}
+            >
+              Saldo {money(loan.balance)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 divide-x divide-border/60">
+        <MoneyCell label="Monto" value={loan.amount} />
+        <MoneyCell label="Abonado" value={loan.collected} />
+        <MoneyCell label="Saldo" value={loan.balance} muted={!hasBalance} />
+      </div>
+
+      <div className="mt-auto border-t border-border/60 pt-3">
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Inicio</dt>
+            <dd
+              className="mt-0.5 truncate text-xs font-medium text-foreground"
+              title={issuedDayLong}
+            >
+              {issuedDay}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+              Vence
+              {overdue && (
+                <span className="font-semibold text-danger-text">Vencido</span>
+              )}
+            </dt>
+            <dd
+              className={cn(
+                "mt-0.5 truncate text-xs font-medium",
+                overdue ? "text-danger-text" : "text-foreground",
+              )}
+              title={dueDayLong ?? undefined}
+            >
+              {dueDay ?? "—"}
+            </dd>
+          </div>
+        </dl>
+        {loan.reason && (
+          <p
+            className="mt-1.5 min-w-0 truncate text-xs text-muted-foreground"
+            title={loan.reason}
+          >
+            Motivo · {loan.reason}
+          </p>
+        )}
       </div>
     </Card>
   );

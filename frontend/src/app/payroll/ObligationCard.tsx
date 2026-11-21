@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
+import { SettledStrip } from "@/components/ui/SettledStrip";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn, toFiniteNumber } from "@/lib/utils";
 import type {
@@ -33,6 +34,23 @@ function expenseLabel(obligation: PayrollObligation): string {
   return obligation.selectedExpenseDate
     ? `Gasto al completar: Sí · ${payrollDateShort(obligation.selectedExpenseDate)}`
     : "Gasto al completar: Sí";
+}
+
+/**
+ * The day of the latest abono, for the settled strip. Installment days are
+ * calendar days (`@db.Date`), so they read through the payroll formatter like
+ * the period and every row below. Display only: the server owns the money.
+ */
+function latestInstallmentDate(
+  installments: PayrollInstallment[],
+): string | null {
+  const latest = installments.reduce<string | null>((current, installment) => {
+    const day = installment.outflow?.date;
+    if (!day) return current;
+    if (!current) return day;
+    return day.slice(0, 10) > current.slice(0, 10) ? day : current;
+  }, null);
+  return latest ? payrollDateShort(latest) : null;
 }
 
 function MoneyFact({
@@ -217,24 +235,47 @@ export function ObligationCard({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div
-            role="progressbar"
-            aria-label={`Pagado de ${employeeName}`}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progress}
-            className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
-          >
+        {/* Paid so far against the agreed total; the bar reads at a glance what
+            the money triple then states exactly, like the loan card. A completed
+            payment replaces it with the shared settled strip at the same
+            height. */}
+        {completed ? (
+          <SettledStrip
+            testId="payroll-settled-line"
+            label="Pagado completo"
+            date={latestInstallmentDate(obligation.installments)}
+          />
+        ) : (
+          <div>
             <div
-              className="h-full rounded-full bg-primary/80 transition-[width] duration-300"
-              style={{ width: `${progress}%` }}
-            />
+              role="progressbar"
+              aria-label={`Pagado de ${employeeName}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+              className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            >
+              <div
+                data-testid="payroll-progress-fill"
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="mt-1.5 flex items-baseline justify-between gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                Pagado {progress}%
+              </span>
+              <span
+                className={cn(
+                  "truncate text-xs font-semibold tabular-nums",
+                  hasBalance ? "text-warning-text" : "text-muted-foreground",
+                )}
+              >
+                Saldo {payrollMoney(obligation.summary.balance)}
+              </span>
+            </div>
           </div>
-          <span className="text-[13px] text-muted-foreground tabular-nums">
-            {progress}%
-          </span>
-        </div>
+        )}
 
         <dl className="space-y-1 rounded-lg bg-muted/40 p-2.5">
           <MoneyFact
