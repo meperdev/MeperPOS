@@ -84,7 +84,7 @@ model Organization {
   @@index([status, trialEndsAt])
 }
 
-// Unexposed site foundation; inventory still uses Product.stock.
+// Site access is separate from inventory, which still uses Product.stock.
 model Location {
   id             String       @id @default(uuid())
   organizationId String
@@ -92,9 +92,22 @@ model Location {
   isDefault      Boolean      @default(false)
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments    MembershipLocation[]
 
   // The partial unique index for the default site is defined in SQL.
+  @@unique([id, organizationId])
   @@index([organizationId])
+}
+
+model MembershipLocation {
+  userId         String
+  organizationId String
+  locationId     String
+  membership     OrganizationUser @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade)
+  location       Location @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@id([userId, organizationId, locationId])
+  @@index([organizationId, locationId])
 }
 
 // Unexposed payroll foundation; employees do not require login accounts.
@@ -421,6 +434,7 @@ model OrganizationUser {
   isPrimaryOwner Boolean      @default(false)
   inventoryLoansEmployee InventoryLoan[] @relation("InventoryLoanEmployee")
   inventoryLoanOperations InventoryLoanOperation[]
+  locationAssignments MembershipLocation[]
   payrollCashOutflows PayrollCashOutflow[]
   payrollCashRevisions PayrollCashRevision[]
   payrollCashReturns PayrollCashReturn[]

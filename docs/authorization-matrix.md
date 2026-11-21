@@ -379,6 +379,13 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | /api/tasks/:id/status | PUT | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER | org-scoped | backend/src/tasks/tasks.service.spec.ts |
 | /api/tasks/:id | DELETE | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER | org-scoped | backend/src/tasks/tasks.service.spec.ts |
 
+## locations
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/locations | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
+| /api/locations/:id | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
+
 ## users
 
 | Route | Method | Role(s) | Org-scope | Test reference |
@@ -386,6 +393,7 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | /api/users | POST | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users | GET | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users/:id | PUT | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
+| /api/users/:id/locations | PUT | OWNER, ADMIN, SUPER_ADMIN | selected org; target membership and every location must belong to it | backend/src/locations/locations.http.int.spec.ts |
 | /api/users/:id/toggle-active | PUT | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users/:id/reset-password | POST | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users/:id | DELETE | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
