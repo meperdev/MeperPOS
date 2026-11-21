@@ -1,4 +1,19 @@
-export const PLAN_LIMITS = {
+import type { PlanType } from '@prisma/client';
+
+export interface PlanLimits {
+  maxUsers: number;
+  maxProducts: number;
+  maxCustomers: number;
+  maxCashRegisters: number;
+  hasForceClose: boolean;
+}
+
+/**
+ * One entry per `PlanType` in the Postgres enum. The `Record` is the guard: a
+ * plan added to the database and not priced here fails the TypeScript build
+ * instead of reaching the `BadRequestException` in `PlanLimitService`.
+ */
+export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   BASIC: {
     maxUsers: 3,
     maxProducts: 100,
@@ -13,9 +28,9 @@ export const PLAN_LIMITS = {
     maxCashRegisters: -1,
     hasForceClose: true,
   },
-} as const;
+};
 
-export type PlanType = keyof typeof PLAN_LIMITS;
+export type { PlanType };
 export type LimitType = 'users' | 'products' | 'customers' | 'cashRegisters';
 
 export interface PlanLimitResult {
