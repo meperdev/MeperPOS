@@ -17,7 +17,28 @@ type AlertFixture = {
   revision: string;
 };
 
-const alertsState = vi.hoisted(() => ({ current: [] as AlertFixture[] }));
+const alertsState = vi.hoisted(() => ({
+  current: {
+    alerts: [] as AlertFixture[],
+    isError: false,
+    refetch: () => {},
+  },
+}));
+
+/** Puts a feed shape behind the mocked hook; omitted fields are the happy path. */
+function setFeed(
+  next: {
+    alerts?: AlertFixture[];
+    isError?: boolean;
+    refetch?: () => void;
+  } = {},
+) {
+  alertsState.current = {
+    alerts: next.alerts ?? [],
+    isError: next.isError ?? false,
+    refetch: next.refetch ?? (() => {}),
+  };
+}
 
 vi.mock("@/hooks/useAlerts", () => ({ useAlerts: () => alertsState.current }));
 vi.mock("@/contexts/AuthContext", () => ({
@@ -56,7 +77,7 @@ const ledger = () =>
 describe("AlertCenter", () => {
   beforeEach(() => {
     localStorage.clear();
-    alertsState.current = twoAlerts;
+    setFeed({ alerts: twoAlerts });
   });
 
   afterEach(() => cleanup());
@@ -91,18 +112,20 @@ describe("AlertCenter", () => {
     cleanup();
 
     // Same alert ids; a new low-stock product changed the stock revision.
-    alertsState.current = [
-      { ...twoAlerts[0] },
-      {
-        id: "stock:low",
-        category: "stock",
-        severity: "warning",
-        title: "Stock bajo",
-        detail: "3 productos por debajo del mínimo.",
-        href: "/inventory?filter=lowStock",
-        revision: "rev-stock-2",
-      },
-    ];
+    setFeed({
+      alerts: [
+        { ...twoAlerts[0] },
+        {
+          id: "stock:low",
+          category: "stock",
+          severity: "warning",
+          title: "Stock bajo",
+          detail: "3 productos por debajo del mínimo.",
+          href: "/inventory?filter=lowStock",
+          revision: "rev-stock-2",
+        },
+      ],
+    });
 
     render(<AlertCenter />);
 
@@ -202,16 +225,60 @@ describe("AlertCenter", () => {
   });
 
   it("shows the quiet empty state when nothing is pending", () => {
-    alertsState.current = [];
+    setFeed();
     render(<AlertCenter />);
     fireEvent.click(screen.getByRole("button", { name: "Alertas" }));
 
     expect(screen.getByText("Todo en orden")).toBeInTheDocument();
   });
 
+  it("shows a failure state instead of the empty state when the feed failed", () => {
+    setFeed({ isError: true });
+    render(<AlertCenter />);
+
+    // An error is not an all-clear, and it never rings the bell.
+    const bell = screen.getByRole("button", { name: "Alertas" });
+    expect(screen.queryByTestId("alert-badge")).not.toBeInTheDocument();
+
+    fireEvent.click(bell);
+
+    expect(
+      screen.getByText("No se pudieron cargar las alertas"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Revisa tu conexión e inténtalo de nuevo."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Todo en orden")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reintentar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks the feed again from the retry button", () => {
+    const refetch = vi.fn();
+    setFeed({ isError: true, refetch });
+    render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the alerts it already had when a later request fails", () => {
+    setFeed({ alerts: twoAlerts, isError: true });
+    render(<AlertCenter />);
+    fireEvent.click(screen.getByRole("button", { name: "Alertas, 2 sin leer" }));
+
+    expect(screen.getByText("Suscripción vencida")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No se pudieron cargar las alertas"),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps both acknowledgements made in the same tick", () => {
     // Nothing to acknowledge yet, so opening the panel writes no ledger entry.
-    alertsState.current = [];
+    setFeed();
     const { rerender } = render(<AlertCenter />);
     fireEvent.click(screen.getByRole("button", { name: "Alertas" }));
     expect(ledger()).toEqual({});
@@ -219,7 +286,7 @@ describe("AlertCenter", () => {
     // A refetch brings the alerts in while the panel is already open: two rows
     // can now be followed before React re-renders, which is how the header and
     // the rail (one ledger, two bells) race each other.
-    alertsState.current = twoAlerts;
+    setFeed({ alerts: twoAlerts });
     rerender(<AlertCenter />);
 
     const first = screen.getByText("Suscripción vencida").closest("a")!;
@@ -252,7 +319,7 @@ describe("AlertCenter mobile panel", () => {
       configurable: true,
       writable: true,
     });
-    alertsState.current = twoAlerts;
+    setFeed({ alerts: twoAlerts });
     localStorage.clear();
     render(<AlertCenter />);
 
@@ -304,7 +371,7 @@ function domRect(top: number, bottom: number, left: number, right: number) {
 describe("AlertCenter header placement", () => {
   beforeEach(() => {
     localStorage.clear();
-    alertsState.current = twoAlerts;
+    setFeed({ alerts: twoAlerts });
     setViewport(1590, 913);
   });
 

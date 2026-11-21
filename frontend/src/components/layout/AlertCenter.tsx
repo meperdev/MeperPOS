@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   ArrowRight,
+  AlertTriangle,
   Bell,
   Check,
   ChevronRight,
@@ -28,6 +29,7 @@ import {
 } from "@/components/layout/alert-panel-geometry";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts, type AlertCategory, type AppAlert } from "@/hooks/useAlerts";
+import { Button } from "@/components/ui/Button";
 
 const SEEN_PREFIX = "meperpos:alerts-seen:";
 const SEEN_EVENT = "meperpos:alerts-seen-changed";
@@ -100,7 +102,7 @@ export function AlertCenter({
   placement?: AlertPanelPlacement;
 }) {
   const { user, organization } = useAuth();
-  const alerts = useAlerts();
+  const { alerts, isError, refetch } = useAlerts();
 
   const storageKey = `${SEEN_PREFIX}${user?.organizationId ?? organization?.id ?? "global"}`;
   const [seen, setSeen] = useState<SeenLedger>(() => readSeen(storageKey));
@@ -306,13 +308,39 @@ export function AlertCenter({
             </div>
 
             {alerts.length === 0 ? (
-              <div className="px-3.5 py-8 text-center">
-                <Check className="mx-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <p className="mt-2 text-sm font-medium text-foreground">Todo en orden</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  No hay alertas pendientes.
-                </p>
-              </div>
+              isError ? (
+                // A failed feed is not an all-clear: the empty state would claim
+                // there is nothing to do when the client simply could not ask.
+                <div className="px-3.5 py-8 text-center">
+                  <AlertTriangle
+                    className="mx-auto h-4 w-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <p className="mt-2 text-sm font-medium text-foreground">
+                    No se pudieron cargar las alertas
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Revisa tu conexión e inténtalo de nuevo.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => refetch()}
+                    className="mt-2"
+                  >
+                    Reintentar
+                  </Button>
+                </div>
+              ) : (
+                <div className="px-3.5 py-8 text-center">
+                  <Check className="mx-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <p className="mt-2 text-sm font-medium text-foreground">Todo en orden</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    No hay alertas pendientes.
+                  </p>
+                </div>
+              )
             ) : (
               <ul className="min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto scrollbar-app">
                 {alerts.map((alert) => (

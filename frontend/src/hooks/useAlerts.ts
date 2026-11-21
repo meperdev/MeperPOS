@@ -24,6 +24,17 @@ export interface AppAlert {
 }
 
 /**
+ * What the bell needs: the feed, whether the last attempt failed, and a way to
+ * ask again. `isError` with no alerts is a failure, not an all-clear — the panel
+ * used to read both as "Todo en orden".
+ */
+export interface AlertsFeed {
+  alerts: AppAlert[];
+  isError: boolean;
+  refetch: () => void;
+}
+
+/**
  * The alert feed is owned by the backend.
  *
  * The client used to derive it from four separate queries plus a role check, and
@@ -31,7 +42,7 @@ export interface AppAlert {
  * Now one tenant-scoped request answers it, visibility is decided on the server,
  * and the hook only asks again while the app is open.
  */
-export function useAlerts(): AppAlert[] {
+export function useAlerts(): AlertsFeed {
   const { user } = useAuth();
 
   // The payload is tenant-scoped, so the cache key must be too: after an
@@ -42,7 +53,7 @@ export function useAlerts(): AppAlert[] {
   const organizationId = user?.organizationId;
   const enabled = Boolean(organizationId);
 
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ["alerts", organizationId ?? "none"],
     queryFn: () => api.get<AppAlert[]>("/alerts").then((res) => res.data),
     enabled,
@@ -51,6 +62,12 @@ export function useAlerts(): AppAlert[] {
   });
 
   // A 200 with an unexpected body (a proxy page, a legacy deploy) must not take
-  // the whole chrome down: the bell renders the safe empty state instead.
-  return Array.isArray(data) ? data : [];
+  // the whole chrome down: the bell renders the safe empty state instead. A
+  // retained payload (react-query keeps the last data on a later error) keeps
+  // being shown; only a failure with nothing to show surfaces as an error.
+  return {
+    alerts: Array.isArray(data) ? data : [],
+    isError,
+    refetch,
+  };
 }
