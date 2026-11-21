@@ -187,6 +187,84 @@ describe('alerts.logic — billing and limits', () => {
     });
   });
 
+  // The trial reminder counts calendar days in Bogotá, not elapsed hours: a
+  // trial ending later today must not read "en 1 día" late in the evening.
+  it('says the trial ends today when it ends later on the same Bogotá day', () => {
+    // 2026-11-15T03:00Z is 22:00 on 14 November in Bogotá; the trial ends half
+    // an hour later, still 14 November there.
+    const [alert] = buildAlerts(
+      signals({
+        now: new Date('2026-11-15T03:00:00.000Z'),
+        organization: {
+          status: 'TRIAL',
+          trialEndsAt: new Date('2026-11-15T03:30:00.000Z'),
+        },
+      }),
+    );
+
+    expect(alert).toMatchObject({
+      id: 'billing:trial',
+      severity: 'warning',
+      title: 'Tu prueba termina hoy',
+    });
+  });
+
+  it('says one day left at 21:00 in Bogotá the evening before the end day', () => {
+    // 2026-11-20T02:00Z is 21:00 on 19 November in Bogotá; the trial ends at
+    // noon on 20 November there, which is one calendar day ahead.
+    const [alert] = buildAlerts(
+      signals({
+        now: new Date('2026-11-20T02:00:00.000Z'),
+        organization: {
+          status: 'TRIAL',
+          trialEndsAt: new Date('2026-11-20T17:00:00.000Z'),
+        },
+      }),
+    );
+
+    expect(alert).toMatchObject({
+      id: 'billing:trial',
+      severity: 'warning',
+      title: 'Tu prueba termina en 1 día',
+    });
+  });
+
+  it('keeps the reminder revision steady through a Bogotá day and moves it at midnight', () => {
+    const trialEndsAt = new Date('2026-11-20T17:00:00.000Z');
+    const revisionAt = (now: string) =>
+      buildAlerts(
+        signals({
+          now: new Date(now),
+          organization: { status: 'TRIAL', trialEndsAt },
+        }),
+      )[0].revision;
+
+    // Both 21:00 and 23:59 on 19 November in Bogotá leave two days.
+    expect(revisionAt('2026-11-20T02:00:00.000Z')).toBe(
+      revisionAt('2026-11-20T04:59:00.000Z'),
+    );
+    // 00:30 on 20 November in Bogotá leaves one day, so the revision moves.
+    expect(revisionAt('2026-11-20T05:30:00.000Z')).not.toBe(
+      revisionAt('2026-11-20T04:59:00.000Z'),
+    );
+  });
+
+  it('still reports a trial that ended on an earlier Bogotá day as finished', () => {
+    const [alert] = buildAlerts(
+      signals({
+        organization: {
+          status: 'TRIAL',
+          trialEndsAt: new Date('2026-11-13T15:00:00.000Z'),
+        },
+      }),
+    );
+
+    expect(alert).toMatchObject({
+      id: 'billing:trial',
+      title: 'Tu prueba terminó',
+    });
+  });
+
   it('separates at-limit from over-limit and skips unlimited plans', () => {
     const alerts = buildAlerts(
       signals({
