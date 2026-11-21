@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { getBogotaDateInputValue } from "@/lib/utils";
 import type {
   CollectLoanInput,
   CreatePosLoanInput,
@@ -12,11 +13,6 @@ import type {
   LoanQueryParams,
   PosLoanInitiation,
 } from "@/types";
-
-/** Today as a strict `YYYY-MM-DD` date, the shape the initiation DTO requires. */
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 /**
  * POS cart financing (POST /loans/pos-initiation).
@@ -48,7 +44,9 @@ export function useCreatePosLoan() {
               ? { discountAmount: item.discountAmount }
               : {}),
           })),
-          issuedAt: data.issuedAt ?? todayIsoDate(),
+          // The issue day is the Bogotá day the operator reads on the clock; the
+          // UTC date would record an evening sale as issued tomorrow.
+          issuedAt: data.issuedAt ?? getBogotaDateInputValue(),
           ...(data.dueAt !== undefined ? { dueAt: data.dueAt } : {}),
           ...(data.discountAmount !== undefined
             ? { discountAmount: data.discountAmount }
