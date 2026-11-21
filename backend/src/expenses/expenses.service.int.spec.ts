@@ -62,13 +62,35 @@ describe('ExpensesService — Integration (Isolation + Payments + Summary)', () 
     );
 
     const [groupA, groupB] = await Promise.all([
-      prisma.expenseGroup.create({ data: { name: 'Integration A', organizationId: orgAId } }),
-      prisma.expenseGroup.create({ data: { name: 'Integration B', organizationId: orgBId } }),
+      prisma.expenseGroup.create({
+        data: { name: 'Integration A', organizationId: orgAId },
+      }),
+      prisma.expenseGroup.create({
+        data: { name: 'Integration B', organizationId: orgBId },
+      }),
     ]);
     const [labelArriendo, labelCajaMenor, labelOrgB] = await Promise.all([
-      prisma.expenseLabel.create({ data: { name: 'Arriendo INT', organizationId: orgAId, groupId: groupA.id } }),
-      prisma.expenseLabel.create({ data: { name: 'Caja menor INT', organizationId: orgAId, groupId: groupA.id } }),
-      prisma.expenseLabel.create({ data: { name: 'Categoría org B', organizationId: orgBId, groupId: groupB.id } }),
+      prisma.expenseLabel.create({
+        data: {
+          name: 'Arriendo INT',
+          organizationId: orgAId,
+          groupId: groupA.id,
+        },
+      }),
+      prisma.expenseLabel.create({
+        data: {
+          name: 'Caja menor INT',
+          organizationId: orgAId,
+          groupId: groupA.id,
+        },
+      }),
+      prisma.expenseLabel.create({
+        data: {
+          name: 'Categoría org B',
+          organizationId: orgBId,
+          groupId: groupB.id,
+        },
+      }),
     ]);
     labelArriendoId = labelArriendo.id;
     labelCajaMenorId = labelCajaMenor.id;
@@ -94,7 +116,7 @@ describe('ExpensesService — Integration (Isolation + Payments + Summary)', () 
 
   it('isolates organizations: cross-org reads 404 and lists never leak', async () => {
     const created = await service.create(
-    buildCreateDto(labelArriendoId),
+      buildCreateDto(labelArriendoId),
       userAId,
       orgAId,
     );
@@ -189,14 +211,14 @@ describe('ExpensesService — Integration (Isolation + Payments + Summary)', () 
     );
     await service.create(
       buildCreateDto(labelArriendoId, {
-        description: 'Mayo 31 23:59 Bogota — fuera del mes',
-        date: new Date('2026-06-01T04:59:59.000Z'),
+        description: '31 de mayo — fuera del mes',
+        date: new Date('2026-05-31T12:00:00.000Z'),
         total: 999999,
         payments: [
           {
             amount: 999999,
             method: 'CASH',
-            date: '2026-06-01T04:59:59.000Z',
+            date: '2026-05-31T12:00:00.000Z',
           },
         ],
       }),
@@ -219,15 +241,45 @@ describe('ExpensesService — Integration (Isolation + Payments + Summary)', () 
     expect(summary.month).toBe('2026-06');
     expect(summary.total.toString()).toBe('1000000');
     expect(
-      summary.groups.flatMap((group) => group.labels.map((row) => ({
-        labelId: row.labelId,
-        name: row.name,
-        total: row.total.toString(),
-      }))),
+      summary.groups.flatMap((group) =>
+        group.labels.map((row) => ({
+          labelId: row.labelId,
+          name: row.name,
+          total: row.total.toString(),
+        })),
+      ),
     ).toEqual([
       { labelId: labelArriendoId, name: 'Arriendo INT', total: '700000' },
       { labelId: labelCajaMenorId, name: 'Caja menor INT', total: '300000' },
     ]);
+  });
+
+  it('counts the first and the last stored day of a month, and not the next month first day', async () => {
+    // `Expense.date` carries a calendar day, not an instant: the API writes
+    // `new Date('YYYY-MM-DD')` at UTC midnight and the payroll writer writes the
+    // same day at 05:00 UTC, so both shapes sit inside the stored day and the
+    // month window has to be built from stored days.
+    for (const [date, total] of [
+      ['2026-04-01', 100000],
+      ['2026-04-30', 200000],
+      ['2026-05-01', 300000],
+    ] as const) {
+      await service.create(
+        buildCreateDto(labelArriendoId, {
+          description: `Gasto del ${date}`,
+          date,
+          total,
+          payments: [{ amount: total, method: 'CASH', date }],
+        }),
+        userAId,
+        orgAId,
+      );
+    }
+
+    const summary = await service.getMonthlySummary('2026-04', orgAId);
+
+    expect(summary.month).toBe('2026-04');
+    expect(summary.total.toString()).toBe('300000');
   });
 
   it('duplicates an expense with today Bogota date, copied payments and derived status', async () => {
