@@ -60,6 +60,15 @@ export class LocationsController {
     return this.locations.list(user);
   }
 
+  @Get('locations/pos-context')
+  @ApiOperation({
+    summary:
+      'List POS locations and the sole site eligible for global-stock checkout',
+  })
+  posContext(@CurrentUser() user: RequestUser) {
+    return this.locations.posContext(user);
+  }
+
   @Get('locations/:id')
   @ApiOperation({
     summary: 'Get a location only if accessible in the selected organization',

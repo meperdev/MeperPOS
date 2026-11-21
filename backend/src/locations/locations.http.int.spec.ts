@@ -20,6 +20,7 @@ describe('Location access (HTTP integration)', () => {
     `${prefix}-cashier@example.test`,
     `${prefix}-race@example.test`,
   ];
+  const superAdminEmail = `${prefix}-superadmin@example.test`;
   const a = { id: randomUUID(), name: 'A', isDefault: true };
   const b = { id: randomUUID(), name: 'B', isDefault: false };
   const other = { id: randomUUID(), name: 'Other', isDefault: true };
@@ -27,6 +28,7 @@ describe('Location access (HTTP integration)', () => {
   let adminAsCashier: string;
   let cashier: string;
   let cashierInOtherOrg: string;
+  let superAdmin: string;
   let cashierId: string;
   let raceUserId: string;
   let adminId: string;
@@ -82,8 +84,20 @@ describe('Location access (HTTP integration)', () => {
         }),
       ),
     );
+    const superAdminUser = await prisma.user.create({
+      data: {
+        name: 'Platform admin',
+        email: superAdminEmail,
+        password: 'not-a-login-credential',
+        isSuperAdmin: true,
+      },
+    });
     const jwt = app.get(JwtService);
-    const sign = (user: typeof ana, organizationId: string, role: OrgRole) =>
+    const sign = (
+      user: { id: string; email: string; tokenVersion: number },
+      organizationId: string | null,
+      role: OrgRole | 'SUPER_ADMIN',
+    ) =>
       `Bearer ${jwt.sign({
         sub: user.id,
         email: user.email,
@@ -98,11 +112,14 @@ describe('Location access (HTTP integration)', () => {
     cashierInOtherOrg = sign(employee, second.id, OrgRole.CASHIER);
     cashierId = employee.id;
     raceUserId = race.id;
+    superAdmin = sign(superAdminUser, null, 'SUPER_ADMIN');
   });
 
   afterAll(async () => {
     await prisma.organization.deleteMany({ where: { slug: { in: slugs } } });
-    await prisma.user.deleteMany({ where: { email: { in: emails } } });
+    await prisma.user.deleteMany({
+      where: { email: { in: [...emails, superAdminEmail] } },
+    });
     await prisma.$disconnect();
     await app?.close();
   });
@@ -116,7 +133,11 @@ describe('Location access (HTTP integration)', () => {
       OrgRole.CASHIER,
       OrgRole.INVENTORY_USER,
     ];
-    for (const handler of [controller.prototype.list, controller.prototype.find]) {
+    for (const handler of [
+      controller.prototype.list,
+      controller.prototype.posContext,
+      controller.prototype.find,
+    ]) {
       const roles =
         Reflect.getMetadata(ROLES_KEY, handler) ??
         Reflect.getMetadata(ROLES_KEY, controller);
@@ -235,6 +256,66 @@ describe('Location access (HTTP integration)', () => {
     await assign(admin, cashierId, [a.id, a.id]).expect(400);
     await get(cashier).expect(200, [a]);
     await get(cashierInOtherOrg).expect(200, []);
+  });
+
+  it('lists permitted POS sites without granting global checkout in a multi-site organization', async () => {
+    await assign(admin, cashierId, [a.id]).expect(200, { locationIds: [a.id] });
+    await get(cashier, 'pos-context').expect(200, {
+      locations: [a],
+      checkoutLocationId: null,
+    });
+    await get(cashierInOtherOrg, 'pos-context').expect(200, {
+      locations: [],
+      checkoutLocationId: null,
+    });
+  });
+
+  it('recomputes checkout in the session organization after site and grant changes', async () => {
+    const addedId = randomUUID();
+    const grant = (ids: string[]) =>
+      assign(superAdmin, cashierId, ids).set('x-organization-id', otherOrgId);
+    const context = () =>
+      get(cashierInOtherOrg, 'pos-context')
+        .set('x-organization-id', orgId)
+        .query({ organizationId: orgId });
+
+    try {
+      await grant([other.id]).expect(200, { locationIds: [other.id] });
+      await context().expect(200, {
+        locations: [other],
+        checkoutLocationId: other.id,
+      });
+
+      await prisma.location.create({
+        data: { id: addedId, organizationId: otherOrgId, name: 'New site' },
+      });
+      await context().expect(200, {
+        locations: [other],
+        checkoutLocationId: null,
+      });
+
+      await prisma.location.delete({ where: { id: addedId } });
+      await context().expect(200, {
+        locations: [other],
+        checkoutLocationId: other.id,
+      });
+
+      await grant([]).expect(200, { locationIds: [] });
+      await context().expect(200, { locations: [], checkoutLocationId: null });
+    } finally {
+      await prisma.location.deleteMany({ where: { id: addedId } });
+      await grant([]).expect(200, { locationIds: [] });
+    }
+  });
+
+  it('requires a selected organization for a SUPER_ADMIN POS context', async () => {
+    const missing = await get(superAdmin, 'pos-context').expect(403);
+    expect(missing.body).toMatchObject({
+      message: expect.stringContaining('Organization scope required'),
+    });
+    await get(superAdmin, 'pos-context')
+      .set('x-organization-id', orgId)
+      .expect(200, { locations: [a, b], checkoutLocationId: null });
   });
 
   it(

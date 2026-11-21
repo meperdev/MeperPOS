@@ -453,7 +453,7 @@ export class AuthService {
     return updatedUser;
   }
 
-  async validateUser(userId: string) {
+  async validateUser(userId: string, organizationId: string | null) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -473,8 +473,12 @@ export class AuthService {
       };
     }
 
-    const orgUser = await this.prisma.organizationUser.findFirst({
-      where: { userId },
+    if (!organizationId) {
+      throw new UnauthorizedException('Organization membership not found');
+    }
+
+    const orgUser = await this.prisma.organizationUser.findUnique({
+      where: { userId_organizationId: { userId, organizationId } },
       include: {
         organization: {
           select: {
@@ -486,18 +490,20 @@ export class AuthService {
           },
         },
       },
-      orderBy: { joinedAt: 'asc' },
     });
 
+    if (!orgUser) {
+      throw new UnauthorizedException('Organization membership not found');
+    }
+
     // Mapear OWNER (legacy) a ADMIN para compatibilidad
-    const role =
-      orgUser?.role === 'OWNER' ? 'ADMIN' : (orgUser?.role ?? 'MEMBER');
+    const role = orgUser.role === 'OWNER' ? 'ADMIN' : orgUser.role;
 
     return {
       ...result,
       role,
-      organizationId: orgUser?.organizationId ?? null,
-      organization: orgUser?.organization ?? null,
+      organizationId: orgUser.organizationId,
+      organization: orgUser.organization,
       isSuperAdmin: false,
     };
   }

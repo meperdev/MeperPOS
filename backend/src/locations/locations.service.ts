@@ -50,6 +50,35 @@ export class LocationsService {
     });
   }
 
+  async posContext(user: RequestUser) {
+    const organizationId = this.requireOrganization(user);
+    const accessible = this.accessibleTo(user);
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const topology = await tx.location.findMany({
+          where: { organizationId },
+          select: { id: true, isDefault: true },
+          take: 2,
+        });
+        const locations = await tx.location.findMany({
+          where: accessible,
+          select: siteFields,
+          orderBy: [{ isDefault: 'desc' }, { name: 'asc' }, { id: 'asc' }],
+        });
+        const sole = topology.length === 1 ? topology[0] : undefined;
+        const checkoutLocationId =
+          sole?.isDefault && locations.some(({ id }) => id === sole.id)
+            ? sole.id
+            : null;
+        return { locations, checkoutLocationId };
+      },
+      // Permissions and topology must come from one snapshot. A restricted
+      // list containing just one site is not evidence of a single-site org.
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  }
+
   async findAccessible(user: RequestUser, id: string) {
     const location = await this.prisma.location.findFirst({
       where: { ...this.accessibleTo(user), id },

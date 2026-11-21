@@ -384,6 +384,7 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/locations | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
+| /api/locations/pos-context | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; eligible checkout site must be assigned or accessible and the organization's sole default site | backend/src/locations/locations.pos-context.spec.ts |
 | /api/locations/:id | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
 
 ## users

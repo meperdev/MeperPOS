@@ -151,8 +151,13 @@ export class AuthController {
   @Get('profile')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
-  async getProfile(@Request() req: { user: { userId: string } }) {
-    return this.authService.validateUser(req.user.userId);
+  async getProfile(
+    @Request() req: { user: { userId: string; organizationId?: string } },
+  ) {
+    return this.authService.validateUser(
+      req.user.userId,
+      req.user.organizationId ?? null,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
