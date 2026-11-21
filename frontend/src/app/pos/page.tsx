@@ -21,7 +21,6 @@ import {
 } from "@/hooks/useReceipt";
 import { Input } from "@/components/ui/Input";
 import { SearchField } from "@/components/ui/SearchField";
-import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Modal } from "@/components/ui/Modal";
@@ -38,6 +37,7 @@ import { useCartUndo } from "@/hooks/useCartUndo";
 import dynamic from "next/dynamic";
 import { PaymentMethodCards } from "@/components/pos/PaymentMethodCards";
 import { CartLine } from "@/components/pos/CartLine";
+import { DiscountModal } from "@/components/pos/DiscountModal";
 import { MobileCartFloatingBar } from "@/components/pos/MobileCartFloatingBar";
 import { ProductCard } from "@/components/products/ProductCard";
 import {
@@ -268,8 +268,6 @@ export default function POSPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [editingDiscount, setEditingDiscount] = useState<string | null>(null);
-  const [customDiscount, setCustomDiscount] = useState("");
-  const [customPrice, setCustomPrice] = useState("");
   const [showPausedSalesModal, setShowPausedSalesModal] = useState(false);
   // Financing is the only action here that creates a real debt, so it waits for
   // an explicit confirmation before the initiation request is built or sent.
@@ -581,7 +579,6 @@ export default function POSPage() {
         }),
       );
       setEditingDiscount(null);
-      setCustomDiscount("");
       if (openedFromMobileCart) {
         setIsMobileCartOpen(true);
         setOpenedFromMobileCart(false);
@@ -610,7 +607,6 @@ export default function POSPage() {
         }),
       );
       setEditingDiscount(null);
-      setCustomDiscount("");
       if (openedFromMobileCart) {
         setIsMobileCartOpen(true);
         setOpenedFromMobileCart(false);
@@ -644,8 +640,6 @@ export default function POSPage() {
         }),
       );
       setEditingDiscount(null);
-      setCustomDiscount("");
-      setCustomPrice("");
       if (openedFromMobileCart) {
         setIsMobileCartOpen(true);
         setOpenedFromMobileCart(false);
@@ -654,20 +648,12 @@ export default function POSPage() {
     [openedFromMobileCart],
   );
 
-  const openDiscountModal = useCallback(
-    (productId: string) => {
-      const item = cart.find((i) => i.productId === productId);
-      setEditingDiscount(productId);
-      setCustomDiscount("");
-      setCustomPrice(item ? String(item.unitPrice) : "");
-    },
-    [cart],
-  );
+  const openDiscountModal = useCallback((productId: string) => {
+    setEditingDiscount(productId);
+  }, []);
 
   const handleCloseDiscountModal = useCallback(() => {
     setEditingDiscount(null);
-    setCustomDiscount("");
-    setCustomPrice("");
     if (openedFromMobileCart) {
       setIsMobileCartOpen(true);
       setOpenedFromMobileCart(false);
@@ -1006,7 +992,6 @@ export default function POSPage() {
       setCurrentPage(1);
       setPaymentMethods([]);
       setEditingDiscount(null);
-      setCustomDiscount("");
       toast.success("Venta pausada correctamente");
     } catch (error) {
       toast.error(
@@ -1708,81 +1693,15 @@ export default function POSPage() {
 
       {/* Discount Modal */}
       {editingDiscount && (
-        <Modal
-          isOpen={!!editingDiscount}
+        <DiscountModal
+          isOpen
+          item={cart.find((item) => item.productId === editingDiscount) ?? null}
+          canOverridePrice={canOverridePrice}
           onClose={handleCloseDiscountModal}
-          title="Agregar descuento"
-          size="sm"
-        >
-          <div className="space-y-4">
-            <div className="space-y-2">
-              {canOverridePrice && (
-                <>
-                  <CurrencyInput
-                    label="Precio unitario"
-                    value={customPrice}
-                    onChange={(value) => setCustomPrice(value === 0 ? "" : String(value))}
-                    placeholder="Precio"
-                  />
-                  <Button
-                    variant="secondary"
-                    className="w-full"
-                    disabled={!customPrice}
-                    onClick={() => {
-                      if (!editingDiscount) return;
-                      const price = Number(customPrice);
-                      if (Number.isNaN(price) || price < 0) return;
-                      updateItemPrice(editingDiscount, price);
-                    }}
-                  >
-                    Aplicar precio
-                  </Button>
-                </>
-              )}
-            </div>
-
-            <CurrencyInput
-              label="Monto del descuento"
-              value={customDiscount}
-              onChange={(value) => setCustomDiscount(value === 0 ? "" : String(value))}
-              placeholder="0.00"
-            />
-            <div className="flex gap-2">
-              {[10, 20, 50].map((pct) => (
-                <Button
-                  key={pct}
-                  variant="secondary"
-                  onClick={() => {
-                    if (editingDiscount)
-                      updateItemDiscountPercent(editingDiscount, pct);
-                  }}
-                  className="flex-1"
-                >
-                  {pct}%
-                </Button>
-              ))}
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="secondary"
-                onClick={handleCloseDiscountModal}
-                className="flex-1"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => {
-                  if (editingDiscount)
-                    updateItemDiscount(editingDiscount, Number(customDiscount));
-                }}
-                className="flex-1"
-                disabled={!customDiscount}
-              >
-                Aplicar
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          onApplyDiscount={updateItemDiscount}
+          onApplyDiscountPercent={updateItemDiscountPercent}
+          onApplyPrice={updateItemPrice}
+        />
       )}
 
       {/* Paused Sales Modal */}
