@@ -25,6 +25,25 @@ La primera entrega **crea una `Sede principal` por organización sin tocar las e
 - **Cambiar de organización:** terminar, pausar o vaciar el carrito antes de cambiar. Mientras el cobro se está verificando o enviando, no se puede pausar el carrito ni cerrar el diálogo de pago. Si la sesión cambia de usuario u organización, el POS no envía la solicitud bajo la otra sesión.
 - **Ventas pausadas:** se muestran solo para el usuario, la organización y la sede que las guardaron. Antes de habilitar este POS, terminar las ventas pausadas que queden en la versión anterior: los borradores sin sede quedan en el navegador, pero el POS nuevo no los muestra ni los reasigna.
 
+## Entrega 2: almacenamiento de stock por sede, todavía vacío
+
+La migración `20261119130000_product_stock_by_location` agrega `ProductStock`, uno por producto y sede, **sin cargar filas**. La base impide vincular productos y sedes de organizaciones distintas, y que las reservas queden negativas o superen el stock disponible; el stock negativo heredado se conserva tal cual. `Product.stock` y `Product.reservedStock` siguen siendo la única fuente de la aplicación: no hay lecturas ni escrituras operativas en la tabla nueva y esta entrega no habilita el cobro por sede. La clave compuesta `Location_id_organizationId_key` ya existe desde la migración de acceso; esta migración no la vuelve a crear.
+
+Antes de aplicar la migración de `ProductStock`, pausar las escrituras de inventario y esperar a que terminen las transacciones en curso. PostgreSQL puede necesitar bloquear `Product` para agregar la clave foránea aunque no se copien saldos. La migración limita la espera a **5 segundos por bloqueo** (no el tiempo total de ejecución), sin ampliar un límite menor ya configurado. En `psql` sin modo silencioso, el bloque que aplica este límite agrega una línea `DO` a la salida normal del SQL directo; no indica un error. Si se agota la espera (SQLSTATE `55P03`), se revierte la transacción. Comprobar que no quedó la tabla nueva y que la clave única existente de `Location` sigue intacta, resolver la transacción que bloquea y recién ahí repetir el despliegue. Si Prisma registró la migración como fallida, el responsable del despliegue debe marcarla como revertida con `prisma migrate resolve --rolled-back 20261119130000_product_stock_by_location` antes de volver a ejecutar `prisma migrate deploy`; no marcarla como aplicada.
+
+Para comprobar el esquema desde `backend/`, usar una **base nueva, desechable y sin conexiones de la aplicación**, con nombre `meperpos_stock_rehearsal_…`. En el caso de actualización, aplicar primero las migraciones existentes hasta `20261119120000_sale_request_key_hash`. El ejemplo carga datos ficticios, aplica el SQL aditivo y verifica las restricciones y los borrados en cascada. No usar esta base para desplegar después.
+
+```bash
+psql -X -v ON_ERROR_STOP=1 "$TEST_DATABASE_URL" \
+  -f test/migrations/product-stock.fixture.sql \
+  -f prisma/migrations/20261119130000_product_stock_by_location/migration.sql \
+  -f test/migrations/product-stock.constraints.sql
+```
+
+Resultado esperado: las comprobaciones pasan, ningún saldo queda persistido en `ProductStock` y los saldos de `Product` y la reserva del POS quedan intactos. La comprobación incluye existencias positivas, cero, negativas e inactivas, una reserva del POS, rechazos de reservas inválidas y los borrados en cascada de producto, sede y organización. El ensayo y la reconciliación de saldos por sede llegan con la entrega siguiente: esta migración no copia saldos ni autoriza el corte operativo.
+
+Para comprobar la espera por bloqueos, ejecutar desde `backend/` `TEST_DATABASE_URL="$TEST_DATABASE_URL" bash test/migrations/product-stock.lock-timeout.sh` en **otra** base desechable con el mismo esquema anterior a `ProductStock`. La prueba sostiene un bloqueo de escritura sobre `Product`, verifica que PostgreSQL cancele la migración sin dejar cambios parciales y que la clave única existente de `Location` quede intacta.
+
 ## Entrega futura: cambiar la fuente de stock
 
 1. **Fijar la base de comparación.** Con una copia verificable y los escritores de inventario detenidos, tomar un registro por organización y producto del stock y sus reservas. Incluir productos con saldo cero e inactivos. El registro debe conservar la identidad del producto, no solo el total de la organización.

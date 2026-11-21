@@ -91,8 +91,9 @@ model Location {
   name           String
   isDefault      Boolean      @default(false)
   createdAt      DateTime     @default(now())
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments    MembershipLocation[]
+  productStocks  ProductStock[]
 
   // The partial unique index for the default site is defined in SQL.
   @@unique([id, organizationId])
@@ -548,6 +549,7 @@ model Product {
   posLoanSaleReservations PosLoanSaleReservation[]
   stockAlerts         ProductStockAlert[]
   stockAlertEvents    ProductStockAlertEvent[]
+  locationStocks      ProductStock[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, sku])
@@ -556,6 +558,20 @@ model Product {
   @@index([organizationId, categoryId])
   @@index([organizationId, type])
   @@index([organizationId, tracksStock])
+}
+
+// Unused until inventory operations cut over together. Product balances remain authoritative.
+model ProductStock {
+  productId      String
+  locationId     String
+  organizationId String
+  stock          Int
+  reservedStock  Int
+  product        Product  @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+  location       Location @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+
+  @@id([productId, locationId])
+  @@index([locationId, organizationId])
 }
 
 model InventoryMovement {
