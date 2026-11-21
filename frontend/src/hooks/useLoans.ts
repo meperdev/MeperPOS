@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type PosRequestScope } from "@/lib/api";
 import type {
   CollectLoanInput,
   CreatePosLoanInput,
@@ -26,8 +26,12 @@ function todayIsoDate(): string {
  * sale-wide discount. When the caller does not pin a `requestKey` the hook
  * generates one; a page that retries a failed attempt should pin a stable key
  * so the initiation stays idempotent.
+ *
+ * `posScope` binds the initiation and its retry to the user and tenant the till
+ * was rendered for, so a session rotated by another tab cannot finance against
+ * another organization.
  */
-export function useCreatePosLoan() {
+export function useCreatePosLoan(posScope?: PosRequestScope) {
   const queryClient = useQueryClient();
 
   return useMutation<PosLoanInitiation, Error, CreatePosLoanInput>({
@@ -54,7 +58,7 @@ export function useCreatePosLoan() {
             ? { discountAmount: data.discountAmount }
             : {}),
           requestKey: data.requestKey ?? crypto.randomUUID(),
-        })
+        }, posScope ? { posScope } : undefined)
         .then((res) => res.data),
     onSuccess: () => {
       // Mirrors the useSales convention: the initiation moves stock, so the

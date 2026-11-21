@@ -58,6 +58,19 @@ function error401(config: InternalAxiosRequestConfig): AxiosError {
   );
 }
 
+/**
+ * A synthetic but structurally real access token: the client reads the claims
+ * the backend signs, without ever involving a JWT library or a live service.
+ */
+function accessToken(claims: Record<string, unknown>): string {
+  const encode = (value: unknown) =>
+    btoa(JSON.stringify(value))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(claims)}.signature`;
+}
+
 describe("ApiClient interceptors - in-memory session + refresh flow (issue #48 slice C2)", () => {
   let adapter: ReturnType<typeof vi.fn<Adapter>>;
   let onSessionExpired: ReturnType<typeof vi.fn<() => void>>;
@@ -247,6 +260,163 @@ describe("ApiClient interceptors - in-memory session + refresh flow (issue #48 s
       expect(urls).toEqual(["/orders", "/auth/refresh", "/orders"]);
       expect(onSessionExpired).not.toHaveBeenCalled();
     });
+  });
+});
+
+/** The code the POS boundary answers with when the credential changed. */
+const POS_SCOPE_MISMATCH = "ERR_POS_SCOPE_MISMATCH";
+
+describe("POS request scope boundary (T13)", () => {
+  let adapter: ReturnType<typeof vi.fn<Adapter>>;
+  let onSessionExpired: ReturnType<typeof vi.fn<() => void>>;
+  let axiosInstance: AxiosInstance;
+  const posScope = { userId: "user-a", organizationId: "org-a" };
+
+  beforeEach(() => {
+    adapter = vi.fn<Adapter>();
+    onSessionExpired = vi.fn<() => void>();
+    const client = new ApiClient(onSessionExpired);
+    axiosInstance = client.getAxiosInstance();
+    axiosInstance.defaults.adapter = adapter;
+    clearAccessToken();
+    document.cookie = "csrf_token=; Max-Age=0; path=/";
+  });
+
+  afterEach(() => {
+    clearAccessToken();
+    document.cookie = "csrf_token=; Max-Age=0; path=/";
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it.each(["/locations/pos-context", "/sales", "/loans/pos-initiation"])(
+    "never dispatches %s when the POS session cannot be verified",
+    async (url) => {
+      adapter.mockResolvedValue(okResponse());
+
+      await expect(
+        axiosInstance.request({ url, method: url === "/locations/pos-context" ? "get" : "post", posScope })
+      ).rejects.toMatchObject({ code: POS_SCOPE_MISMATCH });
+
+      expect(adapter).not.toHaveBeenCalled();
+      expect(onSessionExpired).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["/locations/pos-context", "/sales", "/loans/pos-initiation"])(
+    "never dispatches %s under another user's credential",
+    async (url) => {
+      setAccessToken(accessToken({ sub: "user-b", organizationId: "org-a" }));
+
+      await expect(
+        axiosInstance.request({ url, method: url === "/locations/pos-context" ? "get" : "post", posScope })
+      ).rejects.toMatchObject({ code: POS_SCOPE_MISMATCH });
+
+      // Fail closed: the request never reaches the transport.
+      expect(adapter).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["/locations/pos-context", "/sales", "/loans/pos-initiation"])(
+    "never dispatches %s under another tenant's credential",
+    async (url) => {
+      setAccessToken(accessToken({ sub: "user-a", organizationId: "org-b" }));
+
+      await expect(
+        axiosInstance.request({ url, method: url === "/locations/pos-context" ? "get" : "post", posScope })
+      ).rejects.toMatchObject({ code: POS_SCOPE_MISMATCH });
+
+      expect(adapter).not.toHaveBeenCalled();
+    }
+  );
+
+  it("sends a bound request on the expected tenant when the platform session has no tenant of its own", async () => {
+    localStorage.setItem("selectedOrganizationId", "org-a");
+    setAccessToken(
+      accessToken({ sub: "admin-1", organizationId: null, role: "SUPER_ADMIN" })
+    );
+    adapter.mockResolvedValue(okResponse());
+
+    await axiosInstance.post("/sales", {}, {
+      posScope: { userId: "admin-1", organizationId: "org-a" },
+    });
+
+    const config = adapter.mock.calls[0][0] as InternalAxiosRequestConfig;
+    expect(config.headers?.get("X-Organization-Id")).toBe("org-a");
+  });
+
+  it("does not dispatch the retried POS write when the refreshed session names another tenant", async () => {
+    setAccessToken(accessToken({ sub: "user-a", organizationId: "org-a" }));
+    adapter.mockImplementation(async (config) => {
+      if (config.url === "/auth/refresh") {
+        // Another tab rotated the shared cookie onto another organization.
+        return okResponse(config, {
+          accessToken: accessToken({ sub: "user-a", organizationId: "org-b" }),
+        });
+      }
+      throw error401(config);
+    });
+
+    await expect(
+      axiosInstance.post("/loans/pos-initiation", {}, { posScope })
+    ).rejects.toMatchObject({ code: POS_SCOPE_MISMATCH });
+
+    const urls = adapter.mock.calls.map((call) => call[0]?.url);
+    // Original -> single refresh -> NO second dispatch of the POS write.
+    expect(urls).toEqual(["/loans/pos-initiation", "/auth/refresh"]);
+    expect(getAccessToken()).toBe(
+      accessToken({ sub: "user-a", organizationId: "org-b" })
+    );
+  });
+
+  it("still retries a bound POS write once when the refresh keeps the same user and tenant", async () => {
+    setAccessToken(accessToken({ sub: "user-a", organizationId: "org-a" }));
+    adapter.mockImplementation(async (config) => {
+      if (config.url === "/auth/refresh") {
+        return okResponse(config, {
+          accessToken: accessToken({ sub: "user-a", organizationId: "org-a" }),
+        });
+      }
+      if (!config._retry) throw error401(config);
+      return okResponse(config, { id: "sale-1" });
+    });
+
+    const response = await axiosInstance.post("/sales", {}, { posScope });
+
+    expect(response.data).toEqual({ id: "sale-1" });
+    const urls = adapter.mock.calls.map((call) => call[0]?.url);
+    expect(urls).toEqual(["/sales", "/auth/refresh", "/sales"]);
+    const retryConfig = adapter.mock.calls[2][0] as InternalAxiosRequestConfig;
+    expect(retryConfig._retry).toBe(true);
+    expect(retryConfig.headers?.get("Authorization")).toBe(
+      `Bearer ${accessToken({ sub: "user-a", organizationId: "org-a" })}`
+    );
+    expect(retryConfig.headers?.get("X-Organization-Id")).toBe("org-a");
+  });
+
+  it("leaves every other request outside the POS binding", async () => {
+    setAccessToken(accessToken({ sub: "user-b", organizationId: "org-b" }));
+    adapter.mockResolvedValue(okResponse());
+
+    await axiosInstance.get("/products");
+    await axiosInstance.post("/customers", {});
+
+    expect(adapter).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not send a body field or change the request payload of a bound sale", async () => {
+    setAccessToken(accessToken({ sub: "user-a", organizationId: "org-a" }));
+    adapter.mockResolvedValue(okResponse());
+    const payload = {
+      items: [{ productId: "p1", quantity: 1, discountAmount: 0 }],
+      payments: [{ method: "CASH", amount: 1000 }],
+      discountAmount: 0,
+    };
+
+    await axiosInstance.post("/sales", payload, { posScope });
+
+    const config = adapter.mock.calls[0][0] as InternalAxiosRequestConfig;
+    expect(JSON.parse(config.data as string)).toEqual(payload);
   });
 });
 

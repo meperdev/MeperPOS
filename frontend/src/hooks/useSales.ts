@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type PosRequestScope } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import type { Sale, PaginatedResponse, CartItem, SaleFilters } from "@/types";
 
@@ -41,7 +41,12 @@ export function useSaleByNumber(saleNumber: number) {
   });
 }
 
-export function useCreateSale() {
+/**
+ * Records a sale. `posScope` binds the request to the user and tenant the till
+ * was rendered for, so a session rotated by another tab cannot charge under a
+ * different organization; callers outside the POS pass nothing.
+ */
+export function useCreateSale(posScope?: PosRequestScope) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -63,7 +68,9 @@ export function useCreateSale() {
         amount: number;
       }>;
     }) =>
-      api.post<Sale>("/sales", data).then((res) => res.data),
+      api
+        .post<Sale>("/sales", data, posScope ? { posScope } : undefined)
+        .then((res) => res.data),
     onSuccess: () => {
       // Payment confirmed: the one haptic that confirms money moved (S4.2).
       // It lives here, not in the POS page, so every sale path feels the same.
