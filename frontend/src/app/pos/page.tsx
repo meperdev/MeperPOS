@@ -5,6 +5,7 @@ import {
   useCallback,
   useMemo,
   useEffect,
+  useLayoutEffect,
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -62,6 +63,12 @@ import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAnyRole } from "@/lib/auth";
 import { api, getApiErrorMessage } from "@/lib/api";
+import {
+  guardOrganizationScopeChange,
+  readOrganizationScope,
+} from "@/lib/organizationScope";
+import { usePosOrganizationScope } from "@/hooks/usePosSiteContext";
+import { PosSiteGate, type PosCheckoutSite } from "./PosSiteGate";
 
 import { useMediaQuery } from "@/hooks/useEffectiveViewMode";
 import {
@@ -209,6 +216,59 @@ function isCompactCode(value: string): boolean {
 }
 
 export default function POSPage() {
+  const { user, loading } = useAuth();
+  const adminOrganization = usePosOrganizationScope(
+    Boolean(user?.isSuperAdmin),
+  );
+  const organizationId = user?.isSuperAdmin
+    ? adminOrganization
+    : user?.organizationId;
+
+  return (
+    <DashboardLayout>
+      {!loading &&
+        user &&
+        (organizationId ? (
+          <PosSiteGate
+            key={JSON.stringify([user.id, organizationId])}
+            userId={user.id}
+            organizationId={organizationId}
+          >
+            {(site, scope) => (
+              <POSWorkspace
+                key={scope}
+                scope={scope}
+                site={site}
+                organizationId={organizationId}
+              />
+            )}
+          </PosSiteGate>
+        ) : (
+          <p role="status" className="p-4 text-sm text-muted-foreground">
+            Selecciona una organización para usar el punto de venta.
+          </p>
+        ))}
+    </DashboardLayout>
+  );
+}
+
+function POSWorkspace({
+  scope,
+  site,
+  organizationId,
+}: {
+  scope: string;
+  site: PosCheckoutSite;
+  organizationId: string;
+}) {
+  const mounted = useRef(true);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const toast = useToast();
   const { user, loading: authLoading } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -222,7 +282,7 @@ export default function POSPage() {
   useEffect(() => {
     // DashboardLayout withholds the grid during auth restore; attach only once
     // its DOM is mounted, and detach if loading hides it again.
-    if (authLoading) return;
+    if (authLoading || !site.available) return;
     const area = capacityAreaRef.current;
     const grid = productGridRef.current;
     if (!area || !grid) return;
@@ -232,7 +292,7 @@ export default function POSPage() {
       setPageSize(capacity);
       setCurrentPage(1);
     });
-  }, [authLoading]);
+  }, [authLoading, site.available]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scannerInputRef = useRef<HTMLInputElement | null>(null);
   // A scanner focus the page asked for and has not delivered yet: on a hard
@@ -331,10 +391,18 @@ export default function POSPage() {
   });
   const { data: categoriesData } = useCategories({ limit: 100 });
   const { data: customersData } = useCustomers();
-  const { pausedSales, pauseSale, resumeSale, deletePausedSale } =
-    usePausedSales();
-  const createSale = useCreateSale();
-  const createPosLoan = useCreatePosLoan();
+  const { pausedSales, pauseSale, getPausedSale, deletePausedSale } =
+    usePausedSales(scope);
+  const resumingRef = useRef(false);
+  const posScope = useMemo(
+    () =>
+      user?.id ? { userId: user.id, organizationId } : undefined,
+    [user?.id, organizationId],
+  );
+  const createSale = useCreateSale(posScope);
+  const [checkingOut, setCheckingOut] = useState(false);
+  const checkingOutRef = useRef(false);
+  const createPosLoan = useCreatePosLoan(posScope);
   // An attempt is pinned to the exact payload it was minted for: a retry of the
   // same request reuses its key, while any change to the cart, customer or
   // discount mints a new one. Cleared on success so the next financing starts
@@ -346,12 +414,18 @@ export default function POSPage() {
   // Set when an initiation succeeded: the dialog's own close must not reopen
   // the mobile cart (the sale is done and the cart is now empty).
   const financeCompletedRef = useRef(false);
-  const cartLocked = financing || createPosLoan.isPending;
+  const cartLocked = !site.available || checkingOut || financing || createPosLoan.isPending;
   // A financing in flight owns the payload it will report back: while it is
   // pending nothing may edit the cart, the customer or the discount, or the
   // financed lines could be sold or financed a second time.
   const cartLockedRef = useRef(cartLocked);
   cartLockedRef.current = cartLocked;
+  // The lock a cart mutation must answer against. The rendered state alone
+  // leaves one event's gap between "checkout took the cart" and the first
+  // re-render, so the refs set synchronously at the entry points are part of
+  // the same answer.
+  const cartIsLocked = () =>
+    cartLockedRef.current || checkingOutRef.current || financingRef.current;
   // Same reason as `cartLockedRef`: `addToCart` has to answer "did this change
   // anything?" before React has re-rendered, and the answer decides whether the
   // phone buzzes (S4.2). The mirror is synced in an effect to keep the render
@@ -360,6 +434,28 @@ export default function POSPage() {
   useEffect(() => {
     cartRef.current = cart;
   }, [cart]);
+  const hasActiveCart = cart.length > 0;
+  useLayoutEffect(() => {
+    if (!hasActiveCart) return;
+    return guardOrganizationScopeChange(() => {
+      toast.info(
+        "Termina, pausa o vacía el carrito antes de cambiar de organización",
+      );
+      return false;
+    });
+  }, [hasActiveCart, toast]);
+
+  const scopeIsCurrent = () =>
+    mounted.current &&
+    (!user?.isSuperAdmin || readOrganizationScope() === organizationId);
+
+  const verifySiteForPayment = async () => {
+    if (!scopeIsCurrent()) return false;
+    const eligible = await site.revalidate();
+    if (!scopeIsCurrent()) return false;
+    if (!eligible) toast.error("El cobro no está habilitado para esta sede");
+    return eligible;
+  };
   const posLoanAttemptRef = useRef<{ key: string; signature: string } | null>(
     null,
   );
@@ -513,7 +609,7 @@ export default function POSPage() {
   const visibleProducts = products;
 
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
-    if (cartLockedRef.current) return;
+    if (cartIsLocked()) return;
 
     // Every add the POS offers — the product tile and the scanner — comes
     // through here, so this is the one place a tap can buzz. The buzz answers
@@ -534,13 +630,13 @@ export default function POSPage() {
   // Every removal is reversible for a few seconds: a stray tap on "−" or on the
   // bin during a sale is cheap to undo and expensive to lose.
   const cartUndo = useCartUndo(cart, setCart, {
-    isLocked: () => cartLockedRef.current,
+    isLocked: () => cartIsLocked(),
   });
   const removeFromCart = cartUndo.removeLine;
 
   const updateQuantity = useCallback(
     (productId: string, quantity: number) => {
-      if (cartLockedRef.current) return;
+      if (cartIsLocked()) return;
       if (quantity <= 0) {
         removeFromCart(productId);
         return;
@@ -568,7 +664,7 @@ export default function POSPage() {
   /** Apply a fixed-amount discount (clears any percentage tracking) */
   const updateItemDiscount = useCallback(
     (productId: string, discountAmount: number) => {
-      if (cartLockedRef.current) return;
+      if (cartIsLocked()) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -593,7 +689,7 @@ export default function POSPage() {
   /** Apply a percentage discount that scales with quantity changes */
   const updateItemDiscountPercent = useCallback(
     (productId: string, percent: number) => {
-      if (cartLockedRef.current) return;
+      if (cartIsLocked()) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -622,7 +718,7 @@ export default function POSPage() {
   /** Override a cart line's unit price, preserving any existing discount */
   const updateItemPrice = useCallback(
     (productId: string, price: number) => {
-      if (cartLockedRef.current) return;
+      if (cartIsLocked()) return;
       setCart((prev) =>
         prev.map((item) => {
           if (item.productId !== productId) return item;
@@ -810,7 +906,7 @@ export default function POSPage() {
   }, []);
 
   const handleCheckout = async () => {
-    if (cartLockedRef.current) return;
+    if (checkingOutRef.current || financingRef.current || cartLockedRef.current) return;
     if (cart.length === 0) return;
     const totalPaid = paymentMethods.reduce(
       (sum, method) => sum + method.amount,
@@ -843,27 +939,38 @@ export default function POSPage() {
       toast.error("Sobra un pago: con los demás métodos ya se cubre el total");
       return;
     }
+    checkingOutRef.current = true;
+    setCheckingOut(true);
+    // Freeze the payload the cashier confirmed before the preflight is awaited:
+    // the sale that leaves must describe this cart, this customer and these
+    // tenders, never a later state that changed while it waited.
+    const request = {
+      customerId: selectedCustomer || undefined,
+      items: cart.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        // Sent only for a real override. For every other line the server
+        // derives the price itself, so a promotion applied after the line
+        // entered the cart is honoured instead of being read as an
+        // (unauthorized) override request.
+        ...(cartItemPriceOverride(item)
+          ? { unitPrice: item.unitPrice }
+          : {}),
+        discountAmount: item.discountAmount,
+      })),
+      discountAmount,
+      payments: paymentMethods.map((method) => ({
+        method: method.type,
+        amount: method.amount,
+      })),
+    };
     try {
-      const result = await createSale.mutateAsync({
-        customerId: selectedCustomer || undefined,
-        items: cart.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          // Sent only for a real override. For every other line the server
-          // derives the price itself, so a promotion applied after the line
-          // entered the cart is honoured instead of being read as an
-          // (unauthorized) override request.
-          ...(cartItemPriceOverride(item)
-            ? { unitPrice: item.unitPrice }
-            : {}),
-          discountAmount: item.discountAmount,
-        })),
-        discountAmount,
-        payments: paymentMethods.map((method) => ({
-          method: method.type,
-          amount: method.amount,
-        })),
-      });
+      if (!(await verifySiteForPayment())) return;
+      // The intent that survived the preflight must still be the live one: an
+      // unmounted workspace or a superseded checkout must not charge.
+      if (!checkingOutRef.current || !scopeIsCurrent()) return;
+      const result = await createSale.mutateAsync(request);
+      if (!scopeIsCurrent()) return;
       setLastSale(result);
       setCart([]);
       // A finished or paused sale must not leave an undo offer pointing at it.
@@ -878,7 +985,12 @@ export default function POSPage() {
       setShowPaymentModal(false);
       setShowReceiptModal(true);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Error al realizar la venta"));
+      if (scopeIsCurrent()) {
+        toast.error(getApiErrorMessage(error, "Error al realizar la venta"));
+      }
+    } finally {
+      checkingOutRef.current = false;
+      if (mounted.current) setCheckingOut(false);
     }
   };
 
@@ -913,7 +1025,7 @@ export default function POSPage() {
    */
   const handleFinanceSale = async () => {
     // Single flight: a second confirmation must not start another initiation.
-    if (financingRef.current || cartLockedRef.current) return;
+    if (financingRef.current || checkingOutRef.current || cartLockedRef.current) return;
     if (cart.length === 0 || !selectedCustomer) return;
     financingRef.current = true;
     setFinancing(true);
@@ -925,10 +1037,12 @@ export default function POSPage() {
         : { key: crypto.randomUUID(), signature };
     posLoanAttemptRef.current = attempt;
     try {
+      if (!(await verifySiteForPayment())) return;
       const result = await createPosLoan.mutateAsync({
         ...request,
         requestKey: attempt.key,
       });
+      if (!scopeIsCurrent()) return;
       const financedTotal = formatCurrency(
         Number(result.agreedCustomerTotal),
       );
@@ -952,12 +1066,14 @@ export default function POSPage() {
         `Venta financiada por ${financedTotal}. Puedes verla en Préstamos.`,
       );
     } catch (error) {
-      toast.error(
-        getApiErrorMessage(error, "Error al iniciar la venta financiada"),
-      );
+      if (scopeIsCurrent()) {
+        toast.error(
+          getApiErrorMessage(error, "Error al iniciar la venta financiada"),
+        );
+      }
     } finally {
       financingRef.current = false;
-      setFinancing(false);
+      if (mounted.current) setFinancing(false);
     }
   };
 
@@ -986,6 +1102,9 @@ export default function POSPage() {
   };
 
   const handlePauseSale = () => {
+    // A validation or submission in flight owns this cart: pausing it now would
+    // leave the same lines both resumable later and charged by the running sale.
+    if (cartIsLocked()) return;
     if (cart.length === 0) {
       toast.info("No hay productos en el carrito");
       return;
@@ -1016,9 +1135,10 @@ export default function POSPage() {
   };
 
   const handleResumeSale = async (saleId: string) => {
-    if (cartLockedRef.current) return;
+    if (resumingRef.current || cartIsLocked()) return;
+    resumingRef.current = true;
     try {
-      const resumedSale = resumeSale(saleId);
+      const resumedSale = getPausedSale(saleId);
       // Re-derive each line's price from the product's CURRENT state so a
       // promo changed/removed while the sale sat paused reprices before
       // checkout (stale rebates shrink to the new unit price instead of
@@ -1031,6 +1151,7 @@ export default function POSPage() {
             .catch(() => item.product),
         ),
       );
+      if (!scopeIsCurrent() || cartIsLocked()) return;
       const repricedCart = resumedSale.cart.map((item, index) => {
         const freshProduct = freshProducts[index] ?? item.product;
         const unitPrice = freshProduct.effectiveSalePrice ?? freshProduct.salePrice;
@@ -1050,10 +1171,17 @@ export default function POSPage() {
       setSelectedCustomer(resumedSale.customerId);
       setDiscountAmount(resumedSale.discountAmount);
       setShowPausedSalesModal(false);
+      // The source draft leaves its scope only once the awaited cart has been
+      // restored here; an interrupted resume must keep the original draft.
+      deletePausedSale(saleId);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Error al reanudar la venta",
-      );
+      if (scopeIsCurrent()) {
+        toast.error(
+          error instanceof Error ? error.message : "Error al reanudar la venta",
+        );
+      }
+    } finally {
+      resumingRef.current = false;
     }
   };
 
@@ -1063,6 +1191,9 @@ export default function POSPage() {
   };
 
   const openPaymentModal = () => {
+    // The mobile drawer's checkout lands here too, so the lock is taken at the
+    // entry point rather than only on the desktop button.
+    if (cartIsLocked()) return;
     setPaymentMethods([
       {
         type: selectedPaymentMethod,
@@ -1076,8 +1207,10 @@ export default function POSPage() {
     ? customers.find((c) => c.id === selectedCustomer)?.name
     : null;
 
+  if (!site.available) return null;
+
   return (
-    <DashboardLayout>
+    <>
       <h1 className="sr-only">Punto de venta</h1>
       {/* At lg this page fits the viewport exactly. The height subtracts the two
           things the shell owns — the header bar and the vertical padding it
@@ -1116,6 +1249,10 @@ export default function POSPage() {
 
             {/* Unified search & scanner — types to filter the grid, Enter scans/adds */}
             <div className="@container flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15 max-lg:px-0 max-lg:bg-transparent">
+              <p className="text-xs text-muted-foreground">
+                Sede:{" "}
+                <span className="font-medium text-foreground">{site.name}</span>
+              </p>
               {/* Intrinsic wrap, like FilterBar: Favoritos and the category select share a row under the search when narrow. */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[14rem] flex-[999_1_16rem]">
@@ -1378,7 +1515,7 @@ export default function POSPage() {
                   variant="secondary"
                   size="sm"
                   onClick={handlePauseSale}
-                  disabled={cart.length === 0}
+                  disabled={cart.length === 0 || cartLocked}
                   className="flex-1 h-9 rounded-lg text-[13px] font-medium"
                 >
                   <Pause className="w-3.5 h-3.5" />
@@ -1398,7 +1535,7 @@ export default function POSPage() {
                 size="lg"
                 onClick={openPaymentModal}
                 disabled={cart.length === 0 || cartLocked}
-                loading={createSale.isPending}
+                loading={checkingOut || createSale.isPending}
               >
                 <ShoppingCart className="w-4 h-4 mr-1.5" />
                 Finalizar venta
@@ -1458,7 +1595,7 @@ export default function POSPage() {
           }}
           canFinance={Boolean(selectedCustomer) && !cartLocked}
           isFinancing={createPosLoan.isPending}
-          isPending={createSale.isPending}
+          isPending={checkingOut || createSale.isPending}
         />
       )}
 
@@ -1516,7 +1653,7 @@ export default function POSPage() {
                   : "border-border/70 bg-muted/20 dark:bg-background/40 hover:border-foreground/25 hover:bg-muted/50",
               )}
               onClick={() => {
-                if (cartLockedRef.current) return;
+                if (cartIsLocked()) return;
                 setSelectedCustomer("");
                 setShowCustomerModal(false);
                 setCustomerSearch("");
@@ -1553,7 +1690,7 @@ export default function POSPage() {
                       : "border-border/70 bg-muted/20 dark:bg-background/40 hover:border-foreground/25 hover:bg-muted/50",
                   )}
                   onClick={() => {
-                    if (cartLockedRef.current) return;
+                    if (cartIsLocked()) return;
                     setSelectedCustomer(customer.id);
                     setShowCustomerModal(false);
                     setCustomerSearch("");
@@ -1587,7 +1724,12 @@ export default function POSPage() {
       {showPaymentModal && (
         <PaymentConfirmationModal
           isOpen={showPaymentModal}
-          onClose={() => setShowPaymentModal(false)}
+          onClose={() => {
+            // A validation or submission already owns this cart: dismissing the
+            // dialog would hide the only surface that reports the outcome.
+            if (checkingOutRef.current || createSale.isPending) return;
+            setShowPaymentModal(false);
+          }}
           onConfirm={handleCheckout}
           cart={cart}
           subtotal={subtotal}
@@ -1596,7 +1738,7 @@ export default function POSPage() {
           selectedMethod={selectedPaymentMethod}
           paymentMethods={paymentMethods}
           onPaymentMethodChange={setPaymentMethods}
-          loading={createSale.isPending}
+          loading={checkingOut || createSale.isPending}
           customerName={
             selectedCustomer
               ? customers.find((c) => c.id === selectedCustomer)?.name
@@ -1885,6 +2027,6 @@ export default function POSPage() {
         }. Monto a financiar: ${formatCurrency(total)} (calculado en el POS; el total final lo confirma el servidor).`}
         confirmText="Financiar venta"
       />
-    </DashboardLayout>
+    </>
   );
 }
