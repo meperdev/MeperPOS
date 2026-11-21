@@ -128,15 +128,28 @@ export function useConfirmPurchaseOrder() {
   });
 }
 
+export interface SendPurchaseOrderPayload {
+  id: string;
+  /**
+   * Calendar day `YYYY-MM-DD` the supplier is expected to deliver. An order
+   * confirmed without one can set it here, on the first send; once sent the
+   * document is frozen and the date is ignored.
+   */
+  expectedDeliveryDate?: string;
+}
+
 /** Records the send; the first one freezes the document the supplier receives. */
 export function useSendPurchaseOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
+    mutationFn: ({ id, expectedDeliveryDate }: SendPurchaseOrderPayload) =>
       api
-        .post<PurchaseOrder>(`/purchase-orders/${id}/send`)
+        .post<PurchaseOrder>(
+          `/purchase-orders/${id}/send`,
+          expectedDeliveryDate ? { expectedDeliveryDate } : {},
+        )
         .then((res) => res.data),
-    onSuccess: (_data, id) => invalidateAll(queryClient, id),
+    onSuccess: (_data, vars) => invalidateAll(queryClient, vars.id),
   });
 }
 
