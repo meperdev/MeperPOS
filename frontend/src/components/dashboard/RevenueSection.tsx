@@ -27,10 +27,10 @@ export function RevenueSection() {
  * piece owns the range state and hands each child the resolved `startDate` /
  * `endDate`; every child fetches its own data.
  *
- * Height is fixed on `lg` (`lg:h-[26rem]`) so switching the range — which only
+ * Height is fixed on `lg` (`lg:h-[30rem]`) so switching the range — which only
  * changes the number of bars, not the number of cards — never resizes the
- * section. Children are `h-full` + `min-h-0` and clip their overflow, so their
- * content cannot push the piece taller.
+ * section. Below `lg` the two side cards size to their content, so a long
+ * legend or five product rows never clip on a phone.
  */
 export function RevenueSectionInner({ today }: { today: string }) {
   const [range, setRange] = useState<DashboardRangeKey>(DEFAULT_DASHBOARD_RANGE);
@@ -55,16 +55,16 @@ export function RevenueSectionInner({ today }: { today: string }) {
         </div>
       </div>
 
-      <div className="mt-2.5 grid gap-3 lg:h-[26rem] lg:grid-cols-5">
+      <div className="mt-2.5 grid gap-3 lg:h-[30rem] lg:grid-cols-5">
         <div className="flex h-[24rem] min-w-0 flex-col overflow-visible relative rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border sm:p-5 lg:col-span-3 lg:h-full lg:min-h-0">
           <CategoryStackedChart startDate={startDate} endDate={endDate} />
         </div>
 
         <div className="grid min-w-0 gap-3 lg:col-span-2 lg:h-full lg:min-h-0 lg:grid-rows-2">
-          <div className="flex h-[15rem] min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border lg:h-full">
+          <div className="flex h-auto min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border lg:h-full">
             <PaymentMethodsCard startDate={startDate} endDate={endDate} />
           </div>
-          <div className="flex h-[15rem] min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border lg:h-full">
+          <div className="flex h-auto min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border lg:h-full">
             <TopProductsCard startDate={startDate} endDate={endDate} />
           </div>
         </div>

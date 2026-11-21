@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { RecentSalesCard } from "./RecentSalesCard";
+import { formatDateTime } from "@/lib/utils";
 import type { Customer, Payment, Sale } from "@/types";
 
 const useSalesMock = vi.fn();
@@ -93,20 +94,38 @@ describe("RecentSalesCard (compact recent sales)", () => {
     expect(screen.getAllByTestId("recent-sale-item")).toHaveLength(5);
   });
 
-  it("renders the same sale data as a stacked list for narrow cards", () => {
+  it("renders the same sale data as a stacked list for narrow cards, one fact per line", () => {
     useSalesMock.mockReturnValue({ data: { data: [sale(1)] } });
 
     render(<RecentSalesCard />);
 
-    const item = within(within(screen.getByTestId("recent-sales-list")).getByTestId("recent-sale-item"));
-    expect(item.getByText("101")).toBeTruthy();
-    expect(item.getByText("Cliente 1")).toBeTruthy();
-    expect(item.getByText("Fecha")).toBeTruthy();
-    expect(item.getByText("Pago")).toBeTruthy();
-    expect(item.getByText("Total")).toBeTruthy();
-    expect(item.getByText("Efectivo")).toBeTruthy();
-    expect(item.getByText(/\$\s119\.000/)).toBeTruthy();
-    expect(item.getByText("Completada")).toBeTruthy();
+    const item = screen.getByTestId("recent-sale-item");
+    expect(within(item).getByText("101")).toBeTruthy();
+    expect(within(item).getByText("Cliente 1")).toBeTruthy();
+
+    // No labelled Fecha/Pago/Total columns left to collide in on a phone.
+    expect(within(item).queryByText("Fecha")).toBeNull();
+    expect(within(item).queryByText("Pago")).toBeNull();
+    expect(within(item).queryByText("Total")).toBeNull();
+    expect(item.querySelector(".grid-cols-3")).toBeNull();
+
+    const date = within(item).getByText(formatDateTime(sale(1).createdAt));
+    expect(date.className).toContain("text-[13px]");
+    expect(date.className).toContain("text-muted-foreground");
+    expect(date.className).not.toContain("tabular-nums");
+
+    const payment = within(item).getByText("Efectivo");
+    const total = within(item).getByText(/\$\s119\.000/);
+    expect(total.className).toContain("text-base");
+    expect(total.className).toContain("tabular-nums");
+    expect(total.className).toContain("font-semibold");
+
+    // The date owns its line; payment and total share a separate baseline row.
+    expect(date.contains(payment)).toBe(false);
+    expect(payment.contains(date)).toBe(false);
+    expect(payment.parentElement?.contains(date)).toBe(false);
+    expect(total.parentElement?.contains(date)).toBe(false);
+    expect(within(item).getByText("Completada")).toBeTruthy();
   });
 
   it("renders the minimum columns with real sale data", () => {

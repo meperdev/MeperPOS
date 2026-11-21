@@ -41,6 +41,23 @@ describe("RevenueSection (shared range over three cards)", () => {
     cleanup();
   });
 
+  it("sizes the two side cards to their content below lg and gives the piece room at lg", () => {
+    render(<RevenueSectionInner today={TODAY} />);
+
+    const paymentWrapper = screen.getByTestId("mock-payment-card").parentElement as HTMLElement;
+    const topWrapper = screen.getByTestId("mock-top-card").parentElement as HTMLElement;
+
+    for (const wrapper of [paymentWrapper, topWrapper]) {
+      expect(wrapper.className).toContain("h-auto");
+      expect(wrapper.className).toContain("lg:h-full");
+      expect(wrapper.className).not.toContain("h-[15rem]");
+    }
+
+    const outerGrid = paymentWrapper.parentElement?.parentElement as HTMLElement;
+    expect(outerGrid.className).toContain("lg:h-[30rem]");
+    expect(outerGrid.className).not.toContain("lg:h-[26rem]");
+  });
+
   it("renders the selector and the three cards", () => {
     render(<RevenueSectionInner today={TODAY} />);
 
