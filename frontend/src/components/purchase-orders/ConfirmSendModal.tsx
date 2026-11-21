@@ -41,6 +41,9 @@ export function ConfirmSendModal({ order, isOpen, onClose }: ConfirmSendModalPro
   const [isSending, setIsSending] = useState(false);
 
   const confirmed = confirmedHere || order.status !== "DRAFT";
+  // The expected delivery day belongs to the document, so it is editable until
+  // the order is sent: an order confirmed without a date can still get one here.
+  const dateEditable = !order.sentAt;
 
   const handleConfirm = async () => {
     setIsConfirming(true);
@@ -63,7 +66,10 @@ export function ConfirmSendModal({ order, isOpen, onClose }: ConfirmSendModalPro
     try {
       // The send freezes the document first; the download then renders that
       // frozen document, so the file in hand is the one on record.
-      await sendOrder.mutateAsync(order.id);
+      await sendOrder.mutateAsync({
+        id: order.id,
+        ...(expectedDate ? { expectedDeliveryDate: expectedDate } : {}),
+      });
     } catch (error) {
       toast.error(getApiErrorMessage(error, "No se pudo enviar la orden"));
       setIsSending(false);
@@ -112,13 +118,13 @@ export function ConfirmSendModal({ order, isOpen, onClose }: ConfirmSendModalPro
               value={expectedDate}
               min={getBogotaDateInputValue()}
               onChange={(event) => setExpectedDate(event.target.value)}
-              disabled={confirmed}
+              disabled={!dateEditable}
             />
           </div>
           <Button
             variant="secondary"
             onClick={() => setExpectedDate(getBogotaDateInputValue())}
-            disabled={confirmed}
+            disabled={!dateEditable}
           >
             Hoy
           </Button>

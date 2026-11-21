@@ -28,7 +28,7 @@ El badge muestra **Enviada** para una orden `PENDING` con `sentAt`, y suma
 | Ruta | Qué hace |
 |---|---|
 | `POST /api/purchase-orders/:id/confirm` | Acepta `{ "expectedDeliveryDate": "AAAA-MM-DD" }` opcional. |
-| `POST /api/purchase-orders/:id/send` | Registra el envío. Rechaza `DRAFT` y `CANCELLED`. Repetirlo no cambia nada. |
+| `POST /api/purchase-orders/:id/send` | Registra el envío. Acepta `{ "expectedDeliveryDate": "AAAA-MM-DD" }` opcional, solo en el primer envío. Rechaza `DRAFT` y `CANCELLED`. Repetirlo no cambia nada. |
 | `GET /api/purchase-orders/:id/pdf` | Descarga el PDF (tamaño carta) de cualquier orden que no sea borrador. |
 | `POST /api/purchase-orders/:id/duplicate` | "Repetir pedido": crea un borrador. Acepta `{ "supplierId" }` opcional. |
 | `GET /api/purchase-orders?status=OVERDUE` | Lista las órdenes atrasadas. |
@@ -56,7 +56,11 @@ siempre salen de la orden, que no cambia después de confirmar; el generador no
 calcula dinero.
 
 El primer envío escribe con `updateMany` condicionado a `sentAt: null`: si dos
-envíos llegan a la vez, gana una sola copia.
+envíos llegan a la vez, gana una sola copia. El primer envío acepta además
+`{ "expectedDeliveryDate": "AAAA-MM-DD" }` opcional —la misma validación que la
+confirmación—, así una orden confirmada sin fecha todavía puede fijarla al
+enviarse; enviarla en un reenvío no cambia nada, y una vez enviada la fecha queda
+congelada con el documento.
 
 ## 4. La plantilla del negocio
 

@@ -267,4 +267,50 @@ describe('Purchase order documents — Integration', () => {
       reason: `OC-${before.orderNumber}`,
     });
   });
+
+  it('takes the expected delivery date at the first send and freezes it there', async () => {
+    await documents.send(onTimeOrderId, fixture.orgAId, {
+      expectedDeliveryDate: '2026-12-01',
+    });
+
+    const stored = await prisma.purchaseOrder.findUniqueOrThrow({
+      where: { id: onTimeOrderId },
+    });
+    expect(stored.sentAt).toBeInstanceOf(Date);
+    expect(stored.expectedDeliveryDate?.toISOString()).toBe(
+      '2026-12-01T00:00:00.000Z',
+    );
+
+    const { buffer } = await documents.generatePdf(
+      onTimeOrderId,
+      fixture.orgAId,
+    );
+    const text = (await pdfParse(new Uint8Array(buffer))).text;
+    expect(text).toContain('01/12/2026');
+  });
+
+  it('a re-send with another date leaves the stored one alone', async () => {
+    await documents.send(onTimeOrderId, fixture.orgAId, {
+      expectedDeliveryDate: '2027-01-15',
+    });
+
+    const stored = await prisma.purchaseOrder.findUniqueOrThrow({
+      where: { id: onTimeOrderId },
+    });
+    expect(stored.expectedDeliveryDate?.toISOString()).toBe(
+      '2026-12-01T00:00:00.000Z',
+    );
+  });
+
+  it('a send with no date keeps the one set at confirm', async () => {
+    await documents.send(draftOrderId, fixture.orgAId);
+
+    const stored = await prisma.purchaseOrder.findUniqueOrThrow({
+      where: { id: draftOrderId },
+    });
+    expect(stored.sentAt).toBeInstanceOf(Date);
+    expect(stored.expectedDeliveryDate?.toISOString()).toBe(
+      '2026-11-25T00:00:00.000Z',
+    );
+  });
 });

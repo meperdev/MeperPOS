@@ -10,6 +10,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../../settings/settings.service';
 import { resolveReceiptLogo } from '../../receipts/receipt-logo';
 import { PurchaseOrdersService } from '../purchase-orders.service';
+import { toCalendarDay } from '../purchase-order-status';
+import type { SendPurchaseOrderDto } from '../dto/send-purchase-order.dto';
 import {
   buildPurchaseOrderDocumentData,
   buildPurchaseOrderSnapshot,
@@ -29,9 +31,10 @@ const DOCUMENT_INCLUDE = {
 /**
  * Turns a confirmed purchase order into the document sent to its supplier.
  *
- * `send` records the first send (instant, channel, frozen snapshot) and is safe
- * to repeat; `generatePdf` renders a sent order from its snapshot and an unsent
- * one from the current settings. Receiving and stock are not touched here.
+ * `send` records the first send (instant, channel, expected delivery day and
+ * frozen snapshot) and is safe to repeat; `generatePdf` renders a sent order from
+ * its snapshot and an unsent one from the current settings. Receiving and stock
+ * are not touched here.
  */
 @Injectable()
 export class PurchaseOrderDocumentsService {
@@ -42,7 +45,11 @@ export class PurchaseOrderDocumentsService {
     @Optional() private readonly config?: ConfigService,
   ) {}
 
-  async send(id: string, organizationId: string | undefined) {
+  async send(
+    id: string,
+    organizationId: string | undefined,
+    dto: SendPurchaseOrderDto = {},
+  ) {
     const orgId = this.requireOrganization(organizationId);
     const order = await this.loadOrder(id, orgId);
     if (UNSENDABLE_STATUSES.has(order.status)) {
@@ -56,12 +63,17 @@ export class PurchaseOrderDocumentsService {
     if (!order.sentAt) {
       const settings = await this.settingsService.find(orgId);
       // Guarded by `sentAt: null`: when two first sends race, one snapshot wins
-      // and the other leaves it untouched.
+      // and the other leaves it untouched. A date sent with a re-send is dropped
+      // here too: the document is already frozen, so its delivery day cannot
+      // move (the PDF reads the stored date).
       await this.prisma.purchaseOrder.updateMany({
         where: { id, organizationId: orgId, sentAt: null },
         data: {
           sentAt: new Date(),
           sentVia: 'PDF',
+          ...(dto.expectedDeliveryDate
+            ? { expectedDeliveryDate: toCalendarDay(dto.expectedDeliveryDate) }
+            : {}),
           documentSnapshot: buildPurchaseOrderSnapshot(
             order,
             settings,
