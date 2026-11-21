@@ -40,14 +40,54 @@ psql -X -v ON_ERROR_STOP=1 "$TEST_DATABASE_URL" \
   -f test/migrations/product-stock.constraints.sql
 ```
 
-Resultado esperado: las comprobaciones pasan, ningún saldo queda persistido en `ProductStock` y los saldos de `Product` y la reserva del POS quedan intactos. La comprobación incluye existencias positivas, cero, negativas e inactivas, una reserva del POS, rechazos de reservas inválidas y los borrados en cascada de producto, sede y organización. El ensayo y la reconciliación de saldos por sede llegan con la entrega siguiente: esta migración no copia saldos ni autoriza el corte operativo.
+Resultado esperado: las comprobaciones pasan, ningún saldo queda persistido en `ProductStock` y los saldos de `Product` y la reserva del POS quedan intactos. La comprobación incluye existencias positivas, cero, negativas e inactivas, una reserva del POS, rechazos de reservas inválidas y los borrados en cascada de producto, sede y organización. El ensayo y la reconciliación de saldos por sede se describen en la sección siguiente: esta migración no copia saldos ni autoriza el corte operativo.
 
 Para comprobar la espera por bloqueos, ejecutar desde `backend/` `TEST_DATABASE_URL="$TEST_DATABASE_URL" bash test/migrations/product-stock.lock-timeout.sh` en **otra** base desechable con el mismo esquema anterior a `ProductStock`. La prueba sostiene un bloqueo de escritura sobre `Product`, verifica que PostgreSQL cancele la migración sin dejar cambios parciales y que la clave única existente de `Location` quede intacta.
+
+## Ensayo de solo lectura antes del corte
+
+`test/migrations/product-stock.reconcile.sql` comprueba si el saldo y las reservas actuales se pueden traspasar a la sede inicial de cada producto. Es un ensayo **de solo lectura**: corre en una sola transacción `REPEATABLE READ READ ONLY`, no hace DML ni DDL, no crea objetos temporales, no toma bloqueos de fila y termina con `ROLLBACK`. Si un llamador ya abrió la transacción, el ensayo impone esas características él mismo y, cuando no puede, falla cerrado antes de comprobar nada.
+
+Usar una base **nueva, desechable y sin conexiones de la aplicación**, con el prefijo `meperpos_stock_rehearsal_` y todas las migraciones aplicadas, incluida `20261119130000_product_stock_by_location`. Cargar el fixture propio del ensayo, que es legal y consistente. El fixture de la entrega 2 conserva su inconsistencia deliberada y no sirve para este ensayo.
+
+La conexión va por variables de entorno de libpq, sin URL ni contraseña en los argumentos. Desde `backend/`:
+
+```bash
+PGHOST=127.0.0.1 PGPORT=32768 PGUSER=postgres \
+PGDATABASE=meperpos_stock_rehearsal_t9_… \
+  psql -X -v ON_ERROR_STOP=1 -f test/migrations/product-stock.reconcile-fixture.sql
+```
+
+```bash
+PGHOST=127.0.0.1 PGPORT=32768 PGUSER=postgres \
+PGDATABASE=meperpos_stock_rehearsal_t9_… \
+  psql -X -v ON_ERROR_STOP=1 -At -f test/migrations/product-stock.reconcile.sql
+```
+
+Resultado esperado: salida `BEGIN`, `DO`, una cuenta de productos y `ROLLBACK`, con código de salida 0. La cuenta es lo único que se imprime: el ensayo no publica saldos ni queda expuesto a la aplicación.
+
+**Qué reconstruye.** Las reservas esperadas por organización y producto se derivan de los escritores reales, nunca de `InventoryMovement`: las cantidades pendientes de los ítems de préstamos de inventario en estado `OPEN` (`quantity - deliveredQuantity - cancelledQuantity`, es decir lo no entregado y no cancelado, no lo devuelto) más las reservas del POS en estado `HELD`. Los préstamos terminales (`CLOSED`, `CANCELLED`) y las reservas del POS ya finalizadas no reservan. Un producto inelegible —inactivo, que no es físico o que no controla inventario— debe tener reserva cero. La proyección incluye todos los productos, también los de saldo cero, los inactivos y los que no controlan inventario. Las organizaciones sin productos no aportan filas al resultado.
+
+**Cuándo falla.** Con código de salida 3 y un error determinista. Si el llamador ya abrió una transacción, PostgreSQL también puede avisar que hay una transacción en curso. Las reglas son: base fuera del prefijo `meperpos_stock_rehearsal_`; transacción distinta de `REPEATABLE READ` o de solo lectura; `ProductStock` ausente o con filas; producto sin sede predeterminada en su propia organización; stock negativo; reservas negativas o mayores que el stock; producto inelegible con reservas; préstamo terminal con cantidades pendientes; reserva del POS retenida sobre una financiación cerrada o cancelada; y reserva almacenada distinta del libro reconstruido **producto por producto**, no por total de la organización. Dos errores que se compensan dentro de una organización también fallan.
+
+**Casos que la base ya impide.** `Product_reservedStock_bounds_check` rechaza una reserva negativa o mayor que un stock no negativo, y `Product_reservedStock_eligibility_check` rechaza reservas en productos inelegibles. El ensayo también verifica esos límites en datos heredados; la prueba confirma que el esquema actual rechaza nuevas escrituras de ese tipo, sin desactivar restricciones. El stock negativo sí es un estado heredado posible —la restricción lo tolera para no bloquear filas viejas— y el ensayo lo rechaza incluso cuando los contadores de reserva coinciden con el libro.
+
+**Prueba de las reglas.** Desde `backend/`, con la misma base desechable y los mismos valores de libpq. Para esta prueba, el nombre de la base debe empezar con `meperpos_stock_rehearsal_t9_`:
+
+```bash
+PGHOST=127.0.0.1 PGPORT=32768 PGUSER=postgres \
+PGDATABASE=meperpos_stock_rehearsal_t9_… \
+  bash test/migrations/product-stock.reconcile-failures.sh
+```
+
+El script inyecta cada falla en la base desechable, verifica el código de salida 3 y la salida y el error esperados, y comprueba que el origen, los dos libros de reservas y la tabla destino quedan sin cambios. Puede repetirse: restaura el fixture después de cada caso. Resultado esperado: `21 passed, 0 failed` y código de salida 0.
+
+**Alcance.** Aprobar este ensayo prueba que el saldo se puede traspasar; **no autoriza el corte**. El corte real sigue siendo un cambio atómico, con los escritores de inventario detenidos y autorizados, según la sección siguiente. Ninguna sede adicional recibe saldo y `Product.stock` sigue siendo la única fuente de la aplicación.
 
 ## Entrega futura: cambiar la fuente de stock
 
 1. **Fijar la base de comparación.** Con una copia verificable y los escritores de inventario detenidos, tomar un registro por organización y producto del stock y sus reservas. Incluir productos con saldo cero e inactivos. El registro debe conservar la identidad del producto, no solo el total de la organización.
-2. **Asignar cada saldo una sola vez.** Crear el saldo del producto en la sede inicial de su propia organización. Una clave única producto–ubicación y relaciones que respeten la organización deben impedir duplicados y asociaciones entre organizaciones. En el corte, el saldo y las reservas en la sede inicial tienen que coincidir con el registro de origen producto por producto; ninguna otra sede recibe una copia.
+2. **Asignar cada saldo una sola vez.** Crear el saldo del producto en la sede inicial de su propia organización. Una clave única producto–ubicación y relaciones que respeten la organización deben impedir duplicados y asociaciones entre organizaciones. En el corte, el saldo y las reservas en la sede inicial tienen que coincidir con el registro de origen producto por producto; ninguna otra sede recibe una copia. El ensayo de solo lectura del apartado anterior es la comprobación previa de esta condición: si falla, no hay corte.
 3. **Cambiar las operaciones juntas.** Validar que POS, compras, devoluciones, ajustes, reservas, importaciones y consultas usen el saldo por ubicación antes de reanudar las escrituras con el nuevo modelo. Usar una sola fuente activa; no mantener dos saldos editables. Reanudar solo si coinciden todos los saldos y las reservas. No borrar la columna anterior como parte de este corte. Una vez que haya operaciones nuevas, no volver al stock anterior sin reconciliar esas operaciones.
 4. **Habilitar la segunda tienda.** Su saldo empieza en cero. Si parte del saldo global anterior corresponde físicamente a esa tienda, asignarlo a partir de un conteo y registrar el traspaso de saldo de apertura; no sumarlo por segunda vez. Si lo contado no coincide con el saldo anterior, documentar y autorizar el ajuste por separado.
 
