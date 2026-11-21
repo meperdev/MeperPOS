@@ -55,6 +55,7 @@ model Organization {
   payrollObligations PayrollObligation[]
   payrollCashOutflows PayrollCashOutflow[]
   inventoryMovements InventoryMovement[]
+  locations          Location[]
   sequences          OrganizationSequence[]
   users              OrganizationUser[]
   payments           Payment[]
@@ -81,6 +82,19 @@ model Organization {
   productStockAlertEvents ProductStockAlertEvent[]
 
   @@index([status, trialEndsAt])
+}
+
+// Unexposed site foundation; inventory still uses Product.stock.
+model Location {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  isDefault      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // The partial unique index for the default site is defined in SQL.
+  @@index([organizationId])
 }
 
 // Unexposed payroll foundation; employees do not require login accounts.

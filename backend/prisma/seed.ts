@@ -71,6 +71,7 @@ async function createDemoOrg(
       status: OrgStatus.ACTIVE,
       billingStatus: BillingStatus.PAID,
       active: true,
+      locations: { create: { name: 'Sede principal', isDefault: true } },
       taxId: faker.string.numeric(10),
       phone: faker.phone.number(),
       address: faker.location.streetAddress(),

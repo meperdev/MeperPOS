@@ -111,6 +111,7 @@ export class AdminService {
           plan: dto.plan ?? PlanType.BASIC,
           status: OrgStatus.TRIAL,
           trialEndsAt: trialEndsAt(),
+          locations: { create: { name: 'Sede principal', isDefault: true } },
         },
       });
 
