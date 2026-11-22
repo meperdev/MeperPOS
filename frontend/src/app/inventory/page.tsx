@@ -424,9 +424,10 @@ function InventoryContent() {
     if (
       !Number.isFinite(formData.costPrice ?? 0) || (formData.costPrice ?? 0) < 0 ||
       !Number.isFinite(formData.salePrice ?? 0) || (formData.salePrice ?? 0) < 0 ||
+      // Stock is counted in whole units: the API rejects a fractional value.
       (!isService(formData) && formData.tracksStock !== false &&
-        (!Number.isFinite(formData.stock ?? 0) || (formData.stock ?? 0) < 0 ||
-         !Number.isFinite(formData.minStock ?? 0) || (formData.minStock ?? 0) < 0))
+        (!Number.isInteger(formData.stock ?? 0) || (formData.stock ?? 0) < 0 ||
+         !Number.isInteger(formData.minStock ?? 0) || (formData.minStock ?? 0) < 0))
     ) {
       toast.error("Revisa los precios y las cantidades antes de guardar");
       return;
@@ -1197,6 +1198,8 @@ function InventoryContent() {
                   <Input
                     label="Stock"
                     type="number"
+                    min={0}
+                    step={1}
                     value={formData.stock || 0}
                     onChange={(e) =>
                       setFormData({ ...formData, stock: Number(e.target.value) })
@@ -1206,6 +1209,8 @@ function InventoryContent() {
                   <Input
                     label="Stock mín."
                     type="number"
+                    min={0}
+                    step={1}
                     value={formData.minStock ?? 0}
                     onChange={(e) =>
                       setFormData({
