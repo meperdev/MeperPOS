@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   ValidateNested,
@@ -8,6 +8,9 @@ import {
   IsInt,
   Min,
   IsUUID,
+  IsString,
+  IsNotEmpty,
+  ValidateIf,
 } from 'class-validator';
 
 export class ReceivePurchaseOrderItemDto {
@@ -22,6 +25,13 @@ export class ReceivePurchaseOrderItemDto {
 }
 
 export class ReceivePurchaseOrderDto {
+  @ApiPropertyOptional({ description: 'Explicit destination for this receipt.' })
+  @Transform(({ obj, key }) => obj[key], { toClassOnly: true })
+  @ValidateIf((_dto, value) => value !== undefined)
+  @IsString()
+  @IsNotEmpty()
+  locationId?: string;
+
   @ApiProperty({ type: [ReceivePurchaseOrderItemDto] })
   @IsArray()
   @ArrayMinSize(1)

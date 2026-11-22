@@ -120,6 +120,10 @@ Un reintento con el mismo contenido y clave devuelve la venta original. Si el re
 
 Cobrar o reversar un abono no mueve inventario. Completar la venta financiada consume la reserva y registra la sede guardada en la venta y su movimiento. Cancelar libera la reserva global, sin crear un movimiento. En esas dos operaciones se valida el permiso vigente sobre la sede de origen, sin exigir que siga siendo la única. Los saldos y las reservas siguen en `Product` hasta el corte.
 
+### Recepción de compras antes del corte
+
+Cada llamada a `POST /api/purchase-orders/:id/receive` puede indicar un `locationId` de destino para la entrega actual. Si se envía, el servidor verifica el permiso vigente y solo acepta la única sede principal de la organización mientras el saldo sea global. El mismo destino queda en los movimientos de los productos con control de stock, no en la orden ni en el PDF del proveedor. Omitir `locationId` mantiene la recepción anterior sin atribución. Una entrega parcial no fija el destino de entregas futuras.
+
 ## Entrega futura: cambiar la fuente de stock
 
 1. **Fijar la base de comparación.** Con una copia verificable y los escritores de inventario detenidos, tomar un registro por organización y producto del stock y sus reservas. Incluir productos con saldo cero e inactivos. El registro debe conservar la identidad del producto, no solo el total de la organización.

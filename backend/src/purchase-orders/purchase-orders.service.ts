@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -25,6 +26,8 @@ import {
 } from './purchase-order-status';
 import { SequenceService } from '../common/sequences/sequence.service';
 import { tracksStock } from '../products/product-type.logic';
+import type { RequestUser } from '../common/interfaces/request-user.interface';
+import { resolveWritableSiteWithin } from '../locations/authorized-site';
 
 interface ComputedItem {
   productId: string;
@@ -533,6 +536,7 @@ export class PurchaseOrdersService {
     dto: ReceivePurchaseOrderDto,
     userId: string,
     organizationId: string | undefined,
+    actor?: RequestUser,
   ) {
     if (!organizationId) {
       throw new BadRequestException(
@@ -568,7 +572,30 @@ export class PurchaseOrdersService {
       }
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const { locationId } = dto;
+    const receiveItems = async (tx: Prisma.TransactionClient) => {
+      let destinationId: string | undefined;
+      if (locationId !== undefined) {
+        if (actor?.userId !== userId || actor.organizationId !== organizationId) {
+          throw new ForbiddenException('Organization scope required');
+        }
+        const destination = await resolveWritableSiteWithin(tx, actor, locationId);
+        const sites = await tx.location.findMany({
+          where: { organizationId },
+          select: { id: true, isDefault: true },
+          take: 2,
+        });
+        if (
+          sites.length !== 1 ||
+          !sites[0].isDefault ||
+          sites[0].id !== destination.locationId
+        ) {
+          throw new ConflictException(
+            'El stock global solo permite recibir compras en la única sede principal',
+          );
+        }
+        destinationId = destination.locationId;
+      }
       for (const r of normalizedItems) {
         const item = await tx.purchaseOrderItem.findUnique({
           where: { id: r.itemId },
@@ -635,6 +662,7 @@ export class PurchaseOrdersService {
               reason: `OC-${order.orderNumber}`,
               userId,
               organizationId,
+              ...(destinationId === undefined ? {} : { locationId: destinationId }),
             },
           });
 
@@ -674,7 +702,28 @@ export class PurchaseOrdersService {
           ? { status: 'RECEIVED', receivedAt: new Date() }
           : { status: 'PARTIAL_RECEIVED' },
       });
-    });
+    };
+    if (locationId === undefined) {
+      await this.prisma.$transaction(receiveItems);
+    } else {
+      try {
+        await this.prisma.$transaction(receiveItems, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === 'P2034' ||
+            (error.code === 'P2010' &&
+              (error.meta?.code === '40001' || error.meta?.code === '40P01')))
+        ) {
+          throw new ConflictException(
+            'Recepción concurrente; revise la orden y vuelva a intentar',
+          );
+        }
+        throw error;
+      }
+    }
 
     return this.findOne(id, organizationId);
   }

@@ -1,8 +1,11 @@
 # Órdenes de compra: documento, envío y seguimiento
 
 Una orden de compra es el documento que el negocio le envía a su proveedor. Este
-documento cubre cómo se genera, cómo se envía y cómo se sigue. La recepción, el
-stock y el costo no cambian: siguen como los describe `PurchaseOrdersService.receive`.
+documento cubre cómo se genera, cómo se envía y cómo se sigue. La recepción
+actualiza cantidades y costos según `PurchaseOrdersService.receive`. El `locationId`
+opcional indica la sede de una entrega; el permiso se comprueba al recibir. La
+sede no modifica el documento enviado al proveedor. Consultá las [reglas antes del
+corte de stock](../planes/implementacion/multisede-corte-stock.md#recepción-de-compras-antes-del-corte).
 
 ## 1. Ciclo de vida
 

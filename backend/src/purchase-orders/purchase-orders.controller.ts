@@ -154,6 +154,7 @@ export class PurchaseOrdersController {
       dto,
       user.userId,
       user.organizationId,
+      user,
     );
   }
 

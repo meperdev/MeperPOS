@@ -265,6 +265,72 @@ describe('Purchase order documents — Integration', () => {
       type: 'PURCHASE',
       quantity: 2,
       reason: `OC-${before.orderNumber}`,
+      locationId: null,
     });
+  });
+
+  it('finishes a sent order at an authorized destination without changing its frozen PDF', async () => {
+    const { orgAId: organizationId, userAId: userId } = fixture;
+    const actor = {
+      organizationId, userId, email: 'receipt@example.test', role: 'MEMBER' as const,
+      tokenVersion: 0, isSuperAdmin: false,
+    };
+    await prisma.organizationUser.create({ data: { organizationId, userId, role: actor.role } });
+    const principal = await prisma.location.create({
+      data: { organizationId, name: 'Principal', isDefault: true },
+    });
+    const foreign = await prisma.location.create({
+      data: { organizationId: fixture.orgBId, name: 'Foreign site', isDefault: true },
+    });
+    const snapshot = async () => ({
+      order: await prisma.purchaseOrder.findUniqueOrThrow({
+        where: { id: lateOrderId },
+        include: { items: { include: { product: true } } },
+      }),
+      movements: await prisma.inventoryMovement.count({ where: { organizationId } }),
+      audits: await prisma.auditLog.count({ where: { organizationId } }),
+      siteBalances: await prisma.productStock.count({ where: { organizationId } }),
+    });
+    const before = await snapshot();
+    const [item] = before.order.items;
+    const qty = item.qtyOrdered - item.qtyReceived;
+    const receive = (locationId: string) => orders.receive(
+      lateOrderId, { items: [{ itemId: item.id, qtyReceivedNow: qty }], locationId },
+      userId, organizationId, actor,
+    );
+    for (const site of [principal.id, foreign.id]) {
+      await expect(receive(site)).rejects.toMatchObject({ status: 404, message: 'Location not found' });
+      expect(await snapshot()).toEqual(before);
+    }
+    const grant = { organizationId, userId, locationId: principal.id };
+    await prisma.membershipLocation.create({ data: grant });
+    const warehouse = await prisma.location.create({ data: { organizationId, name: 'Second site' } });
+    await expect(receive(principal.id)).rejects.toMatchObject({
+      status: 409, message: 'El stock global solo permite recibir compras en la única sede principal',
+    });
+    expect(await snapshot()).toEqual(before);
+    await prisma.location.delete({ where: { id: warehouse.id } });
+
+    const readPdf = async () => {
+      const { buffer } = await documents.generatePdf(lateOrderId, organizationId);
+      return (await pdfParse(new Uint8Array(buffer))).text;
+    };
+    const originalDocument = await readPdf();
+    await expect(receive(principal.id)).resolves.toMatchObject({ status: 'RECEIVED' });
+    const after = await snapshot();
+    expect(after.order).toMatchObject({
+      status: 'RECEIVED', receivedAt: expect.any(Date), sentAt: before.order.sentAt,
+      sentVia: before.order.sentVia, documentSnapshot: before.order.documentSnapshot,
+    });
+    expect(after.order.items[0]).toMatchObject({
+      qtyReceived: item.qtyOrdered,
+      product: { stock: item.product.stock + qty, reservedStock: item.product.reservedStock },
+    });
+    expect(after.movements).toBe(before.movements + 1);
+    expect(after.siteBalances).toBe(0);
+    expect(await prisma.inventoryMovement.findFirstOrThrow({
+      where: { productId: item.productId, organizationId, locationId: principal.id },
+    })).toMatchObject({ type: 'PURCHASE', quantity: qty, reason: `OC-${before.order.orderNumber}` });
+    expect(await readPdf()).toBe(originalDocument);
   });
 });
