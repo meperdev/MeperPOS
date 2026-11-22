@@ -10,6 +10,7 @@ import {
   Min,
   IsNumber,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 
 export class CreatePurchaseOrderItemDto {
@@ -49,5 +50,6 @@ export class CreatePurchaseOrderDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 }

@@ -4,11 +4,13 @@ import {
   IsDateString,
   IsEnum,
   IsOptional,
+  MaxLength,
 } from 'class-validator';
 import { PaymentMethod, PaymentRecordStatus } from '@prisma/client';
 
 export class CreatePaymentRecordDto {
   @IsString()
+  @MaxLength(64)
   organizationId: string;
 
   @IsNumber()

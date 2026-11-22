@@ -16,6 +16,7 @@ import { Type } from 'class-transformer';
 export class SaleItemDto {
   @ApiProperty({ example: 'uuid-product-id' })
   @IsString()
+  @MaxLength(64)
   @IsNotEmpty()
   productId: string;
 
@@ -55,6 +56,7 @@ export class PaymentDto {
 export class CreateSaleDto {
   @ApiProperty({ example: 'uuid-customer-id', required: false })
   @IsString()
+  @MaxLength(64)
   @IsNotEmpty()
   @IsOptional()
   customerId?: string;
@@ -103,6 +105,7 @@ export class UpdateSaleDto {
 
   @ApiProperty({ example: 'Cliente arrepentido', required: false })
   @IsString()
+  @MaxLength(500)
   @IsOptional()
   cancelReason?: string;
 }
@@ -124,26 +127,31 @@ export class FindSalesQueryDto {
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(40)
   @IsOptional()
   startDate?: string;
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(40)
   @IsOptional()
   endDate?: string;
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(64)
   @IsOptional()
   status?: string;
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(200)
   @IsOptional()
   search?: string;
 
   @ApiPropertyOptional({ example: 'uuid-customer-id' })
   @IsString()
+  @MaxLength(64)
   @IsOptional()
   customerId?: string;
 }

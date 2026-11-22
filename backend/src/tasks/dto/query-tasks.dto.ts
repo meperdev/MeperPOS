@@ -8,6 +8,7 @@ import {
   IsString,
   Max,
   Min,
+  MaxLength,
 } from 'class-validator';
 
 export class QueryTasksDto {
@@ -19,16 +20,19 @@ export class QueryTasksDto {
   @ApiPropertyOptional({ example: 'stock' })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   search?: string;
 
   @ApiPropertyOptional({ example: '2b7f0d74-ef90-4c55-9d0c-17d44a8df0e2' })
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   assignedToId?: string;
 
   @ApiPropertyOptional({ example: '2b7f0d74-ef90-4c55-9d0c-17d44a8df0e2' })
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   createdById?: string;
 
   @ApiPropertyOptional({ example: false })

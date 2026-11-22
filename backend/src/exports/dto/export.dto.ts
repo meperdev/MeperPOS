@@ -6,6 +6,7 @@ import {
   Min,
   IsString,
   IsNotEmpty,
+  MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { Type } from 'class-transformer';
@@ -79,6 +80,7 @@ export class InventoryMovementsQueryDto {
   @ApiPropertyOptional({ example: 'uuid-product-id' })
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   @IsNotEmpty()
   productId?: string;
 

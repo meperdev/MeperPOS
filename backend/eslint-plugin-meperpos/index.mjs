@@ -8,11 +8,13 @@
  * and an entry in docs/bug-rule-log.md.
  */
 import requireOrganizationGuard from './rules/require-organization-guard.mjs';
+import requireStringLengthBound from './rules/require-string-length-bound.mjs';
 
 const plugin = {
   meta: { name: 'eslint-plugin-meperpos' },
   rules: {
     'require-organization-guard': requireOrganizationGuard,
+    'require-string-length-bound': requireStringLengthBound,
   },
 };
 

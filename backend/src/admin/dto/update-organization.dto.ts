@@ -27,6 +27,7 @@ export class UpdateOrganizationDto {
   address?: string;
 
   @IsString()
+  @MaxLength(2048)
   @IsOptional()
   logoUrl?: string;
 

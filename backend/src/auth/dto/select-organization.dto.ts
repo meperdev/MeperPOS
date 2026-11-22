@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength } from 'class-validator';
 
 export class SelectOrganizationDto {
   @ApiProperty({
@@ -7,6 +7,7 @@ export class SelectOrganizationDto {
     description: 'Pre-authentication token from login',
   })
   @IsString()
+  @MaxLength(2048)
   @IsNotEmpty()
   preAuthToken: string;
 
@@ -15,6 +16,7 @@ export class SelectOrganizationDto {
     description: 'UUID of the organization to select',
   })
   @IsString()
+  @MaxLength(64)
   @IsNotEmpty()
   organizationId: string;
 }

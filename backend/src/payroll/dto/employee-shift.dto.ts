@@ -35,5 +35,6 @@ export class CreateEmployeeShiftDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   observation?: string | null;
 }
