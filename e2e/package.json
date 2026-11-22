@@ -7,7 +7,10 @@
   "scripts": {
     "smoke": "node scripts/run-smoke.mjs",
     "test:e2e:smoke": "playwright test",
-    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
+    "explore": "node scripts/run-explore.mjs",
+    "explore:file-issues": "node scripts/file-explore-issues.mjs",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\" \"exploratory/**/*.test.mjs\"",
+    "test:exploratory": "node --test \"exploratory/**/*.test.mjs\"",
     "typecheck": "tsc --noEmit",
     "install:browsers": "playwright install chromium",
     "db:up": "docker compose -p meperpos-playwright -f docker-compose.yml up --detach --wait",
@@ -17,6 +20,7 @@
     "trace": "playwright show-trace"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.65.1",
     "@types/node": "^22.10.7",
     "typescript": "^5.9.3"
