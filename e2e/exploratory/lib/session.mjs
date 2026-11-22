@@ -19,6 +19,15 @@ function ignoredRequestFailure(failure) {
   return /ERR_ABORTED|NS_BINDING_ABORTED|cancelled/i.test(failure ?? "");
 }
 
+/**
+ * Before sign-in the app probes /auth/refresh and /auth/me to restore a session.
+ * With no cookies the answer is 401, or 403 when the CSRF guard rejects the
+ * anonymous refresh before its handler runs; both are the design, not a defect.
+ */
+export function isPreSignInAuthProbe({ status, path, signedIn }) {
+  return !signedIn && (status === 401 || status === 403) && /\/api\/auth\/(refresh|me)\b/.test(path);
+}
+
 function shortError(error) {
   return String(error?.message ?? error).split("\n")[0].slice(0, 200);
 }
@@ -109,8 +118,7 @@ export class ExplorerSession {
       }
       this.window?.network.push(entry);
       if (status < 400) return;
-      // Before sign-in the app probes /auth/refresh and /auth/me; 401 there is the design.
-      if (status === 401 && /\/api\/auth\/(refresh|me)\b/.test(path) && !this.signedIn) return;
+      if (isPreSignInAuthProbe({ status, path, signedIn: this.signedIn })) return;
       if (this.window?.expected.includes(status)) {
         entry.expected = true;
         return;

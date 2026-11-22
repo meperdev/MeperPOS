@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { Budget, BudgetExhausted } from "./budget.mjs";
 import { FindingStore, atLeast, axeSeverity, normalizeForKey, suggestLayer } from "./findings.mjs";
 import { issueDraft, renderReport, writeRunFiles } from "./report.mjs";
-import { ExplorerSession } from "./session.mjs";
+import { ExplorerSession, isPreSignInAuthProbe } from "./session.mjs";
 import { fileIssues, issueCommands } from "./issues.mjs";
 import { EXPLORE_SEED } from "../seed.mjs";
 
@@ -273,4 +273,19 @@ test("the explorer's seed mirror matches fixtures/seed.ts", () => {
   ]) {
     assert.ok(source.includes(`"${value}"`), `fixtures/seed.ts no longer contains "${value}"`);
   }
+});
+
+test("pre-sign-in session probes on /auth/refresh and /auth/me are not findings (401 or CSRF 403)", () => {
+  // No cookies yet: the CSRF guard answers the anonymous refresh with 403 before the handler's 401.
+  assert.equal(isPreSignInAuthProbe({ status: 403, path: "/api/auth/refresh", signedIn: false }), true);
+  assert.equal(isPreSignInAuthProbe({ status: 401, path: "/api/auth/refresh", signedIn: false }), true);
+  assert.equal(isPreSignInAuthProbe({ status: 401, path: "/api/auth/me", signedIn: false }), true);
+});
+
+test("auth probe failures still count once signed in, and other statuses or routes always count", () => {
+  assert.equal(isPreSignInAuthProbe({ status: 403, path: "/api/auth/refresh", signedIn: true }), false);
+  assert.equal(isPreSignInAuthProbe({ status: 401, path: "/api/auth/refresh", signedIn: true }), false);
+  assert.equal(isPreSignInAuthProbe({ status: 500, path: "/api/auth/refresh", signedIn: false }), false);
+  assert.equal(isPreSignInAuthProbe({ status: 403, path: "/api/auth/login", signedIn: false }), false);
+  assert.equal(isPreSignInAuthProbe({ status: 403, path: "/api/products", signedIn: false }), false);
 });
