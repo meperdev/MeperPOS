@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const {
@@ -100,6 +107,47 @@ describe("General settings page", () => {
     expect(updateOrganizationNameMutateAsyncMock).toHaveBeenCalledWith(
       "Nueva empresa"
     );
+  });
+
+  it("caps the business name input at 100 characters", () => {
+    render(<GeneralSettingsPage />);
+
+    expect(screen.getByLabelText(/nombre del negocio/i)).toHaveAttribute(
+      "maxLength",
+      "100"
+    );
+  });
+
+  it("stops typing at 100 characters and saves only the capped name", async () => {
+    const user = userEvent.setup();
+    render(<GeneralSettingsPage />);
+
+    const nameInput = screen.getByLabelText(/nombre del negocio/i);
+    await user.clear(nameInput);
+    await user.type(nameInput, "a".repeat(105));
+    expect(nameInput).toHaveValue("a".repeat(100));
+
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(updateOrganizationNameMutateAsyncMock).toHaveBeenCalledWith(
+      "a".repeat(100)
+    );
+  });
+
+  it("blocks a name over 100 characters that bypasses the input cap", async () => {
+    const user = userEvent.setup();
+    render(<GeneralSettingsPage />);
+
+    // A programmatic value (autofill, script) is not truncated by maxLength.
+    const nameInput = screen.getByLabelText(/nombre del negocio/i);
+    fireEvent.change(nameInput, { target: { value: "a".repeat(1000) } });
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(updateOrganizationNameMutateAsyncMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("El nombre no puede superar los 100 caracteres.")
+    ).toBeInTheDocument();
+    expect(nameInput).toHaveAttribute("aria-invalid", "true");
   });
 
   it("mirrors the typed name in the receipt header preview", async () => {

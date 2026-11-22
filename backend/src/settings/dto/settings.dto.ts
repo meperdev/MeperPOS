@@ -6,14 +6,27 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+/**
+ * The business name prints in the receipt header. Same cap as the admin
+ * create/update organization DTOs, so settings is not a bypass.
+ */
+export const ORGANIZATION_NAME_MAX_LENGTH = 100;
+
 export class UpdateOrganizationNameDto {
-  @ApiProperty({ example: 'Acme Corp' })
+  @ApiProperty({
+    example: 'Acme Corp',
+    maxLength: ORGANIZATION_NAME_MAX_LENGTH,
+  })
+  // Validate the trimmed value: it is what the service stores.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
-  @MaxLength(100)
   @IsNotEmpty()
+  @MaxLength(ORGANIZATION_NAME_MAX_LENGTH)
   name: string;
 }
 
