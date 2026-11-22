@@ -126,7 +126,7 @@ describe("ToastCard", () => {
     expect(container.querySelector('[style*="animation"]')).toBeNull();
   });
 
-  it("peeks behind the front card at a fixed offset per depth", () => {
+  it("peeks behind the front card anchored to its bottom edge at a fixed offset per depth", () => {
     const { rerender } = render(<ToastCard type="info" title="Frente" onClose={vi.fn()} />);
     const front = screen.getByTestId("toast-card");
     expect(front.className).toContain("relative");
@@ -135,11 +135,14 @@ describe("ToastCard", () => {
     rerender(<ToastCard type="info" title="Frente" depth={1} onClose={vi.fn()} />);
     const behind = screen.getByTestId("toast-card");
     expect(behind.className).toContain("absolute");
+    expect(behind.className).toContain("inset-0");
+    expect(behind.className).toContain("origin-bottom");
+    expect(behind.className).toContain("overflow-hidden");
     expect(behind.className).toContain("pointer-events-none");
-    expect(behind.style.transform).toBe("translateY(8px) scale(0.95)");
+    expect(behind.style.transform).toBe("translateY(12px) scale(0.95)");
 
     rerender(<ToastCard type="info" title="Frente" depth={2} onClose={vi.fn()} />);
-    expect(screen.getByTestId("toast-card").style.transform).toBe("translateY(16px) scale(0.9)");
+    expect(screen.getByTestId("toast-card").style.transform).toBe("translateY(24px) scale(0.9)");
   });
 
   it("drops the travel but keeps the fade under prefers-reduced-motion", () => {

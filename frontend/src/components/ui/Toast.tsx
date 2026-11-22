@@ -40,13 +40,13 @@ const TONE: Record<ToastType, { tile: string; icon: React.ReactNode }> = {
 };
 
 /** The second and third card sit further back and further down, never on top. */
-const DEPTH_OFFSET = 8;
+export const TOAST_DEPTH_OFFSET = 12;
 const DEPTH_SCALE = 0.05;
 /**
  * Opacity alone would make the peeking edges vanish under the front card's
  * shadow; these keep each band readable as a card that is waiting its turn.
  */
-const DEPTH_OPACITY = [1, 0.9, 0.78];
+const DEPTH_OPACITY = [1, 0.94, 0.85];
 
 export type ToastCardProps = {
   type: ToastType;
@@ -83,7 +83,7 @@ export function ToastCard({
         zIndex: 10 - depth,
         ...(peeking
           ? {
-              transform: `translateY(${depth * DEPTH_OFFSET}px) scale(${
+              transform: `translateY(${depth * TOAST_DEPTH_OFFSET}px) scale(${
                 1 - depth * DEPTH_SCALE
               })`,
               opacity: DEPTH_OPACITY[Math.min(depth, DEPTH_OPACITY.length - 1)],
@@ -96,7 +96,9 @@ export function ToastCard({
         // that it never washes over the cards peeking behind this one.
         "shadow-[0_10px_28px_-18px_rgba(0,0,0,0.45)] dark:shadow-[0_10px_28px_-18px_rgba(0,0,0,0.75)]",
         "transition-[transform,opacity] duration-200 ease-out",
-        peeking ? "pointer-events-none absolute inset-x-0 top-0 origin-top" : "relative",
+        peeking
+          ? "pointer-events-none absolute inset-0 origin-bottom overflow-hidden"
+          : "relative",
         // Only the card that arrives in front earns an entrance. A peeking card
         // appearing behind must not replay that motion when the stack opens.
         leaving ? "animate-toast-out" : depth === 0 && "animate-toast-in",
