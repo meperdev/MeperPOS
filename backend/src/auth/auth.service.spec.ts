@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrgRole, OrgStatus, PlanType } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
 import { AuthService } from './auth.service';
 import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants';
 import { PrismaService } from '../prisma/prisma.service';
@@ -635,8 +636,7 @@ describe('AuthService', () => {
 
       await service.logout('raw-logout-token');
 
-      const expectedHash = require('crypto')
-        .createHash('sha256')
+      const expectedHash = createHash('sha256')
         .update('raw-logout-token')
         .digest('hex');
 

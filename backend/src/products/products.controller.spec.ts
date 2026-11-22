@@ -96,7 +96,7 @@ describe('ProductsController — findAll additive params (D5)', () => {
 
   it('rejects malformed availability at the query boundary and accepts omission', async () => {
     const metadata = Reflect.getMetadata('__routeArguments__', ProductsController, 'findAll');
-    const query = Object.values(metadata) as { data?: string; pipes: { transform: (value: unknown, metadata: unknown) => unknown }[] }[];
+    const query: { data?: string; pipes: { transform: (value: unknown, metadata: unknown) => unknown }[] }[] = Object.values(metadata);
     const pipe = query.find((entry) => entry.data === 'available')?.pipes[0];
     await expect(Promise.resolve(pipe!.transform('yes', { type: 'query' }))).rejects.toThrow();
     await expect(Promise.resolve(pipe!.transform('true', { type: 'query' }))).resolves.toBe(true);
@@ -105,7 +105,7 @@ describe('ProductsController — findAll additive params (D5)', () => {
 
   it('validates type at the query boundary and accepts omission', async () => {
     const metadata = Reflect.getMetadata('__routeArguments__', ProductsController, 'findAll');
-    const query = Object.values(metadata) as { data?: string; pipes: { transform: (value: unknown, metadata: unknown) => unknown }[] }[];
+    const query: { data?: string; pipes: { transform: (value: unknown, metadata: unknown) => unknown }[] }[] = Object.values(metadata);
     const pipe = query.find((entry) => entry.data === 'type')?.pipes[0];
     expect(pipe).toBeDefined();
     await expect(Promise.resolve(pipe!.transform('OTHER', { type: 'query' }))).rejects.toThrow();

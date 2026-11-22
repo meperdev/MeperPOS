@@ -22,6 +22,7 @@ export class UpdateModuleDto {
 }
 
 @Controller('admin/organizations/:organizationId/modules')
+// eslint-disable-next-line meperpos/require-organization-guard -- SUPER_ADMIN platform route: the target organization comes from the :organizationId path param
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPER_ADMIN')
 export class AdminBusinessModulesController {

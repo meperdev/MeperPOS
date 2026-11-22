@@ -11,6 +11,7 @@ import { BusinessModulesService } from './business-modules.service';
  * `admin/organizations/:organizationId/modules`.
  */
 @Controller('admin/modules')
+// eslint-disable-next-line meperpos/require-organization-guard -- SUPER_ADMIN platform route: global module catalog, reads no organization state
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPER_ADMIN')
 export class AdminModuleCatalogController {

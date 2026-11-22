@@ -65,9 +65,9 @@ describe('AuthService.refresh — org preservation (spec 3.R1, amendment 1)', ()
   });
 
   function decodeOrg(accessToken: string): string | null {
-    const payload = jwtService.verify(accessToken) as {
-      organizationId: string | null;
-    };
+    const payload = jwtService.verify<{ organizationId: string | null }>(
+      accessToken,
+    );
     return payload.organizationId;
   }
 
@@ -170,9 +170,9 @@ describe('AuthService.refresh — 60s concurrent-tab reuse grace (spec 3.R1, ame
   });
 
   function decodeOrg(accessToken: string): string | null {
-    const payload = jwtService.verify(accessToken) as {
-      organizationId: string | null;
-    };
+    const payload = jwtService.verify<{ organizationId: string | null }>(
+      accessToken,
+    );
     return payload.organizationId;
   }
 

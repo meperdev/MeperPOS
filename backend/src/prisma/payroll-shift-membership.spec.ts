@@ -85,7 +85,7 @@ describe('unwired payroll shift membership', () => {
     expect(sql).toMatch(/BEFORE UPDATE OR DELETE ON "PayrollShiftMembership"/);
     expect(sql).toContain("TG_OP = 'DELETE'");
     expect(sql).not.toMatch(
-      /CREATE TABLE "[^\"]*(?:Installment|Payment|Expense)/i,
+      /CREATE TABLE "[^"]*(?:Installment|Payment|Expense)/i,
     );
   });
 });

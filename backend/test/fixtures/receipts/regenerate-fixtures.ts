@@ -27,7 +27,7 @@ import { SequenceService } from '../../../src/common/sequences/sequence.service'
 import { ReceiptsService } from '../../../src/receipts/receipts.service';
 import { SalesService } from '../../../src/sales/sales.service';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (
   b: Buffer,
 ) => Promise<{ text: string }>;

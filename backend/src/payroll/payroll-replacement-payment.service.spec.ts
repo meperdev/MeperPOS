@@ -742,7 +742,7 @@ describe('PayrollReplacementPaymentService replacement creation', () => {
 // seam reads it back from the same obligation row.
 describe('PayrollReplacementPaymentService expense choice', () => {
   const storedData = (built: ReturnType<typeof create>) =>
-    built.obligationCreate.mock.calls[0][0].data as Record<string, unknown>;
+    built.obligationCreate.mock.calls[0][0].data;
 
   it('stores the enabled choice and its date on the new payment', async () => {
     const built = create({
