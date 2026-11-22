@@ -3,10 +3,16 @@ import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import meperpos from './eslint-plugin-meperpos/index.mjs';
+import { prettierBaseline } from './eslint.baseline.mjs';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs'],
+    ignores: [
+      'eslint.config.mjs',
+      'eslint.baseline.mjs',
+      'eslint-plugin-meperpos/**',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -38,6 +44,22 @@ export default tseslint.config(
       '@typescript-eslint/unbound-method': 'warn',
       '@typescript-eslint/no-base-to-string': 'warn',
       "prettier/prettier": ["error", { endOfLine: "auto" }],
+    },
+  },
+  // Local rules that encode bugs this repo already paid for. Always errors:
+  // they are never baselined (see docs/bug-rule-log.md).
+  {
+    plugins: { meperpos },
+    rules: {
+      'meperpos/require-organization-guard': 'error',
+    },
+  },
+  // Frozen formatting baseline: these pre-existing files report prettier as a
+  // warning so `npm run lint:ci` can block. The list only shrinks.
+  {
+    files: prettierBaseline,
+    rules: {
+      'prettier/prettier': ['warn', { endOfLine: 'auto' }],
     },
   },
 );

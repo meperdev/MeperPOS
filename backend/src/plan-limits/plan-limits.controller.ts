@@ -8,6 +8,7 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 
 @ApiTags('Plan Limits')
 @Controller('plan-limits')
+// eslint-disable-next-line meperpos/require-organization-guard -- user-scoped route: getStatus returns an empty payload when organizationId is missing and never queries without it
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class PlanLimitsController {

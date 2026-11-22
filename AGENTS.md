@@ -20,6 +20,8 @@ npm run test            # Unit tests (Jest)
 npm run test:e2e        # End-to-end tests
 npm run test -- --testPathPatterns=<file> # Run single test file (Jest 30: plural)
 npm run lint            # ESLint with auto-fix
+npm run lint:ci         # ESLint without --fix (what CI runs)
+npm run test:eslint-plugin # RuleTester suites of eslint-plugin-meperpos
 npm run seed            # Seed database with faker data
 npx prisma migrate dev  # Run migrations
 npx prisma studio       # Open Prisma Studio GUI
@@ -29,13 +31,15 @@ npm run db:down         # Stop it
 npm run db:logs         # Follow the server log
 ```
 
-> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npx eslint <file>`. The backend test suite also requires PostgreSQL on port 5432 (`npm run db:up` starts it): roughly 94 integration tests fail without it. The container is the `postgres` service of `backend/docker-compose.yml`; if Docker asks for a password, add your user to the group once (`sudo usermod -aG docker "$USER"`) and start a new session.
+> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npm run lint:ci` (or `npx eslint <file>`). The backend test suite also requires PostgreSQL on port 5432 (`npm run db:up` starts it): roughly 94 integration tests fail without it. The container is the `postgres` service of `backend/docker-compose.yml`; if Docker asks for a password, add your user to the group once (`sudo usermod -aG docker "$USER"`) and start a new session.
 
 ### Frontend (`/frontend`)
 ```bash
 npm run dev    # Development server
 npm run build  # Production build
 npm run lint   # ESLint
+npm run lint:ci            # same, as CI runs it
+npm run test:eslint-plugin # RuleTester suites of eslint-plugin-meperpos
 ```
 
 ## Environment Setup
@@ -116,3 +120,18 @@ Next.js App Router under `frontend/src/`:
 - All API endpoints are prefixed with `/api` (set in `main.ts` via `app.setGlobalPrefix('api')`)
 - Prisma migrations live in `backend/prisma/migrations/`; seed script is `backend/prisma/seed.ts`
 - Derived product fields go through the single `enrichProduct` funnel in `ProductsService`, so a new field cannot reach only some endpoints
+
+## Bug → rule loop (trust stack)
+
+Push every fix as high up the stack as it will go, and prefer the higher layer:
+
+1. **01 types/boundaries** — make the bug unrepresentable: Prisma schema, TypeScript types, `class-validator` DTOs, guards, Nest module limits.
+2. **02 lint/test** — when the type system cannot hold it, add a rule to the local ESLint plugin (`backend/eslint-plugin-meperpos/`, `frontend/eslint-plugin-meperpos/`, with RuleTester fixtures: the broken pattern fails, the fix passes) or a regression test.
+3. **03 prose** — only what cannot be checked mechanically goes into this file or a skill.
+
+Human review comes last, never first.
+
+- Every `fix:` PR names the layer it raised the fix to and appends one row to `docs/bug-rule-log.md` (append-only).
+- CI blocks on `npm run lint:ci` (ESLint without `--fix`) and `npm run test:eslint-plugin` in both `backend/` and `frontend/`. Run them locally before opening a PR. `meperpos/*` rules are always errors; silencing one needs `// eslint-disable-next-line <rule> -- <reason>` on that line.
+- Pre-existing stock-rule debt is frozen in a file-scoped baseline (`backend/eslint.baseline.mjs`, the baseline block in `frontend/eslint.config.mjs`) that may only shrink. Never add a file to it.
+- **Agents never merge.** They open a PR with `.github/pull_request_template.md` filled in and leave the merge to a human.

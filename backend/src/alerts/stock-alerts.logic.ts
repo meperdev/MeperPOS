@@ -27,11 +27,14 @@ export const STOCK_ALERT_SKU_LIMIT = 24;
  * plain-text notification.
  */
 export function cleanCatalogText(value: string, limit: number): string {
-  return value
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, limit);
+  return (
+    value
+      // eslint-disable-next-line no-control-regex -- stripping control characters is the point
+      .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, limit)
+  );
 }
 
 export interface EpisodeSnapshot {

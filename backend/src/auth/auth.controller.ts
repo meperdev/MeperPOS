@@ -139,6 +139,7 @@ export class AuthController {
     return this.toResponseBody(result);
   }
 
+  // eslint-disable-next-line meperpos/require-organization-guard -- user-scoped route: lists the caller's own organizations before one is selected
   @UseGuards(JwtAuthGuard)
   @Get('organizations')
   @ApiBearerAuth()
@@ -147,6 +148,7 @@ export class AuthController {
     return this.authService.getUserOrganizations(req.user.userId);
   }
 
+  // eslint-disable-next-line meperpos/require-organization-guard -- user-scoped route: the caller's own profile
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   @ApiBearerAuth()
@@ -155,6 +157,7 @@ export class AuthController {
     return this.authService.validateUser(req.user.userId);
   }
 
+  // eslint-disable-next-line meperpos/require-organization-guard -- user-scoped route: the caller's own profile
   @UseGuards(JwtAuthGuard)
   @Put('profile')
   @ApiBearerAuth()
@@ -166,6 +169,7 @@ export class AuthController {
     return this.authService.updateProfile(req.user.userId, updateProfileDto);
   }
 
+  // eslint-disable-next-line meperpos/require-organization-guard -- user-scoped route: the caller's own password
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
   @ApiBearerAuth()
@@ -264,6 +268,7 @@ export class AuthController {
     return { message: 'Logged out successfully' };
   }
 
+  // eslint-disable-next-line meperpos/require-organization-guard -- user-scoped route: selects the organization, so none is required yet
   @UseGuards(JwtAuthGuard)
   @Post('select-org')
   @ApiBearerAuth()

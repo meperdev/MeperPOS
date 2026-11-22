@@ -7,6 +7,49 @@ on:
     branches: [master]
 
 jobs:
+  # BLOCKING (trust stack Phase 1, docs/bug-rule-log.md): lint without --fix
+  # plus the RuleTester suites of the local eslint-plugin-meperpos. Any lint
+  # error fails the pipeline. Pre-existing stock-rule debt is frozen in a
+  # file-scoped baseline that only shrinks (backend/eslint.baseline.mjs and the
+  # baseline block in frontend/eslint.config.mjs); `meperpos/*` rules are never
+  # baselined and always report as errors.
+  lint:
+    name: Lint - ${{ matrix.package }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [backend, frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.package }}
+        run: npm ci
+
+      # Type-aware backend rules resolve Prisma model types; without the
+      # generated client they would lint against `error` types.
+      - name: Generate Prisma client
+        if: matrix.package == 'backend'
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: ESLint plugin tests (RuleTester)
+        working-directory: ${{ matrix.package }}
+        run: npm run test:eslint-plugin
+
+      - name: Lint (no --fix)
+        working-directory: ${{ matrix.package }}
+        run: npm run lint:ci
+
   backend:
     name: Backend - build and test
     runs-on: ubuntu-latest

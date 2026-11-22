@@ -89,10 +89,9 @@ describe('Access token TTL — 30-minute ceiling (spec 3.R1)', () => {
   it('signs access tokens with exp−iat ≤ 1800 seconds (30-minute ceiling)', async () => {
     const result = await loginSingleOrg();
 
-    const payload = jwtService.verify(result.accessToken) as {
-      exp: number;
-      iat: number;
-    };
+    const payload = jwtService.verify<{ exp: number; iat: number }>(
+      result.accessToken,
+    );
 
     expect(payload.exp - payload.iat).toBeLessThanOrEqual(1800);
   });
@@ -100,10 +99,9 @@ describe('Access token TTL — 30-minute ceiling (spec 3.R1)', () => {
   it('couples the signed JWT lifetime to ACCESS_TOKEN_TTL_MS (drift fails CI)', async () => {
     const result = await loginSingleOrg();
 
-    const payload = jwtService.verify(result.accessToken) as {
-      exp: number;
-      iat: number;
-    };
+    const payload = jwtService.verify<{ exp: number; iat: number }>(
+      result.accessToken,
+    );
 
     expect(payload.exp - payload.iat).toBe(ACCESS_TOKEN_TTL_MS / 1000);
   });

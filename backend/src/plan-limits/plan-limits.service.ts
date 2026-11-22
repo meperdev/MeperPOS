@@ -37,7 +37,7 @@ export class PlanLimitService {
       };
     }
 
-    const plan = org.plan as keyof typeof PLAN_LIMITS;
+    const plan = org.plan;
     if (!['BASIC', 'PRO'].includes(plan as string)) {
       throw new BadRequestException(`Invalid plan: ${plan}`);
     }
