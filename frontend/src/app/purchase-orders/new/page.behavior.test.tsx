@@ -244,7 +244,23 @@ describe("New purchase order — supplier and summary", () => {
 
     expect(screen.getByText("Proveedor Andino")).toBeTruthy();
     expect(screen.getByText("1 producto")).toBeTruthy();
+    expect(screen.getByText("1 unidad")).toBeTruthy();
     expect(screen.queryByText("Selecciona un proveedor")).toBeNull();
     expect(screen.getByRole("button", { name: "Guardar borrador" })).toBeEnabled();
+  });
+
+  it("places the product editor ahead of optional notes and keeps the untouched summary calm", () => {
+    const { container } = render(<NewPurchaseOrderPage />);
+
+    const editor = screen.getByTestId("purchase-order-item-editor");
+    const notes = screen.getByLabelText("Notas u observaciones (opcional)");
+    expect(
+      editor.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // Untouched form shows muted setup hints without an amber warning box.
+    expect(screen.getByText("Selecciona un proveedor")).toBeTruthy();
+    expect(screen.getByText("Agrega al menos un producto")).toBeTruthy();
+    expect(container.querySelector(".bg-warning\\/10")).toBeNull();
   });
 });
