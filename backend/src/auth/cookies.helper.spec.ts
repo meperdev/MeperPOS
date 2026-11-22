@@ -2,6 +2,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   CSRF_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
+  REFRESH_TTL_MS,
   applyAuthCookies,
   buildAuthCookies,
   buildClearedAuthCookies,
@@ -76,15 +77,20 @@ describe('cookies.helper', () => {
       });
     });
 
-    it('keeps csrf_token JS-readable and session-scoped', () => {
-      const csrf = buildAuthCookies(tokens).find(
-        (c) => c.name === CSRF_TOKEN_COOKIE,
-      );
+    it('keeps csrf_token JS-readable, site-wide, with the same maxAge as refresh_token', () => {
+      const cookies = buildAuthCookies(tokens);
+      const csrf = cookies.find((c) => c.name === CSRF_TOKEN_COOKIE);
+      const refresh = cookies.find((c) => c.name === REFRESH_TOKEN_COOKIE);
 
       expect(csrf?.options.httpOnly).toBe(false);
       expect(csrf?.options.path).toBe('/');
-      expect(csrf?.options.maxAge).toBeUndefined();
       expect(csrf?.value).toHaveLength(64);
+      // POST /api/auth/refresh is CSRF-guarded: a session-only csrf_token
+      // would be dropped on browser restart while the 7-day refresh_token
+      // survives, turning every restored session into a 403 + /login.
+      expect(refresh?.options.maxAge).toBe(REFRESH_TTL_MS);
+      expect(csrf?.options.maxAge).toBe(REFRESH_TTL_MS);
+      expect(csrf?.options.maxAge).toBe(refresh?.options.maxAge);
     });
 
     it('reuses an existing csrf token when provided', () => {
@@ -109,6 +115,35 @@ describe('cookies.helper', () => {
       const refresh = cleared.find((c) => c.name === REFRESH_TOKEN_COOKIE);
       expect(refresh?.options.path).toBe('/api/auth');
     });
+
+    it.each(['development', 'production'])(
+      'clears each cookie with the same path, httpOnly, sameSite and secure it was set with (%s)',
+      (env) => {
+        process.env.NODE_ENV = env;
+        const set = buildAuthCookies(tokens);
+        const cleared = buildClearedAuthCookies();
+
+        for (const name of [
+          ACCESS_TOKEN_COOKIE,
+          REFRESH_TOKEN_COOKIE,
+          CSRF_TOKEN_COOKIE,
+        ]) {
+          const setOptions = set.find((c) => c.name === name)?.options;
+          const clearedOptions = cleared.find((c) => c.name === name)?.options;
+
+          expect(clearedOptions).toBeDefined();
+          expect(clearedOptions).toMatchObject({
+            path: setOptions?.path,
+            httpOnly: setOptions?.httpOnly,
+            sameSite: setOptions?.sameSite,
+            secure: setOptions?.secure,
+          });
+          // The cleared descriptor carries no lifetime of its own:
+          // clearCookie() supplies the past Expires.
+          expect(clearedOptions?.maxAge).toBeUndefined();
+        }
+      },
+    );
   });
 
   describe('applyAuthCookies / clearAuthCookies', () => {
@@ -132,6 +167,10 @@ describe('cookies.helper', () => {
       clearAuthCookies(res as never);
 
       expect(res.clearCookie).toHaveBeenCalledTimes(3);
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        CSRF_TOKEN_COOKIE,
+        expect.objectContaining({ httpOnly: false, path: '/' }),
+      );
     });
   });
 

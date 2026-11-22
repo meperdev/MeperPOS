@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsNumber,
+  IsInt,
   IsOptional,
   IsBoolean,
   Min,
@@ -11,6 +12,7 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
   ValidationArguments,
+  MaxLength,
 } from 'class-validator';
 import { ProductType, PromotionType } from '@prisma/client';
 import { DianTaxCode } from '../../common/utils/tax.util';
@@ -48,19 +50,23 @@ const TAX_CODE_API_PROPERTY = {
 export class CreateProductDto {
   @ApiProperty({ example: 'Product Name' })
   @IsString()
+  @MaxLength(200)
   name: string;
 
   @ApiProperty({ example: 'SKU-001' })
   @IsString()
+  @MaxLength(50)
   sku: string;
 
   @ApiProperty({ example: '123456789', required: false })
   @IsString()
+  @MaxLength(50)
   @IsOptional()
   barcode?: string;
 
   @ApiProperty({ example: 'Product description', required: false })
   @IsString()
+  @MaxLength(2000)
   @IsOptional()
   description?: string;
 
@@ -91,13 +97,14 @@ export class CreateProductDto {
   @IsOptional()
   taxable?: boolean;
 
+  // Stock is counted in whole units (Product.stock/minStock are Int).
   @ApiProperty({ example: 10 })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   stock: number;
 
   @ApiProperty({ example: 5 })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   minStock: number;
 
@@ -118,6 +125,7 @@ export class CreateProductDto {
 
   @ApiProperty({ example: 'https://example.com/image.jpg', required: false })
   @IsString()
+  @MaxLength(2048)
   @IsOptional()
   imageUrl?: string;
 
@@ -145,21 +153,25 @@ export class CreateProductDto {
 export class UpdateProductDto {
   @ApiProperty({ example: 'Product Name', required: false })
   @IsString()
+  @MaxLength(200)
   @IsOptional()
   name?: string;
 
   @ApiProperty({ example: 'SKU-001', required: false })
   @IsString()
+  @MaxLength(50)
   @IsOptional()
   sku?: string;
 
   @ApiProperty({ example: '123456789', required: false })
   @IsString()
+  @MaxLength(50)
   @IsOptional()
   barcode?: string;
 
   @ApiProperty({ example: 'Product description', required: false })
   @IsString()
+  @MaxLength(2000)
   @IsOptional()
   description?: string;
 
@@ -192,14 +204,15 @@ export class UpdateProductDto {
   @IsOptional()
   taxable?: boolean;
 
+  // Stock is counted in whole units (Product.stock/minStock are Int).
   @ApiProperty({ example: 10, required: false })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   stock?: number;
 
   @ApiProperty({ example: 5, required: false })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   minStock?: number;
@@ -220,6 +233,7 @@ export class UpdateProductDto {
 
   @ApiProperty({ example: 'https://example.com/image.jpg', required: false })
   @IsString()
+  @MaxLength(2048)
   @IsOptional()
   imageUrl?: string;
 

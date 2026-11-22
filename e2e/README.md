@@ -8,6 +8,7 @@ a real backend, a real frontend and a dedicated, freshly seeded PostgreSQL.
 | Login | `tests/login.spec.ts` | A wrong password shows an error and stays on `/login`; the seeded owner signs in and lands on `/dashboard`. |
 | POS cash checkout | `tests/pos-checkout.spec.ts` | A seeded product found by SKU reaches the cart at its server price, a cash payment completes the sale, the cart empties, and `/sales` lists the sale with the same number and total. |
 | Inventory | `tests/inventory-create-product.spec.ts` | "Nuevo producto" creates a product with a unique name and SKU, and the catalogue search finds it. |
+| Session restore after a browser restart | `tests/session-restart.spec.ts` | After sign-in, dropping every session-only cookie (as a browser restart does) keeps `refresh_token` and `csrf_token`; reloading `/dashboard` refreshes with 201 and stays signed in. |
 
 ## Run it locally
 
@@ -56,7 +57,8 @@ Do not run `npm run db:up` / `db:down` for the smoke suite.
 | Database | `inventario_db` | `meperpos_playwright` |
 | Storage | volume `postgres_data` | tmpfs, gone on `down` |
 
-Two guards enforce it: `scripts/database-guard.mjs` (orchestrator, unit-tested
+Two guards enforce it: `scripts/database-guard.mjs` (orchestrator, shared by
+`npm run smoke` and `npm run explore` through `scripts/stack.mjs`, unit-tested
 by `npm run test:scripts`) and the check at the top of
 `backend/prisma/seed-e2e.ts`. Both refuse any URL whose database is not
 `meperpos_playwright` or whose port is 5432. The orchestrator also pins
@@ -136,6 +138,90 @@ In CI the job `E2E smoke (Playwright)` uploads `playwright-report/` and
 `test-results/` as the artifact `playwright-smoke-<run id>-<attempt>` when it
 fails. Download it and open the trace with `npx playwright show-trace trace.zip`
 or at https://trace.playwright.dev.
+
+## Exploratory bug bash
+
+`npm run explore` (`scripts/run-explore.mjs`) is a bug bash, not a gate. It
+starts the same isolated stack as `npm run smoke` (same database, guard,
+ports and environment variables), signs in as the seed owner and works through
+scripted exploratory scenarios that try odd input and odd navigation
+(`exploratory/scenarios.mjs`), then tears the stack down.
+
+```bash
+cd e2e
+npm run explore                                    # defaults: 60 actions / 15 min
+SMOKE_SKIP_BUILD=1 npm run explore -- --max-actions 30 --max-minutes 8
+npm run explore -- --scenarios coverage,pos --headed
+npm run explore -- --help
+```
+
+- **Scope:** login, dashboard, POS checkout, inventory, `/sales`, settings
+  (General and Facturación only) and reports, plus unknown routes and history
+  navigation. It never touches WhatsApp, Suscripción, Equipo y acceso, image
+  uploads, "Eliminar definitivo" or SuperAdmin. The stack has no outbound
+  integrations, so there are no real payments, emails or messages.
+- **Oracles:** console errors and uncaught exceptions, 4xx/5xx and failed
+  requests the action did not expect, server-side validation (a 2xx for input
+  the API should reject), axe (WCAG 2.1 A/AA; serious and critical become
+  findings), horizontal overflow at 1440px and 390px, and the copy and
+  typography rules in `AGENTS.md`.
+- **Budget:** `--max-actions` (`EXPLORE_MAX_ACTIONS`, default 60 user actions
+  after sign-in) and `--max-minutes` (`EXPLORE_MAX_MINUTES`, default 15).
+  Whichever runs out first stops the scenarios; the report is written anyway.
+  A watchdog closes the browser if the run overstays the time budget by two minutes.
+- **Output** (gitignored): `exploratory/reports/<timestamp>/` with `REPORT.md`,
+  `findings.json`, `run.json`, `screenshots/`, `traces/` (a Playwright trace per
+  scenario that found something; open with `npm run trace -- <zip>`) and
+  `stack-logs/`. Traces are best-effort: skipped when the report volume has
+  under 1 GiB free and switched off after the first one that cannot be saved;
+  the report is written even if the run fails midway (marked partial). The report lists every page visited, every action, the axe
+  summary and, per finding: severity, repro steps, evidence paths and the
+  suggested trust-stack layer (01 types/boundaries, 02 lint/test, 03 `AGENTS.md`).
+- **Exit code:** 0 when the run completed, whatever it found; 1 when the
+  stack, the sign-in or the runner failed; 2 for bad arguments.
+
+### GitHub issues (opt-in)
+
+Every finding above `info` gets a drafted issue inside `REPORT.md`. Nothing is
+filed unless you ask, after reading the report:
+
+```bash
+npm run explore:file-issues -- exploratory/reports/<run> --dry-run   # print only
+npm run explore:file-issues -- exploratory/reports/<run> --min-severity high
+```
+
+`npm run explore -- --file-issues [--dry-run]` does the same at the end of a
+run. It uses your `gh` login and skips titles that already have an open issue.
+
+### Optional LLM pass (`--agent`)
+
+`npm run explore -- --agent` adds a few free-form steps driven by your own
+OpenCode CLI after the scripted run. It needs no new API keys: it uses the
+provider you already signed in to OpenCode with. The sandbox is set up in
+`exploratory/lib/agent.mjs`, not by the prompt:
+
+- a one-off config through `OPENCODE_CONFIG_CONTENT` with project config
+  disabled, on a private server (`opencode run --standalone`);
+- one MCP server, Playwright's own (`playwright mcp`, shipped with
+  `@playwright/test`), headless, isolated profile, with requests allowed only
+  to the stack's origins (3100/3101);
+- an agent whose permissions deny every action except that server's browser
+  tools (no read, edit, shell, web fetch, skills or subagents);
+- hard caps enforced by killing the process: `--agent-steps` (default 25 tool
+  calls) and `--agent-minutes` (default 5).
+
+The model reports defects as `FINDING: {json}` lines; they land in the report
+tagged `[agent]`, and the transcript is saved in `agent/transcript.jsonl`. Treat
+them as leads to reproduce by hand. The scripted run is the supported path; if
+the pass fails or is skipped, the scripted findings stand.
+
+### In CI
+
+`.github/workflows/explore.yml` runs the scripted explorer on demand
+(`workflow_dispatch` only, with `max_actions` / `max_minutes` inputs) against
+the same Postgres service as the smoke job. It needs no secrets, never runs
+`--agent` or `--file-issues`, and uploads `exploratory/reports/` as the
+artifact `explore-<run id>-<attempt>`. It is not a check on any branch.
 
 ## CI
 

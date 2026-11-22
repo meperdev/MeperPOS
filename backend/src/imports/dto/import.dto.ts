@@ -11,6 +11,7 @@ import {
   IsString,
   Min,
   ValidateNested,
+  MaxLength,
 } from 'class-validator';
 
 /** The four importable entity sheets processed by the multi-sheet importer. */
@@ -86,20 +87,24 @@ export class ImportRowErrorDto {
 
   @ApiProperty({ example: 'INVALID_PRICE' })
   @IsString()
+  @MaxLength(64)
   code: string;
 
   @ApiProperty({ example: 'Precio de venta invalido' })
   @IsString()
+  @MaxLength(1000)
   message: string;
 
   @ApiPropertyOptional({ example: 'salePrice' })
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   field?: string;
 
   @ApiProperty({ type: [String] })
   @IsArray()
   @IsString({ each: true })
+  @MaxLength(64, { each: true })
   editableFields: string[];
 
   @ApiProperty({ example: false })
@@ -114,6 +119,7 @@ export class ImportRowErrorDto {
 
   @ApiProperty({ example: 'request-id' })
   @IsString()
+  @MaxLength(128)
   correlationId: string;
 }
 
@@ -155,6 +161,7 @@ export class ImportSheetStatusDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @MaxLength(64, { each: true })
   missingRequiredFields?: string[];
 
   @ApiPropertyOptional({ example: false })
@@ -165,6 +172,7 @@ export class ImportSheetStatusDto {
   @ApiPropertyOptional({ example: 'Supera el limite del plan' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   planLimitMessage?: string;
 
   @ApiPropertyOptional({
@@ -178,6 +186,7 @@ export class ImportSheetStatusDto {
   @ApiPropertyOptional({ example: 'La hoja usuarios requiere rol ADMIN' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   roleRejectedMessage?: string;
 
   @ApiProperty({ type: [ImportRowErrorDto] })
@@ -190,6 +199,7 @@ export class ImportSheetStatusDto {
 export class ImportJobStatusResponseDto {
   @ApiProperty({ example: 'a1b2c3d4' })
   @IsString()
+  @MaxLength(64)
   jobId: string;
 
   @ApiProperty({ enum: IMPORT_JOB_STATUSES })

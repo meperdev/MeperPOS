@@ -7,8 +7,12 @@ import {
   IsOptional,
   IsUUID,
   IsNotEmpty,
+  MaxLength,
 } from 'class-validator';
-import { IsValidPassword } from '../../common/validators/password.policy';
+import {
+  IsValidPassword,
+  PASSWORD_MAX_LENGTH,
+} from '../../common/validators/password.policy';
 
 export class LoginDto {
   @ApiProperty({ example: 'admin@example.com' })
@@ -17,6 +21,7 @@ export class LoginDto {
 
   @ApiProperty({ example: 'password123', minLength: 6 })
   @IsString()
+  @MaxLength(PASSWORD_MAX_LENGTH)
   @MinLength(6)
   password: string;
 
@@ -48,6 +53,7 @@ export class RegisterDto {
 
   @ApiProperty({ example: 'John Doe' })
   @IsString()
+  @MaxLength(100)
   name: string;
 }
 
@@ -69,6 +75,7 @@ export class CreateUserDto {
 
   @ApiProperty({ example: 'John Doe' })
   @IsString()
+  @MaxLength(100)
   name: string;
 
   @ApiProperty({
@@ -82,6 +89,7 @@ export class CreateUserDto {
 export class UpdateProfileDto {
   @ApiProperty({ example: 'John Doe', required: false })
   @IsString()
+  @MaxLength(100)
   @IsOptional()
   name?: string;
 
@@ -94,6 +102,7 @@ export class UpdateProfileDto {
 export class ChangePasswordDto {
   @ApiProperty({ example: 'currentPassword123' })
   @IsString()
+  @MaxLength(PASSWORD_MAX_LENGTH)
   currentPassword: string;
 
   @ApiProperty({
@@ -137,6 +146,7 @@ export class RefreshTokenDto {
     required: false,
   })
   @IsString()
+  @MaxLength(256)
   @IsOptional()
   refreshToken?: string;
 }

@@ -7,10 +7,12 @@ import {
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
 } from 'class-validator';
 
 export class CreatePayrollGroupDto {
   @IsString()
+  @MaxLength(64)
   @Matches(/\S/)
   employeeId: string;
 
@@ -18,6 +20,7 @@ export class CreatePayrollGroupDto {
   @ArrayMinSize(1)
   @ArrayUnique()
   @IsString({ each: true })
+  @MaxLength(64, { each: true })
   @Matches(/\S/, { each: true })
   shiftIds: string[];
 
