@@ -30,6 +30,22 @@ describe("Input number stepper", () => {
     expect(screen.getByRole("button", { name: "Aumentar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disminuir" })).toBeInTheDocument();
   });
+
+  it("preserves right stepper clearance even when caller overrides horizontal padding", () => {
+    render(<Input aria-label="Cantidad" type="number" className="px-2 text-right" defaultValue="1" />);
+
+    const input = screen.getByRole("spinbutton", { name: "Cantidad" });
+    expect(input.className).toContain("pr-9");
+  });
+
+  it("omits the stepper overlay and reserved right padding when hideStepper is set", () => {
+    render(<Input aria-label="Cantidad" type="number" hideStepper defaultValue="1" />);
+
+    const input = screen.getByRole("spinbutton", { name: "Cantidad" });
+    expect(screen.queryByRole("button", { name: /Aumentar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Disminuir/ })).toBeNull();
+    expect(input.className).not.toContain("pr-9");
+  });
 });
 
 describe("Input mobile keyboard hints", () => {

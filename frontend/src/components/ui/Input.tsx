@@ -28,16 +28,19 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement | HTMLTextArea
   icon?: React.ReactNode;
   prefixText?: string;
   suffixIcon?: React.ReactNode;
+  /** Hides the custom numeric stepper buttons on compact numeric inputs. */
+  hideStepper?: boolean;
 }
 
 export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputProps>(
-  ({ label, error, textarea = false, rows = 3, className = "", icon, prefixText, suffixIcon, required, id, type, disabled, readOnly, ...props }, ref) => {
+  ({ label, error, textarea = false, rows = 3, className = "", icon, prefixText, suffixIcon, hideStepper = false, required, id, type, disabled, readOnly, ...props }, ref) => {
     const reactId = useId();
     const inputId = id || reactId;
     const innerInputRef = useRef<HTMLInputElement | null>(null);
     // Stepper buttons are named after the field: its visible label, else its aria-label.
     const stepperName = typeof label === "string" && label ? label : props["aria-label"];
     const isNumber = !textarea && type === "number";
+    const showStepper = isNumber && !suffixIcon && !hideStepper;
     const focusedRef = useRef(false);
     const [numericText, setNumericText] = useState<string | null>(null);
     // `autoFocus` travels through `...props`, so this is the one place every
@@ -85,13 +88,15 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
       "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-muted/40",
       icon && "pl-9",
       prefixText && "pl-8 tabular-nums",
-      (suffixIcon || isNumber) && "pr-9",
       isNumber &&
         "tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
       error
         ? "border-danger focus:border-danger focus:ring-danger/25"
         : "border-border/70 hover:border-border",
       className,
+      // Keep right clearance AFTER caller className so `px-*` overrides on compact
+      // cells can narrow the left side without letting digits slide under the stepper.
+      (Boolean(suffixIcon) || showStepper) && "pr-9",
     );
 
     return (
@@ -173,7 +178,7 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
               {suffixIcon}
             </span>
           )}
-          {isNumber && !suffixIcon && (
+          {showStepper && (
             <div
               className={cn(
                 "absolute right-1 inset-y-1 flex flex-col w-7 rounded-md border border-border/60 bg-muted/35 overflow-hidden divide-y divide-border/60",
