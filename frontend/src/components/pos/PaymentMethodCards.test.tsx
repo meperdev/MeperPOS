@@ -23,10 +23,22 @@ describe("PaymentMethodCards layout", () => {
     expect(cardBtn).toHaveAttribute("aria-pressed", "false");
     expect(transferBtn).toHaveAttribute("aria-pressed", "false");
 
-    // Selected option uses neutral elevated card surface + subtle terracotta icon, never neon green.
-    expect(cashBtn.className).toContain("bg-card");
+    // Recessed muted track + unmistakable terracotta active segment (never neon green).
+    expect(group.className).toContain("bg-muted");
+    expect(group.className).not.toContain("bg-muted/40");
+    expect(group.className).toContain("border-border");
+
+    expect(cashBtn.className).toContain("bg-primary-light");
+    expect(cashBtn.className).toContain("border-primary/70");
+    expect(cashBtn.className).toContain("text-primary-text");
+    expect(cashBtn.className).toContain("ring-1");
+    expect(cashBtn.className).toContain("ring-primary/25");
+    expect(cashBtn.className).toContain("shadow-xs");
     expect(cashBtn.className).not.toMatch(/success|emerald|green/);
     expect(cashBtn.firstElementChild?.className).toContain("text-primary-text");
+
+    expect(cardBtn.className).toContain("bg-transparent");
+    expect(cardBtn.className).toContain("text-muted-foreground");
     expect(transferBtn.className).not.toContain("col-span-2");
   });
 

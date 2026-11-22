@@ -27,8 +27,8 @@ export function PaymentMethodCard({
         "flex min-h-[46px] flex-col items-center justify-center gap-0.5 rounded-md border px-1.5 py-1.5 cursor-pointer transition-colors duration-150 ease-out",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         selected
-          ? "border-border/80 bg-card text-foreground font-semibold shadow-2xs"
-          : "border-transparent bg-transparent text-muted-foreground font-medium hover:bg-card/50 hover:text-foreground",
+          ? "border-primary/70 bg-primary-light text-primary-text font-semibold shadow-xs ring-1 ring-primary/25"
+          : "border-transparent bg-transparent text-muted-foreground font-medium hover:bg-card/70 hover:text-foreground",
         className,
       )}
     >
@@ -78,7 +78,7 @@ export function PaymentMethodCards({
     <div
       role="group"
       aria-label="Método de pago"
-      className="grid grid-cols-3 gap-1 rounded-lg border border-border/70 bg-muted/40 p-1"
+      className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted p-1"
     >
       {methods.map((method) => (
         <PaymentMethodCard
