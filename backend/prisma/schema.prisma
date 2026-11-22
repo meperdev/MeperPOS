@@ -95,6 +95,8 @@ model Location {
   assignments    MembershipLocation[]
   productStocks  ProductStock[]
   movements      InventoryMovement[]
+  saleOrigins    SaleOriginSite[]
+  posLoanSaleIntentOrigins PosLoanSaleIntentOriginSite[]
 
   // The partial unique index for the default site is defined in SQL.
   @@unique([id, organizationId])
@@ -672,6 +674,7 @@ model Sale {
   items              SaleItem[]
   posLoanSaleIntent  PosLoanSaleIntent?
   fiscalDocument     FiscalDocument?
+  originSite         SaleOriginSite?
 
   @@unique([id, organizationId, customerId])
   /// Needed by `FiscalDocument`'s composite foreign key, which is what makes a
@@ -684,6 +687,18 @@ model Sale {
   @@index([organizationId, createdAt, status])
   @@index([organizationId, userId])
   @@index([organizationId, customerId])
+}
+
+// Site attribution is stored separately so existing Sale JSON stays unchanged.
+model SaleOriginSite {
+  saleId         String
+  organizationId String
+  locationId     String
+  sale           Sale     @relation(fields: [saleId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+  location       Location @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
+
+  @@id([saleId, organizationId])
+  @@index([locationId, organizationId])
 }
 
 model Payment {
@@ -949,12 +964,25 @@ model PosLoanSaleIntent {
   customer       Customer     @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
   loan           MoneyLoan    @relation(fields: [loanId, organizationId, customerId], references: [id, organizationId, customerId], onDelete: Restrict, onUpdate: Restrict)
   finalSale      Sale?        @relation(fields: [finalSaleId, organizationId, customerId], references: [id, organizationId, customerId], onDelete: Restrict, onUpdate: Restrict)
+  originSite     PosLoanSaleIntentOriginSite?
 
   // Composite keys declare the one-to-one relation tuples to Prisma.
   @@unique([loanId, organizationId, customerId])
   @@unique([finalSaleId, organizationId, customerId])
   @@unique([organizationId, initiationRequestKey])
   @@unique([id, organizationId])
+}
+
+// The origin is separate from the frozen quote and replay result.
+model PosLoanSaleIntentOriginSite {
+  intentId       String
+  organizationId String
+  locationId     String
+  intent         PosLoanSaleIntent @relation(fields: [intentId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+  location       Location          @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
+
+  @@id([intentId, organizationId])
+  @@index([locationId, organizationId])
 }
 
 // SQL freezes ownership and validates insert eligibility and terminal claims.

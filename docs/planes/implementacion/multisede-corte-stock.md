@@ -100,6 +100,14 @@ VALUES ('t14-legacy', 'stock-a1', 'ADJUSTMENT_IN', 5, 0, 5, 'Legacy movement wit
 
 Después de aplicar la migración nueva, ejecutar `psql -X -w -v ON_ERROR_STOP=1 -f test/migrations/inventory-movement-location.constraints.sql` desde `backend/`, con las variables de conexión explícitas de la base desechable. Debe terminar en `ROLLBACK` con código 0: verifica que el movimiento anterior conserve sus datos sin sede, que se rechace una sede ajena y que el borrado de la organización siga eliminando su historial.
 
+## Sede de origen de una venta o financiación POS
+
+`20261123120000_sale_origin_site` agrega dos tablas vacías. Cada tabla permite una sola sede de origen por operación, de la misma organización. No cambia `Sale` ni `PosLoanSaleIntent`, no completa datos históricos y no agrega campos a las respuestas, las cotizaciones ni los resultados de un reintento. La aplicación todavía no guarda la sede en estas tablas ni mueve saldos por sede.
+
+Borrar una sede que conserve una atribución se rechaza; si una operación se elimina de acuerdo con las reglas actuales, su atribución se elimina con ella. La migración necesita bloqueos breves sobre las tablas referenciadas: aplicar con las escrituras de ventas y financiación pausadas y las transacciones en curso terminadas, con un máximo de 5 segundos de espera por bloqueo o el límite positivo menor ya configurado.
+
+Para verificarla desde `backend/`, usar una base desechable `meperpos_stock_rehearsal_t16_…` con las migraciones aplicadas y el fixture `test/migrations/product-stock.fixture.sql`. Ejecutar `psql -X -w -v ON_ERROR_STOP=1 -f test/migrations/sale-origin-site.constraints.sql` con la conexión explícita a esa base. Debe terminar en `ROLLBACK` con código 0.
+
 ## Entrega futura: cambiar la fuente de stock
 
 1. **Fijar la base de comparación.** Con una copia verificable y los escritores de inventario detenidos, tomar un registro por organización y producto del stock y sus reservas. Incluir productos con saldo cero e inactivos. El registro debe conservar la identidad del producto, no solo el total de la organización.
