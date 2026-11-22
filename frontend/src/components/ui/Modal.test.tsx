@@ -66,6 +66,42 @@ it("keeps the modal open when Escape only closes a Select list inside it", () =>
   expect(onClose).not.toHaveBeenCalled();
 });
 
+it("keeps focus inside a portaled desktop Select popover without closing the modal on Escape", () => {
+  stubSmBreakpoint(true);
+  const onClose = vi.fn();
+  try {
+    render(
+      <Modal isOpen onClose={onClose} title="Nuevo gasto">
+        <Select
+          value="CASH"
+          label="Método"
+          options={[
+            { value: "CASH", label: "Efectivo" },
+            { value: "CARD", label: "Tarjeta" },
+          ]}
+          onChange={vi.fn()}
+        />
+      </Modal>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Nuevo gasto" });
+    const trigger = screen.getByRole("button", { name: "Método" });
+    fireEvent.click(trigger);
+
+    const option = screen.getByRole("option", { name: "Efectivo" });
+    expect(dialog.contains(option)).toBe(false);
+    expect(option.closest("[data-select-popover]")).not.toBeNull();
+    expect(option).toHaveFocus();
+
+    fireEvent.keyDown(option, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
+  } finally {
+    restoreMatchMedia();
+  }
+});
+
 describe("bottom sheet below sm", () => {
   afterEach(restoreMatchMedia);
 

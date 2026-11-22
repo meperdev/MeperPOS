@@ -5,7 +5,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { CartLine } from "@/components/pos/CartLine";
 import { PaymentMethodCards } from "@/components/pos/PaymentMethodCards";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import type { CartItem } from "@/types";
 
 export interface MobileCartDrawerProps {
@@ -86,6 +86,29 @@ export function MobileCartDrawer({
         </Button>
       }
     >
+      {/* Pause / Resume utilities */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onOpenPausedSales}
+          className="h-10 rounded-lg text-[13px] font-medium tabular-nums"
+        >
+          <Play className="w-3.5 h-3.5" aria-hidden="true" />
+          Reanudar ({pausedSalesCount})
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onPauseSale}
+          disabled={cart.length === 0}
+          className="h-10 rounded-lg text-[13px] font-medium"
+        >
+          <Pause className="w-3.5 h-3.5" aria-hidden="true" />
+          Pausar
+        </Button>
+      </div>
+
       {/* Cart Items Section */}
       <div className="space-y-2">
         {cart.length === 0 ? (
@@ -109,33 +132,55 @@ export function MobileCartDrawer({
         )}
       </div>
 
-      {/* Customer Selection */}
-      <div>
+      {/* Customer & Finance compact row */}
+      <div className="grid grid-cols-[1fr_auto] gap-2">
         <button
           type="button"
           onClick={onOpenCustomerModal}
-          className="flex items-center gap-2 w-full h-10 sm:h-9 px-3 rounded-lg border border-border/70 bg-background/80 text-sm text-foreground hover:border-foreground/25 transition-colors overflow-hidden"
+          className={cn(
+            "flex h-10 min-w-0 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium transition-colors duration-150",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+            selectedCustomerName
+              ? "border-primary/40 bg-primary/10 text-foreground"
+              : "border-border/70 bg-background/80 text-foreground hover:border-foreground/25",
+          )}
         >
-          <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="truncate text-[13px] font-medium">
-            {selectedCustomerName || "Sin cliente (opcional)"}
+          <User
+            className={cn(
+              "w-3.5 h-3.5 shrink-0",
+              selectedCustomerName ? "text-primary-text" : "text-muted-foreground",
+            )}
+          />
+          <span className="min-w-0 truncate">
+            {selectedCustomerName || "Sin cliente"}
+          </span>
+        </button>
+
+        {/* Financed sale: quiet secondary action, far from the checkout bar */}
+        <button
+          type="button"
+          onClick={onFinance}
+          disabled={cart.length === 0 || !canFinance || isFinancing}
+          title={
+            !canFinance && cart.length > 0 ? "Selecciona un cliente para financiar" : undefined
+          }
+          className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 px-3 text-[13px] font-medium text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+        >
+          <HandCoins className="w-3.5 h-3.5" aria-hidden="true" />
+          <span className="whitespace-nowrap">
+            {isFinancing ? "Iniciando…" : "Financiar"}
           </span>
         </button>
       </div>
 
-      {/* Financed sale: quiet secondary action, far from the checkout bar */}
-      <button
-        type="button"
-        onClick={onFinance}
-        disabled={cart.length === 0 || !canFinance || isFinancing}
-        title={
-          !canFinance && cart.length > 0 ? "Selecciona un cliente para financiar" : undefined
-        }
-        className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 py-2 text-[13px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-      >
-        <HandCoins className="w-3.5 h-3.5" />
-        {isFinancing ? "Iniciando financiación…" : "Financiar a crédito"}
-      </button>
+      {/* Payment Method Selector */}
+      <div>
+        <p className="text-[13px] font-medium text-muted-foreground mb-2">Método de pago</p>
+        <PaymentMethodCards
+          selectedMethod={selectedPaymentMethod}
+          onMethodChange={onPaymentMethodChange}
+        />
+      </div>
 
       {/* Totals Breakdown */}
       <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
@@ -151,38 +196,6 @@ export function MobileCartDrawer({
             {formatCurrency(total)}
           </span>
         </div>
-      </div>
-
-      {/* Pause / Resume */}
-      <div className="flex gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onOpenPausedSales}
-          className="flex-1 text-[13px] h-8"
-        >
-          <Play className="w-3.5 h-3.5 mr-1" />
-          Reanudar ({pausedSalesCount})
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onPauseSale}
-          disabled={cart.length === 0}
-          className="flex-1 text-[13px] h-8"
-        >
-          <Pause className="w-3.5 h-3.5 mr-1" />
-          Pausar
-        </Button>
-      </div>
-
-      {/* Payment Method Selector */}
-      <div>
-        <p className="text-[13px] font-medium text-muted-foreground mb-2">Método de pago</p>
-        <PaymentMethodCards
-          selectedMethod={selectedPaymentMethod}
-          onMethodChange={onPaymentMethodChange}
-        />
       </div>
     </BottomSheet>
   );

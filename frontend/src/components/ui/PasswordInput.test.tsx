@@ -198,4 +198,12 @@ describe("PasswordInput", () => {
 
     expect(field).toHaveValue("abcdef");
   });
+
+  it("keeps pr-12 toggle clearance instead of downgrading to suffixIcon pr-9", () => {
+    render(<Host />);
+
+    const field = passwordField();
+    expect(field.className).toContain("pr-12");
+    expect(field.className).not.toContain("pr-9");
+  });
 });

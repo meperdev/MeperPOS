@@ -226,4 +226,80 @@ describe("toast API", () => {
     act(() => vi.advanceTimersByTime(4200));
     expect(screen.queryByText("cuatro")).toBeNull();
   });
+
+  it("stacks distinct toasts newest-first with visible peeking offsets", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("info"));
+    fireEvent.click(screen.getByText("warning"));
+    fireEvent.click(screen.getByText("error"));
+    act(() => vi.advanceTimersByTime(20));
+
+    const cards = screen.getAllByTestId("toast-card");
+    expect(cards).toHaveLength(3);
+    expect(cards[0]).toHaveAttribute("data-depth", "0");
+    expect(cards[0]).toHaveTextContent("falló");
+    expect(cards[1]).toHaveAttribute("data-depth", "1");
+    expect(cards[1]).toHaveTextContent("cuidado");
+    expect(cards[1].style.transform).toContain("translateY(12px)");
+    expect(cards[2]).toHaveAttribute("data-depth", "2");
+    expect(cards[2]).toHaveTextContent("dato");
+    expect(cards[2].style.transform).toContain("translateY(24px)");
+  });
+
+  it("keeps a new toast paused when added while the stack is already hovered", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("success"));
+    act(() => vi.advanceTimersByTime(20));
+
+    const stack = screen.getByTestId("toast-stack");
+    fireEvent.mouseEnter(stack);
+    expect(stack.dataset.expanded).toBe("true");
+
+    fireEvent.click(screen.getByText("short"));
+    act(() => vi.advanceTimersByTime(10000));
+    expect(screen.getByText("guardado")).toBeInTheDocument();
+    expect(screen.getByText("corto")).toBeInTheDocument();
+
+    fireEvent.mouseLeave(stack);
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.queryByText("corto")).toBeNull();
+    expect(screen.getByText("guardado")).toBeInTheDocument();
+  });
+
+  it("promotes a refreshed duplicate to the front of the stack", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("success"));
+    fireEvent.click(screen.getByText("info"));
+    fireEvent.click(screen.getByText("success"));
+    act(() => vi.advanceTimersByTime(20));
+
+    const cards = screen.getAllByTestId("toast-card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent("guardado");
+    expect(cards[0]).toHaveAttribute("data-depth", "0");
+    expect(cards[1]).toHaveTextContent("dato");
+    expect(cards[1]).toHaveAttribute("data-depth", "1");
+  });
+
+  it("collapses and resumes timers after dismissing a focused toast when others remain", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("short"));
+    fireEvent.click(screen.getByText("error"));
+    act(() => vi.advanceTimersByTime(20));
+
+    const stack = screen.getByTestId("toast-stack");
+    const closeFront = screen.getAllByRole("button", { name: "Cerrar notificación" })[0];
+    closeFront.focus();
+    fireEvent.focus(closeFront);
+    expect(stack.dataset.expanded).toBe("true");
+
+    fireEvent.click(closeFront);
+    act(() => vi.advanceTimersByTime(220));
+
+    expect(screen.queryByText("falló")).toBeNull();
+    expect(stack.dataset.expanded).toBe("false");
+
+    act(() => vi.advanceTimersByTime(1100));
+    expect(screen.queryByText("corto")).toBeNull();
+  });
 });

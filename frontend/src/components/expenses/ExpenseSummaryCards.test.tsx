@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { ExpenseSummaryCards } from "./ExpenseSummaryCards";
 
 const summary = {
@@ -52,6 +52,11 @@ function summaryRegion() {
 }
 
 describe("ExpenseSummaryCards", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
   it("leads with the month total and names the month in words", () => {
     render(<ExpenseSummaryCards month="2026-11" summary={summary} />);
 
@@ -134,55 +139,126 @@ describe("ExpenseSummaryCards", () => {
       expect(cell.className).not.toContain("rounded");
       expect(cell.className).not.toMatch(/shadow/);
       expect(cell.className).toContain("border-r");
-      expect(cell.className).toContain("border-b");
       expect(cell.className).toContain("border-border/60");
       expect(cell.className).toContain("p-4");
     }
   });
 
-  it("lays up to six cells in one row only once there is room, and wraps longer months", () => {
+  it("pins Total del mes and keeps all categories on a single horizontal rail regardless of group count", () => {
     const { unmount } = render(
       <ExpenseSummaryCards month="2026-11" summary={summary} />,
     );
 
-    // Five groups plus the total make six cells. The strip stays two across on
-    // a phone and three across at `lg`, where six tracks would squeeze a
-    // currency amount; it only reaches one row from `xl`.
     const strip = screen.getByTestId("expense-summary-strip");
-    expect(strip.className).toContain("grid");
-    expect(strip.className).toContain("grid-cols-2");
-    expect(strip.className).toContain("md:grid-cols-3");
-    expect(strip.className).toContain("xl:grid-cols-6");
-    expect(strip.className).not.toContain("lg:grid-cols");
+    expect(strip.className).toContain("flex");
+    expect(strip.className).toContain("md:flex-row");
 
-    const totalCell = within(summaryRegion())
-      .getByText("Total del mes")
-      .closest("div") as HTMLElement;
-    expect(totalCell.className).toContain("col-span-2");
-    expect(totalCell.className).toContain("md:col-span-1");
+    const rail = screen.getByTestId("expense-summary-rail");
+    expect(rail.className).toContain("overflow-x-auto");
+    expect(rail.className).toContain("scrollbar-hide");
+
+    const cells = within(rail).getAllByRole("listitem");
+    expect(cells).toHaveLength(5);
+    for (const cell of cells) {
+      expect(cell.className).toContain("min-w-0");
+      expect(cell.className).toContain("grow");
+      expect(cell.className).toContain("shrink-0");
+      expect(cell.className).toContain("basis-[232px]");
+      expect(cell.className).toContain("sm:basis-[248px]");
+    }
+    // No numbered pagination anywhere in the summary.
+    expect(within(summaryRegion()).queryByRole("navigation")).toBeNull();
 
     unmount();
 
-    // Seven groups plus the total cannot fit one row even at `xl`: four columns
-    // wrap instead of eight.
+    // Every group count up to the viewport overflow threshold uses the same auto-fill rule.
+    for (const count of [1, 2, 4]) {
+      const { unmount: unmountSlice } = render(
+        <ExpenseSummaryCards
+          month="2026-11"
+          summary={{ ...summary, groups: summary.groups.slice(0, count) }}
+        />,
+      );
+
+      const compactCells = within(
+        screen.getByTestId("expense-summary-rail"),
+      ).getAllByRole("listitem");
+      expect(compactCells).toHaveLength(count);
+      for (const cell of compactCells) {
+        expect(cell.className).toContain("grow");
+        expect(cell.className).toContain("shrink-0");
+        expect(cell.className).toContain("basis-[232px]");
+        expect(cell.className).toContain("sm:basis-[248px]");
+      }
+      unmountSlice();
+    }
+  });
+
+  it("shows discreet scroll arrows only when the horizontal rail overflows", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      frames.push(cb);
+      return frames.length;
+    });
+
+    const { unmount } = render(
+      <ExpenseSummaryCards month="2026-11" summary={summary} />,
+    );
+
+    const rail = screen.getByTestId("expense-summary-rail");
+    let scrollLeft = 0;
+    Object.defineProperty(rail, "clientWidth", { value: 500, configurable: true });
+    Object.defineProperty(rail, "scrollWidth", { value: 1240, configurable: true });
+    Object.defineProperty(rail, "scrollLeft", {
+      get: () => scrollLeft,
+      set: (val: number) => {
+        scrollLeft = val;
+      },
+      configurable: true,
+    });
+    const scrollBySpy = vi.fn(({ left }: { left: number }) => {
+      scrollLeft += left;
+    });
+    rail.scrollBy = scrollBySpy as unknown as typeof rail.scrollBy;
+
+    act(() => {
+      for (const cb of frames.splice(0)) cb(0);
+    });
+
+    const prevBtn = screen.getByRole("button", { name: "Categorías anteriores" });
+    const nextBtn = screen.getByRole("button", { name: "Siguientes categorías" });
+    expect(prevBtn).toBeDisabled();
+    expect(nextBtn).toBeEnabled();
+    expect(rail).toHaveAttribute("data-fade", "right");
+
+    fireEvent.click(nextBtn);
+    expect(scrollBySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ left: 375 }),
+    );
+
+    fireEvent.scroll(rail);
+    expect(prevBtn).toBeEnabled();
+    expect(rail).toHaveAttribute("data-fade", "both");
+
+    unmount();
+
+    // When all categories fit inside the rail, the arrows stay hidden.
     render(
       <ExpenseSummaryCards
         month="2026-11"
-        summary={{
-          ...summary,
-          groups: [
-            ...summary.groups,
-            { groupId: "g6", name: "Servicios", total: 40000, labels: [] },
-            { groupId: "g7", name: "Papelería", total: 30000, labels: [] },
-          ],
-        }}
+        summary={{ ...summary, groups: summary.groups.slice(0, 2) }}
       />,
     );
+    const shortRail = screen.getByTestId("expense-summary-rail");
+    Object.defineProperty(shortRail, "clientWidth", { value: 800, configurable: true });
+    Object.defineProperty(shortRail, "scrollWidth", { value: 800, configurable: true });
+    act(() => {
+      for (const cb of frames.splice(0)) cb(0);
+    });
 
-    const wrapped = screen.getByTestId("expense-summary-strip");
-    expect(wrapped.className).toContain("md:grid-cols-3");
-    expect(wrapped.className).toContain("xl:grid-cols-4");
-    expect(wrapped.className).not.toContain("xl:grid-cols-8");
+    expect(shortRail).not.toHaveAttribute("data-fade");
+    expect(screen.queryByRole("button", { name: "Categorías anteriores" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Siguientes categorías" })).toBeNull();
   });
 
   it("draws no proportion bars at all, only the coloured identity dot", () => {

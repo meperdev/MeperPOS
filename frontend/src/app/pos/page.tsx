@@ -25,7 +25,6 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { InlineConfirmButton } from "@/components/ui/InlineConfirmButton";
 import { Pagination } from "@/components/ui/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -36,6 +35,7 @@ import { shouldAutoFocusTextInput } from "@/lib/input-focus";
 import { useCartUndo } from "@/hooks/useCartUndo";
 import dynamic from "next/dynamic";
 import { PaymentMethodCards } from "@/components/pos/PaymentMethodCards";
+import { PausedSalesModal } from "@/components/pos/PausedSalesModal";
 import { CartLine } from "@/components/pos/CartLine";
 import { DiscountModal } from "@/components/pos/DiscountModal";
 import { MobileCartFloatingBar } from "@/components/pos/MobileCartFloatingBar";
@@ -43,7 +43,6 @@ import { ProductCard } from "@/components/products/ProductCard";
 import {
   Search,
   Star,
-  Trash2,
   ShoppingCart,
   Printer,
   FileDown,
@@ -1252,15 +1251,38 @@ export default function POSPage() {
         <div className="hidden lg:flex min-h-0 lg:h-full flex-col">
           <div className="@container h-auto min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-card lg:h-full flex flex-col">
             {/* Cart Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                Carrito
-              </h2>
-              {cart.length > 0 && (
-                <span className="text-[13px] text-muted-foreground tabular-nums">
-                  {cart.length}
-                </span>
-              )}
+            <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  Carrito
+                </h2>
+                {cart.length > 0 && (
+                  <span className="text-[13px] text-muted-foreground tabular-nums">
+                    {cart.length}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowPausedSalesModal(true)}
+                  className="h-8 px-2.5 text-xs font-medium tabular-nums"
+                >
+                  <Play className="w-3.5 h-3.5" aria-hidden="true" />
+                  Reanudar ({pausedSales.length})
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handlePauseSale}
+                  disabled={cart.length === 0}
+                  className="h-8 px-2.5 text-xs font-medium"
+                >
+                  <Pause className="w-3.5 h-3.5" aria-hidden="true" />
+                  Pausar
+                </Button>
+              </div>
             </div>
 
             {/* Cart Items */}
@@ -1282,15 +1304,15 @@ export default function POSPage() {
 
             {/* Cart Footer */}
             <div className="p-4 border-t border-border/60 bg-muted/10 space-y-3 shrink-0">
-              {/* Customer and financed sale share one row of icon-over-label cards,
-                  matching the payment method cards below. */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* Customer and financed sale share one compact horizontal utility row. */}
+              <div className="grid grid-cols-[1fr_auto] gap-2">
                 <button
                   type="button"
                   onClick={() => setShowCustomerModal(true)}
                   title={selectedCustomerName || undefined}
                   className={cn(
-                    "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2.5 transition-colors duration-150 ease-out",
+                    "flex h-9 min-w-0 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium transition-colors duration-150 ease-out",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                     selectedCustomer
                       ? "border-primary/40 bg-primary/10 text-foreground"
                       : "border-border/80 bg-muted/20 dark:bg-background/50 text-muted-foreground hover:border-foreground/25 hover:bg-muted/50 hover:text-foreground",
@@ -1299,7 +1321,7 @@ export default function POSPage() {
                   <span className={cn("shrink-0", selectedCustomer ? "text-primary-text" : "text-muted-foreground")}>
                     <User className="w-4 h-4" />
                   </span>
-                  <span className="w-full truncate text-center text-[13px] font-medium tracking-tight">
+                  <span className="min-w-0 truncate tracking-tight">
                     {selectedCustomerName || "Sin cliente"}
                   </span>
                 </button>
@@ -1314,16 +1336,22 @@ export default function POSPage() {
                       ? "Selecciona un cliente para financiar"
                       : undefined
                   }
-                  className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 px-2 py-2.5 text-muted-foreground transition-colors duration-150 ease-out hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                  className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/80 px-3 text-[13px] font-medium text-muted-foreground transition-colors duration-150 ease-out hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                 >
                   <span className="shrink-0">
                     <HandCoins className="w-4 h-4" />
                   </span>
-                  <span className="text-[13px] font-medium tracking-tight whitespace-nowrap">
+                  <span className="tracking-tight whitespace-nowrap">
                     Financiar
                   </span>
                 </button>
               </div>
+
+              {/* Payment Method Segmented Control */}
+              <PaymentMethodCards
+                selectedMethod={selectedPaymentMethod}
+                onMethodChange={setSelectedPaymentMethod}
+              />
 
               {/* Totals Breakdown */}
               <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
@@ -1347,35 +1375,6 @@ export default function POSPage() {
                   </span>
                 </div>
               </div>
-
-              {/* Pause / Resume */}
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowPausedSalesModal(true)}
-                  className="flex-1 h-9 rounded-lg text-[13px] font-medium"
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  Reanudar ({pausedSales.length})
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handlePauseSale}
-                  disabled={cart.length === 0}
-                  className="flex-1 h-9 rounded-lg text-[13px] font-medium"
-                >
-                  <Pause className="w-3.5 h-3.5" />
-                  Pausar
-                </Button>
-              </div>
-
-              {/* Payment Method Cards */}
-              <PaymentMethodCards
-                selectedMethod={selectedPaymentMethod}
-                onMethodChange={setSelectedPaymentMethod}
-              />
 
               {/* Checkout */}
               <Button
@@ -1705,7 +1704,7 @@ export default function POSPage() {
       )}
 
       {/* Paused Sales Modal */}
-      <Modal
+      <PausedSalesModal
         isOpen={showPausedSalesModal}
         onClose={() => {
           setShowPausedSalesModal(false);
@@ -1714,72 +1713,10 @@ export default function POSPage() {
             setOpenedFromMobileCart(false);
           }
         }}
-        title="Ventas pausadas"
-        size="xl"
-      >
-        <div className="space-y-3">
-          {pausedSales.length === 0 ? (
-            <EmptyState
-              icon={<Pause className="h-12 w-12" />}
-              title="No hay ventas pausadas"
-              subtitle="Pausa una venta para que aparezca aquí"
-            />
-          ) : (
-            <div className="scrollbar-app max-h-96 overflow-y-auto space-y-2">
-              {pausedSales.map((sale) => (
-                <div
-                  key={sale.id}
-                  className="p-4 rounded-xl bg-background/40 border border-border/70"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        {sale.customerName || "Sin cliente"}
-                      </p>
-                      <p className="text-[13px] text-muted-foreground mt-0.5">
-                        {sale.cart.length} producto(s) ·{" "}
-                        {new Date(sale.pausedAt).toLocaleString("es-CO")}
-                      </p>
-                    </div>
-                    <span className="stat-number text-base font-semibold tabular-nums text-primary-text">
-                      {formatCurrency(
-                        sale.cart.reduce(
-                          (sum, item) =>
-                            sum +
-                            item.quantity * item.unitPrice -
-                            item.discountAmount,
-                          0,
-                        ),
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleResumeSale(sale.id)}
-                      className="flex-1"
-                    >
-                      <Play className="w-3.5 h-3.5" /> Reanudar
-                    </Button>
-                    <InlineConfirmButton
-                      ariaLabel={
-                        sale.customerName
-                          ? `Eliminar venta pausada de ${sale.customerName}`
-                          : "Eliminar venta pausada"
-                      }
-                      announce="Confirma para eliminar la venta pausada"
-                      confirmLabel="¿Eliminar?"
-                      onConfirm={() => handleDeletePausedSale(sale.id)}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    </InlineConfirmButton>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Modal>
+        pausedSales={pausedSales}
+        onResume={handleResumeSale}
+        onDelete={handleDeletePausedSale}
+      />
 
       <ConfirmDialog
         isOpen={showFinanceConfirm}

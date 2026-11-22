@@ -238,7 +238,7 @@ export function PurchaseOrderItemEditor({
       onChange={(event) =>
         updateRow(row.tempId, { qtyOrdered: Number(event.target.value) || 0 })
       }
-      className="text-right"
+      className="px-2.5 text-right"
       data-qty-layout={layout}
       data-qty-row={row.tempId}
     />
@@ -282,7 +282,7 @@ export function PurchaseOrderItemEditor({
       onChange={(event) =>
         updateRow(row.tempId, { taxRate: Number(event.target.value) || 0 })
       }
-      className="text-right"
+      className="px-2.5 text-right"
       data-tax-layout={layout}
       data-tax-row={row.tempId}
     />
@@ -423,23 +423,23 @@ export function PurchaseOrderItemEditor({
       ) : (
         <>
           <div className="hidden overflow-hidden rounded-b-xl @2xl:block @2xl:overflow-x-auto">
-            <Table className="min-w-[620px]">
+            <Table className="min-w-[680px]">
               <TableHeader>
                 <TableRow>
                   <TableCell as="th" className="pl-4">Producto</TableCell>
-                  <TableCell as="th" className="w-24 px-2 text-right">
+                  <TableCell as="th" className="w-28 min-w-28 px-2 2xl:px-2 text-right">
                     Cant.
                   </TableCell>
-                  <TableCell as="th" className="w-36 px-2 text-right">
+                  <TableCell as="th" className="w-40 min-w-40 px-2 2xl:px-2 text-right">
                     Costo unit.
                   </TableCell>
-                  <TableCell as="th" className="w-24 px-2 text-right">
+                  <TableCell as="th" className="w-28 min-w-28 px-2 2xl:px-2 text-right">
                     IVA %
                   </TableCell>
-                  <TableCell as="th" className="w-28 px-2 text-right">
+                  <TableCell as="th" className="w-32 px-2 2xl:px-2 text-right">
                     Subtotal
                   </TableCell>
-                  <TableCell as="th" className="w-12">
+                  <TableCell as="th" className="w-12 px-2 2xl:px-2">
                     <span className="sr-only">Acciones</span>
                   </TableCell>
                 </TableRow>
@@ -455,13 +455,13 @@ export function PurchaseOrderItemEditor({
                         {row.productSku}
                       </p>
                     </TableCell>
-                    <TableCell className="px-2 text-right">{qtyInput(row, "table")}</TableCell>
-                    <TableCell className="px-2">{costInput(row, "table")}</TableCell>
-                    <TableCell className="px-2 text-right">{taxInput(row, "table")}</TableCell>
-                    <TableCell className="whitespace-nowrap px-2 text-right text-sm font-semibold text-foreground tabular-nums">
+                    <TableCell className="w-28 min-w-28 px-2 2xl:px-2 text-right">{qtyInput(row, "table")}</TableCell>
+                    <TableCell className="w-40 min-w-40 px-2 2xl:px-2">{costInput(row, "table")}</TableCell>
+                    <TableCell className="w-28 min-w-28 px-2 2xl:px-2 text-right">{taxInput(row, "table")}</TableCell>
+                    <TableCell className="whitespace-nowrap px-2 2xl:px-2 text-right text-sm font-semibold text-foreground tabular-nums">
                       {formatCurrency(lineTotal(row))}
                     </TableCell>
-                    <TableCell className="pr-2 text-right">{removeButton(row)}</TableCell>
+                    <TableCell className="px-2 2xl:px-2 text-right">{removeButton(row)}</TableCell>
                   </TableRow>
                 ))}
               </tbody>
