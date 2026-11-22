@@ -138,8 +138,8 @@ describe('cookies.helper', () => {
             sameSite: setOptions?.sameSite,
             secure: setOptions?.secure,
           });
-          // clearCookie() sets the past Expires itself; a maxAge here would
-          // override it and keep the cookie alive.
+          // The cleared descriptor carries no lifetime of its own:
+          // clearCookie() supplies the past Expires.
           expect(clearedOptions?.maxAge).toBeUndefined();
         }
       },

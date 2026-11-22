@@ -108,9 +108,9 @@ export function buildAuthCookies(
 
 /**
  * Descriptors for expiring every auth cookie on logout. Express's
- * clearCookie() adds the past Expires header; each cookie must repeat the
- * path (refresh_token: /api/auth), httpOnly, sameSite and secure it was set
- * with, and carry no maxAge, or the browser will not remove it.
+ * clearCookie() adds the past Expires header (and ignores any maxAge); each
+ * cookie must repeat the path (refresh_token: /api/auth), sameSite and secure
+ * it was set with, or the browser will not remove it.
  */
 export function buildClearedAuthCookies(): CookieDescriptor[] {
   const { sameSite, secure } = resolveSitePolicy();
