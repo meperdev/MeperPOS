@@ -102,11 +102,17 @@ Después de aplicar la migración nueva, ejecutar `psql -X -w -v ON_ERROR_STOP=1
 
 ## Sede de origen de una venta o financiación POS
 
-`20261123120000_sale_origin_site` agrega dos tablas vacías. Cada tabla permite una sola sede de origen por operación, de la misma organización. No cambia `Sale` ni `PosLoanSaleIntent`, no completa datos históricos y no agrega campos a las respuestas, las cotizaciones ni los resultados de un reintento. La aplicación todavía no guarda la sede en estas tablas ni mueve saldos por sede.
+`20261123120000_sale_origin_site` agrega dos tablas vacías. Cada tabla permite una sola sede de origen por operación, de la misma organización. No cambia `Sale` ni `PosLoanSaleIntent`, no completa datos históricos y no agrega campos a las respuestas, las cotizaciones ni los resultados de un reintento. La migración por sí sola no escribe atribuciones ni mueve saldos por sede.
 
 Borrar una sede que conserve una atribución se rechaza; si una operación se elimina de acuerdo con las reglas actuales, su atribución se elimina con ella. La migración necesita bloqueos breves sobre las tablas referenciadas: aplicar con las escrituras de ventas y financiación pausadas y las transacciones en curso terminadas, con un máximo de 5 segundos de espera por bloqueo o el límite positivo menor ya configurado.
 
 Para verificarla desde `backend/`, usar una base desechable `meperpos_stock_rehearsal_t16_…` con las migraciones aplicadas y el fixture `test/migrations/product-stock.fixture.sql`. Ejecutar `psql -X -w -v ON_ERROR_STOP=1 -f test/migrations/sale-origin-site.constraints.sql` con la conexión explícita a esa base. Debe terminar en `ROLLBACK` con código 0.
+
+### Ventas directas antes del corte
+
+`POST /api/sales` admite `locationId` opcional. Si se envía, debe ser un texto no vacío; un número o `null` devuelve `400`. El servidor comprueba el permiso vigente en la misma transacción y acepta la venta solo cuando esa sede es la única sede de la organización y es la principal. Guarda la sede de origen junto con la venta y el movimiento. Sin `locationId` se mantiene el comportamiento anterior; no se atribuye una sede por defecto. El saldo descontado sigue siendo `Product.stock`.
+
+Un reintento con el mismo contenido y clave devuelve la venta original. Si el reintento indica una sede, tiene que coincidir con la ya registrada: otra sede o una venta anterior sin sede devuelve `409` sin duplicar la venta ni cambiar el saldo. Una anulación de una venta atribuida registra la devolución en su sede original y comprueba los permisos vigentes, sin volver a exigir que sea la única sede. La respuesta de venta conserva sus campos anteriores.
 
 ## Entrega futura: cambiar la fuente de stock
 

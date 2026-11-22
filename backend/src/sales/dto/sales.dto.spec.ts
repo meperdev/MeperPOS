@@ -1,3 +1,4 @@
+import { ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateSaleDto, UpdateSaleDto } from './sales.dto';
@@ -42,6 +43,38 @@ describe('sales DTO contract', () => {
       });
 
       await expect(validate(dto)).resolves.toHaveLength(0);
+    });
+  });
+
+  describe('CreateSaleDto origin site', () => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    });
+    const transform = (site: Record<string, unknown>) => pipe.transform(
+      { items: validItems, payments: validPayments, ...site },
+      { type: 'body', metatype: CreateSaleDto },
+    );
+
+    it('accepts an exact string and preserves omission', async () => {
+      const omitted = await transform({});
+      expect(omitted.locationId).toBeUndefined();
+      await expect(transform({ locationId: 'site-a' })).resolves.toMatchObject({
+        locationId: 'site-a',
+      });
+    });
+
+    it.each([
+      [123, 'locationId must be a string'],
+      [null, 'locationId must be a string'],
+      ['', 'locationId should not be empty'],
+    ])('rejects explicit invalid locationId %p before the service', async (locationId, message) => {
+      await expect(transform({ locationId })).rejects.toMatchObject({
+        status: 400,
+        response: { message: expect.arrayContaining([message]) },
+      });
     });
   });
 

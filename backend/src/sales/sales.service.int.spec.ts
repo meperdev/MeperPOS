@@ -1,4 +1,5 @@
-import { FiscalDocumentStatus, Prisma } from '@prisma/client';
+import { FiscalDocumentStatus, OrgRole, Prisma } from '@prisma/client';
+import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { SequenceService } from '../common/sequences/sequence.service';
@@ -675,5 +676,137 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
       select: { stock: true },
     });
     expect(stock.stock).toBe(0);
+  });
+
+  describe('direct POS origin before the stock cutover', () => {
+    const principal = 'sales-int-origin-principal';
+    const warehouse = 'sales-int-origin-warehouse';
+    const outside = 'sales-int-origin-other-tenant';
+    let actor: RequestUser;
+
+    beforeAll(async () => {
+      actor = {
+        ...fixture.actAs('A'),
+        email: 'sales-origin@example.test',
+        role: OrgRole.ADMIN,
+        tokenVersion: 0,
+        isSuperAdmin: false,
+      };
+      await prisma.organizationUser.create({
+        data: {
+          userId: actor.userId,
+          organizationId: actor.organizationId!,
+          role: actor.role as OrgRole,
+        },
+      });
+      await prisma.location.createMany({ data: [
+        { id: principal, organizationId: fixture.orgAId, name: 'Principal', isDefault: true },
+        { id: outside, organizationId: fixture.orgBId, name: 'Foreign site', isDefault: true },
+      ] });
+    });
+
+    const create = (locationId: string | undefined, requestKey: string) => {
+      const dto = { ...buildSaleDto(productId, customerId), locationId, requestKey };
+      return salesService.create(dto, actor.userId, actor.organizationId, actor);
+    };
+    const snapshot = async () => {
+      const where = { organizationId: fixture.orgAId };
+      return {
+        sales: await prisma.sale.count({ where }),
+        origins: await prisma.saleOriginSite.count({ where }),
+        movements: await prisma.inventoryMovement.count({ where }),
+        siteBalances: await prisma.productStock.count({ where }),
+        product: await prisma.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { stock: true, reservedStock: true, version: true },
+        }),
+        counter: await prisma.organizationSequence.findFirstOrThrow({
+          where: { ...where, type: 'SALE' },
+          select: { currentNumber: true },
+        }),
+      };
+    };
+
+    it('preserves legacy replay without writing a site or accepting retroactive attribution', async () => {
+      const legacy = await create(undefined, 'origin-legacy');
+      const after = await snapshot();
+      expect(after.origins).toBe(0);
+      expect(await prisma.inventoryMovement.findFirstOrThrow({
+        where: { saleId: legacy.id },
+        select: { locationId: true },
+      })).toEqual({ locationId: null });
+      await expect(create(undefined, 'origin-legacy')).resolves.toMatchObject({ id: legacy.id });
+      await expect(create(principal, 'origin-legacy')).rejects.toMatchObject({
+        status: 409, message: 'La solicitud ya corresponde a una venta con otra atribución de sede',
+      });
+      expect(await snapshot()).toEqual(after);
+    });
+
+    it('persists the authorized principal on sale and reversal, without activating site balances', async () => {
+      const before = await snapshot();
+      await expect(create(outside, 'origin-foreign')).rejects.toMatchObject({
+        status: 404, message: 'Location not found',
+      });
+      expect(await snapshot()).toEqual(before);
+
+      const sale = await create(principal, 'origin-new-sale');
+      expect(sale).not.toHaveProperty('originSite');
+      expect(await prisma.saleOriginSite.findFirstOrThrow({ where: { saleId: sale.id } })).toEqual({
+        saleId: sale.id, organizationId: fixture.orgAId, locationId: principal,
+      });
+      expect(await snapshot()).toEqual({
+        ...before,
+        sales: before.sales + 1,
+        origins: before.origins + 1,
+        movements: before.movements + 1,
+        product: { ...before.product, stock: before.product.stock - 1, version: before.product.version + 1 },
+        counter: { currentNumber: before.counter.currentNumber + 1 },
+      });
+      const after = await snapshot();
+      await expect(create(principal, 'origin-new-sale')).resolves.toMatchObject({ id: sale.id });
+      await expect(create(undefined, 'origin-new-sale')).resolves.toMatchObject({ id: sale.id });
+      await prisma.location.create({ data: { id: warehouse, organizationId: fixture.orgAId, name: 'Warehouse' } });
+      await expect(create(warehouse, 'origin-new-sale')).rejects.toMatchObject({
+        status: 409, message: 'La solicitud ya corresponde a una venta con otra atribución de sede',
+      });
+      for (const site of [principal, warehouse]) {
+        await expect(create(site, 'origin-topology')).rejects.toMatchObject({
+          status: 409, message: 'El stock global solo permite ventas en la única sede principal',
+        });
+      }
+      expect(await snapshot()).toEqual(after);
+
+      await prisma.organizationUser.updateMany({
+        where: { userId: actor.userId, organizationId: actor.organizationId },
+        data: { role: OrgRole.CASHIER },
+      });
+      const cancel = () => salesService.update(
+        sale.id, { status: 'CANCELLED' }, actor.userId, actor.organizationId, actor,
+      );
+      try {
+        await expect(cancel()).rejects.toMatchObject({ status: 403, message: 'Location authorization changed' });
+        expect(await snapshot()).toEqual(after);
+        expect(await prisma.sale.findUniqueOrThrow({ where: { id: sale.id }, select: { status: true } })).toEqual({ status: 'COMPLETED' });
+      } finally {
+        await prisma.organizationUser.updateMany({
+          where: { userId: actor.userId, organizationId: actor.organizationId },
+          data: { role: OrgRole.ADMIN },
+        });
+      }
+      await expect(cancel()).resolves.toMatchObject({ status: 'CANCELLED' });
+      expect(await prisma.inventoryMovement.findMany({
+        where: { saleId: sale.id },
+        orderBy: { type: 'asc' },
+        select: { type: true, quantity: true, locationId: true },
+      })).toEqual([
+        { type: 'SALE', quantity: -1, locationId: principal },
+        { type: 'RETURN', quantity: 1, locationId: principal },
+      ]);
+      expect(await snapshot()).toEqual({
+        ...after,
+        movements: after.movements + 1,
+        product: { ...after.product, stock: before.product.stock, version: after.product.version + 1 },
+      });
+    });
   });
 });

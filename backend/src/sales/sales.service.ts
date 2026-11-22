@@ -34,6 +34,7 @@ import { ReceiptsService } from '../receipts/receipts.service';
 import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emission';
 import { voidSaleFiscalDocument } from '../electronic-invoicing/fiscal-document.service';
 import { isElectronicInvoicingActive } from '../settings/schema';
+import { resolveWritableSiteWithin } from '../locations/authorized-site';
 
 /**
  * A POS-financed sale carries no cash/card rows, so the derived flag travels
@@ -232,7 +233,8 @@ export class SalesService {
         'Organization ID is required for this operation',
       );
     }
-    const { customerId, items, discountAmount = 0, payments } = createSaleDto;
+    const { customerId, items, discountAmount = 0, payments, locationId } =
+      createSaleDto;
 
     if (items.length === 0) {
       throw new BadRequestException('Sale must have at least one item');
@@ -252,6 +254,7 @@ export class SalesService {
       const replayId = await this.findSaleIdByRequestKey(
         organizationId,
         requestKeyHash,
+        locationId,
       );
       if (replayId) {
         return this.findOne(replayId, organizationId);
@@ -429,6 +432,23 @@ export class SalesService {
     const runSaleTransaction = () =>
       this.prisma.$transaction(
         async (tx) => {
+          const origin = locationId === undefined
+            ? undefined
+            : await this.resolveSaleLocation(tx, user, userId, organizationId, locationId);
+          if (origin) {
+            // Global stock is safe for an explicit site only while this is the
+            // sole principal site in the entire tenant, not just in the grant list.
+            const sites = await tx.location.findMany({
+              where: { organizationId },
+              select: { id: true, isDefault: true },
+              take: 2,
+            });
+            if (sites.length !== 1 || !sites[0].isDefault || sites[0].id !== origin.locationId) {
+              throw new ConflictException(
+                'El stock global solo permite ventas en la única sede principal',
+              );
+            }
+          }
           const { number: saleNumber } = await this.sequenceService.nextNumber(
             tx,
             organizationId,
@@ -454,6 +474,12 @@ export class SalesService {
               requestKeyHash,
             },
           });
+
+          if (origin) {
+            await tx.saleOriginSite.create({
+              data: { saleId: createdSale.id, ...origin },
+            });
+          }
 
           for (const saleItem of saleItems) {
             await tx.saleItem.create({
@@ -550,6 +576,7 @@ export class SalesService {
                   userId,
                   saleId: createdSale.id,
                   organizationId,
+                  ...(origin ? { locationId: origin.locationId } : {}),
                 },
               });
             }
@@ -667,6 +694,7 @@ export class SalesService {
           const replayId = await this.findSaleIdByRequestKey(
             organizationId,
             requestKeyHash,
+            locationId,
           );
           if (replayId) {
             return this.findOne(replayId, organizationId);
@@ -691,15 +719,39 @@ export class SalesService {
     }
   }
 
-  /** The sale registered for an idempotency digest, if it exists (SEC-014). */
+  private resolveSaleLocation(
+    tx: Prisma.TransactionClient,
+    user: RequestUser | undefined,
+    userId: string,
+    organizationId: string,
+    locationId: string,
+  ) {
+    if (user?.userId !== userId || user.organizationId !== organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    return resolveWritableSiteWithin(tx, user, locationId);
+  }
+
+  /** Replay legacy digests unchanged, but never switch an explicit origin. */
   private async findSaleIdByRequestKey(
     organizationId: string,
     requestKeyHash: string,
+    locationId: string | undefined,
   ): Promise<string | null> {
+    const where = { organizationId, requestKeyHash };
+    if (locationId === undefined) {
+      const sale = await this.prisma.sale.findFirst({ where, select: { id: true } });
+      return sale?.id ?? null;
+    }
     const sale = await this.prisma.sale.findFirst({
-      where: { organizationId, requestKeyHash },
-      select: { id: true },
+      where,
+      select: { id: true, originSite: { select: { locationId: true } } },
     });
+    if (sale && sale.originSite?.locationId !== locationId) {
+      throw new ConflictException(
+        'La solicitud ya corresponde a una venta con otra atribución de sede',
+      );
+    }
     return sale?.id ?? null;
   }
 
@@ -876,7 +928,12 @@ export class SalesService {
     }
     const existingSale = await this.prisma.sale.findFirst({
       where: { id, organizationId },
-      include: { items: true },
+      include: {
+        items: true,
+        ...(updateSaleDto.status === 'CANCELLED'
+          ? { originSite: { select: { locationId: true } } }
+          : {}),
+      },
     });
 
     if (!existingSale) {
@@ -905,7 +962,11 @@ export class SalesService {
     }
 
     if (updateSaleDto.status === 'CANCELLED') {
+      const locationId = existingSale.originSite?.locationId;
       await this.prisma.$transaction(async (tx) => {
+        if (locationId !== undefined) {
+          await this.resolveSaleLocation(tx, user, userId, organizationId, locationId);
+        }
         // Sale has no version column. Claim its expected state before effects;
         // a concurrent loser cannot restore inventory a second time.
         const claimed = await tx.sale.updateMany({
@@ -978,6 +1039,7 @@ export class SalesService {
                 userId,
                 saleId: existingSale.id,
                 organizationId: existingSale.organizationId,
+                ...(locationId === undefined ? {} : { locationId }),
               },
             });
           }

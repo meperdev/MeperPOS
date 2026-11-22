@@ -9,9 +9,10 @@ import {
   MaxLength,
   MinLength,
   ValidateNested,
+  ValidateIf,
   Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class SaleItemDto {
   @ApiProperty({ example: 'uuid-product-id' })
@@ -53,6 +54,15 @@ export class PaymentDto {
 }
 
 export class CreateSaleDto {
+  @ApiPropertyOptional({
+    description: 'Explicit origin site; before cutover only the sole principal site can use global stock.',
+  })
+  @Transform(({ obj, key }) => obj[key], { toClassOnly: true })
+  @ValidateIf((_dto, value) => value !== undefined)
+  @IsString()
+  @IsNotEmpty()
+  locationId?: string;
+
   @ApiProperty({ example: 'uuid-customer-id', required: false })
   @IsString()
   @IsNotEmpty()
