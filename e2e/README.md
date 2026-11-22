@@ -8,6 +8,7 @@ a real backend, a real frontend and a dedicated, freshly seeded PostgreSQL.
 | Login | `tests/login.spec.ts` | A wrong password shows an error and stays on `/login`; the seeded owner signs in and lands on `/dashboard`. |
 | POS cash checkout | `tests/pos-checkout.spec.ts` | A seeded product found by SKU reaches the cart at its server price, a cash payment completes the sale, the cart empties, and `/sales` lists the sale with the same number and total. |
 | Inventory | `tests/inventory-create-product.spec.ts` | "Nuevo producto" creates a product with a unique name and SKU, and the catalogue search finds it. |
+| Session restore after a browser restart | `tests/session-restart.spec.ts` | After sign-in, dropping every session-only cookie (as a browser restart does) keeps `refresh_token` and `csrf_token`; reloading `/dashboard` refreshes with 201 and stays signed in. |
 
 ## Run it locally
 

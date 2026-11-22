@@ -12,8 +12,12 @@ export const CSRF_TOKEN_COOKIE = 'csrf_token';
  * ACCESS_TOKEN_TTL_MS constant from auth.constants.ts so the JWT and its
  * cookie can never drift) and refresh-token rows expire 7 days after
  * issuance.
+ *
+ * REFRESH_TTL_MS is the lifetime of the whole cookie session: refresh_token
+ * and csrf_token both use it, because POST /api/auth/refresh is CSRF-guarded
+ * and needs both cookies to survive a browser restart together.
  */
-const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface AuthCookieOptions {
   httpOnly: boolean;
@@ -47,7 +51,10 @@ export function generateCsrfToken(): string {
  * Builds Set-Cookie descriptors for a fresh session:
  * - access_token: httpOnly, site-wide (path /)
  * - refresh_token: httpOnly, scoped to /api/auth so it is only sent to auth routes
- * - csrf_token: readable by JS (double-submit CSRF pattern), session-scoped
+ * - csrf_token: readable by JS (double-submit CSRF pattern), same maxAge as
+ *   refresh_token (REFRESH_TTL_MS). It must not be session-scoped: the
+ *   CSRF-guarded refresh needs it after a browser restart drops session
+ *   cookies, or a valid 7-day session ends in 403 + /login.
  *
  * The existing csrf_token cookie is reused when present so open tabs keep a
  * stable header value across token rotations.
@@ -88,15 +95,22 @@ export function buildAuthCookies(
     {
       name: CSRF_TOKEN_COOKIE,
       value: csrfToken,
-      options: { httpOnly: false, sameSite, secure, path: '/' },
+      options: {
+        httpOnly: false,
+        sameSite,
+        secure,
+        path: '/',
+        maxAge: REFRESH_TTL_MS,
+      },
     },
   ];
 }
 
 /**
  * Descriptors for expiring every auth cookie on logout. Express's
- * clearCookie() adds the past Expires header; the refresh cookie must repeat
- * its scoped path or the browser will not remove it.
+ * clearCookie() adds the past Expires header (and ignores any maxAge); each
+ * cookie must repeat the path (refresh_token: /api/auth), sameSite and secure
+ * it was set with, or the browser will not remove it.
  */
 export function buildClearedAuthCookies(): CookieDescriptor[] {
   const { sameSite, secure } = resolveSitePolicy();
