@@ -7,6 +7,7 @@ import {
   IsString,
   IsBooleanString,
   IsIn,
+  MaxLength,
 } from 'class-validator';
 
 export class QuerySuppliersDto {
@@ -27,6 +28,7 @@ export class QuerySuppliersDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   search?: string;
 
   @ApiProperty({ required: false, example: 'true' })

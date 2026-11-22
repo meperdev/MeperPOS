@@ -12,6 +12,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class UpdateOrganizationNameDto {
   @ApiProperty({ example: 'Acme Corp' })
   @IsString()
+  @MaxLength(100)
   @IsNotEmpty()
   name: string;
 }
@@ -19,6 +20,7 @@ export class UpdateOrganizationNameDto {
 export class UpdateReceiptPrefixDto {
   @ApiPropertyOptional({ example: 'REC-' })
   @IsString()
+  @MaxLength(20)
   @IsOptional()
   prefix?: string;
 }
@@ -53,11 +55,13 @@ export class PurchaseOrderTemplateDto {
 export class UpdateSettingsDto {
   @ApiPropertyOptional({ example: 'Empresa ABC - Comprobante #' })
   @IsString()
+  @MaxLength(500)
   @IsOptional()
   printHeader?: string;
 
   @ApiPropertyOptional({ example: 'Pague en efectivo. Gracias por su compra.' })
   @IsString()
+  @MaxLength(500)
   @IsOptional()
   printFooter?: string;
 

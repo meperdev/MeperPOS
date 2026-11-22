@@ -7,6 +7,7 @@ import {
   ValidateNested,
   ArrayMinSize,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 import { CreatePurchaseOrderItemDto } from './create-purchase-order.dto';
 
@@ -27,5 +28,6 @@ export class UpdatePurchaseOrderDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 }

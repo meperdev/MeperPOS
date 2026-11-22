@@ -22,6 +22,7 @@ export class CreatePayrollPeriodInstallmentDto {
   obligationId: string;
 
   @IsString()
+  @MaxLength(13)
   @Matches(/^\d+(?:\.\d{1,2})?$/)
   amount: string;
 

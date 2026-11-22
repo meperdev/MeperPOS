@@ -25,6 +25,7 @@ export class CreatePayrollPeriodDto {
 
   // Strings preserve the caller's exact decimal value and match allocation input.
   @IsString()
+  @MaxLength(13)
   @Matches(/^\d+(?:\.\d{1,2})?$/)
   periodAmount: string;
 

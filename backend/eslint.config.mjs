@@ -54,6 +54,13 @@ export default tseslint.config(
       'meperpos/require-organization-guard': 'error',
     },
   },
+  {
+    files: ['**/*.dto.ts'],
+    plugins: { meperpos },
+    rules: {
+      'meperpos/require-string-length-bound': 'error',
+    },
+  },
   // Frozen formatting baseline: these pre-existing files report prettier as a
   // warning so `npm run lint:ci` can block. The list only shrinks.
   {
