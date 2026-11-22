@@ -38,6 +38,20 @@ describe("Input number stepper", () => {
     expect(input.className).toContain("pr-9");
   });
 
+  it("preserves wider caller right padding on suffixIcon inputs while protecting numeric steppers", () => {
+    render(
+      <Input
+        aria-label="Campo con sufijo"
+        suffixIcon={<span>*</span>}
+        className="pr-12"
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Campo con sufijo" });
+    expect(input.className).toContain("pr-12");
+    expect(input.className).not.toContain("pr-9");
+  });
+
   it("omits the stepper overlay and reserved right padding when hideStepper is set", () => {
     render(<Input aria-label="Cantidad" type="number" hideStepper defaultValue="1" />);
 

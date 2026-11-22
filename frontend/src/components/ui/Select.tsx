@@ -37,13 +37,14 @@ interface PopoverPlacement {
   placement: "top" | "bottom";
 }
 
-/** Nearest ancestor that scrolls vertically (a modal body, a panel), or null when the page scrolls. */
-function findScrollParent(node: HTMLElement | null): HTMLElement | null {
+/** All vertical scroll ancestors (e.g., nested list inside a modal body). */
+function findScrollParents(node: HTMLElement | null): HTMLElement[] {
+  const scrollers: HTMLElement[] = [];
   for (let el = node?.parentElement ?? null; el; el = el.parentElement) {
     const { overflowY } = window.getComputedStyle(el);
-    if (overflowY === "auto" || overflowY === "scroll") return el;
+    if (overflowY === "auto" || overflowY === "scroll") scrollers.push(el);
   }
-  return null;
+  return scrollers;
 }
 
 const MENU_ROW_HEIGHT = 36;
@@ -116,6 +117,12 @@ export function Select({
   useEffect(() => {
     // The sheet carries its own overlay; a mousedown inside it is not "outside".
     if (!isOpen || belowSm) return;
+    const raf = window.requestAnimationFrame(() => {
+      if (triggerRef.current) {
+        setPopover(computePopoverPlacement(triggerRef.current, options.length));
+      }
+    });
+
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (
@@ -137,9 +144,18 @@ export function Select({
       }
       const trigger = triggerRef.current;
       if (!trigger) return;
-      const scroller = findScrollParent(containerRef.current);
-      if (scroller) {
-        const triggerRect = trigger.getBoundingClientRect();
+      const triggerRect = trigger.getBoundingClientRect();
+      if (
+        window.innerHeight > 0 &&
+        triggerRect.height > 0 &&
+        (triggerRect.bottom <= 0 || triggerRect.top >= window.innerHeight)
+      ) {
+        setIsOpen(false);
+        setPopover(null);
+        return;
+      }
+      const scrollers = findScrollParents(containerRef.current);
+      for (const scroller of scrollers) {
         const scrollerRect = scroller.getBoundingClientRect();
         if (
           scrollerRect.height > 0 &&
@@ -158,6 +174,7 @@ export function Select({
     window.addEventListener("resize", handleReposition);
     window.addEventListener("scroll", handleReposition, true);
     return () => {
+      window.cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("resize", handleReposition);
       window.removeEventListener("scroll", handleReposition, true);
@@ -197,6 +214,18 @@ export function Select({
   const handleSelect = (nextValue: string) => {
     onChange(nextValue);
     closeToTrigger();
+  };
+
+  const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!isOpen) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setIsOpen(false);
+      setPopover(null);
+    } else if (event.key === "Tab") {
+      setIsOpen(false);
+      setPopover(null);
+    }
   };
 
   const handleListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -306,6 +335,7 @@ export function Select({
         type="button"
         disabled={disabled}
         onClick={toggleOpen}
+        onKeyDown={handleTriggerKeyDown}
         data-select-trigger
         aria-haspopup="listbox"
         aria-expanded={isOpen}

@@ -88,15 +88,17 @@ export const Input = forwardRef<HTMLInputElement | HTMLTextAreaElement, InputPro
       "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-muted/40",
       icon && "pl-9",
       prefixText && "pl-8 tabular-nums",
+      (Boolean(suffixIcon) || showStepper) && "pr-9",
       isNumber &&
         "tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
       error
         ? "border-danger focus:border-danger focus:ring-danger/25"
         : "border-border/70 hover:border-border",
       className,
-      // Keep right clearance AFTER caller className so `px-*` overrides on compact
-      // cells can narrow the left side without letting digits slide under the stepper.
-      (Boolean(suffixIcon) || showStepper) && "pr-9",
+      // Keep right clearance AFTER caller className for numeric steppers so
+      // `px-*` overrides on compact cells cannot let digits slide under the
+      // stepper, while leaving wider caller `pr-*` (like PasswordInput `pr-12`) intact.
+      showStepper && !/\bpr-(?:9|1[0-9])\b/.test(className) && "pr-9",
     );
 
     return (

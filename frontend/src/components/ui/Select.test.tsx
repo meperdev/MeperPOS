@@ -261,6 +261,59 @@ describe("Select", () => {
       expect(matchMedia).toHaveBeenCalledWith("(min-width: 640px)");
       spy.mockRestore();
     });
+
+    it("closes the popover when an outer scroll ancestor scrolls the trigger out of view", () => {
+      stubSmBreakpoint(true);
+      Object.defineProperty(window, "innerHeight", { value: 768, configurable: true, writable: true });
+      let triggerRect: Partial<DOMRect> = {
+        top: 200,
+        bottom: 236,
+        left: 24,
+        right: 224,
+        width: 200,
+        height: 36,
+      };
+      const spy = vi
+        .spyOn(Element.prototype, "getBoundingClientRect")
+        .mockImplementation(function (this: Element) {
+          const base = this.hasAttribute("data-select-trigger")
+            ? triggerRect
+            : this.hasAttribute("data-outer-scroller")
+              ? { top: 100, bottom: 500, height: 400 }
+              : this.hasAttribute("data-inner-scroller")
+                ? { top: 180, bottom: 320, height: 140 }
+                : {};
+          return {
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            width: 0,
+            height: 0,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+            ...base,
+          } as DOMRect;
+        });
+
+      render(
+        <div data-outer-scroller style={{ overflowY: "auto" }}>
+          <div data-inner-scroller style={{ overflowY: "auto" }}>
+            <Select value="" label="Método" options={baseOptions} onChange={vi.fn()} />
+          </div>
+        </div>,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Método" }));
+      expect(document.body.querySelector("[data-select-popover]")).not.toBeNull();
+
+      triggerRect = { top: 20, bottom: 56, left: 24, right: 224, width: 200, height: 36 };
+      fireEvent.scroll(window);
+
+      expect(document.body.querySelector("[data-select-popover]")).toBeNull();
+      spy.mockRestore();
+    });
   });
 
   it("closes the popover when a mousedown happens outside the container", () => {
