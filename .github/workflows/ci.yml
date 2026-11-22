@@ -50,6 +50,13 @@ jobs:
         working-directory: ${{ matrix.package }}
         run: npm run lint:ci
 
+      # The semáforo labeler's unit tests ride this existing required job, so
+      # they never add a check of their own. Globs need Node 21+: the directory
+      # form is rejected from 24 on.
+      - name: Semáforo classifier tests
+        if: matrix.package == 'backend'
+        run: node --test '.github/semaforo/*.test.mjs'
+
   backend:
     name: Backend - build and test
     runs-on: ubuntu-latest

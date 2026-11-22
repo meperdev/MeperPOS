@@ -1,0 +1,54 @@
+name: Semáforo
+
+# Labels every pull request from .github/semaforo/config.json and keeps ONE
+# summary comment. It only ever labels and comments: it never fails the run,
+# it is not a required check and it must stay out of branch protection. Every
+# problem (API error, fork token, missing label) ends as "no change + warning".
+#
+# Why `pull_request` and not `pull_request_target`: this repository works with
+# same-repo branches, whose token can write labels, while a fork gets a
+# read-only token and therefore degrades to "computed, not written". No PR code
+# is ever checked out or executed here, and nothing privileged is exposed to
+# it (the classifier only reads file names from the API). A PR can edit its own
+# rules; that is not an escalation, because anyone who can push to a same-repo
+# branch can already set labels by hand, and every change under `.github/**`
+# is itself rojo. Known limit: GitHub does not run pull_request workflows while
+# the PR has merge conflicts.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+  # The issue label, comment and event endpoints accept the Pull requests
+  # permission; `issues: write` is not needed.
+  pull-requests: write
+
+jobs:
+  label:
+    name: Semáforo
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Label events only matter for semaforo:* (a hand-set or removed label).
+    # Other label events share an idle concurrency group and change nothing.
+    if: >-
+      github.event.action != 'labeled' && github.event.action != 'unlabeled' ||
+      startsWith(github.event.label.name, 'semaforo:')
+    concurrency:
+      group: semaforo-${{ github.event.pull_request.number }}-${{ startsWith(github.event.label.name || '', 'semaforo:') }}
+      cancel-in-progress: true
+
+    steps:
+      # Only the base ref, only the classifier: no PR code is ever read or run.
+      - name: Check out the classifier (base ref only)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: .github/semaforo
+          persist-credentials: false
+        continue-on-error: true
+
+      - name: Label the pull request
+        # `|| true` and continue-on-error: a failure here is never a red X.
+        run: node .github/semaforo/run.mjs || echo "::warning title=semaforo::semaforo did not finish, nothing was changed"
+        continue-on-error: true
