@@ -1,0 +1,24 @@
+{
+  "name": "meperpos-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright smoke suite for MeperPOS, run against an isolated backend, frontend and database.",
+  "type": "module",
+  "scripts": {
+    "smoke": "node scripts/run-smoke.mjs",
+    "test:e2e:smoke": "playwright test",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
+    "typecheck": "tsc --noEmit",
+    "install:browsers": "playwright install chromium",
+    "db:up": "docker compose -p meperpos-playwright -f docker-compose.yml up --detach --wait",
+    "db:down": "docker compose -p meperpos-playwright -f docker-compose.yml down --volumes --remove-orphans",
+    "db:reset": "npm run db:down && npm run db:up",
+    "report": "playwright show-report",
+    "trace": "playwright show-trace"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^22.10.7",
+    "typescript": "^5.9.3"
+  }
+}

@@ -42,6 +42,18 @@ npm run lint:ci            # same, as CI runs it
 npm run test:eslint-plugin # RuleTester suites of eslint-plugin-meperpos
 ```
 
+### E2E smoke (`/e2e`)
+```bash
+npm run smoke            # isolated Postgres + backend (3101) + frontend (3100) + Playwright, then teardown
+npm run test:e2e:smoke   # Playwright only, against a stack that is already up
+npm run test:scripts     # unit tests of the orchestrator's database guard
+npm run typecheck        # tsc over config, fixtures and specs
+```
+
+- **The smoke suite must pass** before a PR that touches a covered flow (login, POS checkout, `/sales`, inventory create). CI runs it as the `E2E smoke (Playwright)` job.
+- **It never touches the dev database.** It runs on its own Postgres (`e2e/docker-compose.yml`: container `meperpos-playwright-postgres`, `127.0.0.1:55433`, database `meperpos_playwright`, tmpfs). Never point it at `inventario_db` or port 5432, and never use `npm run db:up`/`db:down` for it; the orchestrator and `backend/prisma/seed-e2e.ts` refuse any other database.
+- **Adding a flow:** a new `e2e/tests/<flow>.spec.ts` using `test` from `e2e/fixtures/test.ts` (signed-in) and the deterministic data in `e2e/fixtures/seed.ts`; anything the test creates gets a unique name. Adding a `data-testid` is test infrastructure; changing product behaviour for a test is not. Details, traces and the seed in `e2e/README.md`.
+
 ## Environment Setup
 
 Backend requires a `.env` file in `/backend/`:

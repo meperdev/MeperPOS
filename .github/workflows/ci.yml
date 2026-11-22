@@ -105,6 +105,87 @@ jobs:
         working-directory: backend
         run: npm run test
 
+  # Playwright smoke suite (e2e/README.md): login, POS cash checkout listed in
+  # /sales, and inventory product creation, against a real backend + frontend
+  # and a dedicated, freshly seeded database. Not a required check.
+  e2e-smoke:
+    name: E2E smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Its own database, on its own port and name: the smoke seed and the
+    # orchestrator refuse anything but `meperpos_playwright` off port 5432.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: playwright
+          POSTGRES_PASSWORD: playwright
+          POSTGRES_DB: meperpos_playwright
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U playwright -d meperpos_playwright"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      SMOKE_DATABASE_URL: postgresql://playwright:playwright@127.0.0.1:55433/meperpos_playwright
+      # The service above is the database; the orchestrator must not start a
+      # container of its own.
+      SMOKE_EXTERNAL_DB: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke orchestrator unit tests
+        working-directory: e2e
+        run: npm run test:scripts
+
+      # Generates the Prisma client, migrates + seeds the service database,
+      # builds and starts backend (3101) and frontend (3100), waits for both,
+      # runs Playwright and stops the app processes.
+      - name: Run the smoke suite
+        working-directory: e2e
+        run: npm run smoke
+
+      - name: Upload Playwright report, traces and stack logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
   frontend:
     name: Frontend - typecheck, test and build
     runs-on: ubuntu-latest
