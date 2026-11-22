@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsNumber,
+  IsInt,
   IsOptional,
   IsBoolean,
   Min,
@@ -91,13 +92,14 @@ export class CreateProductDto {
   @IsOptional()
   taxable?: boolean;
 
+  // Stock is counted in whole units (Product.stock/minStock are Int).
   @ApiProperty({ example: 10 })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   stock: number;
 
   @ApiProperty({ example: 5 })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   minStock: number;
 
@@ -192,14 +194,15 @@ export class UpdateProductDto {
   @IsOptional()
   taxable?: boolean;
 
+  // Stock is counted in whole units (Product.stock/minStock are Int).
   @ApiProperty({ example: 10, required: false })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   stock?: number;
 
   @ApiProperty({ example: 5, required: false })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   minStock?: number;

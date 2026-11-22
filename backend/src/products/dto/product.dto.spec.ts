@@ -164,3 +164,88 @@ describe('Product tax code DTO shape', () => {
     expect(dto.taxCode).toBeNull();
   });
 });
+
+// Explorer F28: stock is counted in whole units (Product.stock/minStock and
+// InventoryMovement quantities are Int), so a fractional value must be refused
+// at the boundary instead of reaching Prisma or being silently truncated.
+describe('Product stock DTO shape', () => {
+  const baseCreate = {
+    name: 'Test Product',
+    sku: 'SKU-001',
+    costPrice: 100,
+    salePrice: 19900,
+    stock: 10,
+    minStock: 5,
+    categoryId: '123e4567-e89b-12d3-a456-426614174000',
+  };
+
+  it.each(['stock', 'minStock'] as const)(
+    'rejects a fractional %s on create',
+    async (field) => {
+      const dto = plainToInstance(CreateProductDto, {
+        ...baseCreate,
+        [field]: 2.5,
+      });
+
+      const errors = await validate(dto);
+
+      const fieldErrors = errors.find((e) => e.property === field);
+      expect(fieldErrors).toBeDefined();
+      expect(fieldErrors!.constraints).toHaveProperty('isInt');
+    },
+  );
+
+  it.each(['stock', 'minStock'] as const)(
+    'rejects a fractional %s on update',
+    async (field) => {
+      const dto = plainToInstance(UpdateProductDto, { [field]: 2.5 });
+
+      const errors = await validate(dto);
+
+      const fieldErrors = errors.find((e) => e.property === field);
+      expect(fieldErrors).toBeDefined();
+      expect(fieldErrors!.constraints).toHaveProperty('isInt');
+    },
+  );
+
+  it.each([
+    [0, 0],
+    [7, 3],
+  ])(
+    'accepts integer stock %i and minStock %i on create and update',
+    async (stock, minStock) => {
+      const created = plainToInstance(CreateProductDto, {
+        ...baseCreate,
+        stock,
+        minStock,
+      });
+      const updated = plainToInstance(UpdateProductDto, { stock, minStock });
+
+      expect(await validate(created)).toHaveLength(0);
+      expect(await validate(updated)).toHaveLength(0);
+      expect(created.stock).toBe(stock);
+      expect(updated.minStock).toBe(minStock);
+    },
+  );
+
+  it('still rejects negative integer stock', async () => {
+    const dto = plainToInstance(UpdateProductDto, { stock: -1 });
+
+    const errors = await validate(dto);
+
+    const fieldErrors = errors.find((e) => e.property === 'stock');
+    expect(fieldErrors).toBeDefined();
+    expect(fieldErrors!.constraints).toHaveProperty('min');
+  });
+
+  it('keeps decimal prices valid', async () => {
+    const dto = plainToInstance(CreateProductDto, {
+      ...baseCreate,
+      costPrice: 99.5,
+      salePrice: 149.99,
+      taxRate: 8.5,
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+});
