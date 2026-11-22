@@ -730,3 +730,53 @@ input::-webkit-date-and-time-value {
         animation: fade-in 160ms ease-out;
     }
 }
+
+/* ─── Expenses summary horizontal rail ───────────────────
+   Soft alpha fade only on an edge that actually overflows, so visible labels
+   keep full contrast while clipped cells signal horizontal scrollability. */
+.expense-summary-rail[data-fade="right"] {
+    -webkit-mask-image: linear-gradient(
+        to right,
+        #000 0,
+        #000 calc(100% - 28px),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        #000 0,
+        #000 calc(100% - 28px),
+        transparent 100%
+    );
+}
+
+.expense-summary-rail[data-fade="left"] {
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 28px,
+        #000 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 28px,
+        #000 100%
+    );
+}
+
+.expense-summary-rail[data-fade="both"] {
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 28px,
+        #000 calc(100% - 28px),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 28px,
+        #000 calc(100% - 28px),
+        transparent 100%
+    );
+}
