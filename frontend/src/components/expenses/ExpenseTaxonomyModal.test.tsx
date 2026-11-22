@@ -10,6 +10,7 @@ const {
   updateLabelMock,
   deleteLabelMock,
   useAuthMock,
+  useExpenseGroupsMock,
 } = vi.hoisted(() => ({
   createGroupMock: vi.fn(),
   updateGroupMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
   updateLabelMock: vi.fn(),
   deleteLabelMock: vi.fn(),
   useAuthMock: vi.fn(),
+  useExpenseGroupsMock: vi.fn(),
 }));
 
 vi.mock("@/components/ui/Modal", () => ({
@@ -41,22 +43,7 @@ vi.mock("@/components/ui/Modal", () => ({
 }));
 
 vi.mock("@/hooks/useExpenses", () => ({
-  useExpenseGroups: () => ({
-    data: [
-      {
-        id: "g1",
-        name: "Gastos del local",
-        active: true,
-        labels: [{ id: "l1", name: "Arriendo", active: true }],
-      },
-      {
-        id: "g2",
-        name: "Servicios",
-        active: true,
-        labels: [],
-      },
-    ],
-  }),
+  useExpenseGroups: () => useExpenseGroupsMock(),
   useCreateExpenseGroup: () => ({ mutateAsync: createGroupMock, isPending: false }),
   useUpdateExpenseGroup: () => ({ mutateAsync: updateGroupMock, isPending: false }),
   useDeleteExpenseGroup: () => ({ mutateAsync: deleteGroupMock, isPending: false }),
@@ -76,6 +63,22 @@ describe("ExpenseTaxonomyModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuthMock.mockReturnValue({ user: { role: "ADMIN" } });
+    useExpenseGroupsMock.mockReturnValue({
+      data: [
+        {
+          id: "g1",
+          name: "Gastos del local",
+          active: true,
+          labels: [{ id: "l1", name: "Arriendo", active: true }],
+        },
+        {
+          id: "g2",
+          name: "Servicios",
+          active: true,
+          labels: [],
+        },
+      ],
+    });
     createGroupMock.mockResolvedValue({ id: "g3", name: "Publicidad" });
     updateGroupMock.mockResolvedValue({});
     deleteGroupMock.mockResolvedValue({});
@@ -161,5 +164,24 @@ describe("ExpenseTaxonomyModal", () => {
     useAuthMock.mockReturnValue({ user: { role: "MEMBER" } });
     const { container } = render(<ExpenseTaxonomyModal isOpen onClose={vi.fn()} />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it("shows ErrorState with retry when loading groups fails", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    useExpenseGroupsMock.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: true,
+      refetch,
+    });
+
+    render(<ExpenseTaxonomyModal isOpen onClose={vi.fn()} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "No se pudieron cargar las categorías",
+    );
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

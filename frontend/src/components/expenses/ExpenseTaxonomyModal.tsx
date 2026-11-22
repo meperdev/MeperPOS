@@ -165,6 +165,8 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
       ) : isError ? (
         <ErrorState
           title="No se pudieron cargar las categorías"
+          message="Revisa tu conexión e intenta de nuevo."
+          retryLabel="Reintentar"
           onRetry={refetch ? () => void refetch() : undefined}
         />
       ) : (
