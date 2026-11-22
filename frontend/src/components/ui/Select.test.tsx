@@ -150,58 +150,102 @@ describe("Select", () => {
     expect(row.className).toContain("sm:min-h-9");
   });
 
-  describe("open direction inside a scroll container", () => {
+  describe("desktop popover portal and placement", () => {
     const rects = new Map<string, Partial<DOMRect>>();
+    const originalInnerHeight = window.innerHeight;
+    const originalInnerWidth = window.innerWidth;
+
+    afterEach(() => {
+      rects.clear();
+      restoreMatchMedia();
+      Object.defineProperty(window, "innerHeight", {
+        value: originalInnerHeight,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(window, "innerWidth", {
+        value: originalInnerWidth,
+        configurable: true,
+        writable: true,
+      });
+    });
 
     const mockRects = () =>
       vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-        // The select's own root is the only `relative w-full` element; the scroller is tagged.
-        const key = this.hasAttribute("data-scroller")
-          ? "scroller"
-          : this.className.toString().includes("relative w-full")
-            ? "select"
-            : "";
+        const key = this.hasAttribute("data-select-trigger") ? "trigger" : "";
         const rect = rects.get(key) ?? {};
-        return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}), ...rect } as DOMRect;
+        return {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+          ...rect,
+        } as DOMRect;
       });
 
-    const renderInScroller = () =>
-      render(
-        <div data-scroller style={{ overflowY: "auto" }}>
-          <Select value="" options={baseOptions} onChange={vi.fn()} />
+    it("portals the listbox to document.body so overflow-hidden or scroll containers never clip it", () => {
+      stubSmBreakpoint(true);
+      rects.set("trigger", { top: 200, bottom: 236, left: 40, right: 240, width: 200, height: 36 });
+      const spy = mockRects();
+      const { container } = render(
+        <div data-clip-box style={{ overflow: "hidden" }}>
+          <div data-scroller style={{ overflowY: "auto" }}>
+            <Select value="" label="Método" options={baseOptions} onChange={vi.fn()} />
+          </div>
         </div>,
       );
 
-    it("opens upwards when the scroll container, not the window, has no room below", () => {
-      // The window is 768px tall, but the modal's scroller ends 60px under the trigger.
-      rects.set("scroller", { top: 0, bottom: 400 });
-      rects.set("select", { top: 300, bottom: 340 });
-      const spy = mockRects();
-      renderInScroller();
+      fireEvent.click(screen.getByRole("button", { name: "Método" }));
 
-      fireEvent.click(screen.getByRole("button"));
-
-      const menu = screen.getByText("Opción A").closest(".absolute")!;
-      expect(menu.className).toContain("bottom-full");
+      const popover = document.body.querySelector<HTMLElement>("[data-select-popover]");
+      expect(popover).not.toBeNull();
+      expect(container.contains(popover)).toBe(false);
+      expect(popover?.style.position).toBe("fixed");
+      expect(popover?.style.left).toBe("40px");
+      expect(popover?.style.width).toBe("200px");
       spy.mockRestore();
     });
 
-    it("opens downwards when the scroll container has room for the whole menu", () => {
-      rects.set("scroller", { top: 0, bottom: 700 });
-      rects.set("select", { top: 100, bottom: 140 });
+    it("opens upwards when the viewport lacks room below and has more room above", () => {
+      stubSmBreakpoint(true);
+      Object.defineProperty(window, "innerHeight", { value: 420, configurable: true, writable: true });
+      rects.set("trigger", { top: 340, bottom: 376, left: 24, right: 224, width: 200, height: 36 });
       const spy = mockRects();
-      renderInScroller();
+      render(<Select value="" options={fourOptions} onChange={vi.fn()} />);
 
       fireEvent.click(screen.getByRole("button"));
 
-      const menu = screen.getByText("Opción A").closest(".absolute")!;
-      expect(menu.className).toContain("top-full");
+      const popover = document.body.querySelector<HTMLElement>("[data-select-popover]")!;
+      expect(popover).toHaveAttribute("data-placement", "top");
+      expect(popover.style.bottom).toBe(`${420 - 340 + 6}px`);
       spy.mockRestore();
     });
 
-    it("opens the list as a sheet below sm, so no dropdown estimate is needed there", () => {
-      rects.set("scroller", { top: 0, bottom: 400 });
-      rects.set("select", { top: 190, bottom: 230 });
+    it("opens downwards when the viewport has room below even inside a compact scroll box", () => {
+      stubSmBreakpoint(true);
+      Object.defineProperty(window, "innerHeight", { value: 768, configurable: true, writable: true });
+      rects.set("trigger", { top: 190, bottom: 226, left: 24, right: 224, width: 200, height: 36 });
+      const spy = mockRects();
+      render(
+        <div data-scroller style={{ overflowY: "auto", maxHeight: "150px" }}>
+          <Select value="" options={fourOptions} onChange={vi.fn()} />
+        </div>,
+      );
+
+      fireEvent.click(screen.getByRole("button"));
+
+      const popover = document.body.querySelector<HTMLElement>("[data-select-popover]")!;
+      expect(popover).toHaveAttribute("data-placement", "bottom");
+      expect(popover.style.top).toBe(`${226 + 6}px`);
+      spy.mockRestore();
+    });
+
+    it("opens the list as a sheet below sm instead of a desktop popover", () => {
       const spy = mockRects();
       const matchMedia = stubSmBreakpoint(false);
       render(
@@ -212,31 +256,10 @@ describe("Select", () => {
 
       fireEvent.click(screen.getByRole("button"));
 
-      // No absolute menu: the options live in their own bottom sheet.
-      expect(screen.getByText("Opción A").closest(".absolute")).toBeNull();
+      expect(document.body.querySelector("[data-select-popover]")).toBeNull();
       expect(screen.getByRole("listbox")).toBeInTheDocument();
       expect(matchMedia).toHaveBeenCalledWith("(min-width: 640px)");
       spy.mockRestore();
-      restoreMatchMedia();
-    });
-
-    it("keeps the 36px estimate from sm up, so the same geometry still opens downwards", () => {
-      rects.set("scroller", { top: 0, bottom: 400 });
-      rects.set("select", { top: 190, bottom: 230 });
-      const spy = mockRects();
-      stubSmBreakpoint(true);
-      render(
-        <div data-scroller style={{ overflowY: "auto" }}>
-          <Select value="" options={fourOptions} onChange={vi.fn()} />
-        </div>,
-      );
-
-      fireEvent.click(screen.getByRole("button"));
-
-      const menu = screen.getByText("Opción A").closest(".absolute")!;
-      expect(menu.className).toContain("top-full");
-      spy.mockRestore();
-      restoreMatchMedia();
     });
   });
 
