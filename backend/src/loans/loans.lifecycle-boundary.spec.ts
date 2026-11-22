@@ -171,6 +171,7 @@ describe('Money lifecycle actual controller guards', () => {
         { requestKey: 'x', reason: 'Cancelación' },
         'actor',
         'org',
+        user,
       ],
       [
         'loan',

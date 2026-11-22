@@ -114,6 +114,12 @@ Para verificarla desde `backend/`, usar una base desechable `meperpos_stock_rehe
 
 Un reintento con el mismo contenido y clave devuelve la venta original. Si el reintento indica una sede, tiene que coincidir con la ya registrada: otra sede o una venta anterior sin sede devuelve `409` sin duplicar la venta ni cambiar el saldo. Una anulación de una venta atribuida registra la devolución en su sede original y comprueba los permisos vigentes, sin volver a exigir que sea la única sede. La respuesta de venta conserva sus campos anteriores.
 
+### Financiación POS antes del corte
+
+`POST /api/loans/pos-initiation` acepta `locationId` opcional con las mismas reglas de sede principal y permisos que una venta directa. Si se envía, la reserva guarda su origen sin cambiar la cotización ni el JSON del reintento. Un reintento con sede distinta, o que agrega una sede a una financiación histórica sin atribución, devuelve `409` sin crear otra reserva. Omitir la sede mantiene el comportamiento anterior.
+
+Cobrar o reversar un abono no mueve inventario. Completar la venta financiada consume la reserva y registra la sede guardada en la venta y su movimiento. Cancelar libera la reserva global, sin crear un movimiento. En esas dos operaciones se valida el permiso vigente sobre la sede de origen, sin exigir que siga siendo la única. Los saldos y las reservas siguen en `Product` hasta el corte.
+
 ## Entrega futura: cambiar la fuente de stock
 
 1. **Fijar la base de comparación.** Con una copia verificable y los escritores de inventario detenidos, tomar un registro por organización y producto del stock y sus reservas. Incluir productos con saldo cero e inactivos. El registro debe conservar la identidad del producto, no solo el total de la organización.

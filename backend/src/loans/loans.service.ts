@@ -38,6 +38,7 @@ import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emissi
 import { DianTaxCode } from '../common/utils/tax.util';
 import { tracksStock } from '../products/product-type.logic';
 import { SequenceService } from '../common/sequences/sequence.service';
+import { resolveWritableSiteWithin } from '../locations/authorized-site';
 import { isElectronicInvoicingActive } from '../settings/schema';
 
 /** The catalog tribute codes a stored quote row may carry. */
@@ -190,6 +191,7 @@ export class LoansService {
           if (!loan) throw new NotFoundException('Préstamo no encontrado');
           const intent = await tx.posLoanSaleIntent.findFirst({
             where: { loanId: id, organizationId: orgId },
+            include: { originSite: { select: { locationId: true } } },
           });
           if (!intent) {
             throw new ConflictException(
@@ -238,6 +240,9 @@ export class LoansService {
               'La financiación no admite finalización',
             );
           }
+          const origin = intent.originSite
+            ? await this.resolvePosOrigin(tx, orgId, actor, intent.originSite.locationId)
+            : undefined;
           // Reuse the complete frozen-quote validator, never catalog pricing.
           this.posInitiationReplay(
             intent,
@@ -439,6 +444,9 @@ export class LoansService {
               status: 'COMPLETED',
             },
           });
+          if (origin) {
+            await tx.saleOriginSite.create({ data: { saleId: sale.id, ...origin } });
+          }
           for (const item of items) {
             await tx.saleItem.create({
               data: { ...item, saleId: sale.id, organizationId: orgId },
@@ -562,6 +570,7 @@ export class LoansService {
                 previousStock: product.stock,
                 newStock: product.stock - hold.quantity,
                 reason: `Sale #${saleNumber}`,
+                ...(origin ? { locationId: origin.locationId } : {}),
               },
             });
             const claimed = await tx.posLoanSaleReservation.updateMany({
@@ -648,6 +657,10 @@ export class LoansService {
       throw new ForbiddenException('No tiene permiso para financiar ventas');
     }
     dto = plainToInstance(CreatePosLoanDto, dto);
+    const { locationId } = dto;
+    if (locationId !== undefined && (typeof locationId !== 'string' || !locationId.length)) {
+      throw new BadRequestException('Solicitud de financiación inválida');
+    }
     const payload = this.posRequestPayload(dto);
     const hash = createHash('sha256')
       .update(JSON.stringify(payload))
@@ -656,18 +669,25 @@ export class LoansService {
       organizationId: orgId,
       initiationRequestKey: dto.requestKey,
     };
-    const replay = (intent: PosLoanSaleIntent) =>
-      this.posInitiationReplay(
-        intent,
-        orgId,
-        actor.userId,
-        dto.requestKey,
-        hash,
-      );
+    const lookup = {
+      where,
+      ...(locationId === undefined
+        ? {}
+        : { include: { originSite: { select: { locationId: true } } } }),
+    } as const;
+    const replay = (intent: PosLoanSaleIntent & { originSite?: { locationId: string } | null }) => {
+      const result = this.posInitiationReplay(intent, orgId, actor.userId, dto.requestKey, hash);
+      if (locationId !== undefined && intent.originSite?.locationId !== locationId) {
+        throw new ConflictException(
+          'La solicitud ya corresponde a una financiación con otra atribución de sede',
+        );
+      }
+      return result;
+    };
     try {
       return await this.prisma.$transaction(
         async (tx) => {
-          const prior = await tx.posLoanSaleIntent.findFirst({ where });
+          const prior = await tx.posLoanSaleIntent.findFirst(lookup);
           if (prior) return replay(prior);
           if (
             validateSync(dto, { whitelist: true, forbidNonWhitelisted: true })
@@ -675,6 +695,21 @@ export class LoansService {
             (dto.dueAt != null && dto.dueAt < dto.issuedAt)
           ) {
             throw new BadRequestException('Solicitud de financiación inválida');
+          }
+          const origin = locationId === undefined
+            ? undefined
+            : await this.resolvePosOrigin(tx, orgId, actor, locationId);
+          if (origin) {
+            const sites = await tx.location.findMany({
+              where: { organizationId: orgId },
+              select: { id: true, isDefault: true },
+              take: 2,
+            });
+            if (sites.length !== 1 || !sites[0].isDefault || sites[0].id !== origin.locationId) {
+              throw new ConflictException(
+                'El stock global solo permite ventas en la única sede principal',
+              );
+            }
           }
           const user = await tx.user.findFirst({
             where: { id: actor.userId, active: true },
@@ -817,6 +852,9 @@ export class LoansService {
               initiationResult: result,
             },
           });
+          if (origin) {
+            await tx.posLoanSaleIntentOriginSite.create({ data: { intentId, ...origin } });
+          }
           for (const [productId, quantity] of holds) {
             await tx.posLoanSaleReservation.create({
               data: {
@@ -900,9 +938,7 @@ export class LoansService {
             target.includes('organizationId') &&
             target.includes('initiationRequestKey'));
         if (ownKey) {
-          const winner = await this.prisma.posLoanSaleIntent.findFirst({
-            where,
-          });
+          const winner = await this.prisma.posLoanSaleIntent.findFirst(lookup);
           if (winner) return replay(winner);
           throw new ConflictException(
             'No se encontró evidencia de la solicitud concurrente',
@@ -1057,6 +1093,7 @@ export class LoansService {
     },
     actorId: string,
     organizationId: string | undefined,
+    actor?: RequestUser,
   ) {
     const orgId = requireOrganization(organizationId);
     if (!['COLLECTED', 'REVERSED', 'CLOSED', 'CANCELLED'].includes(kind)) {
@@ -1206,6 +1243,21 @@ export class LoansService {
               );
             status = MoneyLoanStatus.CANCELLED;
           }
+          const cancelIntent = kind === 'CANCELLED'
+            ? await tx.posLoanSaleIntent.findFirst({
+                where: { loanId: id, organizationId: orgId },
+                select: { id: true, finalSaleId: true, originSite: { select: { locationId: true } } },
+              })
+            : null;
+          if (cancelIntent?.finalSaleId != null) {
+            throw new ConflictException('La financiación ya tiene venta final');
+          }
+          if (cancelIntent?.originSite) {
+            if (actor?.userId !== actorId) {
+              throw new ForbiddenException('Organization scope required');
+            }
+            await this.resolvePosOrigin(tx, orgId, actor, cancelIntent.originSite.locationId);
+          }
           // All competing collections, reversals and transitions contend on this row.
           const changed = await tx.moneyLoan.updateMany({
             where: {
@@ -1221,15 +1273,8 @@ export class LoansService {
               'El préstamo cambió; reintente con la misma clave de solicitud',
             );
           if (kind === 'CANCELLED') {
-            const intent = await tx.posLoanSaleIntent.findFirst({
-              where: { loanId: id, organizationId: orgId },
-            });
+            const intent = cancelIntent;
             if (intent) {
-              if (intent.finalSaleId != null) {
-                throw new ConflictException(
-                  'La financiación ya tiene venta final',
-                );
-              }
               const holds = await tx.posLoanSaleReservation.findMany({
                 where: {
                   intentId: intent.id,
@@ -1355,6 +1400,31 @@ export class LoansService {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         ['P2034', 'P2002'].includes(error.code)
+      ) {
+        throw new ConflictException(
+          'Operación concurrente; reintente con la misma clave de solicitud',
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async resolvePosOrigin(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    actor: RequestUser,
+    locationId: string,
+  ) {
+    if (actor.organizationId !== organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    try {
+      return await resolveWritableSiteWithin(tx, actor, locationId);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2010' &&
+        (error.meta?.code === '40001' || error.meta?.code === '40P01')
       ) {
         throw new ConflictException(
           'Operación concurrente; reintente con la misma clave de solicitud',

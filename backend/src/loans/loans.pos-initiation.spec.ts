@@ -575,6 +575,40 @@ describe('POS financing through LoansService (unwired)', () => {
     },
   );
 
+  it.each(['site-a', 'site-b', null])(
+    'checks the persisted origin %s when replaying a concurrent initiation winner',
+    async (locationId) => {
+      const winner = fixture();
+      const original = await winner.initiate();
+      const loser = fixture();
+      const before = loser.state();
+      const row = {
+        ...winner.state().intents[0],
+        originSite: locationId === null ? null : { locationId },
+      };
+      loser.exposeWinner(row);
+      loser.prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('unique initiation key', {
+          code: 'P2002',
+          clientVersion: '6.19.2',
+          meta: { modelName: 'PosLoanSaleIntent', target: ['organizationId', 'initiationRequestKey'] },
+        }),
+      );
+      const replay = loser.initiate({ ...request(), locationId: 'site-a' });
+      if (locationId === 'site-a') {
+        await expect(replay).resolves.toEqual(original);
+      } else {
+        await expect(replay).rejects.toMatchObject({
+          status: 409,
+          message: 'La solicitud ya corresponde a una financiación con otra atribución de sede',
+        });
+      }
+      expect(loser.state()).toEqual(before);
+      expect(loser.outsideWrite).not.toHaveBeenCalled();
+      expect(loser.prisma.$transaction).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('does not turn an unrelated unique failure into an initiation replay', async () => {
     const f = fixture();
     const before = f.state();

@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsNotEmpty,
   IsNumber,
   IsString,
   IsUUID,
@@ -12,11 +13,19 @@ import {
   Min,
   MinLength,
   IsOptional,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { SaleItemDto } from '../../sales/dto/sales.dto';
 
 export class CreatePosLoanDto {
+  @ApiPropertyOptional({ description: 'Explicit origin site for the POS reservation.' })
+  @Transform(({ obj, key }) => obj[key], { toClassOnly: true })
+  @ValidateIf((_dto, value) => value !== undefined)
+  @IsString()
+  @IsNotEmpty()
+  locationId?: string;
+
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   customerId: string;
