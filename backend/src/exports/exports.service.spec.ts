@@ -92,6 +92,35 @@ describe('ExportsService', () => {
     );
   });
 
+  it('keeps the paginated inventory JSON independent of movement site attribution', async () => {
+    const previousRow = {
+      id: 'movement-1',
+      productId: 'product-1',
+      type: 'PURCHASE',
+      quantity: 2,
+      previousStock: 1,
+      newStock: 3,
+      reason: 'Receipt',
+      userId: 'user-1',
+      saleId: null,
+      createdAt: new Date('2026-08-15T14:00:00.000Z'),
+      organizationId: ORG_ID,
+      inventoryLoanEventId: null,
+      product: { id: 'product-1', name: 'Product' },
+    };
+    prismaMock.inventoryMovement.findMany.mockImplementationOnce(({ omit }) =>
+      Promise.resolve([
+        omit?.locationId ? previousRow : { ...previousRow, locationId: 'site-1' },
+      ]),
+    );
+    prismaMock.inventoryMovement.count.mockResolvedValueOnce(1);
+
+    expect(await service.getInventoryMovements(ORG_ID, {})).toEqual({
+      data: [previousRow],
+      meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+    });
+  });
+
   it('exports expense group and label columns', async () => {
     prismaMock.expense.findMany.mockResolvedValue([
       {

@@ -84,6 +84,22 @@ El script inyecta cada falla en la base desechable, verifica el código de salid
 
 **Alcance.** Aprobar este ensayo prueba que el saldo se puede traspasar; **no autoriza el corte**. El corte real sigue siendo un cambio atómico, con los escritores de inventario detenidos y autorizados, según la sección siguiente. Ninguna sede adicional recibe saldo y `Product.stock` sigue siendo la única fuente de la aplicación.
 
+## Atribución en el historial de inventario
+
+La migración `20261122120000_inventory_movement_location` permite guardar la sede de un movimiento, pero todavía no cambia cómo lo registra la aplicación. Los movimientos existentes quedan sin sede: el saldo global anterior no permite deducir dónde ocurrió cada movimiento. Si un movimiento tiene sede, la base exige que pertenezca a la misma organización e impide borrar la sede por separado mientras haya movimientos que la referencien. Los saldos y las reservas se mantienen en `Product`. El historial JSON de `GET /api/exports/inventory` sigue mostrando los mismos campos de la organización; no expone la sede.
+
+Aplicar como cambio de esquema separado. Antes de aplicarlo, detener las escrituras de inventario y esperar a que terminen las transacciones en curso: PostgreSQL bloquea el historial para agregar la columna y validar la referencia. El límite de espera es de 5 segundos por bloqueo, o el límite positivo menor ya configurado; no limita la duración de la validación.
+
+Para verificar una actualización, preparar una base desechable `meperpos_stock_rehearsal_t14_…` con las migraciones hasta `ProductStock`, cargar `test/migrations/product-stock.fixture.sql` y crear un movimiento previo al cambio:
+
+```sql
+INSERT INTO "InventoryMovement"
+    (id, "productId", type, quantity, "previousStock", "newStock", reason, "userId", "organizationId")
+VALUES ('t14-legacy', 'stock-a1', 'ADJUSTMENT_IN', 5, 0, 5, 'Legacy movement without a site', 'stock-user', 'stock-a');
+```
+
+Después de aplicar la migración nueva, ejecutar `psql -X -w -v ON_ERROR_STOP=1 -f test/migrations/inventory-movement-location.constraints.sql` desde `backend/`, con las variables de conexión explícitas de la base desechable. Debe terminar en `ROLLBACK` con código 0: verifica que el movimiento anterior conserve sus datos sin sede, que se rechace una sede ajena y que el borrado de la organización siga eliminando su historial.
+
 ## Entrega futura: cambiar la fuente de stock
 
 1. **Fijar la base de comparación.** Con una copia verificable y los escritores de inventario detenidos, tomar un registro por organización y producto del stock y sus reservas. Incluir productos con saldo cero e inactivos. El registro debe conservar la identidad del producto, no solo el total de la organización.

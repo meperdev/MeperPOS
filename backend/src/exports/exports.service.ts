@@ -53,6 +53,8 @@ export class ExportsService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
+        // This organization-wide feed keeps its existing JSON contract.
+        omit: { locationId: true },
         include: {
           product: true,
         },

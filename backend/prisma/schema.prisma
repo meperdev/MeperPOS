@@ -94,6 +94,7 @@ model Location {
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments    MembershipLocation[]
   productStocks  ProductStock[]
+  movements      InventoryMovement[]
 
   // The partial unique index for the default site is defined in SQL.
   @@unique([id, organizationId])
@@ -592,6 +593,9 @@ model InventoryMovement {
   user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   inventoryLoanEventId String? @unique
   inventoryLoanEvent InventoryLoanEvent? @relation(fields: [inventoryLoanEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // Null on movements created before site attribution.
+  locationId     String?
+  location       Location? @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
 
   @@index([organizationId, productId, createdAt])
 }
