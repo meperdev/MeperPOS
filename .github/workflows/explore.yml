@@ -1,0 +1,95 @@
+# Exploratory bug bash (e2e/README.md, "Exploratory bug bash"), on demand only.
+#
+# Runs the scripted explorer (`npm run explore`) against the same isolated
+# stack as the E2E smoke job: its own Postgres service on 55433, the
+# deterministic e2e seed, no secrets. It never runs the optional LLM pass and
+# never files issues; the report is uploaded as an artifact for a human to read.
+# It is not a check on any branch and has no push or pull_request trigger.
+name: Explore (bug bash)
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_actions:
+        description: "User actions after sign-in"
+        required: false
+        default: "60"
+      max_minutes:
+        description: "Wall-clock minutes for the scripted run"
+        required: false
+        default: "15"
+
+permissions:
+  contents: read
+
+jobs:
+  explore:
+    name: Explore (scripted)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: playwright
+          POSTGRES_PASSWORD: playwright
+          POSTGRES_DB: meperpos_playwright
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U playwright -d meperpos_playwright"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      SMOKE_DATABASE_URL: postgresql://playwright:playwright@127.0.0.1:55433/meperpos_playwright
+      SMOKE_EXTERNAL_DB: "1"
+      EXPLORE_MAX_ACTIONS: ${{ inputs.max_actions }}
+      EXPLORE_MAX_MINUTES: ${{ inputs.max_minutes }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Orchestrator and explorer unit tests
+        working-directory: e2e
+        run: npm run test:scripts
+
+      - name: Run the scripted explorer
+        working-directory: e2e
+        run: npm run explore -- --out exploratory/reports/ci-${{ github.run_id }}
+
+      - name: Upload the report, screenshots, traces and stack logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: explore-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e/exploratory/reports/
+          retention-days: 14
+          if-no-files-found: ignore

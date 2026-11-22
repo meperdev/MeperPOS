@@ -6,6 +6,7 @@ const create = vi.fn().mockResolvedValue({});
 const update = vi.fn().mockResolvedValue({});
 const uploadImage = vi.fn().mockResolvedValue({ imageUrl: "/images/panela-new.jpg" });
 const uploadImageById = vi.fn().mockResolvedValue({ imageUrl: "/images/panela-new.jpg" });
+const toastError = vi.fn();
 let role = "ADMIN";
 let products: ReturnType<typeof product>[] = [];
 
@@ -27,7 +28,7 @@ vi.mock("@/hooks/useCategories", () => ({
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { role } }) }));
 vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+  useToast: () => ({ success: vi.fn(), error: toastError }),
 }));
 vi.mock("@/components/ui/Modal", () => ({
   Modal: function MockModal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: ReactNode }) {
@@ -570,6 +571,66 @@ describe("inventory product modal", () => {
     await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ description: "Dulce de caña" }),
     })));
+  });
+});
+
+// Explorer F28: stock is counted in whole units (the API rejects 2.5 with 400),
+// so the form must refuse a fractional Stock or Stock mín. before submitting.
+describe("inventory product form integer stock", () => {
+  const fillCreate = (dialog: HTMLElement) => {
+    fireEvent.change(within(dialog).getByLabelText("Nombre"), { target: { value: "Café" } });
+    fireEvent.change(within(dialog).getByLabelText("SKU"), { target: { value: "CAF-1" } });
+    fireEvent.change(within(dialog).getByLabelText("Categoría"), { target: { value: "cat-1" } });
+  };
+
+  it.each(["Stock", "Stock mín."])("does not create a product with a fractional %s", async (label) => {
+    render(<InventoryPage />);
+    const dialog = openCreate();
+    fillCreate(dialog);
+    fireEvent.change(within(dialog).getByLabelText(label), { target: { value: "2.5" } });
+    // The click goes through the browser's constraint validation (step={1});
+    // a raw submit event skips it and reaches the form's own integer guard.
+    const save = within(dialog).getByRole("button", { name: "Crear" });
+    fireEvent.click(save);
+    fireEvent.submit(save.closest("form")!);
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Revisa los precios y las cantidades antes de guardar"));
+    expect(create).not.toHaveBeenCalled();
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
+  it.each(["Stock", "Stock mín."])("does not update a product with a fractional %s", async (label) => {
+    products = [product()];
+    render(<InventoryPage />);
+    const dialog = openEdit();
+    fireEvent.change(within(dialog).getByLabelText(label), { target: { value: "2.5" } });
+    const save = within(dialog).getByRole("button", { name: "Actualizar" });
+    fireEvent.click(save);
+    fireEvent.submit(save.closest("form")!);
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Revisa los precios y las cantidades antes de guardar"));
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("still creates a product with integer zero stock and minimum", async () => {
+    render(<InventoryPage />);
+    const dialog = openCreate();
+    fillCreate(dialog);
+    fireEvent.change(within(dialog).getByLabelText("Stock"), { target: { value: "0" } });
+    fireEvent.change(within(dialog).getByLabelText("Stock mín."), { target: { value: "0" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Crear" }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      type: "PRODUCT", tracksStock: true, stock: 0, minStock: 0,
+    })));
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("asks the browser for whole, non-negative stock steps", () => {
+    render(<InventoryPage />);
+    const dialog = openCreate();
+    for (const label of ["Stock", "Stock mín."]) {
+      const input = within(dialog).getByLabelText(label);
+      expect(input, label).toHaveAttribute("step", "1");
+      expect(input, label).toHaveAttribute("min", "0");
+    }
   });
 });
 
