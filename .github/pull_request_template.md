@@ -15,7 +15,7 @@ The fix was raised to:
 
 Rule or test path:
 
-- [ ] Appended one row to `docs/bug-rule-log.md` (required for `fix:` PRs)
+- [ ] Added one entry file under `docs/bug-rules/` (required for `fix:` PRs; see `docs/bug-rule-log.md`)
 
 ## Acceptance evidence
 

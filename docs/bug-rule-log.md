@@ -1,25 +1,53 @@
 # Bug → rule log
 
 Append-only record of every bug or footgun that was pushed up the trust stack
-into something a machine checks. Each `fix:` PR adds **one row at the bottom**;
-never edit or delete an earlier row (a superseded rule gets a new row that says
-so).
+into something a machine checks. Each entry is **one file** in
+[`docs/bug-rules/`](bug-rules/), so two PRs that each add an entry never touch
+the same lines and merge cleanly in any order.
 
 Layers: **01** types/boundaries (Prisma, TypeScript, class-validator, guards,
 module limits) · **02** lint/test (ESLint rule or regression test) · **03**
 prose (AGENTS.md or a skill, only when it cannot be checked mechanically).
 
-| Date | Issue / PR | Bug or footgun addressed | Layer | Rule or test path | PR |
-| --- | --- | --- | --- | --- | --- |
-| 2026-11-21 | Phase 1 trust stack ([#387](https://github.com/meperdev/MeperPOS/pull/387)) | A controller authenticated with `JwtAuthGuard` but without `OrganizationRequiredGuard` lets `user.organizationId` arrive `undefined`, so the service fallback `...(organizationId ? { organizationId } : {})` becomes a cross-tenant query (SEC-002). Exemptions (SUPER_ADMIN platform, user-scoped auth routes, plan-limits) now carry an inline `-- reason`. | 02 | `backend/eslint-plugin-meperpos/rules/require-organization-guard.mjs` · tests `backend/eslint-plugin-meperpos/tests/require-organization-guard.test.mjs` | [#387](https://github.com/meperdev/MeperPOS/pull/387) |
-| 2026-11-21 | Phase 1 trust stack ([#387](https://github.com/meperdev/MeperPOS/pull/387)) | Reading `error.response.data.message` by hand shows a `string[]` from ValidationPipe, an empty toast, or `undefined`; `getApiErrorMessage` in `frontend/src/lib/api.ts` is the single funnel. | 02 | `frontend/eslint-plugin-meperpos/rules/no-raw-api-error-message.mjs` · tests `frontend/eslint-plugin-meperpos/tests/no-raw-api-error-message.test.mjs` | [#387](https://github.com/meperdev/MeperPOS/pull/387) |
-| 2026-11-21 | Explorer F28: fractional stock | `POST /api/products` and `PUT /api/products/:id` accepted a fractional `stock`/`minStock` (e.g. `2.5`) because the DTOs used `@IsNumber()`, while `Product.stock`/`minStock` and every `InventoryMovement` quantity are `Int` whole units. The DTOs now use `@IsInt()` + `@Min(0)` (400, no silent truncation) and the inventory form sets `step={1}` `min={0}` and checks `Number.isInteger` before submitting. | 01 | `backend/src/products/dto/product.dto.ts` · `frontend/src/app/inventory/page.tsx` · tests `backend/src/products/dto/product.dto.spec.ts`, `backend/src/products/products.stock-validation.http.spec.ts`, `frontend/src/app/inventory/page.product-form.test.tsx` | [#390](https://github.com/meperdev/MeperPOS/pull/390) |
-| 2026-11-21 | F39 business name length | `settings/general` and `PATCH /settings/organization` (`UpdateOrganizationNameDto`) accepted an unbounded business name (1000+ chars), bypassing the admin `@MaxLength(100)` on create/update organization, and the name overflows the receipt/invoice header. The DTO now trims and caps it at `ORGANIZATION_NAME_MAX_LENGTH` (100); the form adds `maxLength` and a Zod check. | 01 | `backend/src/settings/dto/settings.dto.ts` · tests `backend/src/settings/dto/settings.dto.spec.ts`, `frontend/src/app/settings/(general)/general/page.behavior.test.tsx` | [#391](https://github.com/meperdev/MeperPOS/pull/391) |
-| 2026-11-21 | CSRF cookie lifetime ([#392](https://github.com/meperdev/MeperPOS/pull/392)) | `csrf_token` was a session cookie while `refresh_token` lived 7 days, so a browser restart dropped only the CSRF cookie: the CSRF-guarded `POST /api/auth/refresh` answered 403 `CSRF token mismatch` and `restoreSession` sent a still-valid session to `/login`. Both cookies now take `maxAge` from the one exported `REFRESH_TTL_MS`; logout still clears `csrf_token` with the same path/httpOnly/sameSite/secure; the guard is unchanged. | 01 (with 02 tests) | `backend/src/auth/cookies.helper.ts` (`REFRESH_TTL_MS`) · tests `backend/src/auth/cookies.helper.spec.ts`, `backend/src/auth/auth.refresh.int.spec.ts`, `e2e/tests/session-restart.spec.ts` | [#392](https://github.com/meperdev/MeperPOS/pull/392) |
-| 2026-11-22 | Explorer F39: unbounded DTO strings | `UpdateOrganizationNameDto` accepted a 1000-character business name because it had `@IsString()` and no `@MaxLength`; the same footgun sat in 97 DTO fields (96 now bounded; the unused multipart `UploadImageDto.file` carries a reasoned disable). In `*.dto.ts`, `@IsString()` now needs `@MaxLength`/`@Length` (`each: true` for arrays) unless `@IsEnum`, `@IsIn`, `@IsUUID`, `@IsEmail`, `@IsUrl`, `@IsISO8601`, `@IsDateString`, `@IsValidPassword` or an anchored, bounded `@Matches` already caps it; `@IsOptional()` does not exempt and `@Matches(/\S/)` is not a bound. | 02 | `backend/eslint-plugin-meperpos/rules/require-string-length-bound.mjs` · tests `backend/eslint-plugin-meperpos/tests/require-string-length-bound.test.mjs`, `backend/src/common/dto-string-bounds.spec.ts` · bounded DTOs in `backend/src/{admin,auth,billing,cash-registers,categories,customers,expenses,exports,imports,payroll,products,purchase-orders,sales,settings,suppliers,tasks,users}/dto/` | [#393](https://github.com/meperdev/MeperPOS/pull/393) |
-| 2026-11-21 | UI polish round 4 | Desktop `Select` rendered an inline `position: absolute` menu inside nested `overflow-hidden` / `overflow-y-auto` containers (such as `ExpenseFormModal` payments), clipping options when opened upwards/downwards. Desktop popovers now portal to `document.body` (`[data-select-popover]`, `position: fixed`) and `Modal` focus-trap whitelists it alongside `[data-select-sheet]`. | 01/02 | `frontend/src/components/ui/Select.tsx` · `frontend/src/components/ui/Select.test.tsx` · `frontend/src/components/ui/Modal.test.tsx` · `frontend/src/components/expenses/expense-form-modal.test.tsx` | [#394](https://github.com/meperdev/MeperPOS/pull/394) |
-| 2026-11-21 | UI polish round 4 | Numeric `Input` fields inside compact purchase-order table cells (`w-24` + `TableCell`'s `2xl:px-5`) had only 4px of inner width at `2xl` and let `px-*` overrides wipe out `pr-9`, clipping digits behind the `w-7` stepper. `Input` now enforces `pr-9` after `className` (and supports `hideStepper`), while `PurchaseOrderItemEditor` widens numeric columns (`w-28 min-w-28`) and overrides `2xl:px-2`. | 01/02 | `frontend/src/components/ui/Input.tsx` · `frontend/src/components/purchase-orders/PurchaseOrderItemEditor.tsx` · `frontend/src/components/ui/Input.test.tsx` · `frontend/src/components/purchase-orders/purchase-order-modals.test.tsx` | [#394](https://github.com/meperdev/MeperPOS/pull/394) |
-| 2026-11-21 | UI polish round 4 | Collapsed `ToastCard` peeking used `top-0 origin-top` with `8px`/`scale(0.95)`, shrinking shorter or equal-height cards upward until they vanished behind taller/two-line front cards, while `ToastStack` lacked a peeking hit-zone, leaked `pinned` expansion across empty queues, and `ToastContext` started unpaused timers for toasts arriving during hover. Peeking cards now use `inset-0 origin-bottom overflow-hidden` (`12px` step) with a collapsed hit-zone, empty-queue state unmount reset, pause-aware `schedule()`, and front-promotion for refreshed duplicates. | 02 | `frontend/src/components/ui/Toast.tsx` · `frontend/src/components/ui/ToastStack.tsx` · `frontend/src/contexts/ToastContext.tsx` · `frontend/src/components/ui/Toast.test.tsx` · `frontend/src/components/ui/ToastStack.test.tsx` · `frontend/src/contexts/ToastContext.test.tsx` | [#394](https://github.com/meperdev/MeperPOS/pull/394) |
+## Adding an entry
+
+Every `fix:` PR adds one entry file:
+
+1. Copy [`docs/bug-rules/_TEMPLATE.md`](bug-rules/_TEMPLATE.md) to
+   `docs/bug-rules/YYYY-MM-DD-<slug>.md` (lowercase letters, digits and
+   hyphens). Put the PR number in the slug when you know it
+   (`2026-11-21-pr-392-csrf-cookie-ttl.md`); otherwise use a descriptive slug
+   (`2026-11-21-csrf-cookie-ttl.md`). There is no sequence number and no shared
+   counter, so nothing needs coordinating with other PRs.
+2. Fill in the frontmatter. Required: `date` (`YYYY-MM-DD`) and `layer`
+   (`"01"`, `"02"`, `"03"` or a mix like `"01+02"`; quote it so YAML keeps the
+   leading zero). Optional: `title` (one-line summary), `source` (issue,
+   explorer finding or audit item), `pr` (the number, or empty until the PR is
+   open), `paths` (rule, type, DTO or guard paths) and `tests` (test paths),
+   both lists. Extra fields are allowed.
+3. Write the full bug or footgun description in the body: what broke, why the
+   old code allowed it, what now catches it.
+
+Entries are append-only: never edit or delete an earlier entry. A rule that
+supersedes another gets a new entry that says which one it supersedes. Filling
+in `pr` on your own entry before your PR merges is fine. Files whose name
+starts with `_` (the template) are not entries.
+
+## Reading the log
+
+There is no committed table to keep in sync. To print one, sorted by date then
+file name:
+
+```sh
+node scripts/bug-log.mjs          # markdown table on stdout (never commit it)
+node scripts/bug-log.mjs --check  # only check the entry files
+```
+
+The backend `npm run test:eslint-plugin` (an existing CI step) also runs
+`scripts/bug-log.test.mjs`, which only checks that each entry file present has
+a conventional name and frontmatter with `date` and `layer`. It never fails
+because a PR has no entry, `pr` is empty or optional fields are missing; a line
+of an optional field it cannot read is only printed as a warning.
 
 ## Lint baseline (Phase 1)
 

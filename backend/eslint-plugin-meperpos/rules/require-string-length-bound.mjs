@@ -12,7 +12,7 @@
  *   Explorer finding F39: `UpdateOrganizationNameDto` accepted a 1000-character
  *   business name because it had `@IsString()` and no `@MaxLength`. An
  *   unbounded string reaches the database, receipts, PDFs and WhatsApp texts.
- *   See docs/bug-rule-log.md.
+ *   See docs/bug-rules/2026-11-22-pr-393-string-length-bound.md.
  *
  * Arrays
  *   `@IsString({ each: true })` is treated like `@IsString()`: every element
