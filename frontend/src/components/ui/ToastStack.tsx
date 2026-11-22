@@ -73,15 +73,48 @@ function ToastStackViewport({
   }, []);
 
   useEffect(() => {
-    if (!pinned) return;
+    if (!pinned && !focused) return;
     const handlePointerDown = (event: PointerEvent) => {
       if (!stackRef.current?.contains(event.target as Node | null)) {
         setPinned(false);
+        setFocused(false);
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [pinned]);
+  }, [pinned, focused]);
+
+  // Removing a focused toast drops document.activeElement to document.body
+  // without firing blur; watch stack DOM mutations and outside focus so `focused`
+  // clears on the same microtask without a 16ms timer gap.
+  useEffect(() => {
+    if (!focused) return;
+    const stack = stackRef.current;
+    if (!stack) return;
+
+    let active = true;
+    const syncFocus = () => {
+      if (active && !stack.contains(document.activeElement)) {
+        setFocused(false);
+      }
+    };
+
+    queueMicrotask(syncFocus);
+    const observer = new MutationObserver(syncFocus);
+    observer.observe(stack, { childList: true, subtree: true });
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!stack.contains(event.target as Node | null)) {
+        setFocused(false);
+      }
+    };
+    document.addEventListener("focusin", handleFocusIn);
+    return () => {
+      active = false;
+      observer.disconnect();
+      document.removeEventListener("focusin", handleFocusIn);
+    };
+  }, [focused]);
 
   const front = visible[0];
 
@@ -103,6 +136,12 @@ function ToastStackViewport({
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !front) return;
         event.stopPropagation();
+        if (
+          document.activeElement instanceof HTMLElement &&
+          event.currentTarget.contains(document.activeElement)
+        ) {
+          document.activeElement.blur();
+        }
         onDismiss(front.id);
       }}
       className={cn(

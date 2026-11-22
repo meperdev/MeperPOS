@@ -145,6 +145,20 @@ describe("ToastCard", () => {
     expect(screen.getByTestId("toast-card").style.transform).toBe("translateY(24px) scale(0.9)");
   });
 
+  it("fades a leaving peeking card behind the front card without playing toast-out", () => {
+    const { rerender } = render(
+      <ToastCard type="info" title="Detrás" depth={1} leaving onClose={vi.fn()} />,
+    );
+    const peekingLeaving = screen.getByTestId("toast-card");
+    expect(peekingLeaving.className).not.toContain("animate-toast-out");
+    expect(peekingLeaving.style.opacity).toBe("0");
+    expect(peekingLeaving.style.transform).toBe("translateY(12px) scale(0.95)");
+
+    rerender(<ToastCard type="info" title="Expandida" depth={1} expanded leaving onClose={vi.fn()} />);
+    const expandedLeaving = screen.getByTestId("toast-card");
+    expect(expandedLeaving.className).toContain("animate-toast-out");
+  });
+
   it("drops the travel but keeps the fade under prefers-reduced-motion", () => {
     expect(globalsCss).toContain("translateY(-12px)");
 

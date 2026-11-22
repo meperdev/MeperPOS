@@ -280,4 +280,26 @@ describe("toast API", () => {
     expect(cards[1]).toHaveTextContent("dato");
     expect(cards[1]).toHaveAttribute("data-depth", "1");
   });
+
+  it("collapses and resumes timers after dismissing a focused toast when others remain", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("short"));
+    fireEvent.click(screen.getByText("error"));
+    act(() => vi.advanceTimersByTime(20));
+
+    const stack = screen.getByTestId("toast-stack");
+    const closeFront = screen.getAllByRole("button", { name: "Cerrar notificación" })[0];
+    closeFront.focus();
+    fireEvent.focus(closeFront);
+    expect(stack.dataset.expanded).toBe("true");
+
+    fireEvent.click(closeFront);
+    act(() => vi.advanceTimersByTime(220));
+
+    expect(screen.queryByText("falló")).toBeNull();
+    expect(stack.dataset.expanded).toBe("false");
+
+    act(() => vi.advanceTimersByTime(1100));
+    expect(screen.queryByText("corto")).toBeNull();
+  });
 });

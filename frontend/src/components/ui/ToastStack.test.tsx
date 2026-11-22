@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ToastStack, type ToastStackItem } from "./ToastStack";
 
 function item(id: string, overrides: Partial<ToastStackItem> = {}): ToastStackItem {
@@ -145,6 +145,55 @@ describe("ToastStack", () => {
     expect(onResumeAll).not.toHaveBeenCalled();
 
     unmount();
+    expect(onResumeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("collapses focus expansion when the focused toast unmounts while another remains", async () => {
+    const onPauseAll = vi.fn();
+    const onResumeAll = vi.fn();
+    const { rerender } = render(
+      <ToastStack
+        toasts={[item("dos"), item("uno")]}
+        onDismiss={noop}
+        onPauseAll={onPauseAll}
+        onResumeAll={onResumeAll}
+      />,
+    );
+
+    const closeBtn = screen.getAllByRole("button", { name: "Cerrar notificación" })[0];
+    closeBtn.focus();
+    fireEvent.focus(closeBtn);
+
+    const stack = screen.getByTestId("toast-stack");
+    expect(stack.dataset.expanded).toBe("true");
+    expect(onPauseAll).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ToastStack
+        toasts={[item("uno")]}
+        onDismiss={noop}
+        onPauseAll={onPauseAll}
+        onResumeAll={onResumeAll}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(stack.dataset.expanded).toBe("false");
+    });
+    expect(onResumeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears focus expansion on outside pointerdown", () => {
+    const onResumeAll = vi.fn();
+    renderStack([item("dos"), item("uno")], { onResumeAll });
+
+    const closeBtn = screen.getAllByRole("button", { name: "Cerrar notificación" })[0];
+    closeBtn.focus();
+    fireEvent.focus(closeBtn);
+    expect(screen.getByTestId("toast-stack").dataset.expanded).toBe("true");
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.getByTestId("toast-stack").dataset.expanded).toBe("false");
     expect(onResumeAll).toHaveBeenCalledTimes(1);
   });
 

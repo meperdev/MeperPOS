@@ -74,6 +74,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastsRef = useRef<ToastItem[]>([]);
   const timersRef = useRef(new Map<string, TimerEntry>());
+  const exitTimersRef = useRef(new Map<string, number>());
   const pausedRef = useRef(false);
 
   const commit = useCallback((next: ToastItem[]) => {
@@ -94,6 +95,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const removeNow = useCallback(
     (id: string) => {
       clearTimer(id);
+      const exitTimeout = exitTimersRef.current.get(id);
+      if (exitTimeout !== undefined) {
+        window.clearTimeout(exitTimeout);
+        exitTimersRef.current.delete(id);
+      }
       commit(toastsRef.current.filter((toast) => toast.id !== id));
     },
     [clearTimer, commit],
@@ -109,7 +115,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           item.id === id ? { ...item, leaving: true } : item,
         ),
       );
-      window.setTimeout(() => removeNow(id), EXIT_MS);
+      const exitTimeout = window.setTimeout(() => {
+        exitTimersRef.current.delete(id);
+        removeNow(id);
+      }, EXIT_MS);
+      exitTimersRef.current.set(id, exitTimeout);
     },
     [clearTimer, commit, removeNow],
   );
@@ -224,6 +234,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const timers = timersRef.current;
+    const exitTimers = exitTimersRef.current;
     return () => {
       timers.forEach((entry) => {
         if (!entry.paused) {
@@ -231,6 +242,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         }
       });
       timers.clear();
+      exitTimers.forEach((timeout) => window.clearTimeout(timeout));
+      exitTimers.clear();
     };
   }, []);
 

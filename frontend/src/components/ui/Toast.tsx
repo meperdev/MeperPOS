@@ -86,7 +86,7 @@ export function ToastCard({
               transform: `translateY(${depth * TOAST_DEPTH_OFFSET}px) scale(${
                 1 - depth * DEPTH_SCALE
               })`,
-              opacity: DEPTH_OPACITY[Math.min(depth, DEPTH_OPACITY.length - 1)],
+              opacity: leaving ? 0 : DEPTH_OPACITY[Math.min(depth, DEPTH_OPACITY.length - 1)],
             }
           : null),
       }}
@@ -99,15 +99,16 @@ export function ToastCard({
         peeking
           ? "pointer-events-none absolute inset-0 origin-bottom overflow-hidden"
           : "relative",
-        // Only the card that arrives in front earns an entrance. A peeking card
-        // appearing behind must not replay that motion when the stack opens.
-        leaving ? "animate-toast-out" : depth === 0 && "animate-toast-in",
+        // Only the card that arrives in front earns an entrance; a peeking card
+        // fades out behind the front card instead of playing the upward exit.
+        leaving ? !peeking && "animate-toast-out" : depth === 0 && "animate-toast-in",
       )}
     >
       <button
         type="button"
         onClick={(event) => {
           event.stopPropagation();
+          event.currentTarget.blur();
           onClose();
         }}
         aria-label="Cerrar notificación"
@@ -150,6 +151,7 @@ export function ToastCard({
             onClick={(event) => {
               event.stopPropagation();
               action.onClick();
+              event.currentTarget.blur();
               onClose();
             }}
             className={cn(buttonClassName({ variant: "secondary", size: "sm" }), "shrink-0")}
