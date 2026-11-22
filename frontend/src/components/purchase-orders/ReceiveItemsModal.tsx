@@ -90,7 +90,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
           ),
         }))
       }
-      className="text-right"
+      className="px-2.5 text-right"
     />
   );
 
@@ -124,7 +124,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                   <th scope="col" className="text-right py-2.5 px-3 text-xs font-medium text-muted-foreground">
                     Pendiente
                   </th>
-                  <th scope="col" className="text-right py-2.5 px-4 text-xs font-medium text-muted-foreground w-32">
+                  <th scope="col" className="text-right py-2.5 px-3 text-xs font-medium text-muted-foreground w-32 min-w-32">
                     Recibir ahora
                   </th>
                 </tr>
@@ -152,7 +152,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                     <td className="py-2 px-3 text-right text-sm font-semibold text-warning-text tabular-nums">
                       {it.pending}
                     </td>
-                    <td className="py-2 px-4">{renderReceiveInput(it)}</td>
+                    <td className="py-2 px-3">{renderReceiveInput(it)}</td>
                   </tr>
                 ))}
               </tbody>

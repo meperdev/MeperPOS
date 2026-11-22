@@ -834,19 +834,24 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(152px, calc((100% - 36px) / 4))), 1fr))");
   });
 
-  it("puts the customer and finance actions side by side as icon-over-label cards", () => {
+  it("puts the customer and finance actions in one compact horizontal row and pause utilities in the cart header", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
     const customer = screen.getByRole("button", { name: "Sin cliente" });
     const finance = screen.getByRole("button", { name: /financiar/i });
     expect(customer.parentElement).toBe(finance.parentElement);
-    expect(customer.parentElement!.className).toContain("grid-cols-2");
-    for (const card of [customer, finance]) {
-      expect(card.className).toContain("flex-col");
-      expect(card.firstElementChild!.tagName.toLowerCase()).toBe("span");
-      expect(card.firstElementChild!.querySelector("svg")).not.toBeNull();
+    expect(customer.parentElement!.className).toContain("grid-cols-[1fr_auto]");
+    for (const action of [customer, finance]) {
+      expect(action.className).toContain("h-9");
+      expect(action.firstElementChild!.tagName.toLowerCase()).toBe("span");
+      expect(action.firstElementChild!.querySelector("svg")).not.toBeNull();
     }
     expect(finance).toBeDisabled();
+
+    const cartHeading = screen.getByRole("heading", { name: "Carrito" });
+    const cartHeader = cartHeading.parentElement!.parentElement!;
+    expect(cartHeader.contains(screen.getByRole("button", { name: "Reanudar (0)" }))).toBe(true);
+    expect(cartHeader.contains(screen.getByRole("button", { name: "Pausar" }))).toBe(true);
   });
 
   it("gives the cart 18rem at lg and a 60/40 split from xl", () => {

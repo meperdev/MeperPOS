@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { cn } from "@/lib/utils";
@@ -27,34 +28,64 @@ interface SelectProps {
   className?: string;
 }
 
-/** Nearest ancestor that scrolls vertically (a modal body, a panel), or null when the page scrolls. */
-function findScrollParent(node: HTMLElement | null): HTMLElement | null {
+interface PopoverPlacement {
+  left: number;
+  width: number;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
+  placement: "top" | "bottom";
+}
+
+/** All vertical scroll ancestors (e.g., nested list inside a modal body). */
+function findScrollParents(node: HTMLElement | null): HTMLElement[] {
+  const scrollers: HTMLElement[] = [];
   for (let el = node?.parentElement ?? null; el; el = el.parentElement) {
     const { overflowY } = window.getComputedStyle(el);
-    if (overflowY === "auto" || overflowY === "scroll") return el;
+    if (overflowY === "auto" || overflowY === "scroll") scrollers.push(el);
   }
-  return null;
+  return scrollers;
 }
 
 const MENU_ROW_HEIGHT = 36;
-// Touch rows are 44px tall (min-h-11), so the open-direction estimate has to match or it
-// decides on a height the menu will not have.
-const MENU_ROW_HEIGHT_TOUCH = 44;
 const MENU_MAX_HEIGHT = 240;
-const TOUCH_VIEWPORT_QUERY = "(min-width: 640px)";
+const POPOVER_EDGE_GAP = 8;
+const POPOVER_OFFSET = 6;
+const MIN_MENU_HEIGHT = 88;
 
 /**
- * Row height the open estimate must assume. Below the `sm` breakpoint the rows keep the
- * 44px touch target; when the environment cannot answer, assume touch so the menu errs
- * towards opening upwards rather than being clipped.
+ * Computes fixed viewport coordinates anchored to the trigger button so a
+ * portaled desktop listbox never gets clipped by `overflow-hidden` or nested
+ * scroll containers inside modals and cards.
  */
-function estimateMenuRowHeight(): number {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return MENU_ROW_HEIGHT_TOUCH;
-  }
-  return window.matchMedia(TOUCH_VIEWPORT_QUERY).matches
-    ? MENU_ROW_HEIGHT
-    : MENU_ROW_HEIGHT_TOUCH;
+function computePopoverPlacement(
+  trigger: HTMLElement,
+  optionCount: number,
+): PopoverPlacement {
+  const rect = trigger.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || 0;
+  const viewportWidth = window.innerWidth || 0;
+  const spaceBelow = Math.max(0, viewportHeight - rect.bottom - POPOVER_EDGE_GAP - POPOVER_OFFSET);
+  const spaceAbove = Math.max(0, rect.top - POPOVER_EDGE_GAP - POPOVER_OFFSET);
+  const desiredHeight = Math.min(MENU_MAX_HEIGHT, optionCount * MENU_ROW_HEIGHT + 12);
+  const placement: "top" | "bottom" =
+    spaceBelow < desiredHeight && spaceAbove > spaceBelow ? "top" : "bottom";
+  const availableSpace = placement === "top" ? spaceAbove : spaceBelow;
+  const maxHeight = Math.max(MIN_MENU_HEIGHT, Math.min(MENU_MAX_HEIGHT, availableSpace));
+  const maxLeft = Math.max(POPOVER_EDGE_GAP, viewportWidth - rect.width - POPOVER_EDGE_GAP);
+  const left =
+    viewportWidth > 0 && rect.width > 0
+      ? Math.min(Math.max(rect.left, POPOVER_EDGE_GAP), maxLeft)
+      : rect.left;
+
+  return {
+    left,
+    width: rect.width,
+    top: placement === "bottom" ? rect.bottom + POPOVER_OFFSET : undefined,
+    bottom: placement === "top" ? viewportHeight - rect.top + POPOVER_OFFSET : undefined,
+    maxHeight,
+    placement,
+  };
 }
 
 export function Select({
@@ -70,7 +101,7 @@ export function Select({
   className = "",
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [openUpwards, setOpenUpwards] = useState(false);
+  const [popover, setPopover] = useState<PopoverPlacement | null>(null);
   // Below `sm` the list is a sheet in a body portal instead of a dropdown.
   const belowSm = useBelowSmViewport();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,20 +117,69 @@ export function Select({
   useEffect(() => {
     // The sheet carries its own overlay; a mousedown inside it is not "outside".
     if (!isOpen || belowSm) return;
+    const raf = window.requestAnimationFrame(() => {
+      if (triggerRef.current) {
+        setPopover(computePopoverPlacement(triggerRef.current, options.length));
+      }
+    });
+
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
+        !containerRef.current?.contains(target) &&
+        !listRef.current?.contains(target)
       ) {
         setIsOpen(false);
+        setPopover(null);
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+    const handleReposition = (event: Event) => {
+      if (
+        event.type === "scroll" &&
+        event.target instanceof Node &&
+        listRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const triggerRect = trigger.getBoundingClientRect();
+      if (
+        window.innerHeight > 0 &&
+        triggerRect.height > 0 &&
+        (triggerRect.bottom <= 0 || triggerRect.top >= window.innerHeight)
+      ) {
+        setIsOpen(false);
+        setPopover(null);
+        return;
+      }
+      const scrollers = findScrollParents(containerRef.current);
+      for (const scroller of scrollers) {
+        const scrollerRect = scroller.getBoundingClientRect();
+        if (
+          scrollerRect.height > 0 &&
+          (triggerRect.bottom <= scrollerRect.top ||
+            triggerRect.top >= scrollerRect.bottom)
+        ) {
+          setIsOpen(false);
+          setPopover(null);
+          return;
+        }
+      }
+      setPopover(computePopoverPlacement(trigger, options.length));
     };
-  }, [isOpen, belowSm]);
+
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [isOpen, belowSm, options.length]);
 
   // Keyboard users land on the current choice when the list opens.
   useEffect(() => {
@@ -112,34 +192,40 @@ export function Select({
 
   const toggleOpen = () => {
     if (disabled) return;
-    if (!isOpen && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      // Measure against the visible scroll area, not the window: inside a modal the menu is
-      // clipped by the modal body, and opening downwards there only grows its scroll height.
-      const scroller = findScrollParent(containerRef.current)?.getBoundingClientRect();
-      const visibleTop = Math.max(0, scroller?.top ?? 0);
-      const visibleBottom = Math.min(window.innerHeight, scroller?.bottom ?? window.innerHeight);
-      const spaceBelow = visibleBottom - rect.bottom;
-      const spaceAbove = rect.top - visibleTop;
-      const menuHeight = Math.min(MENU_MAX_HEIGHT, options.length * estimateMenuRowHeight() + 12);
-      // Open upwards only when the menu does not fit below and there is more room above.
-      if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-        setOpenUpwards(true);
-      } else {
-        setOpenUpwards(false);
-      }
+    if (isOpen) {
+      setIsOpen(false);
+      setPopover(null);
+      return;
     }
-    setIsOpen((prev) => !prev);
+    if (!belowSm && triggerRef.current) {
+      setPopover(computePopoverPlacement(triggerRef.current, options.length));
+    } else {
+      setPopover(null);
+    }
+    setIsOpen(true);
   };
 
   const closeToTrigger = () => {
     setIsOpen(false);
+    setPopover(null);
     triggerRef.current?.focus();
   };
 
   const handleSelect = (nextValue: string) => {
     onChange(nextValue);
     closeToTrigger();
+  };
+
+  const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!isOpen) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setIsOpen(false);
+      setPopover(null);
+    } else if (event.key === "Tab") {
+      setIsOpen(false);
+      setPopover(null);
+    }
   };
 
   const handleListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -153,6 +239,7 @@ export function Select({
       // continues from here and the Modal focus trap is not left behind.
       triggerRef.current?.focus();
       setIsOpen(false);
+      setPopover(null);
       return;
     }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -248,6 +335,7 @@ export function Select({
         type="button"
         disabled={disabled}
         onClick={toggleOpen}
+        onKeyDown={handleTriggerKeyDown}
         data-select-trigger
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -306,23 +394,33 @@ export function Select({
         </div>
       </BottomSheet>
 
-      {isOpen && !belowSm && (
-        <div
-          ref={listRef}
-          id={listboxId}
-          role="listbox"
-          aria-label={label ?? placeholder}
-          onKeyDown={handleListKeyDown}
-          className={cn(
-            "absolute left-0 right-0 z-50 flex flex-col gap-1 rounded-xl border border-border bg-card p-1.5",
-            "shadow-lg shadow-black/10",
-            "max-h-60 overflow-y-auto scrollbar-app",
-            openUpwards ? "bottom-full mb-1.5" : "top-full mt-1.5"
-          )}
-        >
-          {options.map((option) => optionRow(option))}
-        </div>
-      )}
+      {isOpen &&
+        !belowSm &&
+        popover &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={listRef}
+            id={listboxId}
+            role="listbox"
+            data-select-popover=""
+            data-placement={popover.placement}
+            aria-label={label ?? placeholder}
+            onKeyDown={handleListKeyDown}
+            style={{
+              position: "fixed",
+              left: popover.left,
+              width: popover.width,
+              top: popover.top,
+              bottom: popover.bottom,
+              maxHeight: popover.maxHeight,
+            }}
+            className="scrollbar-app z-[70] flex flex-col gap-1 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-lg shadow-black/10"
+          >
+            {options.map((option) => optionRow(option))}
+          </div>,
+          document.body,
+        )}
 
       {error && (
         <span id={errorId} className="mt-1.5 block text-[13px] font-medium text-danger-text">
