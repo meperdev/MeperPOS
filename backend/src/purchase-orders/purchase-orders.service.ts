@@ -596,6 +596,24 @@ export class PurchaseOrdersService {
         }
         destinationId = destination.locationId;
       }
+
+      // Lock the order before reading receipt quantities or changing inventory.
+      // A quantity-only check (or the per-product CAS) cannot serialize two
+      // receipts on different lines, or a receipt against cancellation.
+      const [lockedOrder] = await tx.$queryRaw<{ status: typeof order.status }[]>`
+        SELECT "status" FROM "PurchaseOrder"
+        WHERE "id" = ${id} AND "organizationId" = ${organizationId}
+        FOR NO KEY UPDATE
+      `;
+      if (!lockedOrder) {
+        throw new NotFoundException('Orden de compra no encontrada');
+      }
+      if (lockedOrder.status !== 'PENDING' && lockedOrder.status !== 'PARTIAL_RECEIVED') {
+        throw new BadRequestException(
+          'Solo se pueden recibir órdenes pendientes o parcialmente recibidas',
+        );
+      }
+
       for (const r of normalizedItems) {
         const item = await tx.purchaseOrderItem.findUnique({
           where: { id: r.itemId },
@@ -697,7 +715,7 @@ export class PurchaseOrdersService {
       const allReceived = refreshed.every((i) => i.qtyReceived >= i.qtyOrdered);
 
       await tx.purchaseOrder.update({
-        where: { id },
+        where: { id, organizationId },
         data: allReceived
           ? { status: 'RECEIVED', receivedAt: new Date() }
           : { status: 'PARTIAL_RECEIVED' },
@@ -750,14 +768,19 @@ export class PurchaseOrdersService {
       );
     }
 
-    await this.prisma.purchaseOrder.update({
-      where: { id },
+    const cancelled = await this.prisma.purchaseOrder.updateMany({
+      where: { id, organizationId, status: { in: ['DRAFT', 'PENDING'] } },
       data: {
         status: 'CANCELLED',
         cancelledAt: new Date(),
         cancelReason: dto.reason,
       },
     });
+    if (cancelled.count === 0) {
+      throw new BadRequestException(
+        'Solo se pueden cancelar órdenes en borrador o pendientes',
+      );
+    }
 
     return this.findOne(id, organizationId);
   }

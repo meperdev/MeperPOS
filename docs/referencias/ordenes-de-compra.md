@@ -7,6 +7,11 @@ opcional indica la sede de una entrega; el permiso se comprueba al recibir. La
 sede no modifica el documento enviado al proveedor. Consultá las [reglas antes del
 corte de stock](../planes/implementacion/multisede-corte-stock.md#recepción-de-compras-antes-del-corte).
 
+Las recepciones de una misma orden se procesan una a la vez. Si otra operación
+recibió la cantidad pendiente o canceló la orden, actualizá la orden antes de
+volver a registrar la entrega. Una orden con una recepción parcial o completa
+no se puede cancelar.
+
 ## 1. Ciclo de vida
 
 | Paso | Estado | Qué queda registrado |

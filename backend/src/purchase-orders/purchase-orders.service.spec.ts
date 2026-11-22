@@ -14,6 +14,7 @@ describe('PurchaseOrdersService', () => {
   };
 
   const txMock = {
+    $queryRaw: jest.fn(),
     product: {
       findFirst: jest.fn(),
       updateMany: jest.fn(),
@@ -45,6 +46,7 @@ describe('PurchaseOrdersService', () => {
       findMany: jest.fn(),
       count: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     supplier: {
       findFirst: jest.fn(),
@@ -88,6 +90,7 @@ describe('PurchaseOrdersService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    txMock.$queryRaw.mockResolvedValue([{ status: 'PENDING' }]);
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof txMock) => unknown) => callback(txMock),
     );
@@ -226,7 +229,7 @@ describe('PurchaseOrdersService', () => {
       service.cancel('po-1', { reason: 'Saldo pendiente' }, 'org-1'),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(prismaMock.purchaseOrder.update).not.toHaveBeenCalled();
+    expect(prismaMock.purchaseOrder.updateMany).not.toHaveBeenCalled();
   });
 
   // ---- new tests for T5.3 ----
