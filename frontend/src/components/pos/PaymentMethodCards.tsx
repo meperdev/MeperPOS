@@ -24,30 +24,25 @@ export function PaymentMethodCard({
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2.5 cursor-pointer transition-colors duration-150 ease-out",
+        "flex min-h-[46px] flex-col items-center justify-center gap-0.5 rounded-md border px-1.5 py-1.5 cursor-pointer transition-colors duration-150 ease-out",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         selected
-          ? "border-success/30 bg-success/10 text-foreground font-semibold"
-          : "border-border/80 bg-muted/20 dark:bg-background/50 text-muted-foreground hover:border-foreground/25 hover:bg-muted/50 hover:text-foreground",
+          ? "border-border/80 bg-card text-foreground font-semibold shadow-2xs"
+          : "border-transparent bg-transparent text-muted-foreground font-medium hover:bg-card/50 hover:text-foreground",
         className,
       )}
     >
       <span
         className={cn(
           "shrink-0 transition-colors duration-150",
-          selected ? "text-success-text" : "text-muted-foreground"
+          selected ? "text-primary-text" : "text-muted-foreground",
         )}
       >
         {icon}
       </span>
-      <span className="text-[13px] tracking-tight whitespace-nowrap">
+      <span className="text-xs tracking-tight whitespace-nowrap">
         {label}
       </span>
-      {selected && (
-        <span
-          aria-hidden="true"
-          className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success"
-        />
-      )}
     </button>
   );
 }
@@ -57,7 +52,10 @@ interface PaymentMethodCardsProps {
   onMethodChange: (method: "CASH" | "CARD" | "TRANSFER") => void;
 }
 
-export function PaymentMethodCards({ selectedMethod, onMethodChange }: PaymentMethodCardsProps) {
+export function PaymentMethodCards({
+  selectedMethod,
+  onMethodChange,
+}: PaymentMethodCardsProps) {
   const methods = [
     {
       type: "CASH" as const,
@@ -77,11 +75,14 @@ export function PaymentMethodCards({ selectedMethod, onMethodChange }: PaymentMe
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {methods.map((method, index) => (
+    <div
+      role="group"
+      aria-label="Método de pago"
+      className="grid grid-cols-3 gap-1 rounded-lg border border-border/70 bg-muted/40 p-1"
+    >
+      {methods.map((method) => (
         <PaymentMethodCard
           key={method.type}
-          className={cn(methods.length % 2 === 1 && index === methods.length - 1 && "col-span-2")}
           label={method.label}
           icon={method.icon}
           selected={selectedMethod === method.type}

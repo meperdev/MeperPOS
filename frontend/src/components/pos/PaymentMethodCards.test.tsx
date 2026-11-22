@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { PaymentMethodCards } from "@/components/pos/PaymentMethodCards";
 
 afterEach(() => {
@@ -7,24 +8,39 @@ afterEach(() => {
 });
 
 describe("PaymentMethodCards layout", () => {
-  it("uses two columns with the odd last method spanning the row, at any viewport", () => {
+  it("renders all three methods in one neutral segmented row without neon success styling", () => {
     render(<PaymentMethodCards selectedMethod="CASH" onMethodChange={vi.fn()} />);
 
-    const group = screen.getByRole("button", { name: "Efectivo" }).parentElement;
-    expect(group).not.toBeNull();
-    expect(group!.className).toContain("grid-cols-2");
-    expect(group!.className).not.toMatch(/(^|\s)(md|sm):grid-cols/);
-    expect(screen.getByRole("button", { name: /Transferencia/ }).className).toContain("col-span-2");
-    expect(screen.getByRole("button", { name: "Efectivo" }).className).not.toContain("col-span-2");
+    const group = screen.getByRole("group", { name: "Método de pago" });
+    expect(group.className).toContain("grid-cols-3");
+    expect(group.className).not.toContain("grid-cols-2");
+
+    const cashBtn = screen.getByRole("button", { name: "Efectivo" });
+    const cardBtn = screen.getByRole("button", { name: "Tarjeta" });
+    const transferBtn = screen.getByRole("button", { name: "Transferencia" });
+
+    expect(cashBtn).toHaveAttribute("aria-pressed", "true");
+    expect(cardBtn).toHaveAttribute("aria-pressed", "false");
+    expect(transferBtn).toHaveAttribute("aria-pressed", "false");
+
+    // Selected option uses neutral elevated card surface + subtle terracotta icon, never neon green.
+    expect(cashBtn.className).toContain("bg-card");
+    expect(cashBtn.className).not.toMatch(/success|emerald|green/);
+    expect(cashBtn.firstElementChild?.className).toContain("text-primary-text");
+    expect(transferBtn.className).not.toContain("col-span-2");
   });
 
-  it("keeps labels from truncating so they show fully in an 18rem cart", () => {
-    render(<PaymentMethodCards selectedMethod="CASH" onMethodChange={vi.fn()} />);
+  it("keeps labels from truncating and notifies on method switch", async () => {
+    const user = userEvent.setup();
+    const onMethodChange = vi.fn();
+    render(<PaymentMethodCards selectedMethod="CASH" onMethodChange={onMethodChange} />);
 
     const label = screen.getByText("Transferencia");
-    const card = screen.getByRole("button", { name: /Transferencia/ });
     expect(label.className).not.toContain("truncate");
     expect(label.className).toContain("whitespace-nowrap");
-    expect(card.className).toContain("flex-col");
+    expect(label.className).toContain("text-xs");
+
+    await user.click(screen.getByRole("button", { name: "Tarjeta" }));
+    expect(onMethodChange).toHaveBeenCalledWith("CARD");
   });
 });
