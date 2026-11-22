@@ -1,0 +1,6 @@
+# Playwright output: reports, traces, screenshots, videos and stack logs.
+/test-results/
+/playwright-report/
+/blob-report/
+# Signed-in session written by tests/auth.setup.ts.
+/.auth/
