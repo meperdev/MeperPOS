@@ -248,12 +248,7 @@ export function ExpenseSummaryCards({ month, summary }: Props) {
               return (
                 <li
                   key={entry.group.groupId}
-                  className={cn(
-                    "min-w-0 snap-start border-r border-border/60 p-4 last:border-r-0",
-                    entries.length <= 3
-                      ? "min-w-[220px] flex-1"
-                      : "w-[232px] shrink-0 sm:w-[248px]",
-                  )}
+                  className="min-w-0 grow shrink-0 basis-[232px] snap-start border-r border-border/60 p-4 last:border-r-0 sm:basis-[248px]"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1.5">

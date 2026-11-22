@@ -159,25 +159,39 @@ describe("ExpenseSummaryCards", () => {
 
     const cells = within(rail).getAllByRole("listitem");
     expect(cells).toHaveLength(5);
-    expect(cells[0].className).toContain("shrink-0");
+    for (const cell of cells) {
+      expect(cell.className).toContain("min-w-0");
+      expect(cell.className).toContain("grow");
+      expect(cell.className).toContain("shrink-0");
+      expect(cell.className).toContain("basis-[232px]");
+      expect(cell.className).toContain("sm:basis-[248px]");
+    }
     // No numbered pagination anywhere in the summary.
     expect(within(summaryRegion()).queryByRole("navigation")).toBeNull();
 
     unmount();
 
-    // Small group count (<= 3) stretches evenly across the rail instead of fixed tracks.
-    render(
-      <ExpenseSummaryCards
-        month="2026-11"
-        summary={{ ...summary, groups: summary.groups.slice(0, 2) }}
-      />,
-    );
+    // Every group count up to the viewport overflow threshold uses the same auto-fill rule.
+    for (const count of [1, 2, 4]) {
+      const { unmount: unmountSlice } = render(
+        <ExpenseSummaryCards
+          month="2026-11"
+          summary={{ ...summary, groups: summary.groups.slice(0, count) }}
+        />,
+      );
 
-    const compactCells = within(
-      screen.getByTestId("expense-summary-rail"),
-    ).getAllByRole("listitem");
-    expect(compactCells).toHaveLength(2);
-    expect(compactCells[0].className).toContain("flex-1");
+      const compactCells = within(
+        screen.getByTestId("expense-summary-rail"),
+      ).getAllByRole("listitem");
+      expect(compactCells).toHaveLength(count);
+      for (const cell of compactCells) {
+        expect(cell.className).toContain("grow");
+        expect(cell.className).toContain("shrink-0");
+        expect(cell.className).toContain("basis-[232px]");
+        expect(cell.className).toContain("sm:basis-[248px]");
+      }
+      unmountSlice();
+    }
   });
 
   it("shows discreet scroll arrows only when the horizontal rail overflows", () => {
