@@ -145,7 +145,7 @@ Push every fix as high up the stack as it will go, and prefer the higher layer:
 
 Human review comes last, never first.
 
-- Every `fix:` PR names the layer it raised the fix to and appends one row to `docs/bug-rule-log.md` (append-only).
+- Every `fix:` PR names the layer it raised the fix to and adds one entry file under `docs/bug-rules/` (append-only; how to in `docs/bug-rule-log.md`).
 - CI blocks on `npm run lint:ci` (ESLint without `--fix`) and `npm run test:eslint-plugin` in both `backend/` and `frontend/`. Run them locally before opening a PR. `meperpos/*` rules are always errors; silencing one needs `// eslint-disable-next-line <rule> -- <reason>` on that line.
 - `meperpos/require-string-length-bound` makes every `@IsString()` field in a backend `*.dto.ts` carry `@MaxLength`/`@Length` (`{ each: true }` on arrays) unless a format decorator already caps it; size the bound to the column or its consumer (receipt, PDF, sibling DTO).
 - Pre-existing stock-rule debt is frozen in a file-scoped baseline (`backend/eslint.baseline.mjs`, the baseline block in `frontend/eslint.config.mjs`) that may only shrink. Never add a file to it.

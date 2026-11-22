@@ -1,9 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import {
+  ArrowLeft,
+  Check,
+  FolderOpen,
+  Pencil,
+  Plus,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { InlineConfirmButton } from "@/components/ui/InlineConfirmButton";
+import { CATEGORY_CHART_PALETTE } from "@/lib/dashboard";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAnyRole } from "@/lib/auth";
@@ -17,56 +32,113 @@ import {
   useUpdateExpenseLabel,
 } from "@/hooks/useExpenses";
 import { getApiErrorMessage } from "@/lib/api";
-import { Pencil, Plus, Trash2, Tag, Folder } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
 
+type EditingTarget =
+  | { kind: "group"; id: string; value: string }
+  | { kind: "label"; id: string; groupId: string; value: string };
+
+/**
+ * Two-panel master-detail dialog for managing expense groups and their labels:
+ * keeps one group list and one active label workspace without nested cards or
+ * repeated per-card inputs.
+ */
 export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
   const { user } = useAuth();
   const toast = useToast();
-  const { data: groups = [], isLoading, isError } = useExpenseGroups();
+  const {
+    data: groups = [],
+    isLoading = false,
+    isError = false,
+    refetch,
+  } = useExpenseGroups();
   const createGroup = useCreateExpenseGroup();
   const updateGroup = useUpdateExpenseGroup();
   const deleteGroup = useDeleteExpenseGroup();
   const createLabel = useCreateExpenseLabel();
   const updateLabel = useUpdateExpenseLabel();
   const deleteLabel = useDeleteExpenseLabel();
-  const [groupName, setGroupName] = useState("");
-  const [newLabel, setNewLabel] = useState<Record<string, string>>({});
-  const [editing, setEditing] = useState<{ id: string; groupId?: string; value: string } | null>(null);
+
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [mobilePane, setMobilePane] = useState<"groups" | "labels">("groups");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newLabelName, setNewLabelName] = useState("");
+  const [editing, setEditing] = useState<EditingTarget | null>(null);
 
   if (!hasAnyRole(user?.role, ["ADMIN"])) return null;
+
+  const selectedIndex = groups.findIndex((group) => group.id === selectedGroupId);
+  const resolvedIndex = selectedIndex >= 0 ? selectedIndex : 0;
+  const activeGroup = groups[resolvedIndex] ?? null;
+  const activeLabels = activeGroup
+    ? (activeGroup.labels ?? []).filter((label) => label.active !== false)
+    : [];
 
   const run = async (action: () => Promise<unknown>, success: string) => {
     try {
       await action();
       toast.success(success);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "No se pudo actualizar la taxonomía"));
+      toast.error(
+        getApiErrorMessage(error, "No se pudo actualizar la taxonomía"),
+      );
     }
   };
 
   const handleCreateGroup = () => {
-    if (!groupName.trim() || createGroup.isPending) return;
+    const trimmed = newGroupName.trim();
+    if (!trimmed || createGroup.isPending) return;
     void run(async () => {
-      await createGroup.mutateAsync({ name: groupName.trim() });
-      setGroupName("");
+      const created = await createGroup.mutateAsync({ name: trimmed });
+      setNewGroupName("");
+      if (created?.id) {
+        setSelectedGroupId(created.id);
+        setMobilePane("labels");
+      }
     }, "Grupo creado");
   };
 
   const handleCreateLabel = (groupId: string) => {
-    const name = newLabel[groupId]?.trim();
-    if (!name || createLabel.isPending) return;
+    const trimmed = newLabelName.trim();
+    if (!trimmed || createLabel.isPending) return;
     void run(async () => {
       await createLabel.mutateAsync({
         groupId,
-        data: { name },
+        data: { name: trimmed },
       });
-      setNewLabel({ ...newLabel, [groupId]: "" });
+      setNewLabelName("");
     }, "Etiqueta creada");
+  };
+
+  const handleSaveGroupEdit = (groupId: string) => {
+    if (!editing || editing.kind !== "group" || editing.id !== groupId) return;
+    const trimmed = editing.value.trim();
+    if (!trimmed || updateGroup.isPending) return;
+    void run(async () => {
+      await updateGroup.mutateAsync({
+        id: groupId,
+        data: { name: trimmed },
+      });
+      setEditing(null);
+    }, "Grupo actualizado");
+  };
+
+  const handleSaveLabelEdit = (groupId: string, labelId: string) => {
+    if (!editing || editing.kind !== "label" || editing.id !== labelId) return;
+    const trimmed = editing.value.trim();
+    if (!trimmed || updateLabel.isPending) return;
+    void run(async () => {
+      await updateLabel.mutateAsync({
+        groupId,
+        id: labelId,
+        data: { name: trimmed },
+      });
+      setEditing(null);
+    }, "Etiqueta actualizada");
   };
 
   return (
@@ -74,271 +146,416 @@ export function ExpenseTaxonomyModal({ isOpen, onClose }: Props) {
       isOpen={isOpen}
       onClose={onClose}
       title="Gestionar categorías"
-      size="xl"
+      size="lg"
       footer={
-        <div className="flex items-center justify-between w-full">
+        <div className="flex w-full items-center justify-between">
           <p className="text-[13px] text-muted-foreground tabular-nums">
             {groups.length} {groups.length === 1 ? "grupo activo" : "grupos activos"}
           </p>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" size="sm" onClick={onClose}>
             Listo
           </Button>
         </div>
       }
     >
-      <div className="space-y-5">
-        {/* Top Section: Create New Group */}
-        <div className="rounded-xl border border-border/70 bg-muted/20 p-4 shadow-2xs space-y-3">
-          <div>
-            <h3 className="text-[13px] font-semibold text-foreground">
-              Crear nuevo grupo de gasto
-            </h3>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
-              Organiza tus salidas en grupos lógicos para clasificar compras, suministros, nómina y servicios.
-            </p>
-          </div>
-          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1">
-              <Input
-                label="Nuevo grupo"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleCreateGroup();
-                  }
-                }}
-                placeholder="Nombre del grupo (ej. Publicidad, Logística)"
-              />
-            </div>
-            <Button
-              type="button"
-              className="w-full shrink-0 sm:w-auto h-9"
-              disabled={!groupName.trim() || createGroup.isPending}
-              onClick={handleCreateGroup}
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" /> Nuevo grupo
-            </Button>
-          </div>
+      {isLoading ? (
+        <div className="py-12 text-center text-sm text-muted-foreground">
+          Cargando grupos…
         </div>
+      ) : isError ? (
+        <ErrorState
+          title="No se pudieron cargar las categorías"
+          message="Revisa tu conexión e intenta de nuevo."
+          retryLabel="Reintentar"
+          onRetry={refetch ? () => void refetch() : undefined}
+        />
+      ) : (
+        <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-border/70 bg-card md:h-[460px] md:grid-cols-[260px_1fr]">
+          {/* Left rail: groups */}
+          <div
+            className={cn(
+              "flex min-h-0 flex-col border-border/60 bg-muted/15 md:border-r",
+              mobilePane === "labels" && activeGroup && "hidden md:flex",
+            )}
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3.5 py-2.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Grupos
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {groups.length}
+              </span>
+            </div>
 
-        {isLoading && (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            Cargando grupos…
-          </div>
-        )}
-        {isError && (
-          <p role="alert" className="py-4 text-sm text-danger-text text-center">
-            No se pudieron cargar los grupos.
-          </p>
-        )}
-        {!isLoading && groups.length === 0 && (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            No hay grupos configurados.
-          </div>
-        )}
+            <div className="scrollbar-app max-h-[300px] min-h-0 flex-1 space-y-1 overflow-y-auto p-2 md:max-h-none">
+              {groups.length === 0 ? (
+                <p className="px-2 py-8 text-center text-[13px] text-muted-foreground">
+                  Sin grupos configurados.
+                </p>
+              ) : (
+                groups.map((group, index) => {
+                  const labelCount = (group.labels ?? []).filter(
+                    (label) => label.active !== false,
+                  ).length;
+                  const isSelected = activeGroup?.id === group.id;
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      aria-current={isSelected ? "true" : undefined}
+                      onClick={() => {
+                        setSelectedGroupId(group.id);
+                        setMobilePane("labels");
+                        setEditing(null);
+                        setNewLabelName("");
+                      }}
+                      className={cn(
+                        "flex h-9 w-full items-center justify-between gap-2 rounded-lg border px-2.5 text-left text-[13px] transition-colors duration-150",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        isSelected
+                          ? "border-border/80 bg-card font-medium text-foreground shadow-2xs"
+                          : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{
+                            backgroundColor:
+                              CATEGORY_CHART_PALETTE[index % CATEGORY_CHART_PALETTE.length],
+                          }}
+                        />
+                        <span className="truncate">{group.name}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                        {labelCount}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
 
-        {/* Groups Grid */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {groups.map((group) => {
-            const activeLabels = (group.labels ?? []).filter((l) => l.active !== false);
-
-            return (
-              <div
-                key={group.id}
-                className="min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-2xs flex flex-col max-h-[340px]"
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleCreateGroup();
+              }}
+              className="flex shrink-0 items-center gap-1.5 border-t border-border/60 p-2.5"
+            >
+              <div className="min-w-0 flex-1">
+                <Input
+                  aria-label="Nuevo grupo"
+                  placeholder="Nuevo grupo…"
+                  value={newGroupName}
+                  onChange={(event) => setNewGroupName(event.target.value)}
+                />
+              </div>
+              <Button
+                type="submit"
+                size="sm"
+                variant="secondary"
+                aria-label="Crear grupo"
+                loading={createGroup.isPending}
+                disabled={!newGroupName.trim()}
+                className="h-10 w-10 shrink-0 px-0 sm:h-9 sm:w-9"
               >
-                {/* Group Header */}
-                <div className="flex items-center gap-2 pb-3 border-b border-border/60 shrink-0">
-                  <Folder className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    {editing?.id === group.id ? (
-                      <Input
-                        value={editing.value}
-                        onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && editing.value.trim()) {
-                            e.preventDefault();
-                            void run(async () => {
-                              await updateGroup.mutateAsync({
-                                id: group.id,
-                                data: { name: editing.value.trim() },
-                              });
-                              setEditing(null);
-                            }, "Grupo actualizado");
+                <Plus className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </form>
+          </div>
+
+          {/* Right workspace: active group and its labels */}
+          <div
+            className={cn(
+              "flex min-h-0 flex-col bg-card",
+              (!activeGroup || mobilePane === "groups") && "hidden md:flex",
+            )}
+          >
+            {!activeGroup ? (
+              <div className="flex flex-1 items-center justify-center p-6">
+                <EmptyState
+                  icon={<FolderOpen className="h-5 w-5" />}
+                  title="Sin grupos todavía"
+                  subtitle="Crea tu primer grupo a la izquierda para organizar las etiquetas."
+                />
+              </div>
+            ) : (
+              <>
+                <div className="flex shrink-0 items-center border-b border-border/60 px-3 py-2 md:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setMobilePane("groups")}
+                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                    Grupos
+                  </button>
+                </div>
+
+                {/* Active group header */}
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+                  {editing?.kind === "group" && editing.id === activeGroup.id ? (
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        handleSaveGroupEdit(activeGroup.id);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <Input
+                          aria-label={`Renombrar ${activeGroup.name}`}
+                          autoFocus
+                          value={editing.value}
+                          onChange={(event) =>
+                            setEditing({ ...editing, value: event.target.value })
                           }
-                        }}
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2 truncate">
-                        <h3 className="font-semibold text-sm text-foreground truncate">
-                          {group.name}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setEditing(null);
+                            }
+                          }}
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        loading={updateGroup.isPending}
+                        disabled={!editing.value.trim()}
+                        aria-label="Guardar nombre del grupo"
+                        className="h-9 w-9 shrink-0 px-0"
+                      >
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setEditing(null)}
+                        aria-label="Cancelar edición"
+                        className="h-9 w-9 shrink-0 px-0"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      </Button>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{
+                            backgroundColor:
+                              CATEGORY_CHART_PALETTE[
+                                resolvedIndex % CATEGORY_CHART_PALETTE.length
+                              ],
+                          }}
+                        />
+                        <h3 className="truncate text-sm font-semibold text-foreground">
+                          {activeGroup.name}
                         </h3>
-                        <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded-md bg-muted/50 border border-border/60 tabular-nums shrink-0">
-                          {activeLabels.length} {activeLabels.length === 1 ? "etiqueta" : "etiquetas"}
+                        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                          {activeLabels.length === 1
+                            ? "1 etiqueta"
+                            : `${activeLabels.length} etiquetas`}
                         </span>
                       </div>
-                    )}
-                  </div>
-                  {editing?.id === group.id ? (
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        void run(async () => {
-                          await updateGroup.mutateAsync({
-                            id: group.id,
-                            data: { name: editing.value.trim() },
-                          });
-                          setEditing(null);
-                        }, "Grupo actualizado")
-                      }
-                    >
-                      Guardar
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={`Editar ${group.name}`}
-                      onClick={() => setEditing({ id: group.id, value: group.name })}
-                      className="p-1 h-9 w-9 rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:border-border/70 hover:bg-muted/60"
-                    >
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Desactivar ${group.name}`}
-                    onClick={() => void run(() => deleteGroup.mutateAsync(group.id), "Grupo desactivado")}
-                    className="p-1 h-9 w-9 rounded-md border border-transparent text-muted-foreground hover:text-danger-text hover:border-danger/30 hover:bg-danger/10"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Button>
-                </div>
-
-                {/* Labels List with smooth internal scroll */}
-                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-app py-2.5 pr-1 space-y-1.5">
-                  {activeLabels.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center py-6 px-2">
-                      <Tag className="w-5 h-5 text-muted-foreground/30 mb-1.5" />
-                      <p className="text-[13px] text-muted-foreground/70">Sin etiquetas</p>
-                      <p className="text-[13px] text-muted-foreground/70 mt-0.5">
-                        Agrega una abajo para clasificar este grupo
-                      </p>
-                    </div>
-                  ) : (
-                    activeLabels.map((label) => (
-                      <div
-                        key={label.id}
-                        className="flex items-center gap-2 text-sm py-1 px-2.5 rounded-lg bg-muted/40 transition-colors hover:bg-muted/60"
-                      >
-                        <Tag className="w-3 h-3 text-muted-foreground/60 shrink-0" />
-                        {editing?.id === label.id ? (
-                          <Input
-                            value={editing.value}
-                            onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && editing.value.trim()) {
-                                e.preventDefault();
-                                void run(async () => {
-                                  await updateLabel.mutateAsync({
-                                    groupId: group.id,
-                                    id: label.id,
-                                    data: { name: editing.value.trim() },
-                                  });
-                                  setEditing(null);
-                                }, "Etiqueta actualizada");
-                              }
-                            }}
-                          />
-                        ) : (
-                          <span className="flex-1 text-foreground font-medium truncate">
-                            {label.name}
-                          </span>
-                        )}
-                        {editing?.id === label.id ? (
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              void run(async () => {
-                                await updateLabel.mutateAsync({
-                                  groupId: group.id,
-                                  id: label.id,
-                                  data: { name: editing.value.trim() },
-                                });
-                                setEditing(null);
-                              }, "Etiqueta actualizada")
-                            }
-                          >
-                            Guardar
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            aria-label={`Editar ${label.name}`}
-                            onClick={() =>
-                              setEditing({ id: label.id, groupId: group.id, value: label.name })
-                            }
-                            className="p-1 h-9 w-9 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
-                          >
-                            <Pencil className="h-3 w-3" aria-hidden="true" />
-                          </Button>
-                        )}
+                      <div className="flex shrink-0 items-center gap-1">
                         <Button
+                          type="button"
                           size="sm"
                           variant="ghost"
-                          aria-label={`Desactivar ${label.name}`}
+                          aria-label={`Renombrar grupo ${activeGroup.name}`}
                           onClick={() =>
-                            void run(
-                              () => deleteLabel.mutateAsync({ groupId: group.id, id: label.id }),
-                              "Etiqueta desactivada",
-                            )
+                            setEditing({
+                              kind: "group",
+                              id: activeGroup.id,
+                              value: activeGroup.name,
+                            })
                           }
-                          className="p-1 h-9 w-9 rounded-md text-muted-foreground hover:text-danger-text hover:bg-danger/10"
+                          className="h-9 w-9 px-0 text-muted-foreground hover:text-foreground"
                         >
-                          <Trash2 className="h-3 w-3" aria-hidden="true" />
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                         </Button>
+                        <InlineConfirmButton
+                          ariaLabel={`Eliminar grupo ${activeGroup.name}`}
+                          announce={`Confirma para eliminar el grupo ${activeGroup.name}`}
+                          confirmLabel="¿Eliminar?"
+                          onConfirm={() => {
+                            void run(
+                              () => deleteGroup.mutateAsync(activeGroup.id),
+                              "Grupo eliminado",
+                            );
+                            setMobilePane("groups");
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </InlineConfirmButton>
                       </div>
-                    ))
+                    </>
                   )}
                 </div>
 
-                {/* Add new label input */}
-                <div className="flex items-end gap-2 pt-2.5 border-t border-border/40 shrink-0">
-                  <div className="flex-1">
+                {/* Single new label form */}
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleCreateLabel(activeGroup.id);
+                  }}
+                  className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
                     <Input
-                      label="Nueva etiqueta"
-                      value={newLabel[group.id] ?? ""}
-                      onChange={(e) =>
-                        setNewLabel({ ...newLabel, [group.id]: e.target.value })
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleCreateLabel(group.id);
-                        }
-                      }}
-                      placeholder="Nombre de la etiqueta"
+                      aria-label="Nueva etiqueta"
+                      placeholder="Nombre de la etiqueta…"
+                      value={newLabelName}
+                      onChange={(event) => setNewLabelName(event.target.value)}
                     />
                   </div>
                   <Button
+                    type="submit"
                     size="sm"
                     variant="secondary"
-                    disabled={!newLabel[group.id]?.trim()}
-                    onClick={() => handleCreateLabel(group.id)}
-                    className="shrink-0 h-9"
+                    loading={createLabel.isPending}
+                    disabled={!newLabelName.trim()}
+                    className="shrink-0"
                   >
-                    <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Agregar
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                    Agregar
                   </Button>
+                </form>
+
+                {/* Labels list */}
+                <div className="scrollbar-app max-h-[300px] min-h-0 flex-1 overflow-y-auto md:max-h-none">
+                  {activeLabels.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+                      <Tag
+                        className="mb-1.5 h-5 w-5 text-muted-foreground/40"
+                        aria-hidden="true"
+                      />
+                      <p className="text-[13px] font-medium text-muted-foreground">
+                        Sin etiquetas en este grupo
+                      </p>
+                      <p className="mt-0.5 text-[13px] text-muted-foreground/80">
+                        Agrega una arriba para clasificar este grupo.
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-border/60">
+                      {activeLabels.map((label) => (
+                        <li
+                          key={label.id}
+                          className="group flex items-center justify-between gap-2 px-4 py-2 transition-colors duration-150 hover:bg-muted/25"
+                        >
+                          {editing?.kind === "label" && editing.id === label.id ? (
+                            <form
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                handleSaveLabelEdit(activeGroup.id, label.id);
+                              }}
+                              className="flex min-w-0 flex-1 items-center gap-2"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <Input
+                                  aria-label={`Renombrar ${label.name}`}
+                                  autoFocus
+                                  value={editing.value}
+                                  onChange={(event) =>
+                                    setEditing({ ...editing, value: event.target.value })
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Escape") {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      setEditing(null);
+                                    }
+                                  }}
+                                />
+                              </div>
+                              <Button
+                                type="submit"
+                                size="sm"
+                                loading={updateLabel.isPending}
+                                disabled={!editing.value.trim()}
+                                aria-label="Guardar nombre de la etiqueta"
+                                className="h-9 w-9 shrink-0 px-0"
+                              >
+                                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setEditing(null)}
+                                aria-label="Cancelar edición"
+                                className="h-9 w-9 shrink-0 px-0"
+                              >
+                                <X className="h-3.5 w-3.5" aria-hidden="true" />
+                              </Button>
+                            </form>
+                          ) : (
+                            <>
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
+                                <Tag
+                                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                  aria-hidden="true"
+                                />
+                                <span className="truncate text-sm text-foreground">
+                                  {label.name}
+                                </span>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1 transition-opacity duration-150 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  aria-label={`Renombrar etiqueta ${label.name}`}
+                                  onClick={() =>
+                                    setEditing({
+                                      kind: "label",
+                                      id: label.id,
+                                      groupId: activeGroup.id,
+                                      value: label.name,
+                                    })
+                                  }
+                                  className="h-9 w-9 px-0 text-muted-foreground hover:text-foreground"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                                </Button>
+                                <InlineConfirmButton
+                                  ariaLabel={`Eliminar etiqueta ${label.name}`}
+                                  announce={`Confirma para eliminar la etiqueta ${label.name}`}
+                                  confirmLabel="¿Eliminar?"
+                                  onConfirm={() =>
+                                    void run(
+                                      () =>
+                                        deleteLabel.mutateAsync({
+                                          groupId: activeGroup.id,
+                                          id: label.id,
+                                        }),
+                                      "Etiqueta eliminada",
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                </InlineConfirmButton>
+                              </div>
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-              </div>
-            );
-          })}
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </Modal>
   );
 }

@@ -376,4 +376,30 @@ describe("Purchase order modals", () => {
       document.activeElement,
     );
   });
+
+  it("keeps Cant. and IVA % columns wide enough without 2xl cell padding clipping digits", () => {
+    render(<EditDraftModal order={makeOrder()} isOpen onClose={vi.fn()} />);
+
+    const tableEl = screen.getByRole("table");
+    const table = within(tableEl);
+    const qtyHeader = table.getByRole("columnheader", { name: "Cant." });
+    const taxHeader = table.getByRole("columnheader", { name: "IVA %" });
+    expect(qtyHeader.className).toContain("w-28");
+    expect(qtyHeader.className).toContain("min-w-28");
+    expect(qtyHeader.className).toContain("2xl:px-2");
+    expect(qtyHeader.className).not.toContain("2xl:px-5");
+    expect(taxHeader.className).toContain("w-28");
+    expect(taxHeader.className).toContain("min-w-28");
+    expect(taxHeader.className).toContain("2xl:px-2");
+    expect(taxHeader.className).not.toContain("2xl:px-5");
+
+    const qtyCell = table.getByLabelText("Cantidad de Producto Uno").closest("td")!;
+    const taxCell = table.getByLabelText("IVA de Producto Uno").closest("td")!;
+    expect(qtyCell.className).toContain("2xl:px-2");
+    expect(qtyCell.className).not.toContain("2xl:px-5");
+    expect(taxCell.className).toContain("2xl:px-2");
+    expect(taxCell.className).not.toContain("2xl:px-5");
+    expect(table.getByLabelText("Cantidad de Producto Uno").className).toContain("pr-9");
+    expect(table.getByLabelText("IVA de Producto Uno").className).toContain("pr-9");
+  });
 });

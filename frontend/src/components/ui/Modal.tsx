@@ -137,11 +137,12 @@ export function Modal({
     const handleFocusIn = (event: FocusEvent) => {
       if (!(event.target instanceof Node) || !panel) return;
       if (panel.contains(event.target)) return;
-      // A Select inside the dialog opens its own sheet in a body portal below
-      // `sm`; while it is open the options own focus, and yanking it back would
-      // also send Escape to the dialog instead of the list.
+      // A Select inside the dialog portals its list to `document.body` (as a
+      // bottom sheet below `sm` or a fixed popover above `sm`); while it is
+      // open the options own focus, and yanking it back would also send Escape
+      // to the dialog instead of the list.
       const nested = event.target instanceof Element
-        ? event.target.closest("[data-select-sheet]")
+        ? event.target.closest("[data-select-sheet], [data-select-popover]")
         : null;
       if (nested && panel.querySelector('[data-select-trigger][aria-expanded="true"]')) {
         return;

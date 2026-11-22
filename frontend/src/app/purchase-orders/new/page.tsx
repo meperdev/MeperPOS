@@ -20,6 +20,11 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 
+const SETUP_REASONS = new Set([
+  "Selecciona un proveedor",
+  "Agrega al menos un producto",
+]);
+
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
   const toast = useToast();
@@ -39,18 +44,22 @@ export default function NewPurchaseOrderPage() {
   const totals = useMemo(() => {
     let subtotal = 0;
     let taxAmount = 0;
+    let units = 0;
     for (const item of items) {
       const line = item.qtyOrdered * item.unitCost;
       subtotal += line;
       taxAmount += (line * item.taxRate) / 100;
+      units += Math.max(0, item.qtyOrdered || 0);
     }
-    return { subtotal, taxAmount, total: subtotal + taxAmount };
+    return { subtotal, taxAmount, total: subtotal + taxAmount, units };
   }, [items]);
 
   const count = (value: number, one: string, many: string) =>
     `${value} ${value === 1 ? one : many}`;
 
   const blockingReasons = draftBlockingReasons({ supplierId, items });
+  const setupReasons = blockingReasons.filter((reason) => SETUP_REASONS.has(reason));
+  const rowErrors = blockingReasons.filter((reason) => !SETUP_REASONS.has(reason));
 
   const canSubmit = blockingReasons.length === 0;
 
@@ -97,7 +106,7 @@ export default function NewPurchaseOrderPage() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
           <div className="space-y-4 lg:col-span-2">
-            <div className="space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
+            <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
               <Select
                 label="Proveedor *"
                 value={supplierId}
@@ -111,18 +120,20 @@ export default function NewPurchaseOrderPage() {
                   })),
                 ]}
               />
-
-              <Input
-                textarea
-                rows={3}
-                label="Notas u observaciones (opcional)"
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Instrucciones de entrega, número de cotización o detalles del pedido…"
-              />
             </div>
 
             <PurchaseOrderItemEditor rows={items} onChange={setItems} />
+
+            <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs">
+              <Input
+                textarea
+                rows={2}
+                label="Notas u observaciones (opcional)"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Instrucciones de entrega, número de cotización o condiciones acordadas…"
+              />
+            </div>
           </div>
 
           <aside className="space-y-3 lg:sticky lg:top-4 lg:self-start">
@@ -147,6 +158,14 @@ export default function NewPurchaseOrderPage() {
                     {count(items.length, "producto", "productos")}
                   </dd>
                 </div>
+                {items.length > 0 && (
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-muted-foreground">Unidades</dt>
+                    <dd className="tabular-nums text-foreground">
+                      {count(totals.units, "unidad", "unidades")}
+                    </dd>
+                  </div>
+                )}
 
                 <div className="space-y-2 border-t border-border/60 pt-2.5">
                   <div className="flex items-center justify-between gap-3">
@@ -188,22 +207,39 @@ export default function NewPurchaseOrderPage() {
                 </Link>
               </div>
 
-              {blockingReasons.length > 0 && (
+              {rowErrors.length > 0 && (
                 <div
                   role="status"
                   aria-live="polite"
                   className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5"
                 >
                   <p className="text-[13px] font-semibold text-warning-text">
-                    Falta para guardar
+                    Revisa los productos
                   </p>
                   <ul className="mt-1 space-y-1">
-                    {blockingReasons.map((reason) => (
+                    {rowErrors.map((reason) => (
                       <li
                         key={reason}
                         className="flex items-start gap-1.5 text-[13px] text-warning-text"
                       >
-                        <span aria-hidden="true" className="mt-1 h-1 w-1 shrink-0 rounded-full bg-warning" />
+                        <span aria-hidden="true" className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning" />
+                        {reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {setupReasons.length > 0 && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="space-y-1 pt-0.5 text-[13px] text-muted-foreground"
+                >
+                  <ul className="space-y-1">
+                    {setupReasons.map((reason) => (
+                      <li key={reason} className="flex items-center gap-1.5">
+                        <span aria-hidden="true" className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" />
                         {reason}
                       </li>
                     ))}
