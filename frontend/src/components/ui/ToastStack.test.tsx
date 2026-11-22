@@ -179,8 +179,8 @@ describe("ToastStack", () => {
 
     await waitFor(() => {
       expect(stack.dataset.expanded).toBe("false");
+      expect(onResumeAll).toHaveBeenCalledTimes(1);
     });
-    expect(onResumeAll).toHaveBeenCalledTimes(1);
   });
 
   it("clears focus expansion on outside pointerdown", () => {
