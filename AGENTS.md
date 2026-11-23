@@ -70,6 +70,8 @@ CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
 ```
 
+`CORS_ORIGIN` is also the pre-auth login allowlist (SEC-007): every production frontend Origin must be listed, and `backend/src/config/required-production-origins.json` is the committed set a boot warning, the unit tests and the daily production probe check (`docs/bug-rules/2026-11-22-cors-origin-pwa.md`).
+
 Frontend uses `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:3001/api`).
 
 ## Architecture
