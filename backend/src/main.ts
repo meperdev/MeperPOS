@@ -2,12 +2,18 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { configureApp, configureErrorHandling } from './app-configuration';
-import { resolveAllowedOrigins } from './config/allowed-origins';
+import {
+  resolveAllowedOrigins,
+  warnMissingProductionOrigins,
+} from './config/allowed-origins';
 import { validateJwtSecretOrExit } from './config/runtime-env';
 
 async function bootstrap() {
   // Fail fast on insecure runtime configuration before wiring anything up.
   validateJwtSecretOrExit(process.env);
+  // Warns (never exits) when CORS_ORIGIN misses a known production frontend:
+  // the symptom is a 403 on that frontend's login, not a crash.
+  warnMissingProductionOrigins(process.env);
 
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
