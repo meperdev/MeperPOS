@@ -1223,6 +1223,61 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
   });
 
+  it.each([
+    { label: "Tarjeta", method: "CARD", price: 1005, lineDiscount: 150.75, total: 1016.56 },
+    { label: "Transferencia", method: "TRANSFER", price: 1005, lineDiscount: 150.75, total: 1016.56 },
+    // At a half-cent the server rounds the base (1.275 → 1.28) separately
+    // from the IVA (0.24225 → 0.24), before totaling.
+    { label: "Tarjeta", method: "CARD", price: 1.50, lineDiscount: 0.225, total: 1.52 },
+  ])("prefills $label with the cent-exact total for $price after line discount and IVA", async ({ label, method, price, lineDiscount, total }) => {
+    const product = makeProduct("taxed", "Producto con IVA", { salePrice: price, taxRate: 19 });
+    useProductsMock.mockReturnValue({
+      data: { data: [product], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: product.name }));
+    await userEvent.click(screen.getByTitle("Descuento"));
+    await userEvent.click(screen.getByRole("button", { name: "15%" }));
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
+    await userEvent.click(screen.getByRole("button", { name: label }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar pago" }));
+
+    expect(createSaleMutateMock).toHaveBeenCalledTimes(1);
+    expect(createSaleMutateMock).toHaveBeenCalledWith(expect.objectContaining({
+      items: [{ productId: product.id, quantity: 1, discountAmount: lineDiscount }],
+      payments: [{ method, amount: total }],
+    }));
+    expect(toastState.error).not.toHaveBeenCalled();
+  });
+
+  it("rounds each line's IVA before summing the checkout total", async () => {
+    const products = [
+      makeProduct("taxed-1", "Primer producto", { salePrice: 100.02, taxRate: 19 }),
+      makeProduct("taxed-2", "Segundo producto", { salePrice: 100.02, taxRate: 19 }),
+    ];
+    useProductsMock.mockReturnValue({
+      data: { data: products, meta: { total: 2, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+
+    for (const product of products) {
+      await userEvent.click(screen.getByRole("button", { name: product.name }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Tarjeta" }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar pago" }));
+
+    expect(createSaleMutateMock).toHaveBeenCalledWith(expect.objectContaining({
+      payments: [{ method: "CARD", amount: 238.04 }],
+    }));
+  });
+
   it("sends a requestKey alongside the unchanged checkout body", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
