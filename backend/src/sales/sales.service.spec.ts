@@ -1178,7 +1178,12 @@ describe('SalesService', () => {
         findFirst: jest.fn().mockResolvedValue({ ...stockRow(), stock: 5 }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      inventoryMovement: { create: jest.fn() },
+      inventoryMovement: {
+        // The sale was completed with tracking off, so it wrote no SALE
+        // movement and cancelling restores nothing.
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn(),
+      },
       sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       fiscalDocument: {
         findFirst: jest.fn().mockResolvedValue(null),

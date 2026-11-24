@@ -372,7 +372,10 @@ describe('SalesService — selling services', () => {
             .mockResolvedValue({ ...productRow(), tracksStock: false }),
           updateMany: jest.fn(),
         },
-        inventoryMovement: { create: jest.fn() },
+        inventoryMovement: {
+          findMany: jest.fn().mockResolvedValue([]),
+          create: jest.fn(),
+        },
       };
       prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
       prismaMock.$transaction.mockImplementation(
@@ -413,7 +416,7 @@ describe('SalesService — selling services', () => {
           findFirst: jest.fn(),
           updateMany: jest.fn(),
         },
-        inventoryMovement: { create: jest.fn() },
+        inventoryMovement: { findMany: jest.fn(), create: jest.fn() },
       };
       prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
       prismaMock.$transaction.mockImplementation(
@@ -425,6 +428,7 @@ describe('SalesService — selling services', () => {
       ).rejects.toThrow(ConflictException);
 
       expect(tx.fiscalDocument.updateMany).not.toHaveBeenCalled();
+      expect(tx.inventoryMovement.findMany).not.toHaveBeenCalled();
       expect(tx.product.findFirst).not.toHaveBeenCalled();
       expect(tx.product.updateMany).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
@@ -447,7 +451,12 @@ describe('SalesService — selling services', () => {
             update: jest.fn(),
             updateMany: jest.fn(),
           },
-          inventoryMovement: { create: jest.fn() },
+          inventoryMovement: {
+            findMany: jest
+              .fn()
+              .mockResolvedValue([{ productId: 'prod-1', quantity: -2 }]),
+            create: jest.fn(),
+          },
         };
         if (priorWinner) tx.sale.updateMany.mockResolvedValueOnce({ count: 1 });
         tx.product.findFirst.mockResolvedValue(productRow({ stock: 5 }));
@@ -465,10 +474,14 @@ describe('SalesService — selling services', () => {
           );
         const reads = tx.product.findFirst.mock.calls.length;
         const movements = tx.inventoryMovement.create.mock.calls.length;
+        const movementReads = tx.inventoryMovement.findMany.mock.calls.length;
         const restocks = tx.product.updateMany.mock.calls.length;
         await expect(
           service.update('sale-1', { status: 'CANCELLED' }, 'user-1', 'org-1'),
         ).rejects.toThrow('Only completed sales can be updated');
+        expect(tx.inventoryMovement.findMany).toHaveBeenCalledTimes(
+          movementReads,
+        );
         expect(tx.product.findFirst).toHaveBeenCalledTimes(reads);
         expect(tx.product.updateMany).toHaveBeenCalledTimes(restocks);
         expect(tx.inventoryMovement.create).toHaveBeenCalledTimes(movements);
@@ -503,7 +516,12 @@ describe('SalesService — selling services', () => {
           update: jest.fn(),
           updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         },
-        inventoryMovement: { create: jest.fn() },
+        inventoryMovement: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ productId: 'prod-1', quantity: -2 }]),
+          create: jest.fn(),
+        },
       };
       prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
       prismaMock.$transaction.mockImplementation(
@@ -527,7 +545,12 @@ describe('SalesService — selling services', () => {
           findFirst: jest.fn().mockResolvedValue({ stock: 5, version: 7 }),
           updateMany: jest.fn(),
         },
-        inventoryMovement: { create: jest.fn() },
+        inventoryMovement: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ productId: 'prod-1', quantity: -2 }]),
+          create: jest.fn(),
+        },
       };
       prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
       prismaMock.$transaction.mockImplementation(
@@ -602,7 +625,10 @@ describe('SalesService — selling services', () => {
     // `sales.dto.spec.ts` and `sales.service.hardening.spec.ts`), so the service
     // has no bare status flip left to exercise here.
 
-    it('cancels an untracked product without stock effects', async () => {
+    it('does not invent stock when a product sold untracked has tracking enabled later', async () => {
+      // The reported bug: the sale took no stock because the product did not
+      // track it. Enabling tracking afterwards must not conjure a restore, so
+      // today's flag never decides: only the SALE movements do.
       const tx = {
         sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
         fiscalDocument: {
@@ -610,14 +636,17 @@ describe('SalesService — selling services', () => {
           updateMany: jest.fn(),
         },
         product: {
-          findFirst: jest
-            .fn()
-            .mockResolvedValue({ ...productRow(), tracksStock: false }),
+          findFirst: jest.fn().mockResolvedValue(productRow({ stock: 5 })),
           updateMany: jest.fn(),
         },
-        inventoryMovement: { create: jest.fn() },
+        inventoryMovement: {
+          findMany: jest.fn().mockResolvedValue([]),
+          create: jest.fn(),
+        },
       };
-      prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
+      prismaMock.sale.findFirst
+        .mockResolvedValueOnce(saleWithItem('prod-1', 2))
+        .mockResolvedValueOnce(cancelledSale);
       prismaMock.$transaction.mockImplementation(
         (callback: (tx: unknown) => unknown) => callback(tx),
       );
@@ -627,6 +656,15 @@ describe('SalesService — selling services', () => {
         'user-1',
         'org-1',
       );
+      expect(tx.inventoryMovement.findMany).toHaveBeenCalledWith({
+        where: {
+          saleId: 'sale-1',
+          organizationId: 'org-1',
+          type: 'SALE',
+        },
+        select: { productId: true, quantity: true },
+      });
+      expect(tx.product.findFirst).not.toHaveBeenCalled();
       expect(tx.product.updateMany).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
     });
@@ -637,7 +675,10 @@ describe('SalesService — selling services', () => {
           findFirst: jest.fn().mockResolvedValue(serviceRow({ stock: 0 })),
           updateMany: jest.fn(),
         },
-        inventoryMovement: { create: jest.fn() },
+        inventoryMovement: {
+          findMany: jest.fn().mockResolvedValue([]),
+          create: jest.fn(),
+        },
         sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
         fiscalDocument: {
           findFirst: jest.fn().mockResolvedValue(null),
@@ -677,7 +718,12 @@ describe('SalesService — selling services', () => {
             ),
           updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
-        inventoryMovement: { create: jest.fn() },
+        inventoryMovement: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ productId: 'prod-1', quantity: -2 }]),
+          create: jest.fn(),
+        },
         sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
         fiscalDocument: {
           findFirst: jest.fn().mockResolvedValue(null),
@@ -698,6 +744,14 @@ describe('SalesService — selling services', () => {
         'org-1',
       );
 
+      expect(txMock.inventoryMovement.findMany).toHaveBeenCalledWith({
+        where: {
+          saleId: 'sale-1',
+          organizationId: 'org-1',
+          type: 'SALE',
+        },
+        select: { productId: true, quantity: true },
+      });
       expect(txMock.product.updateMany).toHaveBeenCalledWith({
         where: {
           id: 'prod-1',
@@ -716,6 +770,125 @@ describe('SalesService — selling services', () => {
             previousStock: 5,
             newStock: 7,
           }),
+        }),
+      );
+    });
+
+    it('restores stock from the SALE movements even when the product no longer tracks it', async () => {
+      // The inverse of the bug: sold as merchandise, later turned into a
+      // service. What left stock is the movement, not today's flag.
+      const txMock = {
+        product: {
+          findFirst: jest.fn().mockResolvedValue(serviceRow({ stock: 5 })),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        inventoryMovement: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ productId: 'prod-1', quantity: -2 }]),
+          create: jest.fn(),
+        },
+        sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        fiscalDocument: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          updateMany: jest.fn(),
+        },
+      };
+      prismaMock.sale.findFirst
+        .mockResolvedValueOnce(saleWithItem('prod-1', 2))
+        .mockResolvedValueOnce(cancelledSale);
+      prismaMock.$transaction.mockImplementation(
+        async (callback: (tx: unknown) => unknown) => callback(txMock),
+      );
+
+      await service.update(
+        'sale-1',
+        { status: 'CANCELLED' },
+        'user-1',
+        'org-1',
+      );
+
+      expect(txMock.product.updateMany).toHaveBeenCalledTimes(1);
+      expect(txMock.product.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { stock: { increment: 2 }, version: { increment: 1 } },
+        }),
+      );
+      expect(txMock.inventoryMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'RETURN', quantity: 2 }),
+        }),
+      );
+    });
+
+    it('aggregates the signed SALE movements per product and skips a line that never moved', async () => {
+      const txMock = {
+        product: {
+          findFirst: jest
+            .fn()
+            .mockImplementation(({ where }: { where: { id: string } }) =>
+              Promise.resolve(
+                productRow({ id: where.id, stock: 5, version: 7 }),
+              ),
+            ),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        inventoryMovement: {
+          findMany: jest.fn().mockResolvedValue([
+            { productId: 'prod-1', quantity: -1 },
+            { productId: 'prod-1', quantity: -2 },
+            { productId: 'prod-2', quantity: -5 },
+          ]),
+          create: jest.fn(),
+        },
+        sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        fiscalDocument: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          updateMany: jest.fn(),
+        },
+      };
+      // prod-3 is on the sale but was never decremented, so it is not touched.
+      prismaMock.sale.findFirst
+        .mockResolvedValueOnce({
+          ...saleWithItem('prod-1', 3),
+          items: [
+            { id: 'si-1', productId: 'prod-1', quantity: 3 },
+            { id: 'si-2', productId: 'prod-2', quantity: 5 },
+            { id: 'si-3', productId: 'prod-3', quantity: 4 },
+          ],
+        })
+        .mockResolvedValueOnce(cancelledSale);
+      prismaMock.$transaction.mockImplementation(
+        async (callback: (tx: unknown) => unknown) => callback(txMock),
+      );
+
+      await service.update(
+        'sale-1',
+        { status: 'CANCELLED' },
+        'user-1',
+        'org-1',
+      );
+
+      const writes = txMock.product.updateMany.mock.calls as Array<
+        [{ data: { stock: { increment: number } } }]
+      >;
+      expect(writes.map(([args]) => args.data.stock.increment)).toEqual([3, 5]);
+      const reads = txMock.product.findFirst.mock.calls as Array<
+        [{ where: { id: string } }]
+      >;
+      expect(reads.map(([args]) => args.where.id)).toEqual([
+        'prod-1',
+        'prod-2',
+      ]);
+      expect(txMock.inventoryMovement.create).toHaveBeenCalledTimes(2);
+      expect(txMock.inventoryMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ productId: 'prod-1', quantity: 3 }),
+        }),
+      );
+      expect(txMock.inventoryMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ productId: 'prod-2', quantity: 5 }),
         }),
       );
     });

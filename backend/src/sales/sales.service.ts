@@ -952,15 +952,42 @@ export class SalesService {
           saleId: existingSale.id,
           organizationId: existingSale.organizationId,
         });
-        for (const item of existingSale.items) {
+        // Cancelling restores exactly what the sale took out of stock: the
+        // SALE movements it wrote, not today's tracking flag. A product sold
+        // while untracked wrote no movement and must not gain stock when
+        // tracking is enabled later; one sold as merchandise and turned into a
+        // service afterwards still gets its stock back.
+        const saleMovements = await tx.inventoryMovement.findMany({
+          where: {
+            saleId: existingSale.id,
+            organizationId: existingSale.organizationId,
+            type: 'SALE',
+          },
+          select: { productId: true, quantity: true },
+        });
+
+        // A sale movement is negative (it left stock); repeated lines for one
+        // product are one restore, so the signed quantities add up per product.
+        const soldByProduct = new Map<string, number>();
+        for (const movement of saleMovements) {
+          soldByProduct.set(
+            movement.productId,
+            (soldByProduct.get(movement.productId) ?? 0) + movement.quantity,
+          );
+        }
+
+        for (const [productId, signedQuantity] of soldByProduct) {
+          const restoreQuantity = -signedQuantity;
+          if (restoreQuantity <= 0) continue;
+
           const product = await tx.product.findFirst({
             where: {
-              id: item.productId,
+              id: productId,
               organizationId: existingSale.organizationId,
             },
           });
 
-          if (product && tracksStock(product)) {
+          if (product) {
             if (
               !Number.isInteger(product.version) ||
               !Number.isInteger(product.reservedStock) ||
@@ -968,35 +995,35 @@ export class SalesService {
               product.reservedStock > product.stock
             ) {
               throw new ConflictException(
-                `Stock changed for product ${item.productId}`,
+                `Stock changed for product ${productId}`,
               );
             }
             const previousStock = product.stock;
-            const newStock = previousStock + item.quantity;
+            const newStock = previousStock + restoreQuantity;
 
             const restored = await tx.product.updateMany({
               where: {
-                id: item.productId,
+                id: productId,
                 organizationId,
                 version: product.version,
                 reservedStock: product.reservedStock,
               },
               data: {
-                stock: { increment: item.quantity },
+                stock: { increment: restoreQuantity },
                 version: { increment: 1 },
               },
             });
             if (restored.count === 0) {
               throw new ConflictException(
-                `Stock changed for product ${item.productId}`,
+                `Stock changed for product ${productId}`,
               );
             }
 
             await tx.inventoryMovement.create({
               data: {
-                productId: item.productId,
+                productId,
                 type: 'RETURN' as const,
-                quantity: item.quantity,
+                quantity: restoreQuantity,
                 previousStock,
                 newStock,
                 reason: `Sale #${existingSale.saleNumber} cancelled`,
