@@ -16,7 +16,16 @@ import {
   Plus,
   User,
 } from "lucide-react";
+import { CURRENCY, LOCALE } from "@/lib/constants";
+import { toCheckoutCents } from "@/lib/pos-checkout-money";
 import { formatCurrency } from "@/lib/utils";
+
+const formatCheckoutAmount = new Intl.NumberFormat(LOCALE, {
+  style: "currency",
+  currency: CURRENCY,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+}).format;
 
 type PaymentType = "CASH" | "CARD" | "TRANSFER";
 type PaymentMethod = { type: PaymentType; amount: number };
@@ -107,30 +116,31 @@ export function PaymentConfirmationModal({
 
   const quickCashAmounts = [10000, 20000, 50000, 100000];
 
-  const totalPaid = methods.reduce((sum, method) => sum + method.amount, 0);
-  const remaining = Math.max(0, total - totalPaid);
-  // Mirrors `SalesService.create` (S3 / D1): a sale may only overpay when the
-  // surplus can come back as change, and change only leaves the drawer as cash.
-  // On a positive total every tender must also be needed; on a zero total,
-  // only cash may be handed back. The server derives and persists change. The surplus is
-  // measured in cents, like the server does, so the tax rounding that leaves this
-  // total a fraction of a cent away from the persisted one is not read as change.
-  const overpay = Math.round((totalPaid - total) * 100) / 100;
+  const totalCents = toCheckoutCents(total);
+  const paidCents = methods.reduce(
+    (sum, method) => sum + toCheckoutCents(method.amount),
+    0,
+  );
+  const overpaidCents = paidCents - totalCents;
+  const remainingCents = Math.max(0, -overpaidCents);
+  const remaining = remainingCents / 100;
+
+  // Mirrors SalesService.create: only cash can return change, and on a
+  // positive total every tender must be needed to cover the total.
   const paymentProblem =
-    overpay <= 0
+    overpaidCents <= 0
       ? null
       : !methods.some((method) => method.type === "CASH")
         ? "Las tarjetas y transferencias no dan cambio"
         : methods.some((method) =>
-              total > 0 ? method.amount <= overpay : method.type !== "CASH",
+              totalCents > 0
+                ? toCheckoutCents(method.amount) <= overpaidCents
+                : method.type !== "CASH",
             )
           ? "Sobra un pago: con los demás métodos ya se cubre el total"
           : null;
-  const change = overpay > 0 && !paymentProblem ? overpay : 0;
-  const canConfirm =
-    totalPaid >= total &&
-    !paymentProblem &&
-    methods.some((method) => method.amount > 0);
+  const change = overpaidCents > 0 && !paymentProblem ? overpaidCents / 100 : 0;
+  const canConfirm = remainingCents === 0 && !paymentProblem && paidCents > 0;
 
   const updateMethodAmount = (index: number, amount: number) => {
     const nextMethods = [...methods];
@@ -160,7 +170,8 @@ export function PaymentConfirmationModal({
       return;
     }
 
-    updateMethodAmount(cashIndex, methods[cashIndex].amount + remaining);
+    const cashCents = toCheckoutCents(methods[cashIndex].amount);
+    updateMethodAmount(cashIndex, (cashCents + remainingCents) / 100);
   };
 
   return (
@@ -262,8 +273,10 @@ export function PaymentConfirmationModal({
                   </div>
 
                   <CurrencyInput
-                    value={method.amount}
-                    onChange={(value) => updateMethodAmount(index, value)}
+                    decimals
+                    label="Importe"
+                    value={method.amount === 0 ? "" : String(method.amount)}
+                    onChange={(raw) => updateMethodAmount(index, Number(raw))}
                   />
                 </div>
               ))}
@@ -320,7 +333,7 @@ export function PaymentConfirmationModal({
                 disabled={remaining <= 0}
               >
                 <DollarSign className="mr-2 h-5 w-5" />
-                Completar con efectivo ({formatCurrency(remaining)})
+                Completar con efectivo ({formatCheckoutAmount(remaining)})
               </Button>
 
               <div className="grid grid-cols-4 gap-2">
@@ -349,13 +362,13 @@ export function PaymentConfirmationModal({
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-medium text-foreground tabular-nums">
-                {formatCurrency(subtotal)}
+                {formatCheckoutAmount(subtotal)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Impuestos</span>
               <span className="font-medium text-foreground tabular-nums">
-                {formatCurrency(taxAmount)}
+                {formatCheckoutAmount(taxAmount)}
               </span>
             </div>
             <div className="flex justify-between text-sm text-success-text">
@@ -369,24 +382,24 @@ export function PaymentConfirmationModal({
             </div>
             <div className="flex justify-between text-lg font-semibold pt-2 border-t border-border">
               <span className="text-foreground">Total</span>
-              <span className="text-primary-text tabular-nums">{formatCurrency(total)}</span>
+              <span className="text-primary-text tabular-nums">{formatCheckoutAmount(total)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Pagado</span>
               <span className="font-medium text-foreground tabular-nums">
-                {formatCurrency(totalPaid)}
+                {formatCheckoutAmount(paidCents / 100)}
               </span>
             </div>
             {remaining > 0 && (
               <div className="flex justify-between text-sm text-warning-text">
                 <span>Faltante</span>
-                <span className="font-medium tabular-nums">{formatCurrency(remaining)}</span>
+                <span className="font-medium tabular-nums">{formatCheckoutAmount(remaining)}</span>
               </div>
             )}
             {change > 0 && (
               <div className="flex justify-between text-lg font-semibold text-success-text pt-2 border-t border-border">
                 <span>Cambio</span>
-                <span className="tabular-nums">{formatCurrency(change)}</span>
+                <span className="tabular-nums">{formatCheckoutAmount(change)}</span>
               </div>
             )}
           </div>

@@ -232,13 +232,18 @@ export class SalesService {
         'Organization ID is required for this operation',
       );
     }
-    const { customerId, items, discountAmount = 0, payments } = createSaleDto;
+    const {
+      customerId,
+      items,
+      discountAmount = 0,
+      payments: requestedPayments,
+    } = createSaleDto;
 
     if (items.length === 0) {
       throw new BadRequestException('Sale must have at least one item');
     }
 
-    if (!payments || payments.length === 0) {
+    if (!requestedPayments || requestedPayments.length === 0) {
       throw new BadRequestException(
         'Sale must have at least one payment method',
       );
@@ -363,12 +368,22 @@ export class SalesService {
       throw new BadRequestException('Total cannot be negative');
     }
 
-    const totalPaid = payments.reduce(
-      (sum, payment) => sum + payment.amount,
-      0,
-    );
+    // Round each tender as its DECIMAL(10,2) payment row will be stored.
+    // Summing those cents keeps the header and individual payments in sync.
+    const toCents = (amount: number) =>
+      new Prisma.Decimal(amount)
+        .times(100)
+        .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP)
+        .toNumber();
+    const payments = requestedPayments.map((payment) => {
+      const cents = toCents(payment.amount);
+      return { ...payment, cents, amount: cents / 100 };
+    });
+    const paidCents = payments.reduce((sum, payment) => sum + payment.cents, 0);
+    const totalPaid = paidCents / 100;
+    const totalCents = toCents(total);
 
-    if (totalPaid < total) {
+    if (paidCents < totalCents) {
       throw new BadRequestException(
         `Total paid (${totalPaid}) is less than total (${total})`,
       );
@@ -379,24 +394,17 @@ export class SalesService {
     // tender must also be needed. A tender that can be dropped while the rest
     // covers the total would create an artificial overpayment (S3: cash 112.931 plus a
     // 100.000 transfer on a 112.931 total used to be accepted as a 212.931
-    // payment). Change is the overpaid amount itself.
-    //
-    // Cents are the unit a sale can store. The POS total is a JS float while
-    // each line tax is persisted rounded to cents, so a taxed price that is not
-    // a multiple of 10 leaves the two a fraction of a cent apart (net 1006 at
-    // 19% → 1197.1399999999999): without this rounding, paying that displayed
-    // total by card was refused as a 2e-13 surplus, and paying it in cash
-    // persisted a 2e-13 change that DECIMAL(10,2) stores as 0.00.
-    const overpay = Math.round((totalPaid - total) * 100) / 100;
-    if (overpay > 0) {
+    // payment). Change is the overpaid amount itself, in cents.
+    const overpaidCents = paidCents - totalCents;
+    if (overpaidCents > 0) {
       if (!payments.some((p) => p.method === 'CASH')) {
         throw new BadRequestException(
-          `Change (${overpay}) can only be handed back in cash: card and transfer payments never return change`,
+          `Change (${overpaidCents / 100}) can only be handed back in cash: card and transfer payments never return change`,
         );
       }
       // With nothing to collect (SEC-015), only cash may be handed back.
       const unneeded = payments.find((p) =>
-        total > 0 ? p.amount <= overpay : p.method !== 'CASH',
+        totalCents > 0 ? p.cents <= overpaidCents : p.method !== 'CASH',
       );
       if (unneeded) {
         throw new BadRequestException(
@@ -405,7 +413,7 @@ export class SalesService {
       }
     }
 
-    const change = overpay > 0 ? overpay : null;
+    const change = overpaidCents > 0 ? overpaidCents / 100 : null;
 
     // The buyer identification is a fiscal fact of the sale, captured now
     // because the customer row may be edited afterwards.
