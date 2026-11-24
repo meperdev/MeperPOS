@@ -360,6 +360,14 @@ export default function POSPage() {
   const posLoanAttemptRef = useRef<{ key: string; signature: string } | null>(
     null,
   );
+  // The ordinary checkout pins its idempotency key the same way: the key
+  // belongs to the exact request body it was minted for, so a retry of that same
+  // body after a lost response replays instead of selling twice, while any edit
+  // to the cart, customer, discount or payment split mints a new one. A success
+  // clears it so a second, deliberate sale never reuses the key.
+  const checkoutAttemptRef = useRef<{ key: string; signature: string } | null>(
+    null,
+  );
   const quickSearchProduct = useQuickSearchProduct();
 
   // SalesService explicitly permits CASHIER as well as managers. Keep this
@@ -828,27 +836,42 @@ export default function POSPage() {
       toast.error("Sobra un pago: con los demás métodos ya se cubre el total");
       return;
     }
+    // One builder feeds both the request and its identity, so a payload change
+    // can never leave the pinned request key describing a different request.
+    const request = {
+      customerId: selectedCustomer || undefined,
+      items: cart.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        // Sent only for a real override. For every other line the server
+        // derives the price itself, so a promotion applied after the line
+        // entered the cart is honoured instead of being read as an
+        // (unauthorized) override request.
+        ...(cartItemPriceOverride(item)
+          ? { unitPrice: item.unitPrice }
+          : {}),
+        discountAmount: item.discountAmount,
+      })),
+      discountAmount,
+      payments: paymentMethods.map((method) => ({
+        method: method.type,
+        amount: method.amount,
+      })),
+    };
+    const signature = JSON.stringify(request);
+    // SEC-014: a retry of this exact body reuses its key so the server replays
+    // the sale it already persisted; anything else is a new intent.
+    const attempt =
+      checkoutAttemptRef.current?.signature === signature
+        ? checkoutAttemptRef.current
+        : { key: crypto.randomUUID(), signature };
+    checkoutAttemptRef.current = attempt;
     try {
       const result = await createSale.mutateAsync({
-        customerId: selectedCustomer || undefined,
-        items: cart.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          // Sent only for a real override. For every other line the server
-          // derives the price itself, so a promotion applied after the line
-          // entered the cart is honoured instead of being read as an
-          // (unauthorized) override request.
-          ...(cartItemPriceOverride(item)
-            ? { unitPrice: item.unitPrice }
-            : {}),
-          discountAmount: item.discountAmount,
-        })),
-        discountAmount,
-        payments: paymentMethods.map((method) => ({
-          method: method.type,
-          amount: method.amount,
-        })),
+        ...request,
+        requestKey: attempt.key,
       });
+      if (checkoutAttemptRef.current === attempt) checkoutAttemptRef.current = null;
       setLastSale(result);
       setCart([]);
       // A finished or paused sale must not leave an undo offer pointing at it.
