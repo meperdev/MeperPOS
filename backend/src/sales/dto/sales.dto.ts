@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsInt,
   IsNumber,
   IsOptional,
   IsEnum,
@@ -10,8 +11,11 @@ import {
   MinLength,
   ValidateNested,
   Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export const SALE_ITEM_QUANTITY_MAX = 2147483647;
 
 export class SaleItemDto {
   @ApiProperty({ example: 'uuid-product-id' })
@@ -20,9 +24,15 @@ export class SaleItemDto {
   @IsNotEmpty()
   productId: string;
 
-  @ApiProperty({ example: 2, minimum: 1 })
-  @IsNumber()
+  @ApiProperty({
+    type: 'integer',
+    example: 2,
+    minimum: 1,
+    maximum: SALE_ITEM_QUANTITY_MAX,
+  })
+  @IsInt()
   @Min(1)
+  @Max(SALE_ITEM_QUANTITY_MAX)
   @Type(() => Number)
   quantity: number;
 

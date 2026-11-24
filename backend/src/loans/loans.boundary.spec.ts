@@ -16,6 +16,7 @@ import { OrganizationRequiredGuard } from '../common/guards/organization-require
 import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organization.interceptor';
 import { LoansController } from './loans.controller';
 import { CounterpartyType, CreateLoanDto } from './dto/create-loan.dto';
+import { CreatePosLoanDto } from './dto/create-pos-loan.dto';
 import { LoanOperationDto } from './dto/loan-operation.dto';
 import { QueryLoansDto } from './dto/query-loans.dto';
 
@@ -119,6 +120,36 @@ describe('Loan request validation', () => {
       await expect(pipe.transform(input, meta)).rejects.toThrow();
     }
   });
+});
+
+describe('Financed POS cart quantity compatibility', () => {
+  // The financed-POS cart rides the shared `SaleItemDto` shape, but the loans
+  // module validates it with its own public error. This pins the base contract
+  // (whatever the cart accepts today still gets through the pipe unchanged) so
+  // a cash-sale quantity fix cannot silently change the loans contract.
+  const posLoan = {
+    customerId: '00000000-0000-4000-8000-000000000001',
+    requestKey: 'pos-key',
+    issuedAt: '2026-10-13',
+    reason: 'Compra financiada',
+  };
+
+  it.each([
+    [2, 2],
+    ['2', 2],
+    [2.7, 2.7],
+    [2147483648, 2147483648],
+  ])(
+    'passes quantity %j through the production pipe as %s',
+    async (quantity, expected) => {
+      const dto = await pipe.transform(
+        { ...posLoan, items: [{ productId: 'coffee', quantity }] },
+        { type: 'body', metatype: CreatePosLoanDto },
+      );
+
+      expect(dto.items[0].quantity).toBe(expected);
+    },
+  );
 });
 
 describe('Loan backend role boundary', () => {
