@@ -1278,6 +1278,137 @@ describe("POS behavior evidence (#19, #18)", () => {
     }));
   });
 
+  it("sends a requestKey alongside the unchanged checkout body", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+    );
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(1));
+
+    const payload = createSaleMutateMock.mock.calls[0]?.[0] as {
+      requestKey?: string;
+      items: Array<Record<string, unknown>>;
+      payments: Array<Record<string, unknown>>;
+    };
+    expect(typeof payload.requestKey).toBe("string");
+    expect(payload.requestKey!.length).toBeGreaterThan(0);
+    // The idempotency key rides beside the sale body, it does not replace it.
+    expect(payload.items).toEqual([{ productId: "1", quantity: 1, discountAmount: 0 }]);
+    expect(payload.payments).toEqual([{ method: "CARD", amount: 1000 }]);
+  });
+
+  it("reuses the request key when the same checkout is retried after a lost response", async () => {
+    createSaleMutateMock
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(makeSale());
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+    );
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(1));
+
+    // A lost response leaves the sale on screen and the payment split intact.
+    expect(screen.queryByRole("region", { name: "Venta registrada" })).toBeNull();
+    expect(screen.getByRole("button", { name: /confirmar pago/i })).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(2));
+
+    const keys = createSaleMutateMock.mock.calls.map(
+      (call) => (call[0] as { requestKey: string }).requestKey,
+    );
+    expect(typeof keys[0]).toBe("string");
+    expect(keys[0].length).toBeGreaterThan(0);
+    expect(keys[1]).toBe(keys[0]);
+    expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
+  });
+
+  it("mints a new request key when only the payment split changes after a failure", async () => {
+    createSaleMutateMock
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(makeSale());
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+    );
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(1));
+
+    // Same cart, different tender: the failed key no longer describes the body.
+    await userEvent.click(screen.getByRole("button", { name: "Entregar efectivo" }));
+    await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(2));
+
+    const calls = createSaleMutateMock.mock.calls.map(
+      (call) => call[0] as { requestKey: string; payments: Array<Record<string, unknown>> },
+    );
+    expect(calls[0].payments).toEqual([{ method: "CARD", amount: 1000 }]);
+    expect(calls[1].payments).toEqual([{ method: "CASH", amount: 1000 }]);
+    expect(calls[1].requestKey).not.toBe(calls[0].requestKey);
+  });
+
+  it("mints a fresh request key for a deliberate identical sale after a success", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    const checkout = async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+      await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+      await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+      await userEvent.click(
+        await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+      );
+    };
+
+    await checkout();
+    await screen.findByRole("region", { name: "Venta registrada" });
+    await userEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    // The very same cart, paid the same way, is a second sale on purpose.
+    await checkout();
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(2));
+
+    const [first, second] = createSaleMutateMock.mock.calls.map(
+      (call) => call[0] as { requestKey: string },
+    );
+    expect(second.requestKey.length).toBeGreaterThan(0);
+    expect(second.requestKey).not.toBe(first.requestKey);
+  });
+
   it("refuses a mixed payment that overpays with a tender the sale does not need (S3)", async () => {
     useProductsMock.mockReturnValue({
       data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },

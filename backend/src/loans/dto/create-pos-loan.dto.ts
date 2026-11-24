@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -15,6 +15,15 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { SaleItemDto } from '../../sales/dto/sales.dto';
+
+// LoansService owns quantity validation and its public error for financed POS.
+class PosLoanItemDto extends OmitType(SaleItemDto, ['quantity'] as const) {
+  @ApiProperty({ example: 2, minimum: 1 })
+  @IsNumber()
+  @Min(1)
+  @Type(() => Number)
+  quantity: number;
+}
 
 export class CreatePosLoanDto {
   @ApiProperty({ format: 'uuid' })
@@ -54,10 +63,10 @@ export class CreatePosLoanDto {
   @Type(() => Number)
   discountAmount?: number;
 
-  @ApiProperty({ type: [SaleItemDto] })
+  @ApiProperty({ type: [PosLoanItemDto] })
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => SaleItemDto)
-  items: SaleItemDto[];
+  @Type(() => PosLoanItemDto)
+  items: PosLoanItemDto[];
 }

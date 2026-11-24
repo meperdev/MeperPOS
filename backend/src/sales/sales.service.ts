@@ -9,7 +9,11 @@ import {
 import { createHash } from 'node:crypto';
 import { Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateSaleDto, UpdateSaleDto } from './dto/sales.dto';
+import {
+  CreateSaleDto,
+  SALE_ITEM_QUANTITY_MAX,
+  UpdateSaleDto,
+} from './dto/sales.dto';
 import type { Response } from 'express';
 import {
   parseBogotaEndOfDay,
@@ -246,6 +250,19 @@ export class SalesService {
     if (!requestedPayments || requestedPayments.length === 0) {
       throw new BadRequestException(
         'Sale must have at least one payment method',
+      );
+    }
+
+    if (
+      items.some(
+        ({ quantity }) =>
+          !Number.isInteger(quantity) ||
+          quantity < 1 ||
+          quantity > SALE_ITEM_QUANTITY_MAX,
+      )
+    ) {
+      throw new BadRequestException(
+        `Sale item quantity must be an integer between 1 and ${SALE_ITEM_QUANTITY_MAX}`,
       );
     }
 
