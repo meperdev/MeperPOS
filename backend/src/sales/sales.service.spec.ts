@@ -1759,6 +1759,42 @@ describe('SalesService', () => {
       });
     });
   });
+
+  describe('create quantity preflight', () => {
+    // A valid line first, so a guard that only inspects `items[0]` cannot pass
+    // this: the whole cart is checked before the replay, the product lookup,
+    // the numbering and the transaction.
+    const dto = (quantity: number) => ({
+      items: [
+        { productId: 'prod-1', quantity: 1 },
+        { productId: 'prod-2', quantity },
+      ],
+      discountAmount: 0,
+      payments: [{ method: 'CASH' as const, amount: 300 }],
+      requestKey: 'sale-key-1',
+    });
+
+    it.each([1.5, 2.7, 0, 2147483648])(
+      'rejects quantity %s as 400 before replay, lookup, numbering or writes',
+      async (quantity) => {
+        prismaMock.sale.findFirst.mockResolvedValue(null);
+
+        const error = await service
+          .create(dto(quantity), 'user-1', 'org-1', cashierUser)
+          .then(
+            () => null,
+            (caught: unknown) => caught,
+          );
+
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect((error as BadRequestException).getStatus()).toBe(400);
+        expect(prismaMock.sale.findFirst).not.toHaveBeenCalled();
+        expect(prismaMock.product.findFirst).not.toHaveBeenCalled();
+        expect(sequenceServiceMock.nextNumber).not.toHaveBeenCalled();
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      },
+    );
+  });
 });
 
 // T4c: a sale registers its fiscal document in the same transaction that

@@ -54,6 +54,7 @@ import {
   HandCoins,
 } from "lucide-react";
 import { cn, formatCurrency, safeGetItem, safeSetItem } from "@/lib/utils";
+import { toCheckoutCents } from "@/lib/pos-checkout-money";
 import { haptic } from "@/lib/haptics";
 import { effectiveStock } from "@/lib/product-type";
 import type { CartItem, Product, Sale } from "@/types";
@@ -358,6 +359,14 @@ export default function POSPage() {
     cartRef.current = cart;
   }, [cart]);
   const posLoanAttemptRef = useRef<{ key: string; signature: string } | null>(
+    null,
+  );
+  // The ordinary checkout pins its idempotency key the same way: the key
+  // belongs to the exact request body it was minted for, so a retry of that same
+  // body after a lost response replays instead of selling twice, while any edit
+  // to the cart, customer, discount or payment split mints a new one. A success
+  // clears it so a second, deliberate sale never reuses the key.
+  const checkoutAttemptRef = useRef<{ key: string; signature: string } | null>(
     null,
   );
   const quickSearchProduct = useQuickSearchProduct();
@@ -777,14 +786,17 @@ export default function POSPage() {
     sharesExceptLast.reduce((sum, share) => sum + share, 0);
   const discountShares = [...sharesExceptLast, lastShare];
 
-  const taxAmount = cart.reduce(
-    (sum, item, index) =>
-      sum +
-      (lineGrossBases[index] - discountShares[index]) *
-        ((item.product.effectiveTaxRate ?? item.product.taxRate) / 100),
-    0,
-  );
-  const total = subtotal + taxAmount - clampedSaleDiscount;
+  // Match toPersistedLineTax: round each line's tax, not the sum of raw taxes.
+  const taxCents = cart.reduce((sum, item, index) => {
+    const rate = item.product.effectiveTaxRate ?? item.product.taxRate;
+    const lineTax = (lineGrossBases[index] - discountShares[index]) * (rate / 100);
+    return sum + Math.round(lineTax * 100);
+  }, 0);
+  const taxAmount = taxCents / 100;
+  // Like SalesService, charge from the stored (cent-precision) subtotal.
+  const storedSubtotal = toCheckoutCents(subtotal) / 100;
+  const totalCents = toCheckoutCents(storedSubtotal - clampedSaleDiscount) + taxCents;
+  const total = totalCents / 100;
 
   const toggleFavoriteProduct = useCallback((productId: string) => {
     setFavoriteProductIds((current) =>
@@ -797,11 +809,11 @@ export default function POSPage() {
   const handleCheckout = async () => {
     if (cartLockedRef.current) return;
     if (cart.length === 0) return;
-    const totalPaid = paymentMethods.reduce(
-      (sum, method) => sum + method.amount,
+    const paidCents = paymentMethods.reduce(
+      (sum, method) => sum + toCheckoutCents(method.amount),
       0,
     );
-    if (totalPaid < total) {
+    if (paidCents < totalCents) {
       toast.error("El monto total pagado debe cubrir el total de la venta");
       return;
     }
@@ -812,43 +824,59 @@ export default function POSPage() {
     // Mirrors `SalesService.create` (S3 / D1). The server is the authority and
     // rejects these splits anyway; answering here turns a 400 into the sentence
     // that tells the cashier what to fix. Change is only ever cash, and on a
-    // positive total no tender may be surplus on its own. Round the surplus
-    // to cents, as the server does, so tax rounding is not treated as change.
-    const overpay = Math.round((totalPaid - total) * 100) / 100;
-    if (overpay > 0 && !paymentMethods.some((method) => method.type === "CASH")) {
+    // positive total no tender may be surplus on its own.
+    const overpaidCents = paidCents - totalCents;
+    if (overpaidCents > 0 && !paymentMethods.some((method) => method.type === "CASH")) {
       toast.error("Las tarjetas y transferencias no dan cambio");
       return;
     }
     if (
-      overpay > 0 &&
+      overpaidCents > 0 &&
       paymentMethods.some((method) =>
-        total > 0 ? method.amount <= overpay : method.type !== "CASH",
+        totalCents > 0
+          ? toCheckoutCents(method.amount) <= overpaidCents
+          : method.type !== "CASH",
       )
     ) {
       toast.error("Sobra un pago: con los demás métodos ya se cubre el total");
       return;
     }
+    // One builder feeds both the request and its identity, so a payload change
+    // can never leave the pinned request key describing a different request.
+    const request = {
+      customerId: selectedCustomer || undefined,
+      items: cart.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        // Sent only for a real override. For every other line the server
+        // derives the price itself, so a promotion applied after the line
+        // entered the cart is honoured instead of being read as an
+        // (unauthorized) override request.
+        ...(cartItemPriceOverride(item)
+          ? { unitPrice: item.unitPrice }
+          : {}),
+        discountAmount: item.discountAmount,
+      })),
+      discountAmount,
+      payments: paymentMethods.map((method) => ({
+        method: method.type,
+        amount: method.amount,
+      })),
+    };
+    const signature = JSON.stringify(request);
+    // SEC-014: a retry of this exact body reuses its key so the server replays
+    // the sale it already persisted; anything else is a new intent.
+    const attempt =
+      checkoutAttemptRef.current?.signature === signature
+        ? checkoutAttemptRef.current
+        : { key: crypto.randomUUID(), signature };
+    checkoutAttemptRef.current = attempt;
     try {
       const result = await createSale.mutateAsync({
-        customerId: selectedCustomer || undefined,
-        items: cart.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          // Sent only for a real override. For every other line the server
-          // derives the price itself, so a promotion applied after the line
-          // entered the cart is honoured instead of being read as an
-          // (unauthorized) override request.
-          ...(cartItemPriceOverride(item)
-            ? { unitPrice: item.unitPrice }
-            : {}),
-          discountAmount: item.discountAmount,
-        })),
-        discountAmount,
-        payments: paymentMethods.map((method) => ({
-          method: method.type,
-          amount: method.amount,
-        })),
+        ...request,
+        requestKey: attempt.key,
       });
+      if (checkoutAttemptRef.current === attempt) checkoutAttemptRef.current = null;
       setLastSale(result);
       setCart([]);
       // A finished or paused sale must not leave an undo offer pointing at it.

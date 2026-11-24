@@ -73,4 +73,19 @@ describe("useCreateSale", () => {
       items: [{ productId: "p1", quantity: 2, discountAmount: 0 }],
     });
   });
+
+  it("forwards a pinned requestKey unchanged so the server can replay instead of duplicating", async () => {
+    post.mockResolvedValue({ data: { id: "sale-1" } } as never);
+    const { result } = renderHook(() => useCreateSale(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync({
+      items: [{ productId: "p1", quantity: 2, discountAmount: 0 }],
+      requestKey: "checkout-attempt-key",
+    });
+
+    expect(post).toHaveBeenCalledWith("/sales", {
+      items: [{ productId: "p1", quantity: 2, discountAmount: 0 }],
+      requestKey: "checkout-attempt-key",
+    });
+  });
 });

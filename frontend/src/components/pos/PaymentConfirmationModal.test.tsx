@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { PaymentConfirmationModal } from "./PaymentConfirmationModal";
 import type { CartItem } from "@/types";
 
@@ -105,6 +105,79 @@ describe("PaymentConfirmationModal currency output", () => {
     expect(
       screen.getByRole("button", { name: `$${NBSP}100.000` }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("PaymentConfirmationModal cent-exact checkout", () => {
+  const props = { ...baseProps, subtotal: 854.25, taxAmount: 162.31, total: 1016.56 };
+
+  it("shows and edits the card amount without discarding cents", () => {
+    const onPaymentMethodChange = vi.fn();
+    const onConfirm = vi.fn();
+    const { rerender } = render(
+      <PaymentConfirmationModal
+        {...props}
+        selectedMethod="CARD"
+        paymentMethods={[]}
+        onPaymentMethodChange={onPaymentMethodChange}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveValue("1.016,56");
+    expect(screen.getByText("Total").parentElement).toHaveTextContent("1.016,56");
+    fireEvent.change(input, { target: { value: "1.016,55" } });
+    expect(onPaymentMethodChange).toHaveBeenLastCalledWith([{ type: "CARD", amount: 1016.55 }]);
+
+    rerender(
+      <PaymentConfirmationModal
+        {...props}
+        selectedMethod="CARD"
+        paymentMethods={[{ type: "CARD", amount: 1016.55 }]}
+        onConfirm={onConfirm}
+      />,
+    );
+    const confirm = screen.getByRole("button", { name: "Confirmar pago" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("completes the precise balance on top of cash already entered", () => {
+    const onPaymentMethodChange = vi.fn();
+    render(
+      <PaymentConfirmationModal
+        {...props}
+        paymentMethods={[{ type: "CASH", amount: 0.07 }]}
+        onPaymentMethodChange={onPaymentMethodChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Completar con efectivo ($${NBSP}1.016,49)`,
+    }));
+    expect(onPaymentMethodChange).toHaveBeenCalledExactlyOnceWith([{ type: "CASH", amount: 1016.56 }]);
+  });
+
+  it("confirms an exact split even when the floating-point sum is slightly short", () => {
+    const onConfirm = vi.fn();
+    render(
+      <PaymentConfirmationModal
+        {...props}
+        onConfirm={onConfirm}
+        paymentMethods={[
+          { type: "CARD", amount: 666.81 },
+          { type: "TRANSFER", amount: 259.34 },
+          { type: "CASH", amount: 90.41 },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText("Faltante")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cambio")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar pago" }));
+    expect(onConfirm).toHaveBeenCalledOnce();
   });
 });
 
