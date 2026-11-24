@@ -12,6 +12,13 @@ recibió la cantidad pendiente o canceló la orden, actualizá la orden antes de
 volver a registrar la entrega. Una orden con una recepción parcial o completa
 no se puede cancelar.
 
+La edición de un borrador y su confirmación toman la misma orden una a la vez,
+con el mismo bloqueo que la recepción. Si otra operación la confirmó o la
+canceló mientras tanto, la edición responde «Solo se pueden editar órdenes en
+borrador» y la confirmación «Solo se pueden confirmar órdenes en borrador», sin
+escribir nada. Al confirmar se guardan los ítems, los totales y el proveedor que
+la orden tiene en ese momento, no los que la petición leyó al empezar.
+
 ## 1. Ciclo de vida
 
 | Paso | Estado | Qué queda registrado |
