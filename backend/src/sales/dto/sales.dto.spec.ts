@@ -1,3 +1,4 @@
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateSaleDto, UpdateSaleDto } from './sales.dto';
@@ -42,6 +43,50 @@ describe('sales DTO contract', () => {
       });
 
       await expect(validate(dto)).resolves.toHaveLength(0);
+    });
+  });
+
+  describe('SaleItemDto quantity', () => {
+    // The same pipe `configureErrorHandling` installs on the running server, so
+    // implicit conversion and whitelisting behave as in production.
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    });
+    const create = (quantity: unknown) =>
+      pipe.transform(
+        {
+          items: [{ productId: 'prod-1', quantity }],
+          payments: validPayments,
+        },
+        { type: 'body', metatype: CreateSaleDto },
+      );
+
+    it.each([1.5, 2.7, '2.7'])(
+      'rejects the fractional quantity %j',
+      async (quantity) => {
+        await expect(create(quantity)).rejects.toThrow(BadRequestException);
+      },
+    );
+
+    it.each([0, 2147483648])(
+      'rejects the out-of-range quantity %s',
+      async (quantity) => {
+        await expect(create(quantity)).rejects.toThrow(BadRequestException);
+      },
+    );
+
+    it.each([
+      [1, 1],
+      [2, 2],
+      ['2', 2],
+      [2147483647, 2147483647],
+    ])('accepts the integer quantity %j', async (quantity, expected) => {
+      const dto = await create(quantity);
+
+      expect(dto.items[0].quantity).toBe(expected);
     });
   });
 
