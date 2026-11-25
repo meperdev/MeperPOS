@@ -265,8 +265,8 @@ describe("Sidebar", () => {
   });
 
   it.each([
-    ["OWNER", true], ["ADMIN", true], ["MEMBER", true],
-    ["CASHIER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", true],
+    ["OWNER", true], ["ADMIN", true], ["MEMBER", true], ["CASHIER", true],
+    ["INVENTORY_USER", false], ["SUPER_ADMIN", true],
   ])("shows the transfers link for %s only when permitted", async (role, permitted) => {
     useAuthMock.mockReturnValue({
       user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
@@ -1208,12 +1208,13 @@ describe("drawer offers only what the tab bar does not", () => {
     expect(screen.queryByRole("link", { name: "Panel" })).toBeNull();
   });
 
-  it("removes a group heading whose whole list is tabs", () => {
+  it("keeps a group heading as soon as one of its rows has no tab", () => {
+    // S6: a cashier now has Transferencias in Inventario, and that row has no
+    // mobile tab, so the heading belongs in the drawer again.
     const { container } = renderAs("CASHIER");
 
     const inventoryGroup = container.querySelector('[data-nav-group="Inventario"]');
-    expect(inventoryGroup?.className).toContain("hidden");
-    expect(inventoryGroup?.className).toContain("lg:block");
+    expect(inventoryGroup?.className).not.toContain("hidden");
 
     const operationsGroup = container.querySelector('[data-nav-group="Operación"]');
     expect(operationsGroup?.className).not.toContain("hidden");

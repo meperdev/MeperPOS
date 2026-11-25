@@ -22,6 +22,15 @@ import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
 import { QueryStockTransfersDto } from './dto/query-stock-transfers.dto';
 import { TransfersService } from './transfers.service';
 
+/**
+ * Transfers between sites. Dispatch and cancellation are administrative work, so
+ * the class minimum is ADMIN/MEMBER. A cashier is the role that physically
+ * receives the goods at its store, so the three routes it needs — the list, one
+ * document and the receipt — carry their own broader role list. Which sites a
+ * cashier reaches is decided afterwards, inside each transaction, by the
+ * membership assignment: a cashier only receives at an assigned destination and
+ * reads only documents touching its sites.
+ */
 @ApiTags('Transfers')
 @ApiBearerAuth()
 @Controller('transfers')
@@ -43,6 +52,7 @@ export class TransfersController {
   }
 
   @Get()
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
   @ApiOperation({
     summary: 'Listar las transferencias visibles para el usuario y sus sedes',
   })
@@ -54,12 +64,14 @@ export class TransfersController {
   }
 
   @Get(':id')
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Leer una transferencia con sus ítems y sus sedes' })
   findOne(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.transfers.findOne(user, id);
   }
 
   @Post(':id/receive')
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Recibir una transferencia en la sede de destino' })
   receive(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.transfers.receive(user, id);

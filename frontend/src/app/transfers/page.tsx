@@ -17,6 +17,8 @@ import { TransferDetailModal } from "@/components/transfers/TransferDetailModal"
 import { CancelTransferModal } from "@/components/transfers/CancelTransferModal";
 import { useLocations } from "@/hooks/useLocations";
 import { useTransfers } from "@/hooks/useTransfers";
+import { useAuth } from "@/contexts/AuthContext";
+import { hasAnyRole } from "@/lib/auth";
 import { activationProps } from "@/lib/activation";
 import { formatDateTime } from "@/lib/utils";
 import type { StockTransfer, StockTransferStatus } from "@/types";
@@ -35,8 +37,15 @@ const statusOptions: SelectOption[] = [
  * in transit, and lands at its destination when the receiving site confirms it.
  * The screen only dispatches and resolves documents; every quantity and total is
  * the server's.
+ *
+ * S6 splits the screen by role: an administrator or member dispatches and
+ * cancels, while the destination's cashier reads what is coming and receives it.
+ * This is display only — each route is guarded again on the server, and the
+ * assignment that decides *which* store a cashier receives at lives there too.
  */
 export default function TransfersPage() {
+  const { user } = useAuth();
+  const canDispatch = hasAnyRole(user?.role, ["ADMIN", "MEMBER"]);
   const [status, setStatus] = useState<"" | StockTransferStatus>("");
   const [siteId, setSiteId] = useState("");
   const [page, setPage] = useState(1);
@@ -100,10 +109,12 @@ export default function TransfersPage() {
               : undefined
           }
           actions={
-            <Button onClick={() => setIsNewOpen(true)}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Nueva transferencia
-            </Button>
+            canDispatch ? (
+              <Button onClick={() => setIsNewOpen(true)}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Nueva transferencia
+              </Button>
+            ) : undefined
           }
         />
 
@@ -157,7 +168,9 @@ export default function TransfersPage() {
             subtitle={
               hasFilters
                 ? "Prueba cambiando el estado o la sede."
-                : "Mueve mercancía de una sede a otra desde Nueva transferencia."
+                : canDispatch
+                  ? "Mueve mercancía de una sede a otra desde Nueva transferencia."
+                  : "Cuando otra sede te envíe mercancía, aparecerá aquí para recibirla."
             }
           />
         ) : (
@@ -253,15 +266,18 @@ export default function TransfersPage() {
         )}
       </div>
 
-      <NewTransferModal
-        isOpen={isNewOpen}
-        onClose={() => setIsNewOpen(false)}
-        onCreated={(created) => setSelected(created)}
-      />
+      {canDispatch && (
+        <NewTransferModal
+          isOpen={isNewOpen}
+          onClose={() => setIsNewOpen(false)}
+          onCreated={(created) => setSelected(created)}
+        />
+      )}
 
       <TransferDetailModal
         transfer={selected}
         isOpen={selected !== null}
+        canCancel={canDispatch}
         onClose={() => setSelected(null)}
         onAskCancel={(transfer) => {
           // One dialog at a time: two stacked dialogs would trap and steal focus
@@ -271,12 +287,14 @@ export default function TransfersPage() {
         }}
       />
 
-      <CancelTransferModal
-        transferId={cancelTarget?.id ?? ""}
-        transferNumber={cancelTarget?.number ?? 0}
-        isOpen={cancelTarget !== null}
-        onClose={() => setCancelTarget(null)}
-      />
+      {canDispatch && (
+        <CancelTransferModal
+          transferId={cancelTarget?.id ?? ""}
+          transferNumber={cancelTarget?.number ?? 0}
+          isOpen={cancelTarget !== null}
+          onClose={() => setCancelTarget(null)}
+        />
+      )}
     </DashboardLayout>
   );
 }

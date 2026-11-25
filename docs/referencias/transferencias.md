@@ -53,9 +53,11 @@ puede vender ni reservar unidades que están en un camión.
 
 ## 3. API
 
-Todas las rutas llevan `JwtAuthGuard`, `OrganizationRequiredGuard` y `@Roles`
-(`ADMIN`, `MEMBER`; `OWNER` hereda de `ADMIN`). Toda lectura y toda escritura se
-filtra por la organización del token.
+Todas las rutas llevan `JwtAuthGuard`, `OrganizationRequiredGuard` y `@Roles`.
+Despachar y cancelar son trabajo administrativo (`ADMIN`, `MEMBER`; `OWNER` hereda
+de `ADMIN`). El cajero de la sede de destino recibe la mercancía, así que leer y
+recibir admiten además `CASHIER`. Toda lectura y toda escritura se filtra por la
+organización del token.
 
 | Ruta | Método | Para qué |
 |---|---|---|
@@ -93,12 +95,15 @@ POST /api/transfers/:id/cancel
 { "reason": "La bodega no la recibe" }
 ```
 
-Recibir exige acceso a la sede de destino; cancelar, a la de origen. Las dos
-operaciones toman la fila de la transferencia (`SELECT … FOR NO KEY UPDATE`)
-antes de leer su estado, así que si dos pedidos compiten —dos recepciones, o una
-recepción y una cancelación— uno gana y el otro responde 409 sin efectos. La
-transacción es `Serializable`; una falla de serialización de PostgreSQL se
-informa como el mismo 409, nunca se reintenta sola.
+Recibir exige acceso a la sede de destino; cancelar, a la de origen. El cajero de
+la sede de destino puede recibir, pero no despachar ni cancelar: su sesión llega a
+las tres rutas de lectura y recepción y la recepción solo prospera en una sede que
+tenga asignada (en cualquier otra responde 404 y el documento sigue
+`IN_TRANSIT`). Las dos operaciones toman la fila de la transferencia
+(`SELECT … FOR NO KEY UPDATE`) antes de leer su estado, así que si dos pedidos
+compiten —dos recepciones, o una recepción y una cancelación— uno gana y el otro
+responde 409 sin efectos. La transacción es `Serializable`; una falla de
+serialización de PostgreSQL se informa como el mismo 409, nunca se reintenta sola.
 
 ### Leer
 
@@ -106,9 +111,9 @@ informa como el mismo 409, nunca se reintenta sola.
 y acepta `status` (`IN_TRANSIT`, `RECEIVED`, `CANCELLED`), `siteId` (solo
 transferencias que salen o llegan a esa sede), `page` y `limit` (10 por defecto).
 
-`OWNER` y `ADMIN` ven todas las transferencias de la organización. Un miembro con
-sedes asignadas solo ve las que tocan alguna de sus sedes; sin ninguna asignación
-no ve ninguna. Un identificador de otra organización responde 404.
+`OWNER` y `ADMIN` ven todas las transferencias de la organización. Un miembro o un
+cajero con sedes asignadas solo ve las que tocan alguna de sus sedes; sin ninguna
+asignación no ve ninguna. Un identificador de otra organización responde 404.
 
 ## 4. Errores
 
@@ -135,8 +140,10 @@ otro toma el número siguiente.
 
 ## 6. Límites de esta entrega
 
-- No hay pantalla de transferencias todavía: esta entrega expone la API y sus
-  garantías de stock.
+- La pantalla `/transfers` lista, despacha, recibe y cancela. Un administrador o
+  miembro ve los botones de despacho y cancelación; un cajero ve la lista y el
+  botón «Recibir» de su detalle. Es presentación: el servidor vuelve a decidir en
+  cada ruta y en cada sede.
 - La recepción automática de compras y el POS siguen trabajando con su propia
   sede explícita; una transferencia no reemplaza esos flujos.
 - El stock en tránsito no se reserva para nadie: si la mercancía no llega, se

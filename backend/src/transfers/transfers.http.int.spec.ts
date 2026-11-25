@@ -21,8 +21,13 @@ import { AppModule } from '../app.module';
  * It is bound to an explicitly provided disposable database and creates only its
  * own uniquely named rows; the guard below refuses anything else. Run it with
  *
- *   TRANSFERS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55440/meperpos_stock_rehearsal_w2_xfer_b?schema=public \
+ *   TRANSFERS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55440/meperpos_stock_rehearsal_w4_xfer?schema=public \
  *     npx jest --runInBand src/transfers/transfers.http.int.spec.ts
+ *
+ * T23 extends the contract to the destination's own cashier: that role lists,
+ * reads and receives at the sites assigned to it, and still cannot dispatch or
+ * cancel. The route guard is the first boundary; the site authorization inside
+ * the transaction is the second one.
  */
 const databaseUrl = process.env.TRANSFERS_TEST_DATABASE_URL;
 
@@ -53,6 +58,7 @@ interface SiteFixture {
     let memberOriginOnly: string;
     let memberNoSites: string;
     let cashier: string;
+    let destinationCashier: string;
     let foreignAdmin: string;
     const createdEmails: string[] = [];
 
@@ -64,7 +70,9 @@ interface SiteFixture {
         !url.port ||
         url.port === '5432' ||
         url.search !== '?schema=public' ||
-        !/^\/meperpos_stock_rehearsal_w2_xfer[a-z0-9_]*$/.test(url.pathname)
+        !/^\/meperpos_stock_rehearsal_w[0-9]+_xfer[a-z0-9_]*$/.test(
+          url.pathname,
+        )
       ) {
         throw new Error(
           'Expected an explicit disposable T4 PostgreSQL database',
@@ -157,6 +165,10 @@ interface SiteFixture {
       await product('listing', 8);
       await product('hidden', 3);
       await product('leg', 2);
+      await product('cashierReceive', 6);
+      await product('cashierOffSite', 4);
+      await product('cashierList', 8);
+      await product('cashierCancel', 5);
       serviceProductId = await product('service', 0, {
         type: ProductType.SERVICE,
         tracksStock: false,
@@ -235,6 +247,24 @@ interface SiteFixture {
         where: { userId: bare.id },
       });
 
+      // T23: a cashier assigned to the destination store is the role that
+      // actually receives the goods. The membership trigger already gave it the
+      // principal site, so only the destination grant is added here.
+      const receivingCashier = await member(
+        'cashier-destination',
+        OrgRole.CASHIER,
+      );
+      await prisma.membershipLocation.createMany({
+        data: [
+          {
+            userId: receivingCashier.id,
+            organizationId: orgId,
+            locationId: warehouse.id,
+          },
+        ],
+        skipDuplicates: true,
+      });
+
       const jwt = app.get(JwtService);
       const sign = (
         user: { id: string; email: string; tokenVersion: number },
@@ -254,6 +284,7 @@ interface SiteFixture {
       memberOriginOnly = sign(originOnly, orgId, OrgRole.MEMBER);
       memberNoSites = sign(bare, orgId, OrgRole.MEMBER);
       cashier = sign(cashierUser, orgId, OrgRole.CASHIER);
+      destinationCashier = sign(receivingCashier, orgId, OrgRole.CASHIER);
       foreignAdmin = sign(foreign, otherOrgId, OrgRole.ADMIN);
     });
 
@@ -558,7 +589,10 @@ interface SiteFixture {
       );
       expect(message(unauthorized)).toBe('Location not found');
       await receive(foreignAdmin, transfer.id).expect(404);
-      await receive(cashier, transfer.id).expect(403);
+      // A cashier holds the role, but its assignment is the origin: the
+      // destination is as unreachable for it as for any other outsider.
+      const offSite = await receive(cashier, transfer.id).expect(404);
+      expect(message(offSite)).toBe('Location not found');
       // A caller that reaches neither end cannot cancel it either.
       await cancel(memberNoSites, transfer.id, 'no es mi sede').expect(404);
 
@@ -568,6 +602,162 @@ interface SiteFixture {
         where: { id: transfer.id },
       });
       expect(stored.status).toBe('IN_TRANSIT');
+    });
+
+    it('lets the destination cashier receive at its assigned site', async () => {
+      const transfer = body(
+        await dispatch(admin, {
+          items: [{ productId: products.cashierReceive, quantity: 2 }],
+        }).expect(201),
+      );
+      expect(await siteStock(origin.id, products.cashierReceive)).toBe(4);
+      expect(await siteStock(warehouse.id, products.cashierReceive)).toBe(0);
+
+      const received = body(
+        await receive(destinationCashier, transfer.id).expect(201),
+      );
+      expect(received.status).toBe('RECEIVED');
+      expect(received.receivedAt).not.toBeNull();
+
+      expect(await siteStock(origin.id, products.cashierReceive)).toBe(4);
+      expect(await siteStock(warehouse.id, products.cashierReceive)).toBe(2);
+      expect(await aggregate(products.cashierReceive)).toEqual({
+        productStock: 6,
+        siteSum: 6,
+      });
+
+      const inbound = (await movements(`TR-${transfer.number}`)).filter(
+        (movement) => movement.type === 'TRANSFER_IN',
+      );
+      expect(inbound).toHaveLength(1);
+      expect(inbound[0]).toMatchObject({
+        quantity: 2,
+        locationId: warehouse.id,
+      });
+    });
+
+    it('leaves an off-site cashier without the destination and the transfer in transit', async () => {
+      const transfer = body(
+        await dispatch(admin, {
+          items: [{ productId: products.cashierOffSite, quantity: 2 }],
+        }).expect(201),
+      );
+      const [stockBefore, transfersBefore, movementsBefore] = await Promise.all(
+        [
+          siteStock(warehouse.id, products.cashierOffSite),
+          prisma.stockTransfer.count({ where: { organizationId: orgId } }),
+          prisma.inventoryMovement.count({ where: { organizationId: orgId } }),
+        ],
+      );
+
+      const refused = await receive(cashier, transfer.id).expect(404);
+      expect(message(refused)).toBe('Location not found');
+
+      expect(await siteStock(origin.id, products.cashierOffSite)).toBe(2);
+      expect(await siteStock(warehouse.id, products.cashierOffSite)).toBe(
+        stockBefore,
+      );
+      expect(await aggregate(products.cashierOffSite)).toEqual({
+        productStock: 2,
+        siteSum: 2,
+      });
+      expect(
+        await prisma.stockTransfer.count({ where: { organizationId: orgId } }),
+      ).toBe(transfersBefore);
+      expect(
+        await prisma.inventoryMovement.count({
+          where: { organizationId: orgId },
+        }),
+      ).toBe(movementsBefore);
+      expect(
+        await prisma.stockTransfer.findUniqueOrThrow({
+          where: { id: transfer.id },
+        }),
+      ).toMatchObject({ status: 'IN_TRANSIT' });
+    });
+
+    it('refuses dispatch and cancellation for a cashier at either end', async () => {
+      const transfer = body(
+        await dispatch(admin, {
+          items: [{ productId: products.cashierCancel, quantity: 1 }],
+        }).expect(201),
+      );
+      const [transfersBefore, movementsBefore] = await Promise.all([
+        prisma.stockTransfer.count({ where: { organizationId: orgId } }),
+        prisma.inventoryMovement.count({ where: { organizationId: orgId } }),
+      ]);
+
+      await dispatch(cashier).expect(403);
+      await dispatch(destinationCashier).expect(403);
+      await cancel(cashier, transfer.id, 'desde el origen').expect(403);
+      await cancel(destinationCashier, transfer.id, 'desde el destino').expect(
+        403,
+      );
+
+      expect(await siteStock(origin.id, products.cashierCancel)).toBe(4);
+      expect(await siteStock(warehouse.id, products.cashierCancel)).toBe(0);
+      expect(
+        await prisma.stockTransfer.count({ where: { organizationId: orgId } }),
+      ).toBe(transfersBefore);
+      expect(
+        await prisma.inventoryMovement.count({
+          where: { organizationId: orgId },
+        }),
+      ).toBe(movementsBefore);
+      expect(
+        await prisma.stockTransfer.findUniqueOrThrow({
+          where: { id: transfer.id },
+        }),
+      ).toMatchObject({ status: 'IN_TRANSIT' });
+    });
+
+    it('lists and reads only the transfers touching a cashier site', async () => {
+      const seeded = body(
+        await dispatch(admin, {
+          items: [{ productId: products.cashierList, quantity: 3 }],
+        }).expect(201),
+      );
+      await receive(admin, seeded.id).expect(201);
+      const internal = body(
+        await dispatch(admin, {
+          fromLocationId: warehouse.id,
+          toLocationId: secondWarehouse.id,
+          items: [{ productId: products.cashierList, quantity: 1 }],
+        }).expect(201),
+      );
+
+      const listing = await list(cashier).expect(200);
+      const visible = (listing.body as { data: TransferBody[] }).data;
+      expect(visible.length).toBeGreaterThan(0);
+      for (const transfer of visible) {
+        expect(
+          transfer.fromLocation.id === origin.id ||
+            transfer.toLocation.id === origin.id,
+        ).toBe(true);
+      }
+      expect(visible.map((transfer) => transfer.id)).not.toContain(internal.id);
+      expect(visible.map((transfer) => transfer.id)).toContain(seeded.id);
+
+      // The destination cashier reads the document that lands at its site.
+      const arriving = body(
+        await dispatch(admin, {
+          items: [{ productId: products.cashierList, quantity: 1 }],
+        }).expect(201),
+      );
+      const arrivingRead = await detail(destinationCashier, arriving.id).expect(
+        200,
+      );
+      expect(body(arrivingRead).toLocation.id).toBe(warehouse.id);
+      await detail(destinationCashier, internal.id).expect(200);
+      // A document between two sites it cannot reach stays hidden.
+      const elsewhere = body(
+        await dispatch(admin, {
+          fromLocationId: warehouse.id,
+          toLocationId: secondWarehouse.id,
+          items: [{ productId: products.cashierList, quantity: 1 }],
+        }).expect(201),
+      );
+      await detail(cashier, elsewhere.id).expect(404);
     });
 
     it('cancels an in-transit transfer back into its origin and requires a reason', async () => {
@@ -757,7 +947,8 @@ interface SiteFixture {
       expect(read.toLocation.name).toBe(secondWarehouse.name);
 
       await detail(foreignAdmin, internal.id).expect(404);
-      await detail(cashier, internal.id).expect(403);
+      // CASHIER holds the route now, but reaches only its assigned sites.
+      await detail(cashier, internal.id).expect(404);
     });
 
     it('keeps the organization aggregate equal to the sum of its site rows', async () => {

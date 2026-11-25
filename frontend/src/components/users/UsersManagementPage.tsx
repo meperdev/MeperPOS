@@ -26,9 +26,14 @@ import { getApiErrorMessage } from "@/lib/api";
 import { Building2, KeyRound, Plus, Shield, SquarePen, Trash2, Users as UsersIcon } from "lucide-react";
 import type { User } from "@/types";
 
-type SelectableRole = "ADMIN" | "CASHIER" | "INVENTORY_USER";
+type SelectableRole = "ADMIN" | "MEMBER" | "CASHIER" | "INVENTORY_USER";
 
-const SELECTABLE_ROLES: SelectableRole[] = ["ADMIN", "CASHIER", "INVENTORY_USER"];
+const SELECTABLE_ROLES: SelectableRole[] = [
+  "ADMIN",
+  "MEMBER",
+  "CASHIER",
+  "INVENTORY_USER",
+];
 const DEFAULT_ROLE: SelectableRole = "CASHIER";
 
 function toSelectableRole(role: User["role"]): SelectableRole {
@@ -306,12 +311,16 @@ export default function UsersPage() {
           <form onSubmit={handleEdit} className="space-y-4">
             <Input label="Nombre" value={editFormData.name} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} required />
             <Input label="Correo" type="email" value={editFormData.email} onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })} required />
+            {/* Known gap, out of this unit: `PUT /users/:id` carries no `role`, so
+                the server keeps the membership's current role whatever is chosen
+                here. The list is shown for parity with the create dialog. */}
             <Select
               label="Rol"
               value={editFormData.role}
               onChange={(value) => setEditFormData({ ...editFormData, role: value as SelectableRole })}
               options={[
                 { value: "CASHIER", label: "Cajero" },
+                { value: "MEMBER", label: "Miembro" },
                 { value: "INVENTORY_USER", label: "Inventario" },
                 { value: "ADMIN", label: "Administrador" },
               ]}
@@ -336,6 +345,7 @@ export default function UsersPage() {
             onChange={(value) => setFormData({ ...formData, role: value as SelectableRole })}
             options={[
               { value: "CASHIER", label: "Cajero" },
+              { value: "MEMBER", label: "Miembro" },
               { value: "INVENTORY_USER", label: "Inventario" },
               { value: "ADMIN", label: "Administrador" },
             ]}

@@ -18,6 +18,11 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onAskCancel: (transfer: StockTransfer) => void;
+  /**
+   * Cancellation is administrative. The destination's cashier receives only, so
+   * the screen hides the button for it; the server refuses the route anyway.
+   */
+  canCancel?: boolean;
 }
 
 const TYPE_LABEL = { STORE: "Sucursal", WAREHOUSE: "Bodega" } as const;
@@ -49,6 +54,7 @@ export function TransferDetailModal({
   isOpen,
   onClose,
   onAskCancel,
+  canCancel = true,
 }: Props) {
   const toast = useToast();
   const receive = useReceiveTransfer();
@@ -160,13 +166,15 @@ export function TransferDetailModal({
             </Button>
             {shown.status === "IN_TRANSIT" && (
               <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onAskCancel(shown)}
-                >
-                  Cancelar
-                </Button>
+                {canCancel && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onAskCancel(shown)}
+                  >
+                    Cancelar
+                  </Button>
+                )}
                 <Button
                   type="button"
                   onClick={handleReceive}

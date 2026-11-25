@@ -12,6 +12,7 @@ const {
   toastSuccess,
   toastError,
   state,
+  authState,
 } = vi.hoisted(() => {
   const state = {
     transfers: [] as StockTransfer[],
@@ -26,11 +27,17 @@ const {
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
     state,
+    /** S6: the same screen serves the destination cashier and the administrators. */
+    authState: { role: "ADMIN" as string },
   };
 });
 
 vi.mock("@/components/layout/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ user: { id: "user-1", name: "Ana", role: authState.role } }),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
@@ -141,6 +148,7 @@ beforeEach(() => {
   state.transfers = [makeTransfer()];
   state.isLoading = false;
   state.isError = false;
+  authState.role = "ADMIN";
   vi.clearAllMocks();
   createMock.mockResolvedValue(makeTransfer());
   receiveMock.mockResolvedValue(makeTransfer({ status: "RECEIVED" }));
@@ -287,6 +295,59 @@ describe("transfers page", () => {
     expect(
       within(dialog).getByRole("button", { name: "Despachar transferencia" }),
     ).toBeDisabled();
+  });
+
+  it("lets a cashier read and receive without dispatching or cancelling", async () => {
+    authState.role = "CASHIER";
+    const user = userEvent.setup();
+    render(<TransfersPage />);
+
+    // The list is readable: a cashier sees what is coming to its store.
+    expect(screen.getAllByText("TR-7").length).toBeGreaterThan(0);
+    // Dispatch and cancellation are administrative; the entry points are gone.
+    expect(
+      screen.queryByRole("button", { name: /Nueva transferencia/ }),
+    ).toBeNull();
+
+    const dialog = await openDetail(user);
+    expect(
+      within(dialog).getByRole("button", { name: "Recibir" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Cancelar" }),
+    ).toBeNull();
+  });
+
+  it("tells a cashier where the stock will arrive when there is nothing to receive", () => {
+    authState.role = "CASHIER";
+    state.transfers = [];
+    render(<TransfersPage />);
+
+    expect(screen.getByText("Sin transferencias todavía")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Cuando otra sede te envíe mercancía, aparecerá aquí para recibirla.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Nueva transferencia/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps dispatch and cancellation for an administrator", async () => {
+    const user = userEvent.setup();
+    render(<TransfersPage />);
+
+    expect(
+      screen.getByRole("button", { name: /Nueva transferencia/ }),
+    ).toBeInTheDocument();
+    const dialog = await openDetail(user);
+    expect(
+      within(dialog).getByRole("button", { name: "Cancelar" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Recibir" }),
+    ).toBeInTheDocument();
   });
 
   it("receives an in-transit transfer from its detail", async () => {

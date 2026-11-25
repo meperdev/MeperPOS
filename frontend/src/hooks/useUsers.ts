@@ -4,17 +4,25 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { User } from "@/types";
 
+/**
+ * The roles the team screen can hand out. Every value is a real `OrgRole`; the
+ * server's `CreateUserDto` validates it with `@IsEnum(OrgRole)`, so MEMBER rides
+ * the payload exactly like the others. OWNER is absent on purpose: it is minted
+ * only by another OWNER or a SUPER_ADMIN.
+ */
+type TeamScreenRole = "ADMIN" | "MEMBER" | "CASHIER" | "INVENTORY_USER";
+
 type CreateUserPayload = {
   email: string;
   password: string;
   name: string;
-  role: "ADMIN" | "CASHIER" | "INVENTORY_USER";
+  role: TeamScreenRole;
 };
 
 type UpdateUserPayload = {
   name?: string;
   email?: string;
-  role?: "ADMIN" | "CASHIER" | "INVENTORY_USER";
+  role?: TeamScreenRole;
 };
 
 async function getUsersRequest() {

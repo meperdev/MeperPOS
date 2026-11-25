@@ -101,12 +101,13 @@ export const navItems: NavItem[] = [
     group: "Inventario",
   },
   {
-    // Transfers are the one inventory section an operational member runs: the
-    // server admits ADMIN and MEMBER, and CASHIER does not inherit MEMBER.
+    // The one inventory section a store cashier opens: dispatch and
+    // cancellation stay with ADMIN and MEMBER, and a cashier only receives at
+    // the sites an administrator assigned it.
     label: "Transferencias",
     href: "/transfers",
     icon: <ArrowLeftRight className="w-4 h-4" />,
-    roles: ["ADMIN", "MEMBER"],
+    roles: ["ADMIN", "MEMBER", "CASHIER"],
     group: "Inventario",
   },
   {

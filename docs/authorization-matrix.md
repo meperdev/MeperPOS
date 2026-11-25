@@ -400,9 +400,9 @@ reads documents that touch a site it was assigned.
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/transfers | POST | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; source site authorized in the transaction, destination must be a site of the same organization | backend/src/transfers/transfers.http.int.spec.ts |
-| /api/transfers | GET | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; restricted memberships only see transfers touching an assigned site | backend/src/transfers/transfers.http.int.spec.ts |
-| /api/transfers/:id | GET | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; restricted memberships only see transfers touching an assigned site | backend/src/transfers/transfers.http.int.spec.ts |
-| /api/transfers/:id/receive | POST | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; destination site authorized in the transaction | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers | GET | ADMIN (OWNER inherits), MEMBER, CASHIER, SUPER_ADMIN | org-scoped; restricted memberships only see transfers touching an assigned site | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers/:id | GET | ADMIN (OWNER inherits), MEMBER, CASHIER, SUPER_ADMIN | org-scoped; restricted memberships only see transfers touching an assigned site | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers/:id/receive | POST | ADMIN (OWNER inherits), MEMBER, CASHIER, SUPER_ADMIN | org-scoped; destination site authorized in the transaction; an unassigned destination answers 404 and the transfer stays IN_TRANSIT | backend/src/transfers/transfers.http.int.spec.ts |
 | /api/transfers/:id/cancel | POST | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; origin site authorized in the transaction | backend/src/transfers/transfers.http.int.spec.ts |
 
 ## users
