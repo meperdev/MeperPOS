@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { shouldAutoFocusTextInput } from "@/lib/input-focus";
@@ -28,6 +28,16 @@ interface ModalProps {
   className?: string;
 }
 
+
+/**
+ * Open dialogs, innermost last. Several can be open at once (a dialog opened
+ * from inside another), and every one listens on `document`; only the top one
+ * may trap focus, handle Tab and Escape or own the page scroll, otherwise two
+ * traps keep pulling focus from each other forever.
+ */
+const openDialogs: symbol[] = [];
+const isTopDialog = (token: symbol) =>
+  openDialogs[openDialogs.length - 1] === token;
 
 const sizes = {
   sm: "max-w-md",
@@ -58,11 +68,21 @@ export function Modal({
   // renders nothing, so it also listens to nothing.
   const keyboardInset = useVisualViewport(isOpen);
   const drag = useRef<{ startY: number; startedAt: number } | null>(null);
+  const [token] = useState(() => Symbol("dialog"));
 
+  // Registered before the focus and Escape effects below, so a dialog opened
+  // from inside another is already the top one when its handlers first run.
+  // The page stays locked while any dialog is open, not just this one.
   useEffect(() => {
-    document.body.style.overflow = isOpen ? "hidden" : "unset";
-    return () => { document.body.style.overflow = "unset"; };
-  }, [isOpen]);
+    if (!isOpen) return;
+    openDialogs.push(token);
+    document.body.style.overflow = "hidden";
+    return () => {
+      const index = openDialogs.indexOf(token);
+      if (index !== -1) openDialogs.splice(index, 1);
+      if (openDialogs.length === 0) document.body.style.overflow = "unset";
+    };
+  }, [isOpen, token]);
 
   // Modal dialogs own the keyboard: focus moves in, Tab stays inside, and the
   // element that opened the dialog gets focus back when it closes.
@@ -135,6 +155,7 @@ export function Modal({
     // Programmatic focus can escape a dialog; bring it back instead of leaving
     // the keyboard user on the page behind it.
     const handleFocusIn = (event: FocusEvent) => {
+      if (!isTopDialog(token)) return;
       if (!(event.target instanceof Node) || !panel) return;
       if (panel.contains(event.target)) return;
       // A Select inside the dialog portals its list to `document.body` (as a
@@ -151,7 +172,7 @@ export function Modal({
     };
 
     const handleTab = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
+      if (event.key !== "Tab" || !isTopDialog(token)) return;
       const items = focusables();
       if (items.length === 0) {
         event.preventDefault();
@@ -177,16 +198,18 @@ export function Modal({
       document.removeEventListener("focusin", handleFocusIn);
       previous?.focus?.();
     };
-  }, [isOpen]);
+  }, [isOpen, token]);
 
   useEffect(() => {
     if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) onClose();
+      if (e.key === "Escape" && !e.defaultPrevented && isTopDialog(token)) {
+        onClose();
+      }
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, token]);
 
   // Dragging the handle (or the header behind it) moves the sheet with the
   // finger; letting go past the threshold dismisses it and anything shorter

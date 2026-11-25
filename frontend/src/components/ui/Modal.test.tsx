@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
 import { Select } from "./Select";
 
@@ -407,5 +408,64 @@ describe("initial focus follows the pointer", () => {
 
     expect(screen.getByRole("textbox", { name: "Detalle" })).not.toHaveFocus();
     expect(screen.getByRole("dialog", { name: "Notas" })).toHaveFocus();
+  });
+});
+
+describe("a dialog opened from inside another", () => {
+  function Nested({
+    innerOpen,
+    onCloseOuter,
+    onCloseInner,
+  }: {
+    innerOpen: boolean;
+    onCloseOuter: () => void;
+    onCloseInner: () => void;
+  }) {
+    return (
+      <Modal isOpen onClose={onCloseOuter} title="Editar producto">
+        <input aria-label="Nombre" />
+        {/* Portaled like StockAdjustmentModal: outside the outer panel. */}
+        {createPortal(
+          <Modal isOpen={innerOpen} onClose={onCloseInner} title="Ajustar existencias">
+            <input aria-label="Motivo" />
+          </Modal>,
+          document.body,
+        )}
+      </Modal>
+    );
+  }
+
+  // The inner dialog opens from an action inside the outer one, after it.
+  const openBoth = (onCloseOuter = vi.fn(), onCloseInner = vi.fn()) => {
+    const view = render(
+      <Nested innerOpen={false} onCloseOuter={onCloseOuter} onCloseInner={onCloseInner} />,
+    );
+    view.rerender(
+      <Nested innerOpen onCloseOuter={onCloseOuter} onCloseInner={onCloseInner} />,
+    );
+    return view;
+  };
+
+  it("lets the inner dialog keep the focus instead of fighting the outer one", () => {
+    openBoth();
+    const reason = screen.getByLabelText("Motivo");
+    // The outer trap used to pull focus back and the inner one to take it
+    // again, until the stack overflowed.
+    expect(() => act(() => reason.focus())).not.toThrow();
+    expect(document.activeElement).toBe(reason);
+  });
+
+  it("closes only the inner dialog on Escape and keeps the page locked", () => {
+    const onCloseOuter = vi.fn();
+    const onCloseInner = vi.fn();
+    const view = openBoth(onCloseOuter, onCloseInner);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onCloseInner).toHaveBeenCalledTimes(1);
+    expect(onCloseOuter).not.toHaveBeenCalled();
+
+    view.rerender(
+      <Nested innerOpen={false} onCloseOuter={onCloseOuter} onCloseInner={onCloseInner} />,
+    );
+    expect(document.body.style.overflow).toBe("hidden");
   });
 });
