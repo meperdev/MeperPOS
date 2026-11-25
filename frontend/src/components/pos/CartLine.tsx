@@ -8,9 +8,13 @@ import { cn, formatCurrency } from "@/lib/utils";
 import type { CartItem } from "@/types";
 
 /**
- * One cart line: a full-height product thumbnail on the left, the name and unit
- * price in the middle, the line total and the line actions on the right, with
- * the quantity stepper sitting in the space under the name.
+ * One cart line: a full-height product thumbnail on the left, then a two-row
+ * grid that uses the whole remaining width — the name and the line actions on
+ * the top row, the quantity stepper and the money on the bottom row.
+ *
+ * The thumbnail only joins in when the cart column is wide enough to keep the
+ * name, the price, the stepper and the total on one line; in the 18rem desktop
+ * column it would push the rest into a wrap, so the row reads as text only.
  *
  * It is presentational on purpose — every mutation is handed back to the POS
  * page (or the mobile drawer), which own the cart state, the stock caps and the
@@ -97,17 +101,20 @@ export function CartLine({
   return (
     <div
       className={cn(
-        "flex gap-2.5 rounded-lg border border-border/70 bg-card p-2.5",
+        "@container flex gap-3 rounded-lg border border-border/70 bg-card p-2.5",
         isCompact && "gap-2 border-border/60 bg-muted/20 p-2",
         className,
       )}
     >
-      {/* Full-height thumbnail: the image owns the whole left edge of the line. */}
+      {/* Full-height thumbnail: the image owns the whole left edge of the line
+          in every desktop column wide enough to keep the money row intact. */}
       <div
         data-testid="cart-line-image"
         className={cn(
           "relative shrink-0 self-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/50",
-          isCompact ? "w-14" : "w-20",
+          isCompact
+            ? "w-14"
+            : "hidden w-20 @min-[19rem]:block @min-[24rem]:w-24 @min-[26rem]:w-28",
         )}
       >
         {item.product.imageUrl ? (
@@ -115,7 +122,7 @@ export function CartLine({
             src={item.product.imageUrl}
             alt={item.product.name}
             fill
-            sizes={isCompact ? "56px" : "80px"}
+            sizes={isCompact ? "56px" : "96px"}
             className="object-cover"
           />
         ) : (
@@ -130,140 +137,160 @@ export function CartLine({
         )}
       </div>
 
-      {/* Name, price context and the quantity stepper. */}
+      {/* Two rows that fill the card: identity and actions on top, quantities
+          and money at the bottom. */}
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 py-0.5">
-        <div className="min-w-0">
-          <p
-            className={cn(
-              "break-words font-medium leading-snug text-foreground",
-              isCompact
-                ? "line-clamp-1 text-[13px]"
-                : "line-clamp-2 text-sm",
-            )}
-          >
-            {item.product.name}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs tabular-nums text-muted-foreground">
-            {offer && (
-              <Badge
-                variant="danger"
-                className="shrink-0 rounded-md px-1.5 py-0.5 text-xs"
-              >
-                Oferta -{offer.percent}%
-              </Badge>
-            )}
-            {priceOverride && (
-              <span data-testid="price-overridden" className="shrink-0">
-                <Badge
-                  variant="warning"
-                  className="rounded-md px-1.5 py-0.5 text-xs"
-                >
-                  Precio ajustado
-                </Badge>
-              </span>
-            )}
-            <span
-              data-testid="line-unit-price"
-              className="whitespace-nowrap"
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p
+              className={cn(
+                "break-words font-semibold leading-snug text-foreground",
+                isCompact
+                  ? "line-clamp-1 text-[13px]"
+                  : "line-clamp-2 text-[15px]",
+              )}
             >
-              <span className="font-medium text-foreground/85">
-                {formatCurrency(item.unitPrice)}
-              </span>{" "}
-              <span className="text-muted-foreground/80">c/u</span>
-            </span>
-            {showsOriginalUnitPrice && (
-              <s
-                data-testid="original-unit-price"
-                className="text-muted-foreground/60 line-through"
-              >
-                {formatCurrency(originalUnitPrice)}
-              </s>
+              {item.product.name}
+            </p>
+
+            {(offer || priceOverride) && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {offer && (
+                  <Badge
+                    variant="danger"
+                    className="shrink-0 rounded-md px-1.5 py-0.5 text-xs"
+                  >
+                    Oferta -{offer.percent}%
+                  </Badge>
+                )}
+                {priceOverride && (
+                  <span data-testid="price-overridden" className="shrink-0">
+                    <Badge
+                      variant="warning"
+                      className="rounded-md px-1.5 py-0.5 text-xs"
+                    >
+                      Precio ajustado
+                    </Badge>
+                  </span>
+                )}
+              </div>
             )}
-            {hasDiscount && (
+
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-sm tabular-nums text-muted-foreground">
+              {showsOriginalUnitPrice && (
+                <s
+                  data-testid="original-unit-price"
+                  className="text-[13px] text-muted-foreground/60 line-through"
+                >
+                  {formatCurrency(originalUnitPrice)}
+                </s>
+              )}
               <span
-                data-testid="line-discount"
-                className="rounded-md bg-success/10 px-1.5 py-0.5 font-medium text-success-text"
+                data-testid="line-unit-price"
+                className="whitespace-nowrap"
               >
-                (-{formatCurrency(item.discountAmount)}
-                {item.discountPercent ? ` · ${item.discountPercent}%` : ""})
+                <span className="font-medium text-foreground/85">
+                  {formatCurrency(item.unitPrice)}
+                </span>{" "}
+                <span className="text-muted-foreground/80">c/u</span>
               </span>
-            )}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-0.5">
+            {/*
+              Default lines use 32px targets inside a dense desktop column; the
+              mobile drawer keeps 44px, the size a thumb needs next to the
+              quantity stepper.
+            */}
+            <button
+              type="button"
+              onClick={() => onDiscount(item.productId)}
+              className={cn(
+                actionButtonClass,
+                isCompact ? "h-11 w-11" : "h-8 w-8",
+                hasDiscount
+                  ? "bg-primary-light text-primary-text hover:bg-primary-light/80"
+                  : "hover:bg-muted/70 hover:text-foreground active:bg-muted",
+              )}
+              title="Descuento"
+              aria-label={`Descuento para ${item.product.name}`}
+            >
+              <Percent className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onRemove(item.productId)}
+              className={cn(
+                actionButtonClass,
+                isCompact ? "h-11 w-11" : "h-8 w-8",
+                "hover:bg-danger/10 hover:text-danger-text",
+              )}
+              title="Eliminar"
+              aria-label={`Eliminar ${item.product.name}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Stepper
-            value={item.quantity}
-            min={1}
-            max={item.availableStock}
-            size="md"
-            className="[&_input]:w-14 [&_input]:text-base"
-            onChange={(value) => onQuantityChange(item.productId, value)}
-          />
-          {atStockLimit && (
-            <span className="text-xs font-medium text-warning-text">
-              máx.
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Money on top, line actions underneath — right-aligned, tabular. */}
-      <div className="flex shrink-0 flex-col items-end justify-between gap-2 py-0.5">
-        <div className="shrink-0 text-right">
-          <p
-            data-testid="cart-line-total"
-            className={cn(
-              "whitespace-nowrap font-semibold leading-tight tabular-nums text-foreground",
-              isCompact ? "text-base" : "text-lg",
-            )}
-          >
-            {formatCurrency(lineTotal)}
-          </p>
+        {/* The saving shares the row with nothing: it has to fit beside an 80px
+            tile, the stepper and the total on the narrowest desktop column. */}
+        <div className="mt-auto space-y-0.5">
           {hasDiscount && (
-            <s
-              data-testid="cart-line-gross"
-              className="block text-xs tabular-nums leading-tight line-through text-muted-foreground"
-            >
-              {formatCurrency(grossLineTotal)}
-            </s>
+            <div className="flex justify-end">
+              <span
+                data-testid="line-discount"
+                className="whitespace-nowrap rounded-md bg-success/10 px-1.5 py-0.5 text-xs font-medium tabular-nums text-success-text"
+              >
+                Ahorro {formatCurrency(item.discountAmount)}
+                {item.discountPercent ? ` · ${item.discountPercent}%` : ""}
+              </span>
+            </div>
           )}
-        </div>
 
-        <div className="flex items-center gap-0.5">
-          {/*
-            Default lines use 36px targets inside a dense desktop column; the
-            mobile drawer keeps 44px, the size a thumb needs next to the
-            quantity stepper.
-          */}
-          <button
-            type="button"
-            onClick={() => onDiscount(item.productId)}
-            className={cn(
-              actionButtonClass,
-              isCompact ? "h-11 w-11" : "h-9 w-9",
-              hasDiscount
-                ? "bg-primary-light text-primary-text hover:bg-primary-light/80"
-                : "hover:bg-muted/70 hover:text-foreground active:bg-muted",
-            )}
-            title="Descuento"
-            aria-label={`Descuento para ${item.product.name}`}
-          >
-            <Percent className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onRemove(item.productId)}
-            className={cn(
-              actionButtonClass,
-              isCompact ? "h-11 w-11" : "h-9 w-9",
-              "hover:bg-danger/10 hover:text-danger-text",
-            )}
-            title="Eliminar"
-            aria-label={`Eliminar ${item.product.name}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Stepper
+                value={item.quantity}
+                min={1}
+                max={item.availableStock}
+                size={isCompact ? "md" : "sm"}
+                className={
+                  isCompact
+                    ? "[&_input]:w-14 [&_input]:text-base"
+                    : "[&_input]:w-8"
+                }
+                onChange={(value) => onQuantityChange(item.productId, value)}
+              />
+              {atStockLimit && (
+                <span className="text-xs font-medium text-warning-text">
+                  máx.
+                </span>
+              )}
+            </div>
+
+            {/* Struck subtotal, then the money the line actually adds. */}
+            <div className="ml-auto flex shrink-0 flex-col items-end gap-0.5 text-right">
+              {hasDiscount && (
+                <s
+                  data-testid="cart-line-gross"
+                  className="text-xs leading-tight tabular-nums line-through text-muted-foreground"
+                >
+                  {formatCurrency(grossLineTotal)}
+                </s>
+              )}
+              <p
+                data-testid="cart-line-total"
+                className={cn(
+                  "whitespace-nowrap font-bold leading-tight tabular-nums text-foreground",
+                  isCompact ? "text-base" : "text-lg @min-[26rem]:text-xl",
+                )}
+              >
+                {formatCurrency(lineTotal)}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

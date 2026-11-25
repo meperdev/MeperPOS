@@ -144,9 +144,9 @@ describe('Location access (HTTP integration)', () => {
       expect(roles).toHaveLength(readRoles.length);
       expect(roles).toEqual(expect.arrayContaining(readRoles));
     }
-    expect(Reflect.getMetadata(ROLES_KEY, controller.prototype.replace)).toEqual([
-      OrgRole.ADMIN,
-    ]);
+    expect(
+      Reflect.getMetadata(ROLES_KEY, controller.prototype.replace),
+    ).toEqual([OrgRole.ADMIN]);
   });
 
   const get = (auth: string, id?: string) =>
@@ -172,7 +172,10 @@ describe('Location access (HTTP integration)', () => {
    * holds, so the competing promotion is attempted while the service is between
    * its target read and its grant write.
    */
-  const waitForGrantDeleteWait = async (blockerPid: number, timeoutMs = 5000) => {
+  const waitForGrantDeleteWait = async (
+    blockerPid: number,
+    timeoutMs = 5000,
+  ) => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const [waiting] = await prisma.$queryRaw<{ pid: number }[]>`
@@ -191,7 +194,10 @@ describe('Location access (HTTP integration)', () => {
   };
 
   /** Waits until the replacement is blocked on the locked target read. */
-  const waitForLockedTargetRead = async (blockerPid: number, timeoutMs = 5000) => {
+  const waitForLockedTargetRead = async (
+    blockerPid: number,
+    timeoutMs = 5000,
+  ) => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const [waiting] = await prisma.$queryRaw<{ pid: number }[]>`
@@ -318,168 +324,159 @@ describe('Location access (HTTP integration)', () => {
       .expect(200, { locations: [a, b], checkoutLocationId: null });
   });
 
-  it(
-    'serializes a role promotion behind the assignment replacement it overlaps',
-    async () => {
-      await assign(admin, cashierId, [a.id]).expect(200, {
-        locationIds: [a.id],
-      });
+  it('serializes a role promotion behind the assignment replacement it overlaps', async () => {
+    await assign(admin, cashierId, [a.id]).expect(200, {
+      locationIds: [a.id],
+    });
 
-      const locker = new PrismaClient();
-      const promoter = new PrismaClient();
-      const lockerReady = deferred();
-      const releaseLocker = deferred();
-      let lockerPid = 0;
-      let replacementSettled: Promise<void> | null = null;
-      let replacementError: unknown = null;
-      let promotion: { blocked: boolean; error?: unknown } | null = null;
+    const locker = new PrismaClient();
+    const promoter = new PrismaClient();
+    const lockerReady = deferred();
+    const releaseLocker = deferred();
+    let lockerPid = 0;
+    let replacementSettled: Promise<void> | null = null;
+    let replacementError: unknown = null;
+    let promotion: { blocked: boolean; error?: unknown } | null = null;
 
-      const lockerTransaction = locker.$transaction(
-        async (tx) => {
-          // Hold the target's current grant so the replacement's DELETE waits
-          // after it has read the target membership.
-          await tx.$queryRaw`
+    const lockerTransaction = locker.$transaction(
+      async (tx) => {
+        // Hold the target's current grant so the replacement's DELETE waits
+        // after it has read the target membership.
+        await tx.$queryRaw`
             SELECT 1
             FROM "MembershipLocation"
             WHERE "userId" = ${cashierId}
               AND "organizationId" = ${orgId}
             FOR UPDATE`;
-          const [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`
+        const [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`
             SELECT pg_backend_pid() AS pid`;
-          lockerPid = pid;
-          lockerReady.resolve();
-          await releaseLocker.promise;
-        },
-        { timeout: 20000 },
-      );
+        lockerPid = pid;
+        lockerReady.resolve();
+        await releaseLocker.promise;
+      },
+      { timeout: 20000 },
+    );
 
+    try {
       try {
-        try {
-          await lockerReady.promise;
-          const replacement = assign(admin, cashierId, [b.id]).expect(200, {
-            locationIds: [b.id],
-          });
-          replacementSettled = Promise.resolve(replacement).then(
-            () => undefined,
-            (error: unknown) => {
-              replacementError = error;
-            },
-          );
-          await waitForGrantDeleteWait(lockerPid);
-
-          // The promotion is another READ COMMITTED writer. Its bounded lock
-          // timeout proves whether the target row was protected before the
-          // grant delete, instead of relying on commit order inspection.
-          promotion = await promoter
-            .$transaction(async (tx) => {
-              await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '500ms'`);
-              await tx.$executeRaw`
-                UPDATE "OrganizationUser"
-                SET "role" = 'ADMIN'
-                WHERE "userId" = ${cashierId}
-                  AND "organizationId" = ${orgId}`;
-            })
-            .then(
-              () => ({ blocked: false }),
-              (error: unknown) => ({ blocked: true, error }),
-            );
-        } finally {
-          releaseLocker.resolve();
-          await lockerTransaction;
-          if (replacementSettled) await replacementSettled;
-        }
-
-        expect(replacementError).toBeNull();
-        expect(promotion).not.toBeNull();
-        expect(promotion?.blocked).toBe(true);
-        expect(errorEvidence(promotion?.error)).toMatch(/55P03|lock timeout/i);
-
-        // Once the replacement commits, the same promotion succeeds normally;
-        // the service never retried its grant write.
-        await promoter.organizationUser.update({
-          where: {
-            userId_organizationId: { userId: cashierId, organizationId: orgId },
-          },
-          data: { role: OrgRole.ADMIN },
+        await lockerReady.promise;
+        const replacement = assign(admin, cashierId, [b.id]).expect(200, {
+          locationIds: [b.id],
         });
-        const promoted = await prisma.organizationUser.findUnique({
-          where: {
-            userId_organizationId: { userId: cashierId, organizationId: orgId },
-          },
-          select: { role: true },
-        });
-        expect(promoted?.role).toBe(OrgRole.ADMIN);
-      } finally {
-        await locker.$disconnect();
-        await promoter.$disconnect();
-      }
-    },
-    15000,
-  );
-
-  it(
-    'fails the assignment when a promotion commits under its locked target read',
-    async () => {
-      await assign(admin, raceUserId, [a.id]).expect(200, {
-        locationIds: [a.id],
-      });
-
-      const promoter = new PrismaClient();
-      const promotionHeld = deferred();
-      const releasePromotion = deferred();
-      let promoterPid = 0;
-      const promotion = promoter.$transaction(
-        async (tx) => {
-          await tx.$executeRaw`
-            UPDATE "OrganizationUser"
-            SET "role" = 'ADMIN'
-            WHERE "userId" = ${raceUserId}
-              AND "organizationId" = ${orgId}`;
-          const [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`
-            SELECT pg_backend_pid() AS pid`;
-          promoterPid = pid;
-          promotionHeld.resolve();
-          await releasePromotion.promise;
-        },
-        { timeout: 20000 },
-      );
-
-      let replacementError: unknown = null;
-      let replacementMessage: unknown = null;
-      try {
-        // The promotion holds an uncommitted row update when the replacement
-        // starts, so the replacement's FOR SHARE waits behind it.
-        await promotionHeld.promise;
-        const replacement = assign(admin, raceUserId, [b.id]).expect(409);
-        const replacementSettled = Promise.resolve(replacement).then(
-          (response) => {
-            replacementMessage = (response.body as { message?: unknown })
-              .message;
-          },
+        replacementSettled = Promise.resolve(replacement).then(
+          () => undefined,
           (error: unknown) => {
             replacementError = error;
           },
         );
-        await waitForLockedTargetRead(promoterPid);
-        releasePromotion.resolve();
-        await promotion;
-        await replacementSettled;
+        await waitForGrantDeleteWait(lockerPid);
+
+        // The promotion is another READ COMMITTED writer. Its bounded lock
+        // timeout proves whether the target row was protected before the
+        // grant delete, instead of relying on commit order inspection.
+        promotion = await promoter
+          .$transaction(async (tx) => {
+            await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '500ms'`);
+            await tx.$executeRaw`
+                UPDATE "OrganizationUser"
+                SET "role" = 'ADMIN'
+                WHERE "userId" = ${cashierId}
+                  AND "organizationId" = ${orgId}`;
+          })
+          .then(
+            () => ({ blocked: false }),
+            (error: unknown) => ({ blocked: true, error }),
+          );
       } finally {
-        releasePromotion.resolve();
-        await promotion.catch(() => undefined);
-        await promoter.$disconnect();
+        releaseLocker.resolve();
+        await lockerTransaction;
+        if (replacementSettled) await replacementSettled;
       }
 
       expect(replacementError).toBeNull();
-      expect(replacementMessage).toBe(
-        'Location assignments changed concurrently',
-      );
-      const grant = await prisma.membershipLocation.findMany({
-        where: { userId: raceUserId, organizationId: orgId },
-        select: { locationId: true },
+      expect(promotion).not.toBeNull();
+      expect(promotion?.blocked).toBe(true);
+      expect(errorEvidence(promotion?.error)).toMatch(/55P03|lock timeout/i);
+
+      // Once the replacement commits, the same promotion succeeds normally;
+      // the service never retried its grant write.
+      await promoter.organizationUser.update({
+        where: {
+          userId_organizationId: { userId: cashierId, organizationId: orgId },
+        },
+        data: { role: OrgRole.ADMIN },
       });
-      expect(grant.map((row) => row.locationId)).toEqual([a.id]);
-    },
-    15000,
-  );
+      const promoted = await prisma.organizationUser.findUnique({
+        where: {
+          userId_organizationId: { userId: cashierId, organizationId: orgId },
+        },
+        select: { role: true },
+      });
+      expect(promoted?.role).toBe(OrgRole.ADMIN);
+    } finally {
+      await locker.$disconnect();
+      await promoter.$disconnect();
+    }
+  }, 15000);
+
+  it('fails the assignment when a promotion commits under its locked target read', async () => {
+    await assign(admin, raceUserId, [a.id]).expect(200, {
+      locationIds: [a.id],
+    });
+
+    const promoter = new PrismaClient();
+    const promotionHeld = deferred();
+    const releasePromotion = deferred();
+    let promoterPid = 0;
+    const promotion = promoter.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`
+            UPDATE "OrganizationUser"
+            SET "role" = 'ADMIN'
+            WHERE "userId" = ${raceUserId}
+              AND "organizationId" = ${orgId}`;
+        const [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`
+            SELECT pg_backend_pid() AS pid`;
+        promoterPid = pid;
+        promotionHeld.resolve();
+        await releasePromotion.promise;
+      },
+      { timeout: 20000 },
+    );
+
+    let replacementError: unknown = null;
+    let replacementMessage: unknown = null;
+    try {
+      // The promotion holds an uncommitted row update when the replacement
+      // starts, so the replacement's FOR SHARE waits behind it.
+      await promotionHeld.promise;
+      const replacement = assign(admin, raceUserId, [b.id]).expect(409);
+      const replacementSettled = Promise.resolve(replacement).then(
+        (response) => {
+          replacementMessage = (response.body as { message?: unknown }).message;
+        },
+        (error: unknown) => {
+          replacementError = error;
+        },
+      );
+      await waitForLockedTargetRead(promoterPid);
+      releasePromotion.resolve();
+      await promotion;
+      await replacementSettled;
+    } finally {
+      releasePromotion.resolve();
+      await promotion.catch(() => undefined);
+      await promoter.$disconnect();
+    }
+
+    expect(replacementError).toBeNull();
+    expect(replacementMessage).toBe(
+      'Location assignments changed concurrently',
+    );
+    const grant = await prisma.membershipLocation.findMany({
+      where: { userId: raceUserId, organizationId: orgId },
+      select: { locationId: true },
+    });
+    expect(grant.map((row) => row.locationId)).toEqual([a.id]);
+  }, 15000);
 });

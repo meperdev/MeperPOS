@@ -9,6 +9,8 @@ import { AppHeader } from "./AppHeader";
 const useAuthMock = vi.fn();
 const toggleThemeMock = vi.fn();
 
+const themeState = vi.hoisted(() => ({ current: "light" as "light" | "dark" }));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => "/dashboard",
@@ -19,7 +21,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 vi.mock("@/contexts/ThemeContext", () => ({
-  useTheme: () => ({ theme: "light", toggleTheme: toggleThemeMock }),
+  useTheme: () => ({ theme: themeState.current, toggleTheme: toggleThemeMock }),
 }));
 
 vi.mock("@/contexts/InstallPromptContext", () => ({
@@ -50,6 +52,7 @@ function setUser(role = "ADMIN") {
 beforeEach(() => {
   vi.clearAllMocks();
   setUser();
+  themeState.current = "light";
   closeCommandPalette();
 });
 
@@ -80,6 +83,47 @@ describe("AppHeader", () => {
       "data-placement",
       "header",
     );
+  });
+
+  it("puts the theme toggle between the search and the bell", () => {
+    render(<AppHeader isCollapsed={false} />);
+
+    const actions = document.querySelector("[data-app-header-actions]")!;
+    const controls = Array.from(actions.querySelectorAll("button")).map((node) =>
+      node.getAttribute("aria-label"),
+    );
+
+    // Order is the contract: the mode, then the inbox, then the identity.
+    expect(controls).toEqual([
+      "Cambiar a modo oscuro",
+      "Alertas",
+      "Opciones de cuenta",
+    ]);
+  });
+
+  it("names the mode the click switches to", () => {
+    render(<AppHeader isCollapsed={false} />);
+
+    const light = screen.getByRole("button", { name: "Cambiar a modo oscuro" });
+    expect(light).toHaveAttribute("title", "Cambiar a modo oscuro");
+    expect(light.querySelector("svg.lucide-moon")).not.toBeNull();
+
+    cleanup();
+    themeState.current = "dark";
+    render(<AppHeader isCollapsed={false} />);
+
+    const dark = screen.getByRole("button", { name: "Cambiar a modo claro" });
+    expect(dark.querySelector("svg.lucide-sun")).not.toBeNull();
+  });
+
+  it("switches the theme from the header", () => {
+    render(<AppHeader isCollapsed={false} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Cambiar a modo oscuro" }),
+    );
+
+    expect(toggleThemeMock).toHaveBeenCalledTimes(1);
   });
 
   it("opens the command palette from the search field", () => {

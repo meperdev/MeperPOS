@@ -60,6 +60,17 @@ describe("CurrencyInput", () => {
     expect(screen.getByRole("textbox")).toHaveValue("15.000");
   });
 
+  it("does not inflate fractional controlled values in integer mode", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<CurrencyInput value={1016.5575} onChange={onChange} />);
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveValue("1.017");
+
+    rerender(<CurrencyInput value={1016.56} onChange={onChange} />);
+    expect(input).toHaveValue("1.017");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("stays empty for a blank value instead of displaying 0", () => {
     render(<CurrencyInput value="   " onChange={vi.fn()} />);
     expect(screen.getByRole("textbox")).toHaveValue("");

@@ -74,6 +74,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastsRef = useRef<ToastItem[]>([]);
   const timersRef = useRef(new Map<string, TimerEntry>());
+  const exitTimersRef = useRef(new Map<string, number>());
+  const pausedRef = useRef(false);
 
   const commit = useCallback((next: ToastItem[]) => {
     toastsRef.current = next;
@@ -83,7 +85,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const clearTimer = useCallback((id: string) => {
     const entry = timersRef.current.get(id);
     if (entry) {
-      window.clearTimeout(entry.timeout);
+      if (!entry.paused) {
+        window.clearTimeout(entry.timeout);
+      }
       timersRef.current.delete(id);
     }
   }, []);
@@ -91,6 +95,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const removeNow = useCallback(
     (id: string) => {
       clearTimer(id);
+      const exitTimeout = exitTimersRef.current.get(id);
+      if (exitTimeout !== undefined) {
+        window.clearTimeout(exitTimeout);
+        exitTimersRef.current.delete(id);
+      }
       commit(toastsRef.current.filter((toast) => toast.id !== id));
     },
     [clearTimer, commit],
@@ -106,13 +115,27 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           item.id === id ? { ...item, leaving: true } : item,
         ),
       );
-      window.setTimeout(() => removeNow(id), EXIT_MS);
+      const exitTimeout = window.setTimeout(() => {
+        exitTimersRef.current.delete(id);
+        removeNow(id);
+      }, EXIT_MS);
+      exitTimersRef.current.set(id, exitTimeout);
     },
     [clearTimer, commit, removeNow],
   );
 
   const schedule = useCallback(
     (id: string, remaining: number) => {
+      clearTimer(id);
+      if (pausedRef.current) {
+        timersRef.current.set(id, {
+          timeout: 0,
+          startedAt: Date.now(),
+          remaining,
+          paused: true,
+        });
+        return;
+      }
       const timeout = window.setTimeout(() => dismiss(id), remaining);
       timersRef.current.set(id, {
         timeout,
@@ -121,7 +144,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         paused: false,
       });
     },
-    [dismiss],
+    [clearTimer, dismiss],
   );
 
   const pause = useCallback((id: string) => {
@@ -149,10 +172,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   /** Hovering the stack stops every countdown in it, not only the card under the pointer. */
   const pauseAll = useCallback(() => {
+    pausedRef.current = true;
     toastsRef.current.forEach((toast) => pause(toast.id));
   }, [pause]);
 
   const resumeAll = useCallback(() => {
+    pausedRef.current = false;
     toastsRef.current.forEach((toast) => resume(toast.id));
   }, [resume]);
 
@@ -168,16 +193,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           item.description === description,
       );
 
-      // Repeating the same message refreshes it instead of stacking a copy.
+      // Repeating the same message refreshes it and brings it to the front instead of stacking a copy.
       if (duplicate) {
         clearTimer(duplicate.id);
-        commit(
-          toastsRef.current.map((item) =>
-            item.id === duplicate.id
-              ? { ...item, duration, description, action }
-              : item,
-          ),
-        );
+        const refreshed: ToastItem = { ...duplicate, duration, description, action };
+        commit([
+          ...toastsRef.current.filter((item) => item.id !== duplicate.id),
+          refreshed,
+        ]);
         schedule(duplicate.id, duration);
         return;
       }
@@ -211,9 +234,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const timers = timersRef.current;
+    const exitTimers = exitTimersRef.current;
     return () => {
-      timers.forEach((entry) => window.clearTimeout(entry.timeout));
+      timers.forEach((entry) => {
+        if (!entry.paused) {
+          window.clearTimeout(entry.timeout);
+        }
+      });
       timers.clear();
+      exitTimers.forEach((timeout) => window.clearTimeout(timeout));
+      exitTimers.clear();
     };
   }, []);
 

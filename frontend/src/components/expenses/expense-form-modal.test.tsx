@@ -698,4 +698,22 @@ describe("ExpenseFormModal", () => {
       }),
     );
   });
+
+  it("portals the first payment method dropdown outside the Pagos overflow container", async () => {
+    const user = userEvent.setup();
+    renderModal(<ExpenseFormModal isOpen onClose={vi.fn()} />);
+
+    const methodTrigger = screen.getByRole("button", { name: "Método" });
+    const paymentsCard = methodTrigger.closest(".overflow-hidden");
+    expect(paymentsCard).not.toBeNull();
+
+    await user.click(methodTrigger);
+
+    const listbox = screen.getByRole("listbox", { name: "Método" });
+    expect(listbox.closest("[data-select-popover]")).not.toBeNull();
+    expect(paymentsCard?.contains(listbox)).toBe(false);
+    expect(screen.getByRole("option", { name: "Efectivo" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Tarjeta" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Transferencia" })).toBeInTheDocument();
+  });
 });

@@ -312,67 +312,94 @@ export function Sidebar() {
           drawer keeps a compact lockup so the brand and its 44px close control
           share one row; the rail keeps the full size. At the 256px rail the
           lockup scales with it (44px mark, 24px wordmark) so the wordmark keeps
-          the same share of the column and never truncates. */}
+          the same share of the column and never truncates.
+
+          At lg the bordered row is exactly the header's height and drops its
+          padding, so this border and the header's land on one pixel row while
+          the 44px mark keeps its size. In the 72px rail the row holds only the
+          mark and the expand control moves below the border, for the same
+          reason. */}
       <div
         data-testid="sidebar-brand"
-        className={cn(
-          "border-b border-border/70 shrink-0",
-          isCollapsed
-            ? "px-2 py-4 flex flex-col items-center gap-3"
-            : "px-4 py-4 lg:px-4 lg:py-4 flex items-center justify-between gap-2"
-        )}
+        className={cn("relative shrink-0", isCollapsed && "flex flex-col")}
       >
         <div
+          data-testid="sidebar-brand-row"
           className={cn(
-            "flex items-center gap-3 min-w-0",
-            isCollapsed && "justify-center"
+            "border-b border-border/70",
+            isCollapsed
+              ? "flex h-[var(--app-header-height)] w-full items-center justify-center lg:px-2"
+              : "flex items-center justify-between gap-2 px-4 py-4 lg:h-[var(--app-header-height)] lg:px-4 lg:py-0"
           )}
         >
-          <Image
-            src="/brand/icon-192.png"
-            alt={`${APP_NAME} logo`}
-            width={192}
-            height={192}
+          <div
             className={cn(
-              "shrink-0 object-contain drop-shadow-xs",
-              isCollapsed ? "w-11 h-11" : "w-10 h-10 lg:w-11 lg:h-11"
-            )}
-          />
-          <p
-            className={cn(
-              "text-2xl font-bold text-foreground truncate leading-none tracking-tight",
-              isCollapsed ? "sr-only" : "min-w-0"
+              "flex items-center gap-3 min-w-0",
+              isCollapsed && "justify-center"
             )}
           >
-            Meper
-            <span className="text-[#B45309] underline decoration-[#B45309] decoration-[3.5px] underline-offset-[6px] dark:text-[#FF9933] dark:decoration-[#FF9933]">
-              POS
-            </span>
-          </p>
+            <Image
+              src="/brand/icon-192.png"
+              alt={`${APP_NAME} logo`}
+              width={192}
+              height={192}
+              className={cn(
+                "shrink-0 object-contain drop-shadow-xs",
+                isCollapsed ? "w-11 h-11" : "w-10 h-10 lg:w-11 lg:h-11"
+              )}
+            />
+            <p
+              className={cn(
+                "text-2xl font-bold text-foreground truncate leading-none tracking-tight",
+                isCollapsed ? "sr-only" : "min-w-0"
+              )}
+            >
+              Meper
+              <span className="text-[#B45309] underline decoration-[#B45309] decoration-[3.5px] underline-offset-[6px] dark:text-[#FF9933] dark:decoration-[#FF9933]">
+                POS
+              </span>
+            </p>
+          </div>
+          {/* The drawer's own way out. The tab bar's "Más" opens it, and a link or
+              Escape close it, but a control the thumb can reach belongs at the top
+              of the screen it now covers. */}
+          <button
+            type="button"
+            onClick={closeMobileMenu}
+            className="lg:hidden -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted"
+            aria-label="Cerrar menú"
+          >          <X className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
+
+        {/* One element in both states, so collapsing moves the control without
+            replacing it: expanded it parks on the row's right edge, collapsed
+            it drops below the border so that border runs the full width under
+            the mark instead of wrapping a control. */}
         <button
           type="button"
           onClick={toggleCollapse}
           data-testid="sidebar-collapse-toggle"
-          className="hidden lg:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-          aria-label={isCollapsed ? "Expandir barra lateral" : "Colapsar barra lateral"}
-          title={isCollapsed ? "Expandir barra lateral (Ctrl+B)" : "Colapsar barra lateral (Ctrl+B)"}
+          className={cn(
+            "hidden lg:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+            isCollapsed
+              ? "mt-3 self-center"
+              : "absolute right-4 top-1/2 -translate-y-1/2"
+          )}
+          aria-label={
+            isCollapsed ? "Expandir barra lateral" : "Colapsar barra lateral"
+          }
+          title={
+            isCollapsed
+              ? "Expandir barra lateral (Ctrl+B)"
+              : "Colapsar barra lateral (Ctrl+B)"
+          }
         >
           {isCollapsed ? (
             <PanelLeftOpen className="w-4 h-4" />
           ) : (
             <PanelLeftClose className="w-4 h-4" />
           )}
-        </button>
-        {/* The drawer's own way out. The tab bar's "Más" opens it, and a link or
-            Escape close it, but a control the thumb can reach belongs at the top
-            of the screen it now covers. */}
-        <button
-          type="button"
-          onClick={closeMobileMenu}
-          className="lg:hidden -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted"
-          aria-label="Cerrar menú"
-        >          <X className="h-5 w-5" aria-hidden="true" />
         </button>
       </div>
 

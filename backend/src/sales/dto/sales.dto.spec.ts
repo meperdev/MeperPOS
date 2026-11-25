@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateSaleDto, UpdateSaleDto } from './sales.dto';
@@ -53,10 +53,11 @@ describe('sales DTO contract', () => {
       transform: true,
       transformOptions: { enableImplicitConversion: true },
     });
-    const transform = (site: Record<string, unknown>) => pipe.transform(
-      { items: validItems, payments: validPayments, ...site },
-      { type: 'body', metatype: CreateSaleDto },
-    );
+    const transform = (site: Record<string, unknown>) =>
+      pipe.transform(
+        { items: validItems, payments: validPayments, ...site },
+        { type: 'body', metatype: CreateSaleDto },
+      );
 
     it('accepts an exact string and preserves omission', async () => {
       const omitted = await transform({});
@@ -70,11 +71,58 @@ describe('sales DTO contract', () => {
       [123, 'locationId must be a string'],
       [null, 'locationId must be a string'],
       ['', 'locationId should not be empty'],
-    ])('rejects explicit invalid locationId %p before the service', async (locationId, message) => {
-      await expect(transform({ locationId })).rejects.toMatchObject({
-        status: 400,
-        response: { message: expect.arrayContaining([message]) },
-      });
+    ])(
+      'rejects explicit invalid locationId %p before the service',
+      async (locationId, message) => {
+        await expect(transform({ locationId })).rejects.toMatchObject({
+          status: 400,
+          response: { message: expect.arrayContaining([message]) },
+        });
+      },
+    );
+  });
+
+  describe('SaleItemDto quantity', () => {
+    // The same pipe `configureErrorHandling` installs on the running server, so
+    // implicit conversion and whitelisting behave as in production.
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    });
+    const create = (quantity: unknown) =>
+      pipe.transform(
+        {
+          items: [{ productId: 'prod-1', quantity }],
+          payments: validPayments,
+        },
+        { type: 'body', metatype: CreateSaleDto },
+      );
+
+    it.each([1.5, 2.7, '2.7'])(
+      'rejects the fractional quantity %j',
+      async (quantity) => {
+        await expect(create(quantity)).rejects.toThrow(BadRequestException);
+      },
+    );
+
+    it.each([0, 2147483648])(
+      'rejects the out-of-range quantity %s',
+      async (quantity) => {
+        await expect(create(quantity)).rejects.toThrow(BadRequestException);
+      },
+    );
+
+    it.each([
+      [1, 1],
+      [2, 2],
+      ['2', 2],
+      [2147483647, 2147483647],
+    ])('accepts the integer quantity %j', async (quantity, expected) => {
+      const dto = await create(quantity);
+
+      expect(dto.items[0].quantity).toBe(expected);
     });
   });
 

@@ -15,6 +15,9 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     exclude: [
       ...quarantinedFiles,
+      // ESLint plugin RuleTester suites run under node:test via
+      // `npm run test:eslint-plugin`, not under Vitest.
+      "eslint-plugin-meperpos/**",
       "**/node_modules/**",
       "**/dist/**",
       "**/cypress/**",

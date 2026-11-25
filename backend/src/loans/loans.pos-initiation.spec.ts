@@ -591,7 +591,10 @@ describe('POS financing through LoansService (unwired)', () => {
         new Prisma.PrismaClientKnownRequestError('unique initiation key', {
           code: 'P2002',
           clientVersion: '6.19.2',
-          meta: { modelName: 'PosLoanSaleIntent', target: ['organizationId', 'initiationRequestKey'] },
+          meta: {
+            modelName: 'PosLoanSaleIntent',
+            target: ['organizationId', 'initiationRequestKey'],
+          },
         }),
       );
       const replay = loser.initiate({ ...request(), locationId: 'site-a' });
@@ -600,7 +603,8 @@ describe('POS financing through LoansService (unwired)', () => {
       } else {
         await expect(replay).rejects.toMatchObject({
           status: 409,
-          message: 'La solicitud ya corresponde a una financiación con otra atribución de sede',
+          message:
+            'La solicitud ya corresponde a una financiación con otra atribución de sede',
         });
       }
       expect(loser.state()).toEqual(before);

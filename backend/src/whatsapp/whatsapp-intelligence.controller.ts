@@ -21,6 +21,7 @@ import { WhatsAppSessionService } from './whatsapp-session.service';
 @ApiTags('WhatsApp')
 @ApiBearerAuth()
 @Controller('whatsapp/intelligence/session')
+// eslint-disable-next-line meperpos/require-organization-guard -- SUPER_ADMIN platform route: the central channel has no organization scope
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPER_ADMIN')
 export class WhatsAppIntelligenceController {

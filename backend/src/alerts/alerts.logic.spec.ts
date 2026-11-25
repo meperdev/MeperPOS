@@ -76,7 +76,7 @@ describe('alerts.logic — stock', () => {
     );
 
     expect(alert).toMatchObject({
-      id: 'stock:depleted',
+      id: 'stock:low',
       category: 'stock',
       severity: 'critical',
       title: '1 producto agotado',
@@ -96,6 +96,25 @@ describe('alerts.logic — stock', () => {
       title: 'Stock bajo',
       detail: '1 producto por debajo del mínimo.',
     });
+  });
+
+  // The id identifies the condition, not the event: one product crossing to
+  // zero must not read as a different alert, only as a changed revision.
+  it('keeps the id when a product crosses to depleted and re-alerts through the revision', () => {
+    const before = buildAlerts(
+      signals({ lowStock: [{ id: 'p1', stock: 1, minStock: 5 }] }),
+    )[0];
+    const after = buildAlerts(
+      signals({ lowStock: [{ id: 'p1', stock: 0, minStock: 5 }] }),
+    )[0];
+
+    expect(before.id).toBe('stock:low');
+    expect(after.id).toBe('stock:low');
+    expect(before.severity).toBe('warning');
+    expect(after.severity).toBe('critical');
+    expect(before.title).toBe('Stock bajo');
+    expect(after.title).toBe('1 producto agotado');
+    expect(after.revision).not.toBe(before.revision);
   });
 
   it('hides stock from a role without the inventory capability', () => {
@@ -184,6 +203,84 @@ describe('alerts.logic — billing and limits', () => {
       id: 'billing:trial',
       severity: 'warning',
       title: 'Tu prueba termina en 2 días',
+    });
+  });
+
+  // The trial reminder counts calendar days in Bogotá, not elapsed hours: a
+  // trial ending later today must not read "en 1 día" late in the evening.
+  it('says the trial ends today when it ends later on the same Bogotá day', () => {
+    // 2026-11-15T03:00Z is 22:00 on 14 November in Bogotá; the trial ends half
+    // an hour later, still 14 November there.
+    const [alert] = buildAlerts(
+      signals({
+        now: new Date('2026-11-15T03:00:00.000Z'),
+        organization: {
+          status: 'TRIAL',
+          trialEndsAt: new Date('2026-11-15T03:30:00.000Z'),
+        },
+      }),
+    );
+
+    expect(alert).toMatchObject({
+      id: 'billing:trial',
+      severity: 'warning',
+      title: 'Tu prueba termina hoy',
+    });
+  });
+
+  it('says one day left at 21:00 in Bogotá the evening before the end day', () => {
+    // 2026-11-20T02:00Z is 21:00 on 19 November in Bogotá; the trial ends at
+    // noon on 20 November there, which is one calendar day ahead.
+    const [alert] = buildAlerts(
+      signals({
+        now: new Date('2026-11-20T02:00:00.000Z'),
+        organization: {
+          status: 'TRIAL',
+          trialEndsAt: new Date('2026-11-20T17:00:00.000Z'),
+        },
+      }),
+    );
+
+    expect(alert).toMatchObject({
+      id: 'billing:trial',
+      severity: 'warning',
+      title: 'Tu prueba termina en 1 día',
+    });
+  });
+
+  it('keeps the reminder revision steady through a Bogotá day and moves it at midnight', () => {
+    const trialEndsAt = new Date('2026-11-20T17:00:00.000Z');
+    const revisionAt = (now: string) =>
+      buildAlerts(
+        signals({
+          now: new Date(now),
+          organization: { status: 'TRIAL', trialEndsAt },
+        }),
+      )[0].revision;
+
+    // Both 21:00 and 23:59 on 19 November in Bogotá leave two days.
+    expect(revisionAt('2026-11-20T02:00:00.000Z')).toBe(
+      revisionAt('2026-11-20T04:59:00.000Z'),
+    );
+    // 00:30 on 20 November in Bogotá leaves one day, so the revision moves.
+    expect(revisionAt('2026-11-20T05:30:00.000Z')).not.toBe(
+      revisionAt('2026-11-20T04:59:00.000Z'),
+    );
+  });
+
+  it('still reports a trial that ended on an earlier Bogotá day as finished', () => {
+    const [alert] = buildAlerts(
+      signals({
+        organization: {
+          status: 'TRIAL',
+          trialEndsAt: new Date('2026-11-13T15:00:00.000Z'),
+        },
+      }),
+    );
+
+    expect(alert).toMatchObject({
+      id: 'billing:trial',
+      title: 'Tu prueba terminó',
     });
   });
 

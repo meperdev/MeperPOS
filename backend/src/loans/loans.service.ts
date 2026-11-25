@@ -241,7 +241,12 @@ export class LoansService {
             );
           }
           const origin = intent.originSite
-            ? await this.resolvePosOrigin(tx, orgId, actor, intent.originSite.locationId)
+            ? await this.resolvePosOrigin(
+                tx,
+                orgId,
+                actor,
+                intent.originSite.locationId,
+              )
             : undefined;
           // Reuse the complete frozen-quote validator, never catalog pricing.
           this.posInitiationReplay(
@@ -445,7 +450,9 @@ export class LoansService {
             },
           });
           if (origin) {
-            await tx.saleOriginSite.create({ data: { saleId: sale.id, ...origin } });
+            await tx.saleOriginSite.create({
+              data: { saleId: sale.id, ...origin },
+            });
           }
           for (const item of items) {
             await tx.saleItem.create({
@@ -658,7 +665,10 @@ export class LoansService {
     }
     dto = plainToInstance(CreatePosLoanDto, dto);
     const { locationId } = dto;
-    if (locationId !== undefined && (typeof locationId !== 'string' || !locationId.length)) {
+    if (
+      locationId !== undefined &&
+      (typeof locationId !== 'string' || !locationId.length)
+    ) {
       throw new BadRequestException('Solicitud de financiación inválida');
     }
     const payload = this.posRequestPayload(dto);
@@ -675,9 +685,22 @@ export class LoansService {
         ? {}
         : { include: { originSite: { select: { locationId: true } } } }),
     } as const;
-    const replay = (intent: PosLoanSaleIntent & { originSite?: { locationId: string } | null }) => {
-      const result = this.posInitiationReplay(intent, orgId, actor.userId, dto.requestKey, hash);
-      if (locationId !== undefined && intent.originSite?.locationId !== locationId) {
+    const replay = (
+      intent: PosLoanSaleIntent & {
+        originSite?: { locationId: string } | null;
+      },
+    ) => {
+      const result = this.posInitiationReplay(
+        intent,
+        orgId,
+        actor.userId,
+        dto.requestKey,
+        hash,
+      );
+      if (
+        locationId !== undefined &&
+        intent.originSite?.locationId !== locationId
+      ) {
         throw new ConflictException(
           'La solicitud ya corresponde a una financiación con otra atribución de sede',
         );
@@ -696,16 +719,21 @@ export class LoansService {
           ) {
             throw new BadRequestException('Solicitud de financiación inválida');
           }
-          const origin = locationId === undefined
-            ? undefined
-            : await this.resolvePosOrigin(tx, orgId, actor, locationId);
+          const origin =
+            locationId === undefined
+              ? undefined
+              : await this.resolvePosOrigin(tx, orgId, actor, locationId);
           if (origin) {
             const sites = await tx.location.findMany({
               where: { organizationId: orgId },
               select: { id: true, isDefault: true },
               take: 2,
             });
-            if (sites.length !== 1 || !sites[0].isDefault || sites[0].id !== origin.locationId) {
+            if (
+              sites.length !== 1 ||
+              !sites[0].isDefault ||
+              sites[0].id !== origin.locationId
+            ) {
               throw new ConflictException(
                 'El stock global solo permite ventas en la única sede principal',
               );
@@ -853,7 +881,9 @@ export class LoansService {
             },
           });
           if (origin) {
-            await tx.posLoanSaleIntentOriginSite.create({ data: { intentId, ...origin } });
+            await tx.posLoanSaleIntentOriginSite.create({
+              data: { intentId, ...origin },
+            });
           }
           for (const [productId, quantity] of holds) {
             await tx.posLoanSaleReservation.create({
@@ -1243,12 +1273,17 @@ export class LoansService {
               );
             status = MoneyLoanStatus.CANCELLED;
           }
-          const cancelIntent = kind === 'CANCELLED'
-            ? await tx.posLoanSaleIntent.findFirst({
-                where: { loanId: id, organizationId: orgId },
-                select: { id: true, finalSaleId: true, originSite: { select: { locationId: true } } },
-              })
-            : null;
+          const cancelIntent =
+            kind === 'CANCELLED'
+              ? await tx.posLoanSaleIntent.findFirst({
+                  where: { loanId: id, organizationId: orgId },
+                  select: {
+                    id: true,
+                    finalSaleId: true,
+                    originSite: { select: { locationId: true } },
+                  },
+                })
+              : null;
           if (cancelIntent?.finalSaleId != null) {
             throw new ConflictException('La financiación ya tiene venta final');
           }
@@ -1256,7 +1291,12 @@ export class LoansService {
             if (actor?.userId !== actorId) {
               throw new ForbiddenException('Organization scope required');
             }
-            await this.resolvePosOrigin(tx, orgId, actor, cancelIntent.originSite.locationId);
+            await this.resolvePosOrigin(
+              tx,
+              orgId,
+              actor,
+              cancelIntent.originSite.locationId,
+            );
           }
           // All competing collections, reversals and transitions contend on this row.
           const changed = await tx.moneyLoan.updateMany({

@@ -3,16 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Bell,
   LogOut,
-  Moon,
   Settings,
   Smartphone,
-  Sun,
   User as UserIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstallPrompt } from "@/contexts/InstallPromptContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { visibleAccountMenuSections } from "@/components/layout/nav-routes";
 import { cn } from "@/lib/utils";
 
@@ -26,22 +24,22 @@ const roleLabels: Record<string, string> = {
 };
 
 /**
- * The two destinations this menu words for itself.
+ * The destinations this menu words for itself.
  *
- * Both come from `visibleAccountMenuSections`, so the audience is the same list
- * `DashboardLayout`'s route gate admits — a row the gate would bounce is never
- * offered. The alerts history is deliberately absent: the bell's own panel ends
- * with that link, and a header menu that repeats it would be a second door to
- * the same room.
+ * All three come from `visibleAccountMenuSections`, so the audience is the same
+ * list `DashboardLayout`'s route gate admits — a row the gate would bounce is
+ * never offered. The alert history belongs here as well as in the bell's panel:
+ * the panel's header link is the quick read on the way out, and this row is the
+ * one the operator goes looking for when the panel is closed.
  */
-const ACCOUNT_MENU_HREFS = new Set(["/profile", "/settings"]);
+const ACCOUNT_MENU_HREFS = new Set(["/profile", "/alerts", "/settings"]);
 
 function iconForHref(href: string) {
-  return href === "/settings" ? (
-    <Settings className="h-3.5 w-3.5" aria-hidden="true" />
-  ) : (
-    <UserIcon className="h-3.5 w-3.5" aria-hidden="true" />
-  );
+  if (href === "/settings")
+    return <Settings className="h-3.5 w-3.5" aria-hidden="true" />;
+  if (href === "/alerts")
+    return <Bell className="h-3.5 w-3.5" aria-hidden="true" />;
+  return <UserIcon className="h-3.5 w-3.5" aria-hidden="true" />;
 }
 
 interface MenuItem {
@@ -64,7 +62,6 @@ interface MenuItem {
 export function AccountMenu() {
   const router = useRouter();
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const { isAvailable, promptInstall } = useInstallPrompt();
 
   const [open, setOpen] = useState(false);
@@ -150,18 +147,9 @@ export function AccountMenu() {
       onSelect: () => router.push(section.href),
     }));
 
-  items.push({
-    key: "theme",
-    label:
-      theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro",
-    icon:
-      theme === "dark" ? (
-        <Sun className="h-3.5 w-3.5" aria-hidden="true" />
-      ) : (
-        <Moon className="h-3.5 w-3.5" aria-hidden="true" />
-      ),
-    onSelect: toggleTheme,
-  });
+  // The theme is not here: the header carries the mode as its own control, next
+  // to the bell and the avatar. Repeating it would be a second switch for one
+  // setting, and the row that repeated it is gone on purpose.
 
   // Only a browser that can actually install the app offers it; the settings
   // screen carries the manual recipe for an iPhone, the menu does not.
@@ -200,8 +188,12 @@ export function AccountMenu() {
         title={user.name}
         onClick={() => setOpen((current) => !current)}
         className={cn(
-          "grid h-8 w-8 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary transition-colors",
-          "hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          // The sand series ink the dashboard already speaks: the initials are
+          // an identity mark, not a teal control. The light-mode value is a
+          // darker sand because 12px on a 15% tint of the lighter one lands
+          // under 4.5:1; dark mode uses the token itself.
+          "grid h-8 w-8 place-items-center rounded-full bg-chart-ink/15 text-xs font-semibold text-[#6F5C40] transition-colors dark:text-chart-ink",
+          "hover:bg-chart-ink/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         )}
       >
         <span aria-hidden="true">{initials}</span>

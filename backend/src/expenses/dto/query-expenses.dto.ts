@@ -9,6 +9,7 @@ import {
   IsUUID,
   Matches,
   Min,
+  MaxLength,
 } from 'class-validator';
 
 export class QueryExpensesDto {
@@ -51,5 +52,6 @@ export class QueryExpensesDto {
   @ApiPropertyOptional({ example: 'arriendo' })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   search?: string;
 }

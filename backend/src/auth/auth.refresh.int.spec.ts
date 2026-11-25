@@ -1,7 +1,13 @@
+import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Test } from '@nestjs/testing';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
+import request from 'supertest';
+import { AppModule } from '../app.module';
+import { configureApp } from '../app-configuration';
 import { AuthService } from './auth.service';
+import { CSRF_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './cookies.helper';
 import {
   setupTwoOrgFixture,
   type TwoOrgFixture,
@@ -65,9 +71,9 @@ describe('AuthService.refresh — org preservation (spec 3.R1, amendment 1)', ()
   });
 
   function decodeOrg(accessToken: string): string | null {
-    const payload = jwtService.verify(accessToken) as {
-      organizationId: string | null;
-    };
+    const payload = jwtService.verify<{ organizationId: string | null }>(
+      accessToken,
+    );
     return payload.organizationId;
   }
 
@@ -170,9 +176,9 @@ describe('AuthService.refresh — 60s concurrent-tab reuse grace (spec 3.R1, ame
   });
 
   function decodeOrg(accessToken: string): string | null {
-    const payload = jwtService.verify(accessToken) as {
-      organizationId: string | null;
-    };
+    const payload = jwtService.verify<{ organizationId: string | null }>(
+      accessToken,
+    );
     return payload.organizationId;
   }
 
@@ -261,5 +267,141 @@ describe('AuthService.refresh — 60s concurrent-tab reuse grace (spec 3.R1, ame
     await expect(service.refresh(rawRevoked)).rejects.toThrow(
       'Refresh token revoked',
     );
+  });
+});
+
+/**
+ * Browser restart (bug: csrf_token outlived by refresh_token).
+ *
+ * A browser restart drops every session cookie (no Max-Age / Expires) and
+ * keeps the persistent ones. POST /api/auth/refresh is CSRF-guarded, so the
+ * double-submit csrf_token must persist exactly as long as refresh_token or
+ * a still-valid 7-day session dies with a 403 on the first page boot. Boots
+ * the real AppModule so CookieCsrfGuard runs in front of the handler.
+ */
+describe('POST /api/auth/refresh after a browser restart (csrf_token lifetime)', () => {
+  let app: INestApplication;
+  let fixture: TwoOrgFixture;
+  let prisma: TwoOrgFixture['prisma'];
+  let userId: string;
+  let email: string;
+
+  const password = 'Refresh-Restart-Pass-123!';
+
+  interface ParsedCookie {
+    name: string;
+    value: string;
+    persistent: boolean;
+  }
+
+  function parseSetCookies(header: unknown): ParsedCookie[] {
+    const lines = Array.isArray(header) ? (header as string[]) : [];
+    return lines.map((line) => {
+      const [pair, ...attributes] = line.split(';').map((p) => p.trim());
+      const eq = pair.indexOf('=');
+      return {
+        name: pair.slice(0, eq),
+        value: pair.slice(eq + 1),
+        persistent: attributes.some((a) => /^(max-age|expires)=/i.test(a)),
+      };
+    });
+  }
+
+  /** What the browser still holds after a restart: persistent cookies only. */
+  function survivingCookies(cookies: ParsedCookie[]): ParsedCookie[] {
+    return cookies.filter((c) => c.persistent);
+  }
+
+  function cookieHeader(cookies: ParsedCookie[]): string {
+    return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+  }
+
+  async function login(): Promise<ParsedCookie[]> {
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password });
+    expect(res.status).toBe(201);
+    return parseSetCookies(res.headers['set-cookie']);
+  }
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleRef.createNestApplication({ logger: false });
+    configureApp(app);
+    await app.init();
+
+    fixture = await setupTwoOrgFixture('refresh-restart');
+    prisma = fixture.prisma;
+
+    const user = await prisma.user.create({
+      data: {
+        email: `refresh-restart-${Date.now()}@example.com`,
+        password: await bcrypt.hash(password, 4),
+        name: 'Browser Restart User',
+        tokenVersion: 0,
+        organizationUsers: { create: { organizationId: fixture.orgAId } },
+      },
+    });
+    userId = user.id;
+    email = user.email;
+  }, 60000);
+
+  afterAll(async () => {
+    await fixture.teardown(async () => {
+      await prisma.refreshToken.deleteMany({ where: { userId } });
+      await prisma.user.deleteMany({ where: { id: userId } });
+    });
+    await app.close();
+  });
+
+  it('keeps refresh working: the persisted csrf_token is sent back with the persisted refresh_token -> 201', async () => {
+    const surviving = survivingCookies(await login());
+    const refresh = surviving.find((c) => c.name === REFRESH_TOKEN_COOKIE);
+    const csrf = surviving.find((c) => c.name === CSRF_TOKEN_COOKIE);
+
+    expect(refresh).toBeDefined();
+    // Pre-fix csrf_token was session-only and vanished here.
+    expect(csrf).toBeDefined();
+
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', cookieHeader(surviving))
+      .set('x-csrf-token', (csrf as ParsedCookie).value)
+      .send({});
+
+    expect(res.status).toBe(201);
+    expect(res.body.accessToken).toEqual(expect.any(String));
+  });
+
+  it('still rejects with 403 a valid refresh cookie sent without the CSRF cookie or header', async () => {
+    const refresh = (await login()).find((c) => c.name === REFRESH_TOKEN_COOKIE);
+    expect(refresh).toBeDefined();
+
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', cookieHeader([refresh as ParsedCookie]))
+      .send({});
+
+    expect(res.status).toBe(403);
+    expect(JSON.stringify(res.body)).toContain('CSRF token mismatch');
+  });
+
+  it('still rejects with 403 a valid refresh cookie plus CSRF cookie but no x-csrf-token header (cookie riding)', async () => {
+    // A cross-site request rides every cookie the browser holds but cannot
+    // read csrf_token to echo it in the header.
+    const cookies = await login();
+    expect(cookies.map((c) => c.name)).toEqual(
+      expect.arrayContaining([REFRESH_TOKEN_COOKIE, CSRF_TOKEN_COOKIE]),
+    );
+
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', cookieHeader(cookies))
+      .send({});
+
+    expect(res.status).toBe(403);
+    expect(JSON.stringify(res.body)).toContain('CSRF token mismatch');
   });
 });

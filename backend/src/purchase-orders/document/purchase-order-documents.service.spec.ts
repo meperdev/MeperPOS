@@ -131,6 +131,42 @@ describe('PurchaseOrderDocumentsService', () => {
       expect(result).toEqual({ id: 'po-1' });
     });
 
+    it('writes the expected delivery date in the same guarded first send', async () => {
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue(order());
+      settingsMock.find.mockResolvedValue(settings('Tienda Meper', 'Contado'));
+      prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.send('po-1', 'org-1', {
+        expectedDeliveryDate: '2026-12-01',
+      });
+
+      expect(prismaMock.purchaseOrder.updateMany).toHaveBeenCalledWith({
+        where: { id: 'po-1', organizationId: 'org-1', sentAt: null },
+        data: {
+          sentAt: expect.any(Date),
+          sentVia: 'PDF',
+          expectedDeliveryDate: new Date('2026-12-01T00:00:00.000Z'),
+          documentSnapshot: buildPurchaseOrderSnapshot(
+            order(),
+            settings('Tienda Meper', 'Contado'),
+          ),
+        },
+      });
+    });
+
+    it('a send with no body writes no date, exactly as before', async () => {
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue(order());
+      settingsMock.find.mockResolvedValue(settings('Tienda Meper', 'Contado'));
+      prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.send('po-1', 'org-1');
+
+      const [call] = prismaMock.purchaseOrder.updateMany.mock.calls[0] as [
+        { data: Record<string, unknown> },
+      ];
+      expect(call.data).not.toHaveProperty('expectedDeliveryDate');
+    });
+
     it('re-sending keeps the first send untouched', async () => {
       prismaMock.purchaseOrder.findFirst.mockResolvedValue(
         order({
@@ -144,6 +180,23 @@ describe('PurchaseOrderDocumentsService', () => {
 
       expect(prismaMock.purchaseOrder.updateMany).not.toHaveBeenCalled();
       expect(settingsMock.find).not.toHaveBeenCalled();
+    });
+
+    it('ignores a date sent with a re-send: the document is already frozen', async () => {
+      prismaMock.purchaseOrder.findFirst.mockResolvedValue(
+        order({
+          sentAt: new Date('2026-11-17T16:00:00.000Z'),
+          sentVia: 'PDF',
+          documentSnapshot: {},
+          expectedDeliveryDate: new Date('2026-11-25T00:00:00.000Z'),
+        }),
+      );
+
+      await service.send('po-1', 'org-1', {
+        expectedDeliveryDate: '2027-01-15',
+      });
+
+      expect(prismaMock.purchaseOrder.updateMany).not.toHaveBeenCalled();
     });
 
     it.each(['PARTIAL_RECEIVED', 'RECEIVED'])(

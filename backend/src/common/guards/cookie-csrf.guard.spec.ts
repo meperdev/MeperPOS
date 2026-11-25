@@ -195,3 +195,88 @@ describe('CookieCsrfGuard', () => {
     expect(guard.canActivate(makeContext(request))).toBe(true);
   });
 });
+
+describe('CookieCsrfGuard pre-auth Origin allowlist (SEC-007)', () => {
+  const guard = new CookieCsrfGuard();
+  const originalCorsOrigin = process.env.CORS_ORIGIN;
+  const PROD_ORIGINS = [
+    'https://pos.mepersoft.app',
+    'https://pos-pwa.mepersoft.app',
+  ];
+
+  const makeContext = (request: Record<string, unknown>) =>
+    ({
+      switchToHttp: () => ({ getRequest: () => request }),
+    }) as never;
+
+  const preAuthRequest = (path: string, origin: string) => ({
+    method: 'POST',
+    path,
+    headers: { origin },
+    cookies: {},
+  });
+
+  beforeEach(() => {
+    process.env.CORS_ORIGIN = PROD_ORIGINS.join(',');
+  });
+
+  afterEach(() => {
+    if (originalCorsOrigin === undefined) {
+      delete process.env.CORS_ORIGIN;
+    } else {
+      process.env.CORS_ORIGIN = originalCorsOrigin;
+    }
+  });
+
+  it.each(PROD_ORIGINS)(
+    'allows login from %s when CORS_ORIGIN lists it (2026-11-22 PWA regression)',
+    (origin) => {
+      expect(
+        guard.canActivate(
+          makeContext(preAuthRequest('/api/auth/login', origin)),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it('still rejects a foreign Origin when the production allowlist is configured', () => {
+    expect(() =>
+      guard.canActivate(
+        makeContext(preAuthRequest('/api/auth/login', 'https://evil.example')),
+      ),
+    ).toThrow(new ForbiddenException('Cross-origin login rejected'));
+  });
+
+  it('rejects the Vercel preview Origin excluded from the production allowlist', () => {
+    expect(() =>
+      guard.canActivate(
+        makeContext(
+          preAuthRequest('/api/auth/login', 'https://meperpos.vercel.app'),
+        ),
+      ),
+    ).toThrow(new ForbiddenException('Cross-origin login rejected'));
+  });
+
+  it('tolerates whitespace and trailing slashes in the configured CORS_ORIGIN', () => {
+    process.env.CORS_ORIGIN =
+      ' https://pos.mepersoft.app/ , https://pos-pwa.mepersoft.app ';
+
+    for (const origin of PROD_ORIGINS) {
+      expect(
+        guard.canActivate(
+          makeContext(preAuthRequest('/api/auth/login', origin)),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('applies the same allowlist to register', () => {
+    expect(
+      guard.canActivate(
+        makeContext(
+          preAuthRequest('/api/auth/register', 'https://pos-pwa.mepersoft.app'),
+        ),
+      ),
+    ).toBe(true);
+  });
+});

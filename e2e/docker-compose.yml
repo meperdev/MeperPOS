@@ -1,0 +1,29 @@
+# Dedicated PostgreSQL for the Playwright smoke suite (e2e/README.md).
+#
+# This is NOT the developer database. backend/docker-compose.yml owns the dev
+# instance (container `postgres-db`, port 5432, database `inventario_db`,
+# volume `postgres_data`); nothing here may point at any of those. Every name
+# below is unique to the smoke stack, and the data lives on tmpfs, so each
+# `up` starts from an empty cluster and `down` leaves nothing behind.
+name: meperpos-playwright
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: meperpos-playwright-postgres
+    environment:
+      POSTGRES_USER: playwright
+      POSTGRES_PASSWORD: playwright
+      POSTGRES_DB: meperpos_playwright
+    ports:
+      # Loopback only, on a port the dev database never uses.
+      - "127.0.0.1:55433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      # Probe over TCP: the image's first-boot init server listens only on the
+      # Unix socket, so a socket probe can report ready before the real server.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U playwright -d meperpos_playwright"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

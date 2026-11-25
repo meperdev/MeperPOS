@@ -1,4 +1,11 @@
-import { PrismaClient, Prisma, OrgRole, PlanType, OrgStatus, BillingStatus } from '@prisma/client';
+import {
+  PrismaClient,
+  Prisma,
+  OrgRole,
+  PlanType,
+  OrgStatus,
+  BillingStatus,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { faker } from '@faker-js/faker';
 import { DEFAULT_EXPENSE_TAXONOMY } from '../src/expenses/default-expense-categories';
@@ -16,7 +23,9 @@ function generateSku(prefix: string, index: number): string {
 
 function generateBarcode(): string {
   // 13 dígitos aleatorios
-  return Array.from({ length: 13 }, () => Math.floor(Math.random() * 10)).join('');
+  return Array.from({ length: 13 }, () => Math.floor(Math.random() * 10)).join(
+    '',
+  );
 }
 
 function d(value: number): Prisma.Decimal {
@@ -52,7 +61,9 @@ async function ensureSuperAdmin(): Promise<void> {
     },
   });
 
-  console.log(`  ✅ SuperAdmin creado: ${email} (contraseña tomada de SUPER_ADMIN_PASSWORD; nunca se imprime)`);
+  console.log(
+    `  ✅ SuperAdmin creado: ${email} (contraseña tomada de SUPER_ADMIN_PASSWORD; nunca se imprime)`,
+  );
 }
 
 // ─── Demo Data Builders ─────────────────────────────────────────────────────
@@ -112,8 +123,20 @@ async function createDemoOrg(
   const currentYear = new Date().getFullYear();
   await prisma.organizationSequence.createMany({
     data: [
-      { organizationId: org.id, type: 'SALE', prefix: 'REC', currentNumber: 0, year: currentYear },
-      { organizationId: org.id, type: 'PO', prefix: 'OC', currentNumber: 0, year: currentYear },
+      {
+        organizationId: org.id,
+        type: 'SALE',
+        prefix: 'REC',
+        currentNumber: 0,
+        year: currentYear,
+      },
+      {
+        organizationId: org.id,
+        type: 'PO',
+        prefix: 'OC',
+        currentNumber: 0,
+        year: currentYear,
+      },
     ],
   });
 
@@ -131,7 +154,11 @@ async function createDemoOrg(
   return { orgId: org.id, adminUserId: adminUser.id };
 }
 
-async function createDemoUsers(orgId: string, slug: string, count: number): Promise<string[]> {
+async function createDemoUsers(
+  orgId: string,
+  slug: string,
+  count: number,
+): Promise<string[]> {
   const userIds: string[] = [];
 
   for (let i = 0; i < count; i++) {
@@ -160,7 +187,10 @@ async function createDemoUsers(orgId: string, slug: string, count: number): Prom
   return userIds;
 }
 
-async function createDemoCategories(orgId: string, count: number): Promise<string[]> {
+async function createDemoCategories(
+  orgId: string,
+  count: number,
+): Promise<string[]> {
   const categories = [
     'Bebidas',
     'Alimentos',
@@ -198,9 +228,26 @@ async function createDemoProducts(
   orgId: string,
   categoryIds: string[],
   count: number,
-): Promise<{ id: string; costPrice: Prisma.Decimal; salePrice: Prisma.Decimal }[]> {
-  const prefixes = ['BEB', 'ALI', 'LIM', 'ELEC', 'ROP', 'HOG', 'PAPEL', 'CUID', 'MASC', 'FARM'];
-  const products: { id: string; costPrice: Prisma.Decimal; salePrice: Prisma.Decimal }[] = [];
+): Promise<
+  { id: string; costPrice: Prisma.Decimal; salePrice: Prisma.Decimal }[]
+> {
+  const prefixes = [
+    'BEB',
+    'ALI',
+    'LIM',
+    'ELEC',
+    'ROP',
+    'HOG',
+    'PAPEL',
+    'CUID',
+    'MASC',
+    'FARM',
+  ];
+  const products: {
+    id: string;
+    costPrice: Prisma.Decimal;
+    salePrice: Prisma.Decimal;
+  }[] = [];
 
   for (let i = 0; i < count; i++) {
     const prefix = prefixes[i % prefixes.length];
@@ -240,11 +287,16 @@ async function createDemoProducts(
   return products;
 }
 
-async function createDemoCustomers(orgId: string, count: number): Promise<string[]> {
+async function createDemoCustomers(
+  orgId: string,
+  count: number,
+): Promise<string[]> {
   const customerIds: string[] = [];
 
   for (let i = 0; i < count; i++) {
-    const docNumber = faker.number.int({ min: 10000000, max: 99999999 }).toString();
+    const docNumber = faker.number
+      .int({ min: 10000000, max: 99999999 })
+      .toString();
     const customer = await prisma.customer.create({
       data: {
         name: faker.person.fullName(),
@@ -253,7 +305,12 @@ async function createDemoCustomers(orgId: string, count: number): Promise<string
         email: faker.internet.email().toLowerCase(),
         phone: faker.phone.number(),
         address: faker.location.streetAddress(),
-        segment: faker.helpers.arrayElement(['VIP', 'FREQUENT', 'OCCASIONAL', 'INACTIVE']),
+        segment: faker.helpers.arrayElement([
+          'VIP',
+          'FREQUENT',
+          'OCCASIONAL',
+          'INACTIVE',
+        ]),
         active: true,
         organizationId: orgId,
       },
@@ -270,7 +327,11 @@ async function createDemoSales(
   orgId: string,
   userIds: string[],
   customerIds: string[],
-  products: { id: string; costPrice: Prisma.Decimal; salePrice: Prisma.Decimal }[],
+  products: {
+    id: string;
+    costPrice: Prisma.Decimal;
+    salePrice: Prisma.Decimal;
+  }[],
   count: number,
 ): Promise<void> {
   for (let i = 0; i < count; i++) {
@@ -319,7 +380,10 @@ async function createDemoSales(
       data: {
         organizationId: orgId,
         saleNumber,
-        customerId: faker.helpers.maybe(() => faker.helpers.arrayElement(customerIds), { probability: 0.7 }) ?? null,
+        customerId:
+          faker.helpers.maybe(() => faker.helpers.arrayElement(customerIds), {
+            probability: 0.7,
+          }) ?? null,
         subtotal,
         taxAmount,
         discountAmount: d(0),
@@ -364,9 +428,13 @@ async function createDemoSales(
 }
 
 async function createDemoExpenseTaxonomy(orgId: string): Promise<void> {
-  for (const [groupName, labelNames] of Object.entries(DEFAULT_EXPENSE_TAXONOMY)) {
+  for (const [groupName, labelNames] of Object.entries(
+    DEFAULT_EXPENSE_TAXONOMY,
+  )) {
     const group = await prisma.expenseGroup.upsert({
-      where: { organizationId_name: { organizationId: orgId, name: groupName } },
+      where: {
+        organizationId_name: { organizationId: orgId, name: groupName },
+      },
       update: { active: true },
       create: { name: groupName, organizationId: orgId },
     });
@@ -425,7 +493,7 @@ async function main() {
   if (!nodeEnv || nodeEnv !== 'development') {
     console.error(
       `❌ Refusing to seed: NODE_ENV is "${nodeEnv || 'undefined'}". ` +
-      'Seeds must only run in development. Aborting.',
+        'Seeds must only run in development. Aborting.',
     );
     process.exit(1);
   }
@@ -440,8 +508,16 @@ async function main() {
   if (isDev) {
     console.log('\n🛠️  Modo DEV detectado — creando datos de demo...');
 
-    await seedDemoOrganization('Cafetería Demo', 'cafeteria-demo', PlanType.BASIC);
-    await seedDemoOrganization('Supermercado Demo', 'supermercado-demo', PlanType.PRO);
+    await seedDemoOrganization(
+      'Cafetería Demo',
+      'cafeteria-demo',
+      PlanType.BASIC,
+    );
+    await seedDemoOrganization(
+      'Supermercado Demo',
+      'supermercado-demo',
+      PlanType.PRO,
+    );
   } else {
     console.log('\n🏭 Modo PRODUCTION — solo se creó SuperAdmin');
   }
@@ -453,7 +529,9 @@ async function main() {
 
   if (isDev) {
     console.log('  - 2 organizaciones demo creadas');
-    console.log('  - Usuarios, categorías, productos, clientes y ventas de demo generados');
+    console.log(
+      '  - Usuarios, categorías, productos, clientes y ventas de demo generados',
+    );
   }
 }
 

@@ -235,49 +235,75 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     const initiate = (input: typeof dto) =>
       loans.initiateFromPos(input, organizationId, actor);
     const before = await snapshot();
-    await expect(initiate({ ...dto, locationId: foreign.id })).rejects.toMatchObject({
-      status: 404, message: 'Location not found',
+    await expect(
+      initiate({ ...dto, locationId: foreign.id }),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: 'Location not found',
     });
     expect(await snapshot()).toEqual(before);
     const finance = await initiate(dto);
     const toCancel = await initiate({ ...dto, requestKey: nextTag() });
     expect(finance).not.toHaveProperty('locationId');
-    expect(await prisma.posLoanSaleIntentOriginSite.findMany({
-      where: { organizationId }, select: { locationId: true },
-    })).toEqual([{ locationId: principal.id }, { locationId: principal.id }]);
+    expect(
+      await prisma.posLoanSaleIntentOriginSite.findMany({
+        where: { organizationId },
+        select: { locationId: true },
+      }),
+    ).toEqual([{ locationId: principal.id }, { locationId: principal.id }]);
     const held = await snapshot();
     expect(held.product).toEqual({ stock: 10, reservedStock: 4 });
     expect(held.siteBalances).toBe(0);
     const { locationId: _locationId, ...omitted } = dto;
     await expect(initiate(dto)).resolves.toEqual(finance);
-    await expect(loans.initiateFromPos(omitted, organizationId, actor)).resolves.toEqual(finance);
-    const second = await prisma.location.create({ data: { organizationId, name: 'Second site' } });
-    await expect(initiate({ ...dto, locationId: second.id })).rejects.toMatchObject({ status: 409 });
-    await expect(initiate({ ...dto, requestKey: nextTag() })).rejects.toMatchObject({
-      status: 409, message: 'El stock global solo permite ventas en la única sede principal',
+    await expect(
+      loans.initiateFromPos(omitted, organizationId, actor),
+    ).resolves.toEqual(finance);
+    const second = await prisma.location.create({
+      data: { organizationId, name: 'Second site' },
+    });
+    await expect(
+      initiate({ ...dto, locationId: second.id }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      initiate({ ...dto, requestKey: nextTag() }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'El stock global solo permite ventas en la única sede principal',
     });
     expect(await snapshot()).toEqual(held);
 
     const loanId = finance.loanId as string;
     const completion = { requestKey: nextTag() };
-    const finish = () => loans.completePosSale(loanId, completion, organizationId, actor);
+    const finish = () =>
+      loans.completePosSale(loanId, completion, organizationId, actor);
     await prisma.membershipLocation.deleteMany({ where: grant });
     await collectEverything(fixture, loanId);
     const paid = await snapshot();
     expect(paid).toEqual({ ...held, events: held.events + 1 });
-    await expect(finish()).rejects.toMatchObject({ status: 404, message: 'Location not found' });
+    await expect(finish()).rejects.toMatchObject({
+      status: 404,
+      message: 'Location not found',
+    });
     expect(await snapshot()).toEqual(paid);
 
     await prisma.membershipLocation.create({ data: grant });
     const result = await finish();
     const saleId = result.saleId as string;
     expect(result.status).toBe('CLOSED');
-    expect(await prisma.saleOriginSite.findFirstOrThrow({ where: { saleId } })).toEqual({
-      saleId, organizationId, locationId: principal.id,
+    expect(
+      await prisma.saleOriginSite.findFirstOrThrow({ where: { saleId } }),
+    ).toEqual({
+      saleId,
+      organizationId,
+      locationId: principal.id,
     });
-    expect(await prisma.inventoryMovement.findFirstOrThrow({
-      where: { saleId }, select: { type: true, quantity: true, locationId: true },
-    })).toEqual({ type: 'SALE', quantity: -2, locationId: principal.id });
+    expect(
+      await prisma.inventoryMovement.findFirstOrThrow({
+        where: { saleId },
+        select: { type: true, quantity: true, locationId: true },
+      }),
+    ).toEqual({ type: 'SALE', quantity: -2, locationId: principal.id });
     const completed = await snapshot();
     expect(completed.product).toEqual({ stock: 8, reservedStock: 2 });
     await expect(finish()).resolves.toEqual(result);
@@ -285,21 +311,40 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
 
     const cancelBody = { requestKey: nextTag(), reason: 'Cancelar sin abonos' };
     const admin = { ...actor, role: OrgRole.ADMIN };
-    const cancel = () => loans.mutate(
-      toCancel.loanId as string, 'CANCELLED', cancelBody, userId, organizationId, admin,
-    );
-    await expect(cancel()).rejects.toMatchObject({ status: 403, message: 'Location authorization changed' });
-    expect(await snapshot()).toEqual(completed);
-    await prisma.organizationUser.updateMany({ where: { userId, organizationId }, data: { role: OrgRole.ADMIN } });
-    await expect(cancel()).resolves.toMatchObject({ status: 'CANCELLED' });
-    expect(await snapshot()).toEqual({ ...completed, events: completed.events + 1, product: { stock: 8, reservedStock: 0 } });
-    const reservations = await prisma.posLoanSaleReservation.findMany({
-      where: { organizationId }, select: { intentId: true, state: true },
+    const cancel = () =>
+      loans.mutate(
+        toCancel.loanId as string,
+        'CANCELLED',
+        cancelBody,
+        userId,
+        organizationId,
+        admin,
+      );
+    await expect(cancel()).rejects.toMatchObject({
+      status: 403,
+      message: 'Location authorization changed',
     });
-    expect(reservations).toEqual(expect.arrayContaining([
-      { intentId: finance.intentId, state: 'CONSUMED' },
-      { intentId: toCancel.intentId, state: 'RELEASED' },
-    ]));
+    expect(await snapshot()).toEqual(completed);
+    await prisma.organizationUser.updateMany({
+      where: { userId, organizationId },
+      data: { role: OrgRole.ADMIN },
+    });
+    await expect(cancel()).resolves.toMatchObject({ status: 'CANCELLED' });
+    expect(await snapshot()).toEqual({
+      ...completed,
+      events: completed.events + 1,
+      product: { stock: 8, reservedStock: 0 },
+    });
+    const reservations = await prisma.posLoanSaleReservation.findMany({
+      where: { organizationId },
+      select: { intentId: true, state: true },
+    });
+    expect(reservations).toEqual(
+      expect.arrayContaining([
+        { intentId: finance.intentId, state: 'CONSUMED' },
+        { intentId: toCancel.intentId, state: 'RELEASED' },
+      ]),
+    );
   });
 
   const initiationDto = (fixture: Fixture) => ({

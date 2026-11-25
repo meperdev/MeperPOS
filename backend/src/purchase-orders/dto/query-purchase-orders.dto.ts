@@ -8,6 +8,7 @@ import {
   IsEnum,
   IsUUID,
   IsDateString,
+  MaxLength,
 } from 'class-validator';
 
 /**
@@ -70,5 +71,6 @@ export class QueryPurchaseOrdersDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   q?: string;
 }

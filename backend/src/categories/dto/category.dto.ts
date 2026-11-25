@@ -9,6 +9,7 @@ import {
   Min,
   Max,
   ValidateIf,
+  MaxLength,
 } from 'class-validator';
 import { DianTaxCode } from '../../common/utils/tax.util';
 
@@ -24,6 +25,7 @@ const DEFAULT_TAX_CODE_API_PROPERTY = {
 export class CreateCategoryDto {
   @ApiProperty({ example: 'Electronics' })
   @IsString()
+  @MaxLength(100)
   name: string;
 
   @ApiProperty({
@@ -31,6 +33,7 @@ export class CreateCategoryDto {
     required: false,
   })
   @IsString()
+  @MaxLength(500)
   @IsOptional()
   description?: string;
 
@@ -56,6 +59,7 @@ export class CreateCategoryDto {
 export class UpdateCategoryDto {
   @ApiProperty({ example: 'Electronics', required: false })
   @IsString()
+  @MaxLength(100)
   @IsOptional()
   name?: string;
 
@@ -64,6 +68,7 @@ export class UpdateCategoryDto {
     required: false,
   })
   @IsString()
+  @MaxLength(500)
   @IsOptional()
   description?: string;
 

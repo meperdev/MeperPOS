@@ -116,7 +116,9 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     expect(res.status).toBe(201);
     expect(res.body.accessToken).toBeDefined();
     expect(res.body.refreshToken).toBeUndefined();
-    expect(findCookie(res.headers['set-cookie'], 'refresh_token')).toBeDefined();
+    expect(
+      findCookie(res.headers['set-cookie'], 'refresh_token'),
+    ).toBeDefined();
   });
 
   it('refresh returns accessToken but no refreshToken in the body (rotated cookie only)', async () => {
@@ -133,9 +135,7 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     // double-submit header minted at login alongside the refresh cookie.
     const csrfCookie = findCookie(login.headers['set-cookie'], 'csrf_token');
     expect(csrfCookie).toBeDefined();
-    const csrfValue = (csrfCookie as string)
-      .split(';')[0]
-      .split('=')[1];
+    const csrfValue = (csrfCookie as string).split(';')[0].split('=')[1];
 
     const res = await request(app.getHttpServer())
       .post('/api/auth/refresh')
@@ -147,7 +147,9 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     expect(res.body.accessToken).toBeDefined();
     expect(res.body.refreshToken).toBeUndefined();
     // Rotation re-issues the refresh cookie for the next cycle.
-    expect(findCookie(res.headers['set-cookie'], 'refresh_token')).toBeDefined();
+    expect(
+      findCookie(res.headers['set-cookie'], 'refresh_token'),
+    ).toBeDefined();
   });
 
   it('select-organization returns accessToken but no refreshToken in the body', async () => {
@@ -195,9 +197,7 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     const csrfCookie = findCookie(res.headers['set-cookie'], 'csrf_token');
     expect(refreshCookie).toBeDefined();
     expect(csrfCookie).toBeDefined();
-    const csrfValue = (csrfCookie as string)
-      .split(';')[0]
-      .split('=')[1];
+    const csrfValue = (csrfCookie as string).split(';')[0].split('=')[1];
 
     const refreshed = await request(app.getHttpServer())
       .post('/api/auth/refresh')

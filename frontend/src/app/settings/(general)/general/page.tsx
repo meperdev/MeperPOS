@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
+import { z } from "zod";
 import {
   useSettings,
   useUploadLogo,
@@ -17,6 +18,23 @@ import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Building2, Image as ImageIcon, Palette, Upload } from "lucide-react";
+
+/**
+ * Mirrors `ORGANIZATION_NAME_MAX_LENGTH` in
+ * `backend/src/settings/dto/settings.dto.ts` (and the admin organization DTOs):
+ * the business name prints in the receipt header. The server stays the
+ * boundary; this only stops an over-long name before it is sent.
+ */
+const ORGANIZATION_NAME_MAX_LENGTH = 100;
+
+const organizationNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Ingresa el nombre del negocio.")
+  .max(
+    ORGANIZATION_NAME_MAX_LENGTH,
+    `El nombre no puede superar los ${ORGANIZATION_NAME_MAX_LENGTH} caracteres.`,
+  );
 
 /**
  * One settings row: the label and its explanation sit on the left rail, the
@@ -125,6 +143,7 @@ export default function GeneralSettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
   const [syncedSettings, setSyncedSettings] = useState<typeof settings | null>(
     null,
   );
@@ -165,8 +184,14 @@ export default function GeneralSettingsPage() {
 
   const handleNameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const parsed = organizationNameSchema.safeParse(name);
+    if (!parsed.success) {
+      setNameError(parsed.error.issues[0]?.message ?? "Nombre no válido.");
+      return;
+    }
+    setNameError(null);
     try {
-      await updateOrganizationName.mutateAsync(name);
+      await updateOrganizationName.mutateAsync(parsed.data);
       toast.success("Nombre actualizado correctamente");
     } catch (error) {
       toast.error(getApiErrorMessage(error, "No se pudo actualizar el nombre"));
@@ -203,7 +228,13 @@ export default function GeneralSettingsPage() {
                     id="organization-name"
                     aria-label="Nombre del negocio"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setNameError(null);
+                    }}
+                    maxLength={ORGANIZATION_NAME_MAX_LENGTH}
+                    aria-invalid={nameError ? true : undefined}
+                    error={nameError ?? undefined}
                     placeholder="Nombre de tu negocio"
                   />
                 </div>

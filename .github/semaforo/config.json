@@ -1,0 +1,224 @@
+{
+  "$comment": "Semáforo rules. Every changed path (both sides of a rename, deleted files included) is matched against every rule; a file takes the highest color among the rules it matches, a file no rule matches takes defaultRule, and the PR takes the highest file color (rojo > amarillo > verde). Verde is then capped by size. Source of the criteria: .github/pull_request_template.md, section 'Semáforo (suggested)'. When the bot mislabels a PR, fix it here and add a test in classify.test.mjs (bug -> rule).",
+  "labels": {
+    "verde": "semaforo:verde",
+    "amarillo": "semaforo:amarillo",
+    "rojo": "semaforo:rojo",
+    "manual": "semaforo:manual"
+  },
+  "labelPrefix": "semaforo:",
+  "botLogin": "github-actions[bot]",
+  "commentMarker": "<!-- semaforo-bot -->",
+  "size": {
+    "$comment": "Verde is for a change a human can merge after one read. Above either limit the PR asks for an AI review first (amarillo); size alone never makes a PR rojo. Lockfiles are generated and do not count as lines.",
+    "maxVerdeChangedLines": 400,
+    "maxVerdeFiles": 30,
+    "excludeFromLineCount": [
+      "**/package-lock.json",
+      "**/npm-shrinkwrap.json",
+      "**/yarn.lock",
+      "**/pnpm-lock.yaml"
+    ]
+  },
+  "defaultRule": {
+    "id": "code",
+    "color": "amarillo",
+    "reason": "Code or config outside the verde paths (docs, tests)"
+  },
+  "rules": [
+    {
+      "id": "ci",
+      "color": "rojo",
+      "reason": "CI, repository automation or a test-gate registry (architecture)",
+      "paths": [
+        ".github/workflows/**",
+        ".github/actions/**",
+        ".github/semaforo/**",
+        "frontend/quarantine.ts",
+        "frontend/vitest.quarantine.config.ts",
+        "frontend/build-size.baseline.json"
+      ]
+    },
+    {
+      "id": "lint",
+      "color": "rojo",
+      "reason": "Lint rule, lint config or lint baseline (new lint rules)",
+      "paths": [
+        "{backend,frontend}/eslint-plugin-meperpos/**",
+        "**/eslint.config.{js,mjs,cjs,ts}",
+        "**/.eslintrc*",
+        "backend/eslint.baseline.mjs"
+      ]
+    },
+    {
+      "id": "schema",
+      "color": "rojo",
+      "reason": "Database schema or migration (architecture)",
+      "paths": [
+        "backend/prisma/schema.prisma",
+        "backend/prisma/migrations/**",
+        "backend/prisma.config.ts"
+      ]
+    },
+    {
+      "id": "architecture",
+      "color": "rojo",
+      "reason": "App bootstrap, runtime config, data layer, module boundary or deployment (architecture)",
+      "paths": [
+        "backend/src/main.ts",
+        "backend/src/app.module.ts",
+        "backend/src/app-configuration.ts",
+        "backend/src/config/**",
+        "backend/src/prisma/**",
+        "backend/src/business-modules/**",
+        "frontend/next.config.*",
+        "**/vercel.json",
+        "**/Dockerfile*"
+      ]
+    },
+    {
+      "id": "auth",
+      "color": "rojo",
+      "reason": "Authentication, session, roles or tenant guards (auth)",
+      "paths": [
+        "backend/src/auth/**",
+        "backend/src/common/guards/**",
+        "backend/src/common/decorators/{roles,current-user}.decorator.ts",
+        "backend/src/users/**",
+        "frontend/src/app/{login,register,users}/**",
+        "frontend/src/app/settings/(team)/**",
+        "frontend/src/components/{auth,users}/**",
+        "frontend/src/contexts/AuthContext*",
+        "frontend/src/lib/{api,api-proxy,auth,session,organizationScope}.*",
+        "frontend/src/hooks/useUsers*"
+      ]
+    },
+    {
+      "id": "payments",
+      "color": "rojo",
+      "reason": "Sales, payments, cash, billing, invoicing, receipts or tax (payments)",
+      "paths": [
+        "backend/src/{sales,billing,cash-registers,loans,electronic-invoicing,receipts,plan-limits}/**",
+        "backend/src/common/utils/tax.util*",
+        "frontend/src/app/{pos,sales,loans}/**",
+        "frontend/src/app/settings/{(billing),(invoicing)}/**",
+        "frontend/src/components/{pos,sales,billing}/**",
+        "frontend/src/hooks/{useSales,useBilling,usePausedSales,useReceipt,useLoans,usePlanLimits,useCartUndo}*",
+        "frontend/src/lib/taxFields*"
+      ]
+    },
+    {
+      "id": "inventory",
+      "color": "rojo",
+      "reason": "Products, stock, purchase orders, imports or stock alerts (inventory)",
+      "paths": [
+        "backend/src/{products,purchase-orders,imports}/**",
+        "backend/src/alerts/{stock-alerts,low-stock}*",
+        "frontend/src/app/{inventory,purchase-orders}/**",
+        "frontend/src/app/settings/(purchase-orders)/**",
+        "frontend/src/components/{products,purchase-orders,imports}/**",
+        "frontend/src/hooks/{useProducts,usePurchaseOrders,useImport}*",
+        "frontend/src/lib/product-type*"
+      ]
+    },
+    {
+      "id": "payroll",
+      "color": "rojo",
+      "reason": "Payroll, employees or shifts (payroll)",
+      "paths": [
+        "backend/src/payroll/**",
+        "frontend/src/app/{payroll,employees}/**",
+        "frontend/src/hooks/{usePayroll,useEmployees,useEmployeeShifts}*"
+      ]
+    },
+    {
+      "id": "dependencies",
+      "color": "amarillo",
+      "reason": "Dependency manifest or lockfile (a version bump can change runtime behavior)",
+      "paths": [
+        "**/package.json",
+        "**/package-lock.json",
+        "**/npm-shrinkwrap.json",
+        "**/yarn.lock",
+        "**/pnpm-lock.yaml"
+      ]
+    },
+    {
+      "id": "agent-instructions",
+      "color": "amarillo",
+      "reason": "Agent instructions or skills (trust-stack prose layer)",
+      "paths": [
+        "**/AGENTS.md",
+        "**/CLAUDE.md",
+        ".agents/**",
+        ".claude/**",
+        ".atl/**"
+      ]
+    },
+    {
+      "id": "docs",
+      "color": "verde",
+      "reason": "Documentation",
+      "paths": [
+        "docs/**",
+        "openspec/**",
+        "odd/**",
+        "**/*.md",
+        ".github/ISSUE_TEMPLATE/**"
+      ]
+    },
+    {
+      "id": "tests",
+      "color": "verde",
+      "reason": "Tests",
+      "paths": [
+        "**/*.{spec,test}.{ts,tsx,js,jsx,mjs,cjs}",
+        "**/*.e2e-spec.ts",
+        "backend/test/**",
+        "e2e/tests/**",
+        "**/__snapshots__/**"
+      ]
+    }
+  ],
+  "trustSuggestions": {
+    "$comment": "Non-binding: shown in the comment, never applied. The first entry with a matching file wins.",
+    "rules": [
+      {
+        "label": "trust:02-lint-test",
+        "reason": "touches a lint rule or lint config",
+        "paths": [
+          "{backend,frontend}/eslint-plugin-meperpos/**",
+          "**/eslint.config.{js,mjs,cjs,ts}"
+        ]
+      },
+      {
+        "label": "trust:01-codebase",
+        "reason": "touches the schema, a DTO, a guard, a decorator or shared types",
+        "paths": [
+          "backend/prisma/schema.prisma",
+          "backend/prisma/migrations/**",
+          "**/*.dto.ts",
+          "**/*.guard.ts",
+          "**/*.decorator.ts",
+          "**/*.types.ts",
+          "frontend/src/types/**"
+        ]
+      },
+      {
+        "label": "trust:02-lint-test",
+        "reason": "adds or changes tests",
+        "paths": [
+          "**/*.{spec,test}.{ts,tsx,js,jsx,mjs,cjs}",
+          "**/*.e2e-spec.ts",
+          "backend/test/**",
+          "e2e/tests/**"
+        ]
+      },
+      {
+        "label": "trust:03-prose",
+        "reason": "changes agent instructions or skills",
+        "paths": ["**/AGENTS.md", "**/CLAUDE.md", ".agents/**"]
+      }
+    ]
+  }
+}

@@ -65,7 +65,11 @@ describe('SalesService payment rule — cents boundary (S3)', () => {
   const sequenceServiceMock = { nextNumber: jest.fn() };
   const receiptsServiceMock = { generateSaleReceiptPdf: jest.fn() };
 
-  const prime = (payments: Array<{ method: string; amount: number }>) => {
+  const prime = (
+    payments: Array<{ method: string; amount: number }>,
+    price = netPrice,
+    lineDiscount = 0,
+  ) => {
     tx = buildTx();
     prismaMock.$transaction.mockImplementation(
       async (callback: (client: unknown) => unknown) => callback(tx),
@@ -74,7 +78,7 @@ describe('SalesService payment rule — cents boundary (S3)', () => {
       number: 90,
       formatted: '90',
     });
-    prismaMock.product.findFirst.mockResolvedValue(taxedProduct(netPrice));
+    prismaMock.product.findFirst.mockResolvedValue(taxedProduct(price));
     tx.sale.create.mockResolvedValue({
       id: 'sale-new',
       saleNumber: 90,
@@ -93,7 +97,9 @@ describe('SalesService payment rule — cents boundary (S3)', () => {
     return () =>
       service.create(
         {
-          items: [{ productId: 'prod-1', quantity: 1, discountAmount: 0 }],
+          items: [
+            { productId: 'prod-1', quantity: 1, discountAmount: lineDiscount },
+          ],
           discountAmount: 0,
           payments: payments as never,
         },
@@ -128,6 +134,49 @@ describe('SalesService payment rule — cents boundary (S3)', () => {
         }),
       }),
     );
+  });
+
+  it.each([
+    ['canonical card amount', [{ method: 'CARD', amount: 1016.56 }]],
+    ['legacy unrounded card amount', [{ method: 'CARD', amount: 1016.5575 }]],
+    [
+      'exact split with a floating-point residue',
+      [
+        { method: 'CARD', amount: 666.81 },
+        { method: 'TRANSFER', amount: 259.34 },
+        { method: 'CASH', amount: 90.41 },
+      ],
+    ],
+  ] as const)(
+    'accepts the %s on 1,005 with 19%% IVA and a 15%% line discount',
+    async (_name, payments) => {
+      const create = prime([...payments], 1005, 150.75);
+
+      await expect(create()).resolves.toMatchObject({ id: 'sale-new' });
+
+      expect(tx.sale.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            subtotal: 854.25,
+            taxAmount: 162.31,
+            total: 1016.56,
+            amountPaid: 1016.56,
+            change: null,
+          }),
+        }),
+      );
+    },
+  );
+
+  it('rejects a card payment one cent short before numbering or writing the sale', async () => {
+    const create = prime([{ method: 'CARD', amount: 1016.55 }], 1005, 150.75);
+
+    await expect(create()).rejects.toMatchObject({
+      status: 400,
+      message: 'Total paid (1016.55) is less than total (1016.56)',
+    });
+    expect(sequenceServiceMock.nextNumber).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
   it('stores no change for a cash payment a fraction of a cent above the total', async () => {

@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { cn, formatDateShort, formatDateTime } from "@/lib/utils";
 import type { TaskStatus } from "@/types";
+import { isTaskOverdue } from "./task-due";
 
 function getTaskStatusLabel(status: TaskStatus) {
   switch (status) {
@@ -841,7 +842,7 @@ export default function TasksPage() {
                         task.dueDate &&
                         task.status !== "COMPLETED" &&
                         task.status !== "CANCELLED" &&
-                        new Date(task.dueDate) < new Date();
+                        isTaskOverdue(task.dueDate);
 
                       return (
                         <div

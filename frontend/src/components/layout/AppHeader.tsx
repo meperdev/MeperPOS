@@ -1,21 +1,26 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Moon, Search, Sun } from "lucide-react";
 import { AlertCenter } from "@/components/layout/AlertCenter";
 import { AccountMenu } from "@/components/layout/AccountMenu";
+import { useTheme } from "@/contexts/ThemeContext";
 import { openCommandPalette } from "@/lib/command-palette";
 import { APP_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
- * The desktop header: one bar above the content column, holding the three
- * things that are not a destination — search, notifications and the account.
+ * The desktop header: one bar above the content column, holding the few things
+ * that are not a destination — search, the light/dark mode, notifications and
+ * the account.
  *
  * It sits right of the rail and follows its collapsed width, so the rail keeps
  * the left edge at every size. Below `lg` the phone keeps `MobileTopBar`, which
- * carries the same three surfaces in the space a thumb can reach.
+ * carries the same surfaces in the space a thumb can reach.
  */
 export function AppHeader({ isCollapsed }: { isCollapsed: boolean }) {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+
   return (
     <header
       data-testid="app-header"
@@ -60,6 +65,25 @@ export function AppHeader({ isCollapsed }: { isCollapsed: boolean }) {
           data-app-header-actions=""
           className="flex shrink-0 items-center gap-1"
         >
+          {/* The mode lives here, next to the inbox and the identity: the three
+              controls that change how the surface reads, not where it takes
+              you. It stacks in reading order, so the toggle is the first
+              decision and the avatar the last. */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={
+              isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"
+            }
+            title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+          >
+            {isDark ? (
+              <Sun className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Moon className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
           {/* The same bell the rail footer mounts: one component, one ledger.
               The header names its own placement, because here the panel has to
               hang under this row instead of growing out of the sidebar. */}

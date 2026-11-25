@@ -11,6 +11,7 @@ import {
   IsString,
   IsNotEmpty,
   ValidateIf,
+  MaxLength,
 } from 'class-validator';
 
 export class ReceivePurchaseOrderItemDto {
@@ -25,10 +26,13 @@ export class ReceivePurchaseOrderItemDto {
 }
 
 export class ReceivePurchaseOrderDto {
-  @ApiPropertyOptional({ description: 'Explicit destination for this receipt.' })
+  @ApiPropertyOptional({
+    description: 'Explicit destination for this receipt.',
+  })
   @Transform(({ obj, key }) => obj[key], { toClassOnly: true })
   @ValidateIf((_dto, value) => value !== undefined)
   @IsString()
+  @MaxLength(64)
   @IsNotEmpty()
   locationId?: string;
 

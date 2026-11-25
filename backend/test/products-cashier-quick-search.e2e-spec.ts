@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, UnauthorizedException } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { ProductsController } from '../src/products/products.controller';
@@ -61,7 +61,6 @@ describe('CASHIER quick-search on the registered products contract (e2e)', () =>
       const req = ctx.switchToHttp().getRequest();
       const raw = req.headers?.['auth-principal'] as string | undefined;
       if (!raw) {
-        const { UnauthorizedException } = require('@nestjs/common');
         throw new UnauthorizedException();
       }
       req.user = JSON.parse(raw);

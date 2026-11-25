@@ -2,6 +2,7 @@ import { OrgRole } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import type { PlanLimitService } from '../plan-limits/plan-limits.service';
 import type { PrismaService } from '../prisma/prisma.service';
+import { fingerprint } from './alerts.logic';
 import { AlertsService } from './alerts.service';
 
 const MIN_STOCK_FIELD = { name: 'minStock' };
@@ -230,7 +231,12 @@ describe('AlertsService', () => {
         take: 100,
       }),
     );
-    expect(page.meta).toEqual({ total: 11, page: 2, limit: 100, totalPages: 1 });
+    expect(page.meta).toEqual({
+      total: 11,
+      page: 2,
+      limit: 100,
+      totalPages: 1,
+    });
     expect(page.data).toHaveLength(1);
   });
 
@@ -265,5 +271,186 @@ describe('AlertsService', () => {
 
     expect(page.data).toEqual([]);
     expect(prisma.productStockAlertEvent.findMany).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `MoneyLoan.dueAt` is a `@db.Date` column: Prisma stores the calendar day at
+   * midnight UTC and compares that raw value. A loan is overdue only once its
+   * due day is behind today's Bogotá day — the same boundary the loans page
+   * reads — so a loan due today must not turn "vencido" at 19:00 local, five
+   * hours before its own day starts.
+   */
+  describe('overdue loans on the Bogotá business day', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    /** Stands in for the database: applies the `dueAt` comparison it is asked for. */
+    function buildWithLoans(dueDays: readonly string[]) {
+      const built = build();
+      const loans = dueDays.map((day) => ({
+        id: `loan-${day}`,
+        dueAt: new Date(`${day}T00:00:00.000Z`),
+      }));
+      built.prisma.moneyLoan.findMany.mockImplementation(
+        (args: { where: { dueAt: { lt: Date } } }) =>
+          Promise.resolve(
+            loans.filter(
+              (loan) => loan.dueAt.getTime() < args.where.dueAt.lt.getTime(),
+            ),
+          ),
+      );
+      return built;
+    }
+
+    function loanCutoff(prisma: ReturnType<typeof build>['prisma']): Date {
+      const where = prisma.moneyLoan.findMany.mock.calls[0][0].where as {
+        dueAt: { lt: Date };
+      };
+      return where.dueAt.lt;
+    }
+
+    it('leaves a loan due today and a loan due yesterday alone at 21:00 on the previous day in Bogotá', async () => {
+      // 2026-11-20T02:00Z is 21:00 on 19 November in Bogotá, where UTC has
+      // already rolled over and the shop's calendar day has not.
+      jest.useFakeTimers({ now: new Date('2026-11-20T02:00:00.000Z') });
+      const { service, prisma } = buildWithLoans([
+        '2026-11-20',
+        '2026-11-19',
+        '2026-11-18',
+      ]);
+
+      const alerts = await service.list(user());
+
+      expect(loanCutoff(prisma).toISOString()).toBe('2026-11-19T00:00:00.000Z');
+      const overdue = alerts.find((alert) => alert.id === 'loans:overdue');
+      expect(overdue?.title).toBe('1 préstamo vencido');
+      expect(overdue?.revision).toBe(
+        fingerprint(['loan-2026-11-18:2026-11-18T00:00:00.000Z']),
+      );
+    });
+
+    it('counts a loan due yesterday once the shop is on today in Bogotá', async () => {
+      // 2026-11-20T05:30Z is 00:30 on 20 November in Bogotá.
+      jest.useFakeTimers({ now: new Date('2026-11-20T05:30:00.000Z') });
+      const { service, prisma } = buildWithLoans(['2026-11-20', '2026-11-19']);
+
+      const alerts = await service.list(user());
+
+      expect(loanCutoff(prisma).toISOString()).toBe('2026-11-20T00:00:00.000Z');
+      const overdue = alerts.find((alert) => alert.id === 'loans:overdue');
+      expect(overdue?.title).toBe('1 préstamo vencido');
+      expect(overdue?.revision).toBe(
+        fingerprint(['loan-2026-11-19:2026-11-19T00:00:00.000Z']),
+      );
+    });
+
+    it('counts a loan due 2026-11-20 as overdue on 2026-11-21 in Bogotá', async () => {
+      // 2026-11-21T05:30Z is 00:30 on 21 November in Bogotá.
+      jest.useFakeTimers({ now: new Date('2026-11-21T05:30:00.000Z') });
+      const { service, prisma } = buildWithLoans(['2026-11-20', '2026-11-19']);
+
+      const alerts = await service.list(user());
+
+      expect(loanCutoff(prisma).toISOString()).toBe('2026-11-21T00:00:00.000Z');
+      const overdue = alerts.find((alert) => alert.id === 'loans:overdue');
+      expect(overdue?.title).toBe('2 préstamos vencidos');
+    });
+  });
+
+  /**
+   * `Task.dueDate` is not a single shape: the tasks page stores the picked
+   * calendar day at midnight UTC, while the API accepts a real instant. A
+   * day-shaped task due today must not fire the alert at 19:00 in Bogotá, and
+   * the revision must not move either — otherwise the bell re-alerts five hours
+   * early and then again tomorrow.
+   */
+  describe('overdue tasks on the Bogotá business day', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    /** Stands in for the database: applies the `dueDate` comparison it is asked for. */
+    function buildWithTasks(dueDates: readonly string[]) {
+      const built = build();
+      const tasks = dueDates.map((due) => ({
+        id: `task-${due}`,
+        dueDate: new Date(due),
+      }));
+      built.prisma.task.findMany.mockImplementation(
+        (args: { where: { dueDate: { lt: Date } } }) =>
+          Promise.resolve(
+            tasks.filter(
+              (task) =>
+                task.dueDate.getTime() < args.where.dueDate.lt.getTime(),
+            ),
+          ),
+      );
+      return built;
+    }
+
+    it('leaves a day-shaped task due today alone at 21:00 in Bogotá', async () => {
+      // 2026-11-20T02:00Z is 21:00 on 19 November in Bogotá.
+      jest.useFakeTimers({ now: new Date('2026-11-20T02:00:00.000Z') });
+      const { service } = buildWithTasks([
+        '2026-11-19T00:00:00.000Z',
+        '2026-11-18T00:00:00.000Z',
+      ]);
+
+      const alerts = await service.list(user());
+
+      const overdue = alerts.find((alert) => alert.id === 'tasks:overdue');
+      expect(overdue?.title).toBe('1 tarea vencida');
+      expect(overdue?.revision).toBe(
+        fingerprint(['task-2026-11-18T00:00:00.000Z']),
+      );
+    });
+
+    it('counts the day-shaped task due today once the shop is on the next day', async () => {
+      // 2026-11-20T05:30Z is 00:30 on 20 November in Bogotá.
+      jest.useFakeTimers({ now: new Date('2026-11-20T05:30:00.000Z') });
+      const { service } = buildWithTasks([
+        '2026-11-19T00:00:00.000Z',
+        '2026-11-18T00:00:00.000Z',
+      ]);
+
+      const alerts = await service.list(user());
+
+      const overdue = alerts.find((alert) => alert.id === 'tasks:overdue');
+      expect(overdue?.title).toBe('2 tareas vencidas');
+      expect(overdue?.revision).toBe(
+        fingerprint([
+          'task-2026-11-18T00:00:00.000Z',
+          'task-2026-11-19T00:00:00.000Z',
+        ]),
+      );
+    });
+
+    it('counts a task with a real time of day only after its hour', async () => {
+      // 2026-11-19T16:00Z is 11:00 in Bogotá, the same calendar day.
+      jest.useFakeTimers({ now: new Date('2026-11-19T16:00:00.000Z') });
+      const { service } = buildWithTasks([
+        '2026-11-19T15:00:00.000Z',
+        '2026-11-19T17:00:00.000Z',
+        '2026-11-19T00:00:00.000Z',
+      ]);
+
+      const alerts = await service.list(user());
+
+      const overdue = alerts.find((alert) => alert.id === 'tasks:overdue');
+      expect(overdue?.title).toBe('1 tarea vencida');
+      expect(overdue?.revision).toBe(
+        fingerprint(['task-2026-11-19T15:00:00.000Z']),
+      );
+    });
+
+    it('drops the task alert entirely when nothing is overdue yet', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-20T02:00:00.000Z') });
+      const { service } = buildWithTasks(['2026-11-19T00:00:00.000Z']);
+
+      const alerts = await service.list(user());
+
+      expect(alerts.map((alert) => alert.id)).not.toContain('tasks:overdue');
+    });
   });
 });

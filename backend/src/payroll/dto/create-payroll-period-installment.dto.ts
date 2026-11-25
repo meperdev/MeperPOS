@@ -22,6 +22,8 @@ export class CreatePayrollPeriodInstallmentDto {
   obligationId: string;
 
   @IsString()
+  // Abuse cap only; the expense Decimal(12, 2) limit is enforced in the service, and period amounts may be larger.
+  @MaxLength(40)
   @Matches(/^\d+(?:\.\d{1,2})?$/)
   amount: string;
 

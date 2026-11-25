@@ -272,65 +272,157 @@ describe('Purchase order documents — Integration', () => {
   it('finishes a sent order at an authorized destination without changing its frozen PDF', async () => {
     const { orgAId: organizationId, userAId: userId } = fixture;
     const actor = {
-      organizationId, userId, email: 'receipt@example.test', role: 'MEMBER' as const,
-      tokenVersion: 0, isSuperAdmin: false,
+      organizationId,
+      userId,
+      email: 'receipt@example.test',
+      role: 'MEMBER' as const,
+      tokenVersion: 0,
+      isSuperAdmin: false,
     };
-    await prisma.organizationUser.create({ data: { organizationId, userId, role: actor.role } });
+    await prisma.organizationUser.create({
+      data: { organizationId, userId, role: actor.role },
+    });
     const principal = await prisma.location.create({
       data: { organizationId, name: 'Principal', isDefault: true },
     });
     const foreign = await prisma.location.create({
-      data: { organizationId: fixture.orgBId, name: 'Foreign site', isDefault: true },
+      data: {
+        organizationId: fixture.orgBId,
+        name: 'Foreign site',
+        isDefault: true,
+      },
     });
     const snapshot = async () => ({
       order: await prisma.purchaseOrder.findUniqueOrThrow({
         where: { id: lateOrderId },
         include: { items: { include: { product: true } } },
       }),
-      movements: await prisma.inventoryMovement.count({ where: { organizationId } }),
+      movements: await prisma.inventoryMovement.count({
+        where: { organizationId },
+      }),
       audits: await prisma.auditLog.count({ where: { organizationId } }),
-      siteBalances: await prisma.productStock.count({ where: { organizationId } }),
+      siteBalances: await prisma.productStock.count({
+        where: { organizationId },
+      }),
     });
     const before = await snapshot();
     const [item] = before.order.items;
     const qty = item.qtyOrdered - item.qtyReceived;
-    const receive = (locationId: string) => orders.receive(
-      lateOrderId, { items: [{ itemId: item.id, qtyReceivedNow: qty }], locationId },
-      userId, organizationId, actor,
-    );
+    const receive = (locationId: string) =>
+      orders.receive(
+        lateOrderId,
+        { items: [{ itemId: item.id, qtyReceivedNow: qty }], locationId },
+        userId,
+        organizationId,
+        actor,
+      );
     for (const site of [principal.id, foreign.id]) {
-      await expect(receive(site)).rejects.toMatchObject({ status: 404, message: 'Location not found' });
+      await expect(receive(site)).rejects.toMatchObject({
+        status: 404,
+        message: 'Location not found',
+      });
       expect(await snapshot()).toEqual(before);
     }
     const grant = { organizationId, userId, locationId: principal.id };
     await prisma.membershipLocation.create({ data: grant });
-    const warehouse = await prisma.location.create({ data: { organizationId, name: 'Second site' } });
+    const warehouse = await prisma.location.create({
+      data: { organizationId, name: 'Second site' },
+    });
     await expect(receive(principal.id)).rejects.toMatchObject({
-      status: 409, message: 'El stock global solo permite recibir compras en la única sede principal',
+      status: 409,
+      message:
+        'El stock global solo permite recibir compras en la única sede principal',
     });
     expect(await snapshot()).toEqual(before);
     await prisma.location.delete({ where: { id: warehouse.id } });
 
     const readPdf = async () => {
-      const { buffer } = await documents.generatePdf(lateOrderId, organizationId);
+      const { buffer } = await documents.generatePdf(
+        lateOrderId,
+        organizationId,
+      );
       return (await pdfParse(new Uint8Array(buffer))).text;
     };
     const originalDocument = await readPdf();
-    await expect(receive(principal.id)).resolves.toMatchObject({ status: 'RECEIVED' });
+    await expect(receive(principal.id)).resolves.toMatchObject({
+      status: 'RECEIVED',
+    });
     const after = await snapshot();
     expect(after.order).toMatchObject({
-      status: 'RECEIVED', receivedAt: expect.any(Date), sentAt: before.order.sentAt,
-      sentVia: before.order.sentVia, documentSnapshot: before.order.documentSnapshot,
+      status: 'RECEIVED',
+      receivedAt: expect.any(Date),
+      sentAt: before.order.sentAt,
+      sentVia: before.order.sentVia,
+      documentSnapshot: before.order.documentSnapshot,
     });
     expect(after.order.items[0]).toMatchObject({
       qtyReceived: item.qtyOrdered,
-      product: { stock: item.product.stock + qty, reservedStock: item.product.reservedStock },
+      product: {
+        stock: item.product.stock + qty,
+        reservedStock: item.product.reservedStock,
+      },
     });
     expect(after.movements).toBe(before.movements + 1);
     expect(after.siteBalances).toBe(0);
-    expect(await prisma.inventoryMovement.findFirstOrThrow({
-      where: { productId: item.productId, organizationId, locationId: principal.id },
-    })).toMatchObject({ type: 'PURCHASE', quantity: qty, reason: `OC-${before.order.orderNumber}` });
+    expect(
+      await prisma.inventoryMovement.findFirstOrThrow({
+        where: {
+          productId: item.productId,
+          organizationId,
+          locationId: principal.id,
+        },
+      }),
+    ).toMatchObject({
+      type: 'PURCHASE',
+      quantity: qty,
+      reason: `OC-${before.order.orderNumber}`,
+    });
     expect(await readPdf()).toBe(originalDocument);
+  });
+
+  it('takes the expected delivery date at the first send and freezes it there', async () => {
+    await documents.send(onTimeOrderId, fixture.orgAId, {
+      expectedDeliveryDate: '2026-12-01',
+    });
+
+    const stored = await prisma.purchaseOrder.findUniqueOrThrow({
+      where: { id: onTimeOrderId },
+    });
+    expect(stored.sentAt).toBeInstanceOf(Date);
+    expect(stored.expectedDeliveryDate?.toISOString()).toBe(
+      '2026-12-01T00:00:00.000Z',
+    );
+
+    const { buffer } = await documents.generatePdf(
+      onTimeOrderId,
+      fixture.orgAId,
+    );
+    const text = (await pdfParse(new Uint8Array(buffer))).text;
+    expect(text).toContain('01/12/2026');
+  });
+
+  it('a re-send with another date leaves the stored one alone', async () => {
+    await documents.send(onTimeOrderId, fixture.orgAId, {
+      expectedDeliveryDate: '2027-01-15',
+    });
+
+    const stored = await prisma.purchaseOrder.findUniqueOrThrow({
+      where: { id: onTimeOrderId },
+    });
+    expect(stored.expectedDeliveryDate?.toISOString()).toBe(
+      '2026-12-01T00:00:00.000Z',
+    );
+  });
+
+  it('a send with no date keeps the one set at confirm', async () => {
+    await documents.send(draftOrderId, fixture.orgAId);
+
+    const stored = await prisma.purchaseOrder.findUniqueOrThrow({
+      where: { id: draftOrderId },
+    });
+    expect(stored.sentAt).toBeInstanceOf(Date);
+    expect(stored.expectedDeliveryDate?.toISOString()).toBe(
+      '2026-11-25T00:00:00.000Z',
+    );
   });
 });

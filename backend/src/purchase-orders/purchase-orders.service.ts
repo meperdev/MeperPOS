@@ -636,10 +636,17 @@ export class PurchaseOrdersService {
     const receiveItems = async (tx: Prisma.TransactionClient) => {
       let destinationId: string | undefined;
       if (locationId !== undefined) {
-        if (actor?.userId !== userId || actor.organizationId !== organizationId) {
+        if (
+          actor?.userId !== userId ||
+          actor.organizationId !== organizationId
+        ) {
           throw new ForbiddenException('Organization scope required');
         }
-        const destination = await resolveWritableSiteWithin(tx, actor, locationId);
+        const destination = await resolveWritableSiteWithin(
+          tx,
+          actor,
+          locationId,
+        );
         const sites = await tx.location.findMany({
           where: { organizationId },
           select: { id: true, isDefault: true },
@@ -660,7 +667,9 @@ export class PurchaseOrdersService {
       // Lock the order before reading receipt quantities or changing inventory.
       // A quantity-only check (or the per-product CAS) cannot serialize two
       // receipts on different lines, or a receipt against cancellation.
-      const [lockedOrder] = await tx.$queryRaw<{ status: typeof order.status }[]>`
+      const [lockedOrder] = await tx.$queryRaw<
+        { status: typeof order.status }[]
+      >`
         SELECT "status" FROM "PurchaseOrder"
         WHERE "id" = ${id} AND "organizationId" = ${organizationId}
         FOR NO KEY UPDATE
@@ -668,7 +677,10 @@ export class PurchaseOrdersService {
       if (!lockedOrder) {
         throw new NotFoundException('Orden de compra no encontrada');
       }
-      if (lockedOrder.status !== 'PENDING' && lockedOrder.status !== 'PARTIAL_RECEIVED') {
+      if (
+        lockedOrder.status !== 'PENDING' &&
+        lockedOrder.status !== 'PARTIAL_RECEIVED'
+      ) {
         throw new BadRequestException(
           'Solo se pueden recibir órdenes pendientes o parcialmente recibidas',
         );
@@ -740,7 +752,9 @@ export class PurchaseOrdersService {
               reason: `OC-${order.orderNumber}`,
               userId,
               organizationId,
-              ...(destinationId === undefined ? {} : { locationId: destinationId }),
+              ...(destinationId === undefined
+                ? {}
+                : { locationId: destinationId }),
             },
           });
 

@@ -110,7 +110,9 @@ describe('ExportsService', () => {
     };
     prismaMock.inventoryMovement.findMany.mockImplementationOnce(({ omit }) =>
       Promise.resolve([
-        omit?.locationId ? previousRow : { ...previousRow, locationId: 'site-1' },
+        omit?.locationId
+          ? previousRow
+          : { ...previousRow, locationId: 'site-1' },
       ]),
     );
     prismaMock.inventoryMovement.count.mockResolvedValueOnce(1);

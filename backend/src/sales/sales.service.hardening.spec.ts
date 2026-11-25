@@ -625,37 +625,51 @@ describe('SalesService — commercial integrity (SEC-012/014/015)', () => {
       expect(tx.sale.create).not.toHaveBeenCalled();
     });
 
-    it.each(['site-a', 'site-b'])('checks the winning sale origin %s after a key collision', async (locationId) => {
-      const tx = buildTx();
-      prime(tx, [taxedProduct]);
-      const dto = {
-        ...createDto([{ productId: 'prod-1', quantity: 1 }], { requestKey }),
-        locationId: 'site-a',
-      };
-      prismaMock.$transaction.mockRejectedValue(prismaError('P2002', {
-        target: ['organizationId', 'requestKeyHash'],
-      }));
-      let lookups = 0;
-      prismaMock.sale.findFirst.mockImplementation((args: { where?: { requestKeyHash?: unknown } }) => {
-        if (args.where?.requestKeyHash !== undefined) {
-          lookups += 1;
-          return Promise.resolve(lookups === 1 ? null : {
-            id: 'sale-ganadora', originSite: { locationId },
+    it.each(['site-a', 'site-b'])(
+      'checks the winning sale origin %s after a key collision',
+      async (locationId) => {
+        const tx = buildTx();
+        prime(tx, [taxedProduct]);
+        const dto = {
+          ...createDto([{ productId: 'prod-1', quantity: 1 }], { requestKey }),
+          locationId: 'site-a',
+        };
+        prismaMock.$transaction.mockRejectedValue(
+          prismaError('P2002', {
+            target: ['organizationId', 'requestKeyHash'],
+          }),
+        );
+        let lookups = 0;
+        prismaMock.sale.findFirst.mockImplementation(
+          (args: { where?: { requestKeyHash?: unknown } }) => {
+            if (args.where?.requestKeyHash !== undefined) {
+              lookups += 1;
+              return Promise.resolve(
+                lookups === 1
+                  ? null
+                  : {
+                      id: 'sale-ganadora',
+                      originSite: { locationId },
+                    },
+              );
+            }
+            return Promise.resolve({ ...detailSale, id: 'sale-ganadora' });
+          },
+        );
+        const result = service.create(dto, 'user-1', 'org-1');
+        if (locationId === 'site-a') {
+          await expect(result).resolves.toMatchObject({ id: 'sale-ganadora' });
+        } else {
+          await expect(result).rejects.toMatchObject({
+            status: 409,
+            message:
+              'La solicitud ya corresponde a una venta con otra atribución de sede',
           });
         }
-        return Promise.resolve({ ...detailSale, id: 'sale-ganadora' });
-      });
-      const result = service.create(dto, 'user-1', 'org-1');
-      if (locationId === 'site-a') {
-        await expect(result).resolves.toMatchObject({ id: 'sale-ganadora' });
-      } else {
-        await expect(result).rejects.toMatchObject({
-          status: 409, message: 'La solicitud ya corresponde a una venta con otra atribución de sede',
-        });
-      }
-      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
-      expect(tx.sale.create).not.toHaveBeenCalled();
-    });
+        expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+        expect(tx.sale.create).not.toHaveBeenCalled();
+      },
+    );
 
     it('keeps sales without a key outside the idempotency path', async () => {
       const tx = buildTx();

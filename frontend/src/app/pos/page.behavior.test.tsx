@@ -208,8 +208,9 @@ vi.mock("@/components/ui/Input", () => {
       onKeyDown?: (e: ReactKeyboardEvent<HTMLInputElement>) => void;
       placeholder?: string;
       disabled?: boolean;
+      label?: string;
     }
-  >(function MockInput({ value, onChange, onKeyDown, placeholder, disabled }, ref) {
+  >(function MockInput({ value, onChange, onKeyDown, placeholder, disabled, label }, ref) {
     const [mounted, setMounted] = useState(inputMountState.delayMs === 0);
 
     useEffect(() => {
@@ -233,6 +234,7 @@ vi.mock("@/components/ui/Input", () => {
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         disabled={disabled}
+        aria-label={label}
       />
     );
   });
@@ -257,11 +259,19 @@ vi.mock("@/components/ui/Modal", () => ({
     isOpen,
     title,
     children,
+    footer,
   }: {
     isOpen: boolean;
     title?: string;
     children: ReactNode;
-  }) => (isOpen ? <section aria-label={title}>{children}</section> : null),
+    footer?: ReactNode;
+  }) =>
+    isOpen ? (
+      <section aria-label={title}>
+        {children}
+        {footer}
+      </section>
+    ) : null,
 }));
 
 // ConfirmDialog is the shared warning dialog. The mock mirrors its documented
@@ -1187,19 +1197,24 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(grid.style.gridTemplateColumns).toBe("repeat(auto-fill, minmax(min(100%, max(152px, calc((100% - 36px) / 4))), 1fr))");
   });
 
-  it("puts the customer and finance actions side by side as icon-over-label cards", () => {
+  it("puts the customer and finance actions in one compact horizontal row and pause utilities in the cart header", () => {
     useProductsMock.mockReturnValue({ data: { data: [], meta: { total: 0, totalPages: 1 } }, isLoading: false });
     render(<POSPage />);
     const customer = screen.getByRole("button", { name: "Sin cliente" });
     const finance = screen.getByRole("button", { name: /financiar/i });
     expect(customer.parentElement).toBe(finance.parentElement);
-    expect(customer.parentElement!.className).toContain("grid-cols-2");
-    for (const card of [customer, finance]) {
-      expect(card.className).toContain("flex-col");
-      expect(card.firstElementChild!.tagName.toLowerCase()).toBe("span");
-      expect(card.firstElementChild!.querySelector("svg")).not.toBeNull();
+    expect(customer.parentElement!.className).toContain("grid-cols-[1fr_auto]");
+    for (const action of [customer, finance]) {
+      expect(action.className).toContain("h-9");
+      expect(action.firstElementChild!.tagName.toLowerCase()).toBe("span");
+      expect(action.firstElementChild!.querySelector("svg")).not.toBeNull();
     }
     expect(finance).toBeDisabled();
+
+    const cartHeading = screen.getByRole("heading", { name: "Carrito" });
+    const cartHeader = cartHeading.parentElement!.parentElement!;
+    expect(cartHeader.contains(screen.getByRole("button", { name: "Reanudar (0)" }))).toBe(true);
+    expect(cartHeader.contains(screen.getByRole("button", { name: "Pausar" }))).toBe(true);
   });
 
   it("gives the cart 18rem at lg and a 60/40 split from xl", () => {
@@ -1246,6 +1261,9 @@ describe("POS behavior evidence (#19, #18)", () => {
     const thumb = screen.getByTestId("cart-line-image");
     expect(thumb.className).toContain("self-stretch");
     expect(thumb.className).toContain("w-20");
+    expect(thumb.className).toContain("@min-[19rem]:block");
+    expect(thumb.className).toContain("@min-[24rem]:w-24");
+    expect(thumb.className).toContain("@min-[26rem]:w-28");
 
     const name = screen.getByText("Arroz Integral Premium Paquete 5 kg", { selector: "p" });
     expect(name.className).toContain("line-clamp-2");
@@ -1258,8 +1276,8 @@ describe("POS behavior evidence (#19, #18)", () => {
     expect(total.className).toContain("tabular-nums");
     expect(total.className).toContain("whitespace-nowrap");
 
-    expect(screen.getByLabelText("Descuento para Arroz Integral Premium Paquete 5 kg").className).toContain("h-9 w-9");
-    expect(screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").className).toContain("h-9 w-9");
+    expect(screen.getByLabelText("Descuento para Arroz Integral Premium Paquete 5 kg").className).toContain("h-8 w-8");
+    expect(screen.getByLabelText("Eliminar Arroz Integral Premium Paquete 5 kg").className).toContain("h-8 w-8");
   });
 
 
@@ -1567,6 +1585,192 @@ describe("POS behavior evidence (#19, #18)", () => {
     });
 
     expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
+  });
+
+  it.each([
+    { label: "Tarjeta", method: "CARD", price: 1005, lineDiscount: 150.75, total: 1016.56 },
+    { label: "Transferencia", method: "TRANSFER", price: 1005, lineDiscount: 150.75, total: 1016.56 },
+    // At a half-cent the server rounds the base (1.275 → 1.28) separately
+    // from the IVA (0.24225 → 0.24), before totaling.
+    { label: "Tarjeta", method: "CARD", price: 1.50, lineDiscount: 0.225, total: 1.52 },
+  ])("prefills $label with the cent-exact total for $price after line discount and IVA", async ({ label, method, price, lineDiscount, total }) => {
+    const product = makeProduct("taxed", "Producto con IVA", { salePrice: price, taxRate: 19 });
+    useProductsMock.mockReturnValue({
+      data: { data: [product], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: product.name }));
+    await userEvent.click(screen.getByTitle("Descuento"));
+    await userEvent.click(screen.getByRole("button", { name: "15%" }));
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
+    await userEvent.click(screen.getByRole("button", { name: label }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar pago" }));
+
+    expect(createSaleMutateMock).toHaveBeenCalledTimes(1);
+    expect(createSaleMutateMock).toHaveBeenCalledWith(expect.objectContaining({
+      items: [{ productId: product.id, quantity: 1, discountAmount: lineDiscount }],
+      payments: [{ method, amount: total }],
+    }));
+    expect(toastState.error).not.toHaveBeenCalled();
+  });
+
+  it("rounds each line's IVA before summing the checkout total", async () => {
+    const products = [
+      makeProduct("taxed-1", "Primer producto", { salePrice: 100.02, taxRate: 19 }),
+      makeProduct("taxed-2", "Segundo producto", { salePrice: 100.02, taxRate: 19 }),
+    ];
+    useProductsMock.mockReturnValue({
+      data: { data: products, meta: { total: 2, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<POSPage />);
+
+    for (const product of products) {
+      await userEvent.click(screen.getByRole("button", { name: product.name }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Tarjeta" }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirmar pago" }));
+
+    expect(createSaleMutateMock).toHaveBeenCalledWith(expect.objectContaining({
+      payments: [{ method: "CARD", amount: 238.04 }],
+    }));
+  });
+
+  it("sends a requestKey alongside the unchanged checkout body", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+    );
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(1));
+
+    const payload = createSaleMutateMock.mock.calls[0]?.[0] as {
+      requestKey?: string;
+      items: Array<Record<string, unknown>>;
+      payments: Array<Record<string, unknown>>;
+    };
+    expect(typeof payload.requestKey).toBe("string");
+    expect(payload.requestKey!.length).toBeGreaterThan(0);
+    // The idempotency key rides beside the sale body, it does not replace it.
+    expect(payload.items).toEqual([{ productId: "1", quantity: 1, discountAmount: 0 }]);
+    expect(payload.payments).toEqual([{ method: "CARD", amount: 1000 }]);
+  });
+
+  it("reuses the request key when the same checkout is retried after a lost response", async () => {
+    createSaleMutateMock
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(makeSale());
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+    );
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(1));
+
+    // A lost response leaves the sale on screen and the payment split intact.
+    expect(screen.queryByRole("region", { name: "Venta registrada" })).toBeNull();
+    expect(screen.getByRole("button", { name: /confirmar pago/i })).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(2));
+
+    const keys = createSaleMutateMock.mock.calls.map(
+      (call) => (call[0] as { requestKey: string }).requestKey,
+    );
+    expect(typeof keys[0]).toBe("string");
+    expect(keys[0].length).toBeGreaterThan(0);
+    expect(keys[1]).toBe(keys[0]);
+    expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
+  });
+
+  it("mints a new request key when only the payment split changes after a failure", async () => {
+    createSaleMutateMock
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(makeSale());
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+    );
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(1));
+
+    // Same cart, different tender: the failed key no longer describes the body.
+    await userEvent.click(screen.getByRole("button", { name: "Entregar efectivo" }));
+    await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(2));
+
+    const calls = createSaleMutateMock.mock.calls.map(
+      (call) => call[0] as { requestKey: string; payments: Array<Record<string, unknown>> },
+    );
+    expect(calls[0].payments).toEqual([{ method: "CARD", amount: 1000 }]);
+    expect(calls[1].payments).toEqual([{ method: "CASH", amount: 1000 }]);
+    expect(calls[1].requestKey).not.toBe(calls[0].requestKey);
+  });
+
+  it("mints a fresh request key for a deliberate identical sale after a success", async () => {
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Producto Checkout")], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<POSPage />);
+
+    const checkout = async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Producto Checkout" }));
+      await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+      await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+      await userEvent.click(
+        await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+      );
+    };
+
+    await checkout();
+    await screen.findByRole("region", { name: "Venta registrada" });
+    await userEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    // The very same cart, paid the same way, is a second sale on purpose.
+    await checkout();
+    await waitFor(() => expect(createSaleMutateMock).toHaveBeenCalledTimes(2));
+
+    const [first, second] = createSaleMutateMock.mock.calls.map(
+      (call) => call[0] as { requestKey: string },
+    );
+    expect(second.requestKey.length).toBeGreaterThan(0);
+    expect(second.requestKey).not.toBe(first.requestKey);
   });
 
   it("refuses a mixed payment that overpays with a tender the sale does not need (S3)", async () => {
@@ -1930,7 +2134,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Producto Precio" }));
 
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "45000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1948,7 +2153,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Producto Precio" }));
 
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "55000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -1966,7 +2172,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Producto Precio" }));
 
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     // CurrencyInput strips non-digit characters, so "-500" reaches the page as 500.
     await userEvent.type(priceInput, "-500");
@@ -1988,10 +2195,12 @@ describe("POS item price override (pos-edit-item-price)", () => {
     // Apply a 10% percentage discount on quantity 2.
     await openDiscountModal();
     await userEvent.click(screen.getByRole("button", { name: "10%" }));
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     // Edit price down to 40000.
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "40000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -2007,12 +2216,13 @@ describe("POS item price override (pos-edit-item-price)", () => {
 
     // Apply a fixed 5000 discount.
     await openDiscountModal();
-    await userEvent.type(screen.getByPlaceholderText("0.00"), "5000");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     // Edit price down to 45000.
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "45000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -2026,8 +2236,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     renderWithSingleProduct("Producto Descontado", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Descontado" }));
     await openDiscountModal();
-    await userEvent.type(screen.getByPlaceholderText("0.00"), "5000");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     const card = screen.getByLabelText("Eliminar Producto Descontado").closest<HTMLElement>("div.rounded-lg")!;
     const struck = card.querySelector<HTMLElement>("s");
@@ -2045,12 +2255,13 @@ describe("POS item price override (pos-edit-item-price)", () => {
 
     // Apply a fixed 5000 discount.
     await openDiscountModal();
-    await userEvent.type(screen.getByPlaceholderText("0.00"), "5000");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     // Drop price below the fixed discount (5000) to 3000.
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "3000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -2077,7 +2288,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
 
     // Edit the price down to 45000.
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "45000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -2109,7 +2321,8 @@ describe("POS item price override (pos-edit-item-price)", () => {
     expect(screen.queryByTestId("price-overridden")).toBeNull();
 
     await openDiscountModal();
-    const priceInput = screen.getByPlaceholderText("Precio");
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
+    const priceInput = screen.getByLabelText("Nuevo precio unitario");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "45000");
     await userEvent.click(screen.getByRole("button", { name: "Aplicar precio" }));
@@ -2153,22 +2366,25 @@ describe("POS price override permission (explicit roles)", () => {
     await openDiscountModal();
 
     // The discount half of the modal still works for restricted roles...
-    expect(screen.getByPlaceholderText("0.00")).toBeTruthy();
-    // ...but the price override is not offered at all.
+    expect(screen.getByLabelText("Monto del descuento")).toBeTruthy();
+    // ...but the price override is not offered at all, not even as a mode.
+    expect(screen.queryByRole("button", { name: "Precio final" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Aplicar precio" })).toBeNull();
-    expect(screen.queryByPlaceholderText("Precio")).toBeNull();
+    expect(screen.queryByLabelText("Nuevo precio unitario")).toBeNull();
   }
 
-  it("shows the Aplicar precio control to a CASHIER", async () => {
+  it("offers the final-price mode to a CASHIER", async () => {
     authState.role = "CASHIER";
     renderWithSingleProduct("Producto Cajero", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Cajero" }));
     await openDiscountModal();
 
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
     expect(screen.getByRole("button", { name: "Aplicar precio" })).toBeTruthy();
+    expect(screen.getByLabelText("Nuevo precio unitario")).toBeTruthy();
   });
 
-  it("hides the Aplicar precio control from a MEMBER", async () => {
+  it("hides the final-price mode from a MEMBER", async () => {
     authState.role = "MEMBER";
     await expectNoPriceControl("Producto Miembro");
   });
@@ -2180,22 +2396,24 @@ describe("POS price override permission (explicit roles)", () => {
     expect(screen.queryByRole("button", { name: "Aplicar precio" })).toBeNull();
   });
 
-  it("shows the Aplicar precio control to an ADMIN", async () => {
+  it("offers the final-price mode to an ADMIN", async () => {
     authState.role = "ADMIN";
     renderWithSingleProduct("Producto Admin", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Admin" }));
     await openDiscountModal();
 
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
     expect(screen.getByRole("button", { name: "Aplicar precio" })).toBeTruthy();
   });
 
-  it("shows the Aplicar precio control to an OWNER (inherits ADMIN)", async () => {
+  it("offers the final-price mode to an OWNER (inherits ADMIN)", async () => {
     // Mirrors RolesGuard.getInheritedRoles, where OWNER inherits ADMIN.
     authState.role = "OWNER";
     renderWithSingleProduct("Producto Owner", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Owner" }));
     await openDiscountModal();
 
+    await userEvent.click(screen.getByRole("button", { name: "Precio final" }));
     expect(screen.getByRole("button", { name: "Aplicar precio" })).toBeTruthy();
   });
 
@@ -2324,12 +2542,22 @@ describe("POS promotion pricing (#74)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Producto Tope" }));
 
     await userEvent.click(screen.getByTitle("Descuento"));
-    await userEvent.type(screen.getByPlaceholderText("0.00"), "99999");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    // More than the line is rejected before it can ever reach the cart.
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "99999");
+    expect(
+      screen.getByRole("button", { name: "Aplicar descuento" }),
+    ).toBeDisabled();
 
-    // Rebate caps at the offer gross (8000 × 1) — line total floors at $0.
+    // The offer gross (8000 × 1) is the whole line — total floors at $0.
+    await userEvent.clear(screen.getByLabelText("Monto del descuento"));
+    await userEvent.type(screen.getByLabelText("Monto del descuento"), "8000");
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
+
     const discount = screen.getByTestId("line-discount");
     expect(discount.textContent).toContain(formatCurrency(8000));
+    expect(screen.getByTestId("cart-line-total").textContent).toBe(
+      formatCurrency(0),
+    );
     expect(screen.getByTestId("line-unit-price").textContent).toContain(
       formatCurrency(8000),
     );
@@ -2350,6 +2578,7 @@ describe("POS promotion pricing (#74)", () => {
 
     await userEvent.click(screen.getByTitle("Descuento"));
     await userEvent.click(screen.getByRole("button", { name: "10%" }));
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar descuento" }));
 
     // Offer gross at qty 2 is 16000 → 10% rebate = 1600, anchored to the
     // promotional unitPrice (not the 10000 list price, which would give 2000).

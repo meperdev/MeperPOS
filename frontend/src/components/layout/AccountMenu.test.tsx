@@ -76,6 +76,19 @@ describe("AccountMenu", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("wears the sand initials, not the teal one", () => {
+    render(<AccountMenu />);
+
+    const trigger = screen.getByRole("button", { name: "Opciones de cuenta" });
+    // The sand series ink the dashboard already uses; the lighter light-mode
+    // value does not clear 4.5:1 at 12px, so the label takes a darker sand there.
+    expect(trigger.className).toContain("bg-chart-ink/15");
+    expect(trigger.className).toContain("hover:bg-chart-ink/25");
+    expect(trigger.className).toContain("text-[#6F5C40]");
+    expect(trigger.className).toContain("dark:text-chart-ink");
+    expect(trigger.className).not.toContain("bg-primary/15");
+  });
+
   it("names the person and the role inside the menu", () => {
     render(<AccountMenu />);
     openMenu();
@@ -94,13 +107,13 @@ describe("AccountMenu", () => {
 
     expect(labels).toEqual([
       "Mi perfil",
+      "Historial de alertas",
       "Configuración",
-      "Cambiar a modo oscuro",
       "Cerrar sesión",
     ]);
   });
 
-  it("hides Configuración from a cashier, exactly like the rail does", () => {
+  it("hides Configuración and the alert history from a cashier, exactly like the rail does", () => {
     setUser("CASHIER");
     render(<AccountMenu />);
     const menu = openMenu();
@@ -109,7 +122,7 @@ describe("AccountMenu", () => {
       Array.from(menu.querySelectorAll('[role="menuitem"]')).map(
         (item) => item.textContent,
       ),
-    ).toEqual(["Mi perfil", "Cambiar a modo oscuro", "Cerrar sesión"]);
+    ).toEqual(["Mi perfil", "Cerrar sesión"]);
   });
 
   it("navigates to the profile", () => {
@@ -121,6 +134,17 @@ describe("AccountMenu", () => {
     expect(pushMock).toHaveBeenCalledWith("/profile");
   });
 
+  it("navigates to the alert history", () => {
+    render(<AccountMenu />);
+    openMenu();
+
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Historial de alertas" }),
+    );
+
+    expect(pushMock).toHaveBeenCalledWith("/alerts");
+  });
+
   it("ends the session from Cerrar sesión", () => {
     render(<AccountMenu />);
     openMenu();
@@ -130,13 +154,17 @@ describe("AccountMenu", () => {
     expect(logoutMock).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles the theme from the menu", () => {
+  it("leaves the theme in the header, not in this menu", () => {
     render(<AccountMenu />);
-    openMenu();
+    const menu = openMenu();
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Cambiar a modo oscuro" }));
-
-    expect(toggleThemeMock).toHaveBeenCalledTimes(1);
+    // The header carries the mode now; repeating it here would be a second
+    // switch for one setting.
+    expect(screen.queryByRole("menuitem", { name: /modo (claro|oscuro)/ })).toBeNull();
+    expect(
+      menu.querySelectorAll('[role="menuitem"]').length,
+    ).toBe(4);
+    expect(toggleThemeMock).not.toHaveBeenCalled();
   });
 
   it("offers the install only when the browser can install", () => {

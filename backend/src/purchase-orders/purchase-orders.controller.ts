@@ -20,6 +20,7 @@ import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 import { CancelPurchaseOrderDto } from './dto/cancel-purchase-order.dto';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
 import { ConfirmPurchaseOrderDto } from './dto/confirm-purchase-order.dto';
+import { SendPurchaseOrderDto } from './dto/send-purchase-order.dto';
 import { DuplicatePurchaseOrderDto } from './dto/duplicate-purchase-order.dto';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -118,9 +119,19 @@ export class PurchaseOrdersController {
   @ApiOperation({
     summary:
       'Registrar el envío de la orden al proveedor (el primer envío fija el documento)',
+    description:
+      'Acepta { expectedDeliveryDate } opcional; solo se aplica en el primer envío.',
   })
-  send(@Param('id') id: string, @CurrentUser() user: RequestUser) {
-    return this.purchaseOrderDocumentsService.send(id, user.organizationId);
+  send(
+    @Param('id') id: string,
+    @Body() dto: SendPurchaseOrderDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.purchaseOrderDocumentsService.send(
+      id,
+      user.organizationId,
+      dto,
+    );
   }
 
   @Get(':id/pdf')

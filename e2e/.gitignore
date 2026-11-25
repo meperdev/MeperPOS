@@ -1,0 +1,9 @@
+# Playwright output: reports, traces, screenshots, videos and stack logs.
+/test-results/
+/playwright-report/
+/blob-report/
+# Exploratory bug-bash runs (npm run explore): reports, screenshots, traces,
+# stack logs and LLM transcripts. Local only; never committed.
+/exploratory/reports/
+# Signed-in session written by tests/auth.setup.ts.
+/.auth/

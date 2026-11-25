@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { useSales } from "@/hooks/useSales";
 import { getPaymentState } from "@/components/sales/PaymentState";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 
 /** The card is a compact peek at the last sales; it never asks for more. */
 const RECENT_SALES_LIMIT = 5;
@@ -115,36 +115,30 @@ export function RecentSalesCard() {
             {sales.map((sale) => {
               const payment = getPaymentState(sale.payments, sale.financed);
               return (
-                <div key={sale.id} data-testid="recent-sale-item" className="py-3 space-y-2">
+                <div key={sale.id} data-testid="recent-sale-item" className="space-y-1 py-3">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="id-text text-[13px] font-semibold tabular-nums text-foreground">
-                        {sale.saleNumber}
-                      </p>
-                      <p className="truncate text-[13px] text-muted-foreground">
-                        {sale.customer?.name ?? "Sin cliente"}
-                      </p>
-                    </div>
+                    <p className="id-text min-w-0 truncate text-[13px] font-semibold text-foreground">
+                      {sale.saleNumber}
+                    </p>
                     <StatusBadge domain="sale" status={sale.status} dot={false} />
                   </div>
-                  <dl className="grid grid-cols-3 gap-x-3 text-[13px]">
-                    <div className="min-w-0 space-y-0.5">
-                      <dt className="text-muted-foreground">Fecha</dt>
-                      <dd className="whitespace-nowrap text-muted-foreground">{formatDateTime(sale.createdAt)}</dd>
-                    </div>
-                    <div className="min-w-0 space-y-0.5">
-                      <dt className="text-muted-foreground">Pago</dt>
-                      <dd>
-                        <span className={payment.className}>{payment.label}</span>
-                      </dd>
-                    </div>
-                    <div className="min-w-0 space-y-0.5">
-                      <dt className="text-muted-foreground">Total</dt>
-                      <dd className="font-semibold tabular-nums text-foreground">
-                        {formatCurrency(sale.total)}
-                      </dd>
-                    </div>
-                  </dl>
+                  <p className="truncate text-[13px] text-muted-foreground">
+                    {sale.customer?.name ?? "Sin cliente"}
+                  </p>
+                  {/* The date keeps its own line: sharing a column with the
+                      payment method collided at phone widths. Dates read in
+                      proportional figures, like every other date in the app. */}
+                  <p className="text-[13px] text-muted-foreground">
+                    {formatDateTime(sale.createdAt)}
+                  </p>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className={cn("min-w-0 truncate text-[13px]", payment.className)}>
+                      {payment.label}
+                    </span>
+                    <span className="shrink-0 text-base font-semibold tabular-nums text-foreground">
+                      {formatCurrency(sale.total)}
+                    </span>
+                  </div>
                 </div>
               );
             })}

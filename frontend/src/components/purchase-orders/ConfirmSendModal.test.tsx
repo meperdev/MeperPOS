@@ -138,7 +138,8 @@ describe("ConfirmSendModal", () => {
 
     expect(confirmButton()).toBeDisabled();
     expect(sendButton()).toBeEnabled();
-    expect(screen.getByLabelText(/fecha de entrega esperada/i)).toBeDisabled();
+    // Confirmed but not sent yet: the date can still be set at the send.
+    expect(screen.getByLabelText(/fecha de entrega esperada/i)).toBeEnabled();
   });
 
   it("fills today's date with Hoy", async () => {
@@ -188,7 +189,7 @@ describe("ConfirmSendModal", () => {
     await user.click(confirmButton());
     await user.click(await screen.findByRole("button", { name: /^enviar/i }));
 
-    expect(sendMutateAsyncMock).toHaveBeenCalledWith("po-1");
+    expect(sendMutateAsyncMock).toHaveBeenCalledWith({ id: "po-1" });
     expect(downloadMock).toHaveBeenCalledWith(order);
     expect(sendMutateAsyncMock.mock.invocationCallOrder[0]).toBeLessThan(
       downloadMock.mock.invocationCallOrder[0],
@@ -216,6 +217,50 @@ describe("ConfirmSendModal", () => {
     expect(screen.getByLabelText(/fecha de entrega esperada/i)).toHaveValue(
       "2026-11-25",
     );
+  });
+
+  it("takes the expected date at the send for an order confirmed without one", async () => {
+    const user = userEvent.setup();
+    render(
+      <ConfirmSendModal
+        order={makeOrder({ status: "PENDING", sentAt: null })}
+        isOpen
+        onClose={onCloseMock}
+      />,
+    );
+
+    const field = screen.getByLabelText(/fecha de entrega esperada/i);
+    expect(field).toBeEnabled();
+    expect(field).toHaveValue("");
+
+    await user.click(screen.getByRole("button", { name: "Hoy" }));
+    const today = getBogotaDateInputValue();
+    expect(field).toHaveValue(today);
+
+    await user.click(sendButton());
+
+    expect(sendMutateAsyncMock).toHaveBeenCalledWith({
+      id: "po-1",
+      expectedDeliveryDate: today,
+    });
+    expect(downloadMock).toHaveBeenCalled();
+  });
+
+  it("locks the date once the order was sent", () => {
+    render(
+      <ConfirmSendModal
+        order={makeOrder({
+          status: "PENDING",
+          sentAt: "2026-04-19T11:00:00.000Z",
+          expectedDeliveryDate: "2026-11-25T00:00:00.000Z",
+        })}
+        isOpen
+        onClose={onCloseMock}
+      />,
+    );
+
+    expect(screen.getByLabelText(/fecha de entrega esperada/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Hoy" })).toBeDisabled();
   });
 
   it("stays open and does not download when the send fails", async () => {

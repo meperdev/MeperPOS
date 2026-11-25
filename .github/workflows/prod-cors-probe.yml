@@ -1,0 +1,39 @@
+# Production login CORS-origin probe (regression guard).
+#
+# On 2026-11-22 login from https://pos-pwa.mepersoft.app answered
+# 403 "Cross-origin login rejected" because Railway's CORS_ORIGIN listed only
+# https://pos.mepersoft.app (docs/bug-rules/2026-11-22-cors-origin-pwa.md).
+# This job POSTs to the public login endpoint with fake credentials once per
+# required production Origin and fails ONLY on that exact 403.
+#
+# Deliberately not a required check: it has no pull_request or push trigger,
+# is not part of ci.yml and is never added to branch protection. An
+# unreachable API (network, timeout, 5xx, 429) only warns and exits 0.
+name: Prod login CORS probe
+
+on:
+  schedule:
+    # Daily, off the top of the hour to avoid the busiest cron minutes.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe each required production Origin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Zero dependencies: the script only needs Node's fetch and reads
+      # backend/src/config/required-production-origins.json.
+      - name: Probe production login from every required frontend Origin
+        run: node scripts/probe-prod-login-cors.mjs

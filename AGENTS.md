@@ -20,6 +20,8 @@ npm run test            # Unit tests (Jest)
 npm run test:e2e        # End-to-end tests
 npm run test -- --testPathPatterns=<file> # Run single test file (Jest 30: plural)
 npm run lint            # ESLint with auto-fix
+npm run lint:ci         # ESLint without --fix (what CI runs)
+npm run test:eslint-plugin # RuleTester suites of eslint-plugin-meperpos
 npm run seed            # Seed database with faker data
 npx prisma migrate dev  # Run migrations
 npx prisma studio       # Open Prisma Studio GUI
@@ -29,14 +31,30 @@ npm run db:down         # Stop it
 npm run db:logs         # Follow the server log
 ```
 
-> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npx eslint <file>`. The backend test suite also requires PostgreSQL on port 5432 (`npm run db:up` starts it): roughly 94 integration tests fail without it. The container is the `postgres` service of `backend/docker-compose.yml`; if Docker asks for a password, add your user to the group once (`sudo usermod -aG docker "$USER"`) and start a new session.
+> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npm run lint:ci` (or `npx eslint <file>`). The backend test suite also requires PostgreSQL on port 5432 (`npm run db:up` starts it): roughly 94 integration tests fail without it. The container is the `postgres` service of `backend/docker-compose.yml`; if Docker asks for a password, add your user to the group once (`sudo usermod -aG docker "$USER"`) and start a new session.
 
 ### Frontend (`/frontend`)
 ```bash
 npm run dev    # Development server
 npm run build  # Production build
 npm run lint   # ESLint
+npm run lint:ci            # same, as CI runs it
+npm run test:eslint-plugin # RuleTester suites of eslint-plugin-meperpos
 ```
+
+### E2E smoke (`/e2e`)
+```bash
+npm run smoke            # isolated Postgres + backend (3101) + frontend (3100) + Playwright, then teardown
+npm run test:e2e:smoke   # Playwright only, against a stack that is already up
+npm run test:scripts     # unit tests of the database guard and the explorer libs
+npm run typecheck        # tsc over config, fixtures and specs
+npm run explore          # exploratory bug bash on the same isolated stack; writes e2e/exploratory/reports/<run>/REPORT.md
+```
+
+- **The smoke suite must pass** before a PR that touches a covered flow (login, POS checkout, `/sales`, inventory create). CI runs it as the `E2E smoke (Playwright)` job.
+- **It never touches the dev database.** It runs on its own Postgres (`e2e/docker-compose.yml`: container `meperpos-playwright-postgres`, `127.0.0.1:55433`, database `meperpos_playwright`, tmpfs). Never point it at `inventario_db` or port 5432, and never use `npm run db:up`/`db:down` for it; the orchestrator and `backend/prisma/seed-e2e.ts` refuse any other database.
+- **Adding a flow:** a new `e2e/tests/<flow>.spec.ts` using `test` from `e2e/fixtures/test.ts` (signed-in) and the deterministic data in `e2e/fixtures/seed.ts`; anything the test creates gets a unique name. Adding a `data-testid` is test infrastructure; changing product behaviour for a test is not. Details, traces and the seed in `e2e/README.md`.
+- **Exploratory bug bash (`npm run explore`)** is not a gate: it exits 0 when the run completes, whatever it found. It reuses the smoke stack and its database guard, stops after `--max-actions` (default 60) or `--max-minutes` (default 15), and writes a gitignored report with repro steps, evidence and a suggested trust-stack layer per finding, plus drafted GitHub issues. Agents never pass `--file-issues`: filing is a human decision (`npm run explore:file-issues -- <report dir> --dry-run` first). `--agent` (an optional LLM pass through the developer's OpenCode, browser-only and hard-capped) is off by default. See `e2e/README.md`, "Exploratory bug bash".
 
 ## Environment Setup
 
@@ -51,6 +69,8 @@ CLOUDINARY_CLOUD_NAME=...
 CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
 ```
+
+`CORS_ORIGIN` is also the pre-auth login allowlist (SEC-007): every production frontend Origin must be listed, and `backend/src/config/required-production-origins.json` is the committed set a boot warning, the unit tests and the daily production probe check (`docs/bug-rules/2026-11-22-cors-origin-pwa.md`).
 
 Frontend uses `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:3001/api`).
 
@@ -116,3 +136,20 @@ Next.js App Router under `frontend/src/`:
 - All API endpoints are prefixed with `/api` (set in `main.ts` via `app.setGlobalPrefix('api')`)
 - Prisma migrations live in `backend/prisma/migrations/`; seed script is `backend/prisma/seed.ts`
 - Derived product fields go through the single `enrichProduct` funnel in `ProductsService`, so a new field cannot reach only some endpoints
+
+## Bug → rule loop (trust stack)
+
+Push every fix as high up the stack as it will go, and prefer the higher layer:
+
+1. **01 types/boundaries** — make the bug unrepresentable: Prisma schema, TypeScript types, `class-validator` DTOs, guards, Nest module limits.
+2. **02 lint/test** — when the type system cannot hold it, add a rule to the local ESLint plugin (`backend/eslint-plugin-meperpos/`, `frontend/eslint-plugin-meperpos/`, with RuleTester fixtures: the broken pattern fails, the fix passes) or a regression test.
+3. **03 prose** — only what cannot be checked mechanically goes into this file or a skill.
+
+Human review comes last, never first.
+
+- Every `fix:` PR names the layer it raised the fix to and adds one entry file under `docs/bug-rules/` (append-only; how to in `docs/bug-rule-log.md`).
+- CI blocks on `npm run lint:ci` (ESLint without `--fix`) and `npm run test:eslint-plugin` in both `backend/` and `frontend/`. Run them locally before opening a PR. `meperpos/*` rules are always errors; silencing one needs `// eslint-disable-next-line <rule> -- <reason>` on that line.
+- `meperpos/require-string-length-bound` makes every `@IsString()` field in a backend `*.dto.ts` carry `@MaxLength`/`@Length` (`{ each: true }` on arrays) unless a format decorator already caps it; size the bound to the column or its consumer (receipt, PDF, sibling DTO).
+- Pre-existing stock-rule debt is frozen in a file-scoped baseline (`backend/eslint.baseline.mjs`, the baseline block in `frontend/eslint.config.mjs`) that may only shrink. Never add a file to it.
+- **Agents never merge.** They open a PR with `.github/pull_request_template.md` filled in and leave the merge to a human.
+- **The semáforo label is automatic.** `.github/workflows/semaforo.yml` labels every PR (`semaforo:verde|amarillo|rojo`) and keeps one summary comment from `.github/semaforo/config.json`; it never blocks or becomes a required check, and `semaforo:manual` or a semáforo label set by a person wins over it. When it mislabels one, the fix is a rule in that config plus a test in `classify.test.mjs` (bug → rule).

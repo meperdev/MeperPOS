@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { OrgRole } from '@prisma/client';
 import { IsValidPassword } from '../../common/validators/password.policy';
 
@@ -21,6 +27,7 @@ export class CreateUserDto {
 
   @ApiProperty({ example: 'John Doe' })
   @IsString()
+  @MaxLength(100)
   name: string;
 
   @ApiPropertyOptional({ example: OrgRole.CASHIER, enum: OrgRole })

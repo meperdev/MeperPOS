@@ -22,12 +22,10 @@ import {
 } from "@/hooks/useReceipt";
 import { Input } from "@/components/ui/Input";
 import { SearchField } from "@/components/ui/SearchField";
-import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { InlineConfirmButton } from "@/components/ui/InlineConfirmButton";
 import { Pagination } from "@/components/ui/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -38,13 +36,14 @@ import { shouldAutoFocusTextInput } from "@/lib/input-focus";
 import { useCartUndo } from "@/hooks/useCartUndo";
 import dynamic from "next/dynamic";
 import { PaymentMethodCards } from "@/components/pos/PaymentMethodCards";
+import { PausedSalesModal } from "@/components/pos/PausedSalesModal";
 import { CartLine } from "@/components/pos/CartLine";
+import { DiscountModal } from "@/components/pos/DiscountModal";
 import { MobileCartFloatingBar } from "@/components/pos/MobileCartFloatingBar";
 import { ProductCard } from "@/components/products/ProductCard";
 import {
   Search,
   Star,
-  Trash2,
   ShoppingCart,
   Printer,
   FileDown,
@@ -56,6 +55,7 @@ import {
   HandCoins,
 } from "lucide-react";
 import { cn, formatCurrency, safeGetItem, safeSetItem } from "@/lib/utils";
+import { toCheckoutCents } from "@/lib/pos-checkout-money";
 import { haptic } from "@/lib/haptics";
 import { effectiveStock } from "@/lib/product-type";
 import type { CartItem, Product, Sale } from "@/types";
@@ -328,8 +328,6 @@ function POSWorkspace({
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [editingDiscount, setEditingDiscount] = useState<string | null>(null);
-  const [customDiscount, setCustomDiscount] = useState("");
-  const [customPrice, setCustomPrice] = useState("");
   const [showPausedSalesModal, setShowPausedSalesModal] = useState(false);
   // Financing is the only action here that creates a real debt, so it waits for
   // an explicit confirmation before the initiation request is built or sent.
@@ -394,10 +392,11 @@ function POSWorkspace({
   const { pausedSales, pauseSale, getPausedSale, deletePausedSale } =
     usePausedSales(scope);
   const resumingRef = useRef(false);
+  const scopeUserId = user?.id;
   const posScope = useMemo(
     () =>
-      user?.id ? { userId: user.id, organizationId } : undefined,
-    [user?.id, organizationId],
+      scopeUserId ? { userId: scopeUserId, organizationId } : undefined,
+    [scopeUserId, organizationId],
   );
   const createSale = useCreateSale(posScope);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -457,6 +456,14 @@ function POSWorkspace({
     return eligible;
   };
   const posLoanAttemptRef = useRef<{ key: string; signature: string } | null>(
+    null,
+  );
+  // The ordinary checkout pins its idempotency key the same way: the key
+  // belongs to the exact request body it was minted for, so a retry of that same
+  // body after a lost response replays instead of selling twice, while any edit
+  // to the cart, customer, discount or payment split mints a new one. A success
+  // clears it so a second, deliberate sale never reuses the key.
+  const checkoutAttemptRef = useRef<{ key: string; signature: string } | null>(
     null,
   );
   const quickSearchProduct = useQuickSearchProduct();
@@ -677,7 +684,6 @@ function POSWorkspace({
         }),
       );
       setEditingDiscount(null);
-      setCustomDiscount("");
       if (openedFromMobileCart) {
         setIsMobileCartOpen(true);
         setOpenedFromMobileCart(false);
@@ -706,7 +712,6 @@ function POSWorkspace({
         }),
       );
       setEditingDiscount(null);
-      setCustomDiscount("");
       if (openedFromMobileCart) {
         setIsMobileCartOpen(true);
         setOpenedFromMobileCart(false);
@@ -740,8 +745,6 @@ function POSWorkspace({
         }),
       );
       setEditingDiscount(null);
-      setCustomDiscount("");
-      setCustomPrice("");
       if (openedFromMobileCart) {
         setIsMobileCartOpen(true);
         setOpenedFromMobileCart(false);
@@ -750,20 +753,12 @@ function POSWorkspace({
     [openedFromMobileCart],
   );
 
-  const openDiscountModal = useCallback(
-    (productId: string) => {
-      const item = cart.find((i) => i.productId === productId);
-      setEditingDiscount(productId);
-      setCustomDiscount("");
-      setCustomPrice(item ? String(item.unitPrice) : "");
-    },
-    [cart],
-  );
+  const openDiscountModal = useCallback((productId: string) => {
+    setEditingDiscount(productId);
+  }, []);
 
   const handleCloseDiscountModal = useCallback(() => {
     setEditingDiscount(null);
-    setCustomDiscount("");
-    setCustomPrice("");
     if (openedFromMobileCart) {
       setIsMobileCartOpen(true);
       setOpenedFromMobileCart(false);
@@ -888,14 +883,17 @@ function POSWorkspace({
     sharesExceptLast.reduce((sum, share) => sum + share, 0);
   const discountShares = [...sharesExceptLast, lastShare];
 
-  const taxAmount = cart.reduce(
-    (sum, item, index) =>
-      sum +
-      (lineGrossBases[index] - discountShares[index]) *
-        ((item.product.effectiveTaxRate ?? item.product.taxRate) / 100),
-    0,
-  );
-  const total = subtotal + taxAmount - clampedSaleDiscount;
+  // Match toPersistedLineTax: round each line's tax, not the sum of raw taxes.
+  const taxCents = cart.reduce((sum, item, index) => {
+    const rate = item.product.effectiveTaxRate ?? item.product.taxRate;
+    const lineTax = (lineGrossBases[index] - discountShares[index]) * (rate / 100);
+    return sum + Math.round(lineTax * 100);
+  }, 0);
+  const taxAmount = taxCents / 100;
+  // Like SalesService, charge from the stored (cent-precision) subtotal.
+  const storedSubtotal = toCheckoutCents(subtotal) / 100;
+  const totalCents = toCheckoutCents(storedSubtotal - clampedSaleDiscount) + taxCents;
+  const total = totalCents / 100;
 
   const toggleFavoriteProduct = useCallback((productId: string) => {
     setFavoriteProductIds((current) =>
@@ -908,11 +906,11 @@ function POSWorkspace({
   const handleCheckout = async () => {
     if (checkingOutRef.current || financingRef.current || cartLockedRef.current) return;
     if (cart.length === 0) return;
-    const totalPaid = paymentMethods.reduce(
-      (sum, method) => sum + method.amount,
+    const paidCents = paymentMethods.reduce(
+      (sum, method) => sum + toCheckoutCents(method.amount),
       0,
     );
-    if (totalPaid < total) {
+    if (paidCents < totalCents) {
       toast.error("El monto total pagado debe cubrir el total de la venta");
       return;
     }
@@ -923,17 +921,18 @@ function POSWorkspace({
     // Mirrors `SalesService.create` (S3 / D1). The server is the authority and
     // rejects these splits anyway; answering here turns a 400 into the sentence
     // that tells the cashier what to fix. Change is only ever cash, and on a
-    // positive total no tender may be surplus on its own. Round the surplus
-    // to cents, as the server does, so tax rounding is not treated as change.
-    const overpay = Math.round((totalPaid - total) * 100) / 100;
-    if (overpay > 0 && !paymentMethods.some((method) => method.type === "CASH")) {
+    // positive total no tender may be surplus on its own.
+    const overpaidCents = paidCents - totalCents;
+    if (overpaidCents > 0 && !paymentMethods.some((method) => method.type === "CASH")) {
       toast.error("Las tarjetas y transferencias no dan cambio");
       return;
     }
     if (
-      overpay > 0 &&
+      overpaidCents > 0 &&
       paymentMethods.some((method) =>
-        total > 0 ? method.amount <= overpay : method.type !== "CASH",
+        totalCents > 0
+          ? toCheckoutCents(method.amount) <= overpaidCents
+          : method.type !== "CASH",
       )
     ) {
       toast.error("Sobra un pago: con los demás métodos ya se cubre el total");
@@ -943,7 +942,9 @@ function POSWorkspace({
     setCheckingOut(true);
     // Freeze the payload the cashier confirmed before the preflight is awaited:
     // the sale that leaves must describe this cart, this customer and these
-    // tenders, never a later state that changed while it waited.
+    // tenders, never a later state that changed while it waited. One builder
+    // feeds both the request and its identity, so a payload change can never
+    // leave the pinned request key describing a different request.
     const request = {
       customerId: selectedCustomer || undefined,
       items: cart.map((item) => ({
@@ -964,12 +965,24 @@ function POSWorkspace({
         amount: method.amount,
       })),
     };
+    const signature = JSON.stringify(request);
+    // SEC-014: a retry of this exact body reuses its key so the server replays
+    // the sale it already persisted; anything else is a new intent.
+    const attempt =
+      checkoutAttemptRef.current?.signature === signature
+        ? checkoutAttemptRef.current
+        : { key: crypto.randomUUID(), signature };
+    checkoutAttemptRef.current = attempt;
     try {
       if (!(await verifySiteForPayment())) return;
       // The intent that survived the preflight must still be the live one: an
       // unmounted workspace or a superseded checkout must not charge.
       if (!checkingOutRef.current || !scopeIsCurrent()) return;
-      const result = await createSale.mutateAsync(request);
+      const result = await createSale.mutateAsync({
+        ...request,
+        requestKey: attempt.key,
+      });
+      if (checkoutAttemptRef.current === attempt) checkoutAttemptRef.current = null;
       if (!scopeIsCurrent()) return;
       setLastSale(result);
       setCart([]);
@@ -1125,7 +1138,6 @@ function POSWorkspace({
       setCurrentPage(1);
       setPaymentMethods([]);
       setEditingDiscount(null);
-      setCustomDiscount("");
       toast.success("Venta pausada correctamente");
     } catch (error) {
       toast.error(
@@ -1404,15 +1416,38 @@ function POSWorkspace({
         <div className="hidden lg:flex min-h-0 lg:h-full flex-col">
           <div className="@container h-auto min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-card lg:h-full flex flex-col">
             {/* Cart Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                Carrito
-              </h2>
-              {cart.length > 0 && (
-                <span className="text-[13px] text-muted-foreground tabular-nums">
-                  {cart.length}
-                </span>
-              )}
+            <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border/60">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  Carrito
+                </h2>
+                {cart.length > 0 && (
+                  <span className="text-[13px] text-muted-foreground tabular-nums">
+                    {cart.length}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowPausedSalesModal(true)}
+                  className="h-8 px-2.5 text-xs font-medium tabular-nums"
+                >
+                  <Play className="w-3.5 h-3.5" aria-hidden="true" />
+                  Reanudar ({pausedSales.length})
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handlePauseSale}
+                  disabled={cart.length === 0 || cartLocked}
+                  className="h-8 px-2.5 text-xs font-medium"
+                >
+                  <Pause className="w-3.5 h-3.5" aria-hidden="true" />
+                  Pausar
+                </Button>
+              </div>
             </div>
 
             {/* Cart Items */}
@@ -1434,15 +1469,15 @@ function POSWorkspace({
 
             {/* Cart Footer */}
             <div className="p-4 border-t border-border/60 bg-muted/10 space-y-3 shrink-0">
-              {/* Customer and financed sale share one row of icon-over-label cards,
-                  matching the payment method cards below. */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* Customer and financed sale share one compact horizontal utility row. */}
+              <div className="grid grid-cols-[1fr_auto] gap-2">
                 <button
                   type="button"
                   onClick={() => setShowCustomerModal(true)}
                   title={selectedCustomerName || undefined}
                   className={cn(
-                    "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2.5 transition-colors duration-150 ease-out",
+                    "flex h-9 min-w-0 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium transition-colors duration-150 ease-out",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                     selectedCustomer
                       ? "border-primary/40 bg-primary/10 text-foreground"
                       : "border-border/80 bg-muted/20 dark:bg-background/50 text-muted-foreground hover:border-foreground/25 hover:bg-muted/50 hover:text-foreground",
@@ -1451,7 +1486,7 @@ function POSWorkspace({
                   <span className={cn("shrink-0", selectedCustomer ? "text-primary-text" : "text-muted-foreground")}>
                     <User className="w-4 h-4" />
                   </span>
-                  <span className="w-full truncate text-center text-[13px] font-medium tracking-tight">
+                  <span className="min-w-0 truncate tracking-tight">
                     {selectedCustomerName || "Sin cliente"}
                   </span>
                 </button>
@@ -1466,16 +1501,22 @@ function POSWorkspace({
                       ? "Selecciona un cliente para financiar"
                       : undefined
                   }
-                  className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 px-2 py-2.5 text-muted-foreground transition-colors duration-150 ease-out hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                  className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/80 px-3 text-[13px] font-medium text-muted-foreground transition-colors duration-150 ease-out hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
                 >
                   <span className="shrink-0">
                     <HandCoins className="w-4 h-4" />
                   </span>
-                  <span className="text-[13px] font-medium tracking-tight whitespace-nowrap">
+                  <span className="tracking-tight whitespace-nowrap">
                     Financiar
                   </span>
                 </button>
               </div>
+
+              {/* Payment Method Segmented Control */}
+              <PaymentMethodCards
+                selectedMethod={selectedPaymentMethod}
+                onMethodChange={setSelectedPaymentMethod}
+              />
 
               {/* Totals Breakdown */}
               <div className="rounded-lg bg-muted/25 px-3.5 py-2.5 border border-border/60">
@@ -1499,35 +1540,6 @@ function POSWorkspace({
                   </span>
                 </div>
               </div>
-
-              {/* Pause / Resume */}
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowPausedSalesModal(true)}
-                  className="flex-1 h-9 rounded-lg text-[13px] font-medium"
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  Reanudar ({pausedSales.length})
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handlePauseSale}
-                  disabled={cart.length === 0 || cartLocked}
-                  className="flex-1 h-9 rounded-lg text-[13px] font-medium"
-                >
-                  <Pause className="w-3.5 h-3.5" />
-                  Pausar
-                </Button>
-              </div>
-
-              {/* Payment Method Cards */}
-              <PaymentMethodCards
-                selectedMethod={selectedPaymentMethod}
-                onMethodChange={setSelectedPaymentMethod}
-              />
 
               {/* Checkout */}
               <Button
@@ -1850,85 +1862,19 @@ function POSWorkspace({
 
       {/* Discount Modal */}
       {editingDiscount && (
-        <Modal
-          isOpen={!!editingDiscount}
+        <DiscountModal
+          isOpen
+          item={cart.find((item) => item.productId === editingDiscount) ?? null}
+          canOverridePrice={canOverridePrice}
           onClose={handleCloseDiscountModal}
-          title="Agregar descuento"
-          size="sm"
-        >
-          <div className="space-y-4">
-            <div className="space-y-2">
-              {canOverridePrice && (
-                <>
-                  <CurrencyInput
-                    label="Precio unitario"
-                    value={customPrice}
-                    onChange={(value) => setCustomPrice(value === 0 ? "" : String(value))}
-                    placeholder="Precio"
-                  />
-                  <Button
-                    variant="secondary"
-                    className="w-full"
-                    disabled={!customPrice}
-                    onClick={() => {
-                      if (!editingDiscount) return;
-                      const price = Number(customPrice);
-                      if (Number.isNaN(price) || price < 0) return;
-                      updateItemPrice(editingDiscount, price);
-                    }}
-                  >
-                    Aplicar precio
-                  </Button>
-                </>
-              )}
-            </div>
-
-            <CurrencyInput
-              label="Monto del descuento"
-              value={customDiscount}
-              onChange={(value) => setCustomDiscount(value === 0 ? "" : String(value))}
-              placeholder="0.00"
-            />
-            <div className="flex gap-2">
-              {[10, 20, 50].map((pct) => (
-                <Button
-                  key={pct}
-                  variant="secondary"
-                  onClick={() => {
-                    if (editingDiscount)
-                      updateItemDiscountPercent(editingDiscount, pct);
-                  }}
-                  className="flex-1"
-                >
-                  {pct}%
-                </Button>
-              ))}
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="secondary"
-                onClick={handleCloseDiscountModal}
-                className="flex-1"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => {
-                  if (editingDiscount)
-                    updateItemDiscount(editingDiscount, Number(customDiscount));
-                }}
-                className="flex-1"
-                disabled={!customDiscount}
-              >
-                Aplicar
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          onApplyDiscount={updateItemDiscount}
+          onApplyDiscountPercent={updateItemDiscountPercent}
+          onApplyPrice={updateItemPrice}
+        />
       )}
 
       {/* Paused Sales Modal */}
-      <Modal
+      <PausedSalesModal
         isOpen={showPausedSalesModal}
         onClose={() => {
           setShowPausedSalesModal(false);
@@ -1937,72 +1883,10 @@ function POSWorkspace({
             setOpenedFromMobileCart(false);
           }
         }}
-        title="Ventas pausadas"
-        size="xl"
-      >
-        <div className="space-y-3">
-          {pausedSales.length === 0 ? (
-            <EmptyState
-              icon={<Pause className="h-12 w-12" />}
-              title="No hay ventas pausadas"
-              subtitle="Pausa una venta para que aparezca aquí"
-            />
-          ) : (
-            <div className="scrollbar-app max-h-96 overflow-y-auto space-y-2">
-              {pausedSales.map((sale) => (
-                <div
-                  key={sale.id}
-                  className="p-4 rounded-xl bg-background/40 border border-border/70"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        {sale.customerName || "Sin cliente"}
-                      </p>
-                      <p className="text-[13px] text-muted-foreground mt-0.5">
-                        {sale.cart.length} producto(s) ·{" "}
-                        {new Date(sale.pausedAt).toLocaleString("es-CO")}
-                      </p>
-                    </div>
-                    <span className="stat-number text-base font-semibold tabular-nums text-primary-text">
-                      {formatCurrency(
-                        sale.cart.reduce(
-                          (sum, item) =>
-                            sum +
-                            item.quantity * item.unitPrice -
-                            item.discountAmount,
-                          0,
-                        ),
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleResumeSale(sale.id)}
-                      className="flex-1"
-                    >
-                      <Play className="w-3.5 h-3.5" /> Reanudar
-                    </Button>
-                    <InlineConfirmButton
-                      ariaLabel={
-                        sale.customerName
-                          ? `Eliminar venta pausada de ${sale.customerName}`
-                          : "Eliminar venta pausada"
-                      }
-                      announce="Confirma para eliminar la venta pausada"
-                      confirmLabel="¿Eliminar?"
-                      onConfirm={() => handleDeletePausedSale(sale.id)}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    </InlineConfirmButton>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Modal>
+        pausedSales={pausedSales}
+        onResume={handleResumeSale}
+        onDelete={handleDeletePausedSale}
+      />
 
       <ConfirmDialog
         isOpen={showFinanceConfirm}

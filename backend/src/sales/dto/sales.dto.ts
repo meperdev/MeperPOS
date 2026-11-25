@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsInt,
   IsNumber,
   IsOptional,
   IsEnum,
@@ -11,18 +12,28 @@ import {
   ValidateNested,
   ValidateIf,
   Min,
+  Max,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+
+export const SALE_ITEM_QUANTITY_MAX = 2147483647;
 
 export class SaleItemDto {
   @ApiProperty({ example: 'uuid-product-id' })
   @IsString()
+  @MaxLength(64)
   @IsNotEmpty()
   productId: string;
 
-  @ApiProperty({ example: 2, minimum: 1 })
-  @IsNumber()
+  @ApiProperty({
+    type: 'integer',
+    example: 2,
+    minimum: 1,
+    maximum: SALE_ITEM_QUANTITY_MAX,
+  })
+  @IsInt()
   @Min(1)
+  @Max(SALE_ITEM_QUANTITY_MAX)
   @Type(() => Number)
   quantity: number;
 
@@ -55,16 +66,19 @@ export class PaymentDto {
 
 export class CreateSaleDto {
   @ApiPropertyOptional({
-    description: 'Explicit origin site; before cutover only the sole principal site can use global stock.',
+    description:
+      'Explicit origin site; before cutover only the sole principal site can use global stock.',
   })
   @Transform(({ obj, key }) => obj[key], { toClassOnly: true })
   @ValidateIf((_dto, value) => value !== undefined)
   @IsString()
+  @MaxLength(64)
   @IsNotEmpty()
   locationId?: string;
 
   @ApiProperty({ example: 'uuid-customer-id', required: false })
   @IsString()
+  @MaxLength(64)
   @IsNotEmpty()
   @IsOptional()
   customerId?: string;
@@ -113,6 +127,7 @@ export class UpdateSaleDto {
 
   @ApiProperty({ example: 'Cliente arrepentido', required: false })
   @IsString()
+  @MaxLength(500)
   @IsOptional()
   cancelReason?: string;
 }
@@ -134,26 +149,31 @@ export class FindSalesQueryDto {
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(40)
   @IsOptional()
   startDate?: string;
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(40)
   @IsOptional()
   endDate?: string;
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(64)
   @IsOptional()
   status?: string;
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(200)
   @IsOptional()
   search?: string;
 
   @ApiPropertyOptional({ example: 'uuid-customer-id' })
   @IsString()
+  @MaxLength(64)
   @IsOptional()
   customerId?: string;
 }

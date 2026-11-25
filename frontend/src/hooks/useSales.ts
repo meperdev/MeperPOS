@@ -67,10 +67,17 @@ export function useCreateSale(posScope?: PosRequestScope) {
         method: "CASH" | "CARD" | "TRANSFER";
         amount: number;
       }>;
+      // SEC-014 idempotency key. The caller pins one per checkout intent and
+      // reuses it while the outcome is uncertain, so a retried request that the
+      // server already persisted replays that sale instead of selling twice.
+      // Optional: a caller without an intent still posts a plain sale.
+      requestKey?: string;
     }) =>
-      api
-        .post<Sale>("/sales", data, posScope ? { posScope } : undefined)
-        .then((res) => res.data),
+      // No config at all outside the POS: the plain call stays byte-identical.
+      (posScope
+        ? api.post<Sale>("/sales", data, { posScope })
+        : api.post<Sale>("/sales", data)
+      ).then((res) => res.data),
     onSuccess: () => {
       // Payment confirmed: the one haptic that confirms money moved (S4.2).
       // It lives here, not in the POS page, so every sale path feels the same.

@@ -23,6 +23,7 @@ import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { UpdateElectronicInvoicingDto } from './dto/update-electronic-invoicing.dto';
 
 @Controller('admin')
+// eslint-disable-next-line meperpos/require-organization-guard -- SUPER_ADMIN platform route: operates across organizations by design
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPER_ADMIN')
 export class AdminController {

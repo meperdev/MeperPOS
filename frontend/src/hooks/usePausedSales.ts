@@ -3,7 +3,7 @@ import { safeGetItem, safeSetItem } from "@/lib/utils";
 import { effectiveStock } from "@/lib/product-type";
 import type { CartItem } from "@/types";
 
-interface PausedSale {
+export interface PausedSale {
   id: string;
   cart: CartItem[];
   customerId: string | "";

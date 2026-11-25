@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsOptional, Matches } from 'class-validator';
+import { IsExpectedDeliveryDate } from './expected-delivery-date.decorator';
 
 export class ConfirmPurchaseOrderDto {
   @ApiProperty({
@@ -8,13 +8,6 @@ export class ConfirmPurchaseOrderDto {
     description:
       'Calendar day the supplier is expected to deliver (YYYY-MM-DD).',
   })
-  @IsOptional()
-  @IsDateString(
-    { strict: true },
-    { message: 'La fecha de entrega esperada no es una fecha válida' },
-  )
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
-    message: 'La fecha de entrega esperada debe tener el formato AAAA-MM-DD',
-  })
+  @IsExpectedDeliveryDate()
   expectedDeliveryDate?: string;
 }

@@ -1,7 +1,8 @@
-import { IsString, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsBoolean, IsOptional, MaxLength } from 'class-validator';
 
 export class UpdateCashRegisterDto {
   @IsString()
+  @MaxLength(100)
   @IsOptional()
   name?: string;
 

@@ -65,14 +65,42 @@ const compactDateFormatter = new Intl.DateTimeFormat(LOCALE, {
   year: "numeric",
 });
 
-export function formatDateShort(date: string | Date) {
-  const parts = compactDateFormatter.formatToParts(new Date(date));
+/** Same compact day label, pinned to UTC the way `formatCalendarDay` is. */
+const compactCalendarDayFormatter = new Intl.DateTimeFormat(LOCALE, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** The one place a compact day label is assembled, so every one stays identical. */
+function dayLabelFromParts(parts: Intl.DateTimeFormatPart[]): string {
   const pick = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
 
   const month = pick("month").replace(/\.$/, "");
 
   return `${pick("day")} ${month} ${pick("year")}`.trim();
+}
+
+function compactDayLabel(
+  formatter: Intl.DateTimeFormat,
+  date: string | Date,
+): string {
+  return dayLabelFromParts(formatter.formatToParts(new Date(date)));
+}
+
+export function formatDateShort(date: string | Date) {
+  return compactDayLabel(compactDateFormatter, date);
+}
+
+/**
+ * The compact label for a calendar day stored as midnight UTC (a `@db.Date`
+ * column), read as that same day whatever the browser's time zone — the shape
+ * `formatCalendarDay` owns, in the day-only wording tables and card cells use.
+ */
+export function formatCalendarDayShort(date: string | Date) {
+  return compactDayLabel(compactCalendarDayFormatter, date);
 }
 
 /**
@@ -102,9 +130,8 @@ export function formatDateTime(date: string | Date) {
   const pick = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
 
-  const month = pick("month").replace(/\.$/, "");
   const dayPeriod = pick("dayPeriod").replace(/[\u00a0\u202f]/g, " ");
-  const datePart = `${pick("day")} ${month} ${pick("year")}`;
+  const datePart = dayLabelFromParts(parts);
   const timePart = `${pick("hour")}:${pick("minute")}`;
 
   return `${datePart}, ${timePart} ${dayPeriod}`.trimEnd();

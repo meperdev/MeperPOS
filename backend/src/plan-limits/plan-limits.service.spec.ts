@@ -1,3 +1,4 @@
+import { PlanType } from '@prisma/client';
 import { PlanLimitService } from './plan-limits.service';
 import { PLAN_LIMITS } from './plan-limits.constants';
 
@@ -51,6 +52,21 @@ describe('PlanLimitService', () => {
       expect(PLAN_LIMITS.PRO.maxCustomers).toBe(-1);
       expect(PLAN_LIMITS.PRO.maxCashRegisters).toBe(-1);
       expect(PLAN_LIMITS.PRO.hasForceClose).toBe(true);
+    });
+
+    // The table is typed `Record<PlanType, PlanLimits>`, so a plan missing here
+    // is a compile error; this pins the runtime side of the same promise.
+    it('prices every PlanType in the database enum', () => {
+      expect(Object.keys(PLAN_LIMITS).sort()).toEqual(
+        Object.values(PlanType).sort(),
+      );
+    });
+
+    it('keeps the same shape for every plan', () => {
+      const shape = Object.keys(PLAN_LIMITS.BASIC).sort();
+      for (const plan of Object.values(PlanType)) {
+        expect(Object.keys(PLAN_LIMITS[plan]).sort()).toEqual(shape);
+      }
     });
   });
 

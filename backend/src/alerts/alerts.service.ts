@@ -11,6 +11,8 @@ import type {
 } from '../plan-limits/plan-limits.constants';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { bogotaToday } from '../purchase-orders/purchase-order-status';
+import { isTaskOverdue } from '../tasks/task-due';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { alertVisibility, buildAlerts } from './alerts.logic';
 import type {
@@ -197,6 +199,15 @@ export class AlertsService {
     });
   }
 
+  /**
+   * Loans still open whose due day is behind today's business day.
+   *
+   * `dueAt` is a `@db.Date` column, so Prisma stores the calendar day at
+   * midnight UTC and compares that raw value. Handing it the current instant
+   * turned a loan due today into an overdue one from 19:00 in Bogotá — five
+   * hours before its own day starts — so the cutoff is midnight UTC of today's
+   * Bogotá day, the same day boundary the loans page reads.
+   */
   private overdueLoans(
     organizationId: string,
     now: Date,
@@ -205,24 +216,40 @@ export class AlertsService {
       where: {
         organizationId,
         status: MoneyLoanStatus.OPEN,
-        dueAt: { lt: now },
+        dueAt: { lt: bogotaToday(now) },
       },
       select: { id: true, dueAt: true },
     }) as Promise<Array<{ id: string; dueAt: Date }>>;
   }
 
-  private overdueTasks(
+  /**
+   * Tasks still open whose due date has passed.
+   *
+   * `Task.dueDate` carries two shapes — a picked calendar day at midnight UTC
+   * and a real instant — so `isTaskOverdue` decides each one. The query keeps a
+   * strict superset (`dueDate < now`, since today's Bogotá midnight is never
+   * after `now`) so the feed never loads every open task to filter it, and the
+   * surviving ids are what `buildAlerts` fingerprints: a task due today changes
+   * nothing until tomorrow, when it becomes overdue once.
+   */
+  private async overdueTasks(
     organizationId: string,
     now: Date,
   ): Promise<Array<{ id: string }>> {
-    return this.prisma.task.findMany({
+    const candidates = await this.prisma.task.findMany({
       where: {
         organizationId,
         deletedAt: null,
         status: { notIn: [TaskStatus.COMPLETED, TaskStatus.CANCELLED] },
         dueDate: { lt: now },
       },
-      select: { id: true },
+      select: { id: true, dueDate: true },
     });
+
+    return candidates
+      .filter(
+        (task) => task.dueDate !== null && isTaskOverdue(task.dueDate, now),
+      )
+      .map((task) => ({ id: task.id }));
   }
 }
