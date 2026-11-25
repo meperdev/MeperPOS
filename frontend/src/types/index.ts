@@ -1127,3 +1127,14 @@ export type WhatsAppReportOutcome =
   | { status: "failed"; reason: WhatsAppDeliveryFailure }
   | { status: "already_attempted" }
   | { status: "no_identity"; reason: "no_recipient" };
+
+/** A site is either a store that serves customers or a warehouse that stores. */
+export type LocationType = "STORE" | "WAREHOUSE";
+
+/** One site of the active organization, as the locations API returns it. */
+export interface LocationSite {
+  id: string;
+  name: string;
+  type: LocationType;
+  isDefault: boolean;
+}

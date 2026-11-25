@@ -4,7 +4,7 @@ import type { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { OrgRole, PrismaClient } from '@prisma/client';
-import request from 'supertest';
+import request, { type Response } from 'supertest';
 import { configureApp, configureErrorHandling } from '../app-configuration';
 import { AppModule } from '../app.module';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
@@ -21,17 +21,40 @@ describe('Location access (HTTP integration)', () => {
     `${prefix}-race@example.test`,
   ];
   const superAdminEmail = `${prefix}-superadmin@example.test`;
-  const a = { id: randomUUID(), name: 'A', isDefault: true };
-  const b = { id: randomUUID(), name: 'B', isDefault: false };
-  const other = { id: randomUUID(), name: 'Other', isDefault: true };
+  const memberEmail = `${prefix}-member@example.test`;
+  const inventoryEmail = `${prefix}-inventory@example.test`;
+  const foreignEmail = `${prefix}-foreign@example.test`;
+  const a = { id: randomUUID(), name: 'A', type: 'STORE', isDefault: true };
+  const b = { id: randomUUID(), name: 'B', type: 'STORE', isDefault: false };
+  const other = {
+    id: randomUUID(),
+    name: 'Other',
+    type: 'STORE',
+    isDefault: true,
+  };
+  /**
+   * Inserts a fixture site. The `type` column arrives with this feature, so the
+   * creation payload is written out instead of spreading a response shape that
+   * a stale generated client would reject.
+   */
+  const seeded = (site: { id: string; name: string; isDefault: boolean }) => ({
+    id: site.id,
+    name: site.name,
+    isDefault: site.isDefault,
+  });
+  /** Sites this suite creates through the API, removed again in `afterAll`. */
+  const createdLocationIds: string[] = [];
   let admin: string;
   let adminAsCashier: string;
   let cashier: string;
   let cashierInOtherOrg: string;
+  let member: string;
+  let inventoryUser: string;
   let superAdmin: string;
   let cashierId: string;
   let raceUserId: string;
   let adminId: string;
+  let foreignUserId: string;
   let orgId: string;
   let otherOrgId: string;
 
@@ -51,14 +74,14 @@ describe('Location access (HTTP integration)', () => {
         data: {
           name: 'Pilot business',
           slug: slugs[0],
-          locations: { create: [a, b] },
+          locations: { create: [seeded(a), seeded(b)] },
         },
       }),
       prisma.organization.create({
         data: {
           name: 'Separate business',
           slug: slugs[1],
-          locations: { create: other },
+          locations: { create: [seeded(other)] },
         },
       }),
     ]);
@@ -112,13 +135,65 @@ describe('Location access (HTTP integration)', () => {
     cashierInOtherOrg = sign(employee, second.id, OrgRole.CASHIER);
     cashierId = employee.id;
     raceUserId = race.id;
+    const [memberAccount, inventoryAccount, foreignAccount] = await Promise.all(
+      [
+        prisma.user.create({
+          data: {
+            name: 'Member',
+            email: memberEmail,
+            password: 'not-a-login-credential',
+            organizationUsers: {
+              create: [{ organizationId: first.id, role: OrgRole.MEMBER }],
+            },
+          },
+        }),
+        prisma.user.create({
+          data: {
+            name: 'Inventory',
+            email: inventoryEmail,
+            password: 'not-a-login-credential',
+            organizationUsers: {
+              create: [
+                { organizationId: first.id, role: OrgRole.INVENTORY_USER },
+              ],
+            },
+          },
+        }),
+        prisma.user.create({
+          data: {
+            name: 'Foreign',
+            email: foreignEmail,
+            password: 'not-a-login-credential',
+            organizationUsers: {
+              create: [{ organizationId: second.id, role: OrgRole.CASHIER }],
+            },
+          },
+        }),
+      ],
+    );
+    member = sign(memberAccount, first.id, OrgRole.MEMBER);
+    inventoryUser = sign(inventoryAccount, first.id, OrgRole.INVENTORY_USER);
+    foreignUserId = foreignAccount.id;
     superAdmin = sign(superAdminUser, null, 'SUPER_ADMIN');
   });
 
   afterAll(async () => {
+    await prisma.location.deleteMany({
+      where: { id: { in: createdLocationIds } },
+    });
     await prisma.organization.deleteMany({ where: { slug: { in: slugs } } });
     await prisma.user.deleteMany({
-      where: { email: { in: [...emails, superAdminEmail] } },
+      where: {
+        email: {
+          in: [
+            memberEmail,
+            inventoryEmail,
+            foreignEmail,
+            ...emails,
+            superAdminEmail,
+          ],
+        },
+      },
     });
     await prisma.$disconnect();
     await app?.close();
@@ -144,9 +219,14 @@ describe('Location access (HTTP integration)', () => {
       expect(roles).toHaveLength(readRoles.length);
       expect(roles).toEqual(expect.arrayContaining(readRoles));
     }
-    expect(
-      Reflect.getMetadata(ROLES_KEY, controller.prototype.replace),
-    ).toEqual([OrgRole.ADMIN]);
+    for (const handler of [
+      controller.prototype.create,
+      controller.prototype.update,
+      controller.prototype.assignments,
+      controller.prototype.replace,
+    ]) {
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([OrgRole.ADMIN]);
+    }
   });
 
   const get = (auth: string, id?: string) =>
@@ -158,6 +238,34 @@ describe('Location access (HTTP integration)', () => {
       .put(`/api/users/${id}/locations`)
       .set('Authorization', auth)
       .send({ locationIds });
+  const createSite = (auth: string, body: { name: string; type: string }) =>
+    request(app.getHttpServer())
+      .post('/api/locations')
+      .set('Authorization', auth)
+      .send(body);
+  const patchSite = (
+    auth: string,
+    id: string,
+    body: { name?: string; type?: string },
+  ) =>
+    request(app.getHttpServer())
+      .patch(`/api/locations/${id}`)
+      .set('Authorization', auth)
+      .send(body);
+  const assignmentsOf = (auth: string, id: string) =>
+    request(app.getHttpServer())
+      .get(`/api/users/${id}/locations`)
+      .set('Authorization', auth);
+
+  type SiteBody = {
+    id: string;
+    name: string;
+    type: string;
+    isDefault: boolean;
+  };
+  const siteBody = (response: Response) => response.body as SiteBody;
+  const assignmentsBody = (response: Response) =>
+    response.body as { locationIds: string[]; orgWideAccess: boolean };
 
   const deferred = () => {
     let resolve!: () => void;
@@ -479,4 +587,217 @@ describe('Location access (HTTP integration)', () => {
     });
     expect(grant.map((row) => row.locationId)).toEqual([a.id]);
   }, 15000);
+
+  it('creates named sites for administrators without granting access to them', async () => {
+    // The concurrent-promotion cases above leave this membership promoted; the
+    // directory cases below need it restricted to explicit assignments again.
+    await prisma.organizationUser.update({
+      where: {
+        userId_organizationId: { userId: cashierId, organizationId: orgId },
+      },
+      data: { role: OrgRole.CASHIER },
+    });
+    await assign(admin, cashierId, [a.id]).expect(200, { locationIds: [a.id] });
+
+    const warehouse = siteBody(
+      await createSite(admin, {
+        name: 'Bodega norte',
+        type: 'WAREHOUSE',
+      }).expect(201),
+    );
+    const store = siteBody(
+      await createSite(admin, {
+        name: 'Sucursal centro',
+        type: 'STORE',
+      }).expect(201),
+    );
+    createdLocationIds.push(warehouse.id, store.id);
+
+    expect(warehouse).toMatchObject({
+      name: 'Bodega norte',
+      type: 'WAREHOUSE',
+      isDefault: false,
+    });
+    expect(store).toMatchObject({
+      name: 'Sucursal centro',
+      type: 'STORE',
+      isDefault: false,
+    });
+
+    const listed = (await get(admin).expect(200)).body as SiteBody[];
+    expect(listed.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([warehouse.id, store.id]),
+    );
+    expect(listed.filter(({ id }) => id === warehouse.id)[0]).toEqual(
+      warehouse,
+    );
+
+    // S3: creating a site must not hand anybody access to it.
+    await expect(
+      prisma.membershipLocation.count({
+        where: { locationId: { in: [warehouse.id, store.id] } },
+      }),
+    ).resolves.toBe(0);
+    await get(cashier).expect(200, [a]);
+    await get(cashier, warehouse.id).expect(404);
+
+    const renamed = siteBody(
+      await patchSite(admin, warehouse.id, {
+        name: 'Bodega sur',
+        type: 'STORE',
+      }).expect(200),
+    );
+    expect(renamed).toEqual({
+      ...warehouse,
+      name: 'Bodega sur',
+      type: 'STORE',
+    });
+    await get(cashier, warehouse.id).expect(404);
+  });
+
+  it('refuses a duplicate site name in the same organization, ignoring case and spacing', async () => {
+    const created = siteBody(
+      await createSite(admin, {
+        name: '  Bodega réplica  ',
+        type: 'WAREHOUSE',
+      }).expect(201),
+    );
+    createdLocationIds.push(created.id);
+    expect(created.name).toBe('Bodega réplica');
+
+    const before = await prisma.location.count({
+      where: { organizationId: orgId },
+    });
+    const duplicate = await createSite(admin, {
+      name: 'BODEGA RÉPLICA',
+      type: 'STORE',
+    }).expect(409);
+    expect(duplicate.body).toMatchObject({
+      message: 'A location with this name already exists',
+    });
+    const renameCollision = await patchSite(admin, b.id, {
+      name: 'bodega réplica',
+    }).expect(409);
+    expect(renameCollision.body).toMatchObject({
+      message: 'A location with this name already exists',
+    });
+    await expect(
+      prisma.location.count({ where: { organizationId: orgId } }),
+    ).resolves.toBe(before);
+
+    // The unique name is per organization, not global.
+    const elsewhere = siteBody(
+      await createSite(superAdmin, {
+        name: 'bodega réplica',
+        type: 'WAREHOUSE',
+      })
+        .set('x-organization-id', otherOrgId)
+        .expect(201),
+    );
+    createdLocationIds.push(elsewhere.id);
+  });
+
+  it('rejects a blank, oversized or unknown site definition', async () => {
+    const before = await prisma.location.count({
+      where: { organizationId: orgId },
+    });
+    await createSite(admin, { name: '   ', type: 'STORE' }).expect(400);
+    await createSite(admin, { name: 'x'.repeat(81), type: 'STORE' }).expect(
+      400,
+    );
+    await createSite(admin, { name: 'Sede válida', type: 'BAKERY' }).expect(
+      400,
+    );
+    await patchSite(admin, b.id, { name: '' }).expect(400);
+    await patchSite(admin, b.id, { type: 'BAKERY' }).expect(400);
+
+    await expect(
+      prisma.location.count({ where: { organizationId: orgId } }),
+    ).resolves.toBe(before);
+    await get(admin, b.id).expect(200, b);
+  });
+
+  it('rejects site management from members, cashiers and inventory users', async () => {
+    for (const auth of [member, cashier, inventoryUser]) {
+      await createSite(auth, {
+        name: 'Bodega prohibida',
+        type: 'WAREHOUSE',
+      }).expect(403);
+      await patchSite(auth, a.id, { name: 'Renombrada' }).expect(403);
+      await assignmentsOf(auth, cashierId).expect(403);
+    }
+    await expect(
+      prisma.location.count({
+        where: { organizationId: orgId, name: 'Bodega prohibida' },
+      }),
+    ).resolves.toBe(0);
+    await get(admin, a.id).expect(200, a);
+  });
+
+  it('keeps another tenant’s sites and assignments out of reach', async () => {
+    const foreign = await patchSite(admin, other.id, {
+      type: 'WAREHOUSE',
+    }).expect(404);
+    expect(foreign.body).toMatchObject({ message: 'Location not found' });
+    await patchSite(adminAsCashier, a.id, { name: 'Intrusa' }).expect(403);
+    await assignmentsOf(admin, foreignUserId).expect(404);
+    await assignmentsOf(adminAsCashier, foreignUserId).expect(403);
+
+    await expect(
+      prisma.location.findUnique({
+        where: { id: other.id },
+        select: { name: true, type: true },
+      }),
+    ).resolves.toEqual({ name: 'Other', type: 'STORE' });
+  });
+
+  it('keeps the principal site a store while other sites may change type', async () => {
+    const refused = await patchSite(admin, a.id, {
+      type: 'WAREHOUSE',
+    }).expect(400);
+    expect(refused.body).toMatchObject({
+      message: 'The principal site cannot become a warehouse',
+    });
+    await get(admin, a.id).expect(200, a);
+
+    const warehouse = siteBody(
+      await patchSite(admin, b.id, { type: 'WAREHOUSE' }).expect(200),
+    );
+    expect(warehouse).toEqual({ ...b, type: 'WAREHOUSE' });
+    await get(admin, b.id).expect(200, { ...b, type: 'WAREHOUSE' });
+    await patchSite(admin, b.id, { type: 'STORE' }).expect(200);
+
+    const renamed = siteBody(
+      await patchSite(admin, a.id, { name: 'Principal' }).expect(200),
+    );
+    expect(renamed).toEqual({ ...a, name: 'Principal' });
+    await patchSite(admin, a.id, { name: a.name }).expect(200);
+
+    const restored = siteBody(await get(admin, a.id).expect(200));
+    expect(restored).toEqual(a);
+  });
+
+  it('reads the explicit assignments of a restricted membership', async () => {
+    await assign(admin, cashierId, [b.id, a.id]).expect(200, {
+      locationIds: [b.id, a.id],
+    });
+    const listed = assignmentsBody(
+      await assignmentsOf(admin, cashierId).expect(200),
+    );
+    expect([...listed.locationIds].sort()).toEqual([a.id, b.id].sort());
+    expect(listed.orgWideAccess).toBe(false);
+
+    // Organization-wide roles hold no explicit assignment rows: the role is
+    // their access, so the read says so instead of returning an empty set.
+    await assignmentsOf(admin, adminId).expect(200, {
+      locationIds: [],
+      orgWideAccess: true,
+    });
+
+    await assign(admin, cashierId, []).expect(200, { locationIds: [] });
+    await assignmentsOf(admin, cashierId).expect(200, {
+      locationIds: [],
+      orgWideAccess: false,
+    });
+  });
 });

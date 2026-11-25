@@ -9,6 +9,7 @@ import {
 export interface PosSite {
   id: string;
   name: string;
+  type: "STORE" | "WAREHOUSE";
   isDefault: boolean;
 }
 

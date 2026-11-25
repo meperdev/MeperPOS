@@ -16,13 +16,14 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { SiteAssignmentModal } from "@/components/locations/SiteAssignmentModal";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { KeyRound, Plus, Shield, SquarePen, Trash2, Users as UsersIcon } from "lucide-react";
+import { Building2, KeyRound, Plus, Shield, SquarePen, Trash2, Users as UsersIcon } from "lucide-react";
 import type { User } from "@/types";
 
 type SelectableRole = "ADMIN" | "CASHIER" | "INVENTORY_USER";
@@ -61,6 +62,7 @@ export default function UsersPage() {
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [userToReset, setUserToReset] = useState<User | null>(null);
+  const [userToAssignSites, setUserToAssignSites] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [formData, setFormData] = useState({
     name: "",
@@ -252,6 +254,16 @@ export default function UsersPage() {
                             >
                               <SquarePen className="h-3.5 w-3.5" /> Editar
                             </Button>
+                            {/* The dialog asks the server whether this person
+                                already reaches every site; the list carries no role. */}
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Sedes de ${user.name}`}
+                              onClick={() => setUserToAssignSites(user)}
+                            >
+                              <Building2 className="h-3.5 w-3.5" /> Sedes
+                            </Button>
                             <Button
                               size="sm"
                               variant="secondary"
@@ -357,6 +369,16 @@ export default function UsersPage() {
           </form>
         )}
       </Modal>
+
+      {/* Mounted only while open: the dialog reads the site directory, and the
+          team screen has no reason to fetch sites until someone asks. */}
+      {userToAssignSites && (
+        <SiteAssignmentModal
+          isOpen
+          onClose={() => setUserToAssignSites(null)}
+          user={userToAssignSites}
+        />
+      )}
 
       <ConfirmDialog
         isOpen={showDeleteModal}

@@ -20,7 +20,9 @@ type UserRole = AppRole;
 // S5: payroll and the employee directory belong to owners and administrators
 // only. They are checked by identity before the shared route map, because the
 // inherited role list would let an ADMIN-scoped SUPER_ADMIN read tenant payroll.
-const ownerAdminOnlyPrefixes = ["/employees", "/payroll"];
+// Site management is owner/administrator work too: S3 keeps every other role on
+// the sites an administrator assigned it.
+const ownerAdminOnlyPrefixes = ["/employees", "/payroll", "/locations"];
 
 const routeRoleMap: Array<{ prefix: string; roles: UserRole[] }> = [
   { prefix: "/dashboard", roles: ["ADMIN", "INVENTORY_USER"] },
@@ -34,6 +36,7 @@ const routeRoleMap: Array<{ prefix: string; roles: UserRole[] }> = [
   { prefix: "/loans", roles: ["ADMIN", "CASHIER"] },
   { prefix: "/reports", roles: ["ADMIN"] },
   { prefix: "/users", roles: ["ADMIN"] },
+  { prefix: "/locations", roles: ["ADMIN"] },
   { prefix: "/tasks", roles: ["ADMIN", "CASHIER", "INVENTORY_USER"] },
   { prefix: "/alerts", roles: ["ADMIN", "INVENTORY_USER"] },
   { prefix: "/categories", roles: ["ADMIN", "INVENTORY_USER"] },

@@ -1,14 +1,32 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrgRole, Prisma } from '@prisma/client';
+import { LocationType, OrgRole, Prisma } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
 
-const siteFields = { id: true, name: true, isDefault: true } as const;
+const siteFields = {
+  id: true,
+  name: true,
+  type: true,
+  isDefault: true,
+} as const;
+
+const DUPLICATE_NAME = 'A location with this name already exists';
+
+export interface CreateLocationInput {
+  name: string;
+  type?: LocationType;
+}
+
+export interface UpdateLocationInput {
+  name?: string;
+  type?: LocationType;
+}
 
 const hasOrgWideAccess = (role: RequestUser['role']) =>
   role === OrgRole.OWNER || role === OrgRole.ADMIN || role === 'SUPER_ADMIN';
@@ -35,6 +53,18 @@ function isConcurrentAssignmentConflict(error: unknown): boolean {
   }
   return SERIALIZATION_PG_CODES.some((code) =>
     error.message.includes(`Code: \`${code}\``),
+  );
+}
+
+/**
+ * A site create or rename can only hit one unique constraint: the
+ * case-insensitive `(organizationId, name)` index. `isDefault` is never written
+ * by these statements, so the partial principal-site index cannot be involved.
+ */
+function isDuplicateSiteName(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
   );
 }
 
@@ -86,6 +116,103 @@ export class LocationsService {
     });
     if (!location) throw new NotFoundException('Location not found');
     return location;
+  }
+
+  /**
+   * Creates a store or warehouse in the caller's organization.
+   *
+   * S3: this never writes a `MembershipLocation` grant. A new site starts
+   * visible to owners and administrators only (they derive access from their
+   * organization role); every restricted membership keeps exactly the sites an
+   * administrator assigned it.
+   */
+  async create(actor: RequestUser, input: CreateLocationInput) {
+    const organizationId = this.requireAdmin(actor);
+    try {
+      return await this.prisma.location.create({
+        data: {
+          organizationId,
+          name: input.name,
+          type: input.type ?? LocationType.STORE,
+          // A created site is never the principal site: that one is owned by
+          // provisioning and keeps the organization's default topology.
+          isDefault: false,
+        },
+        select: siteFields,
+      });
+    } catch (error) {
+      if (isDuplicateSiteName(error)) {
+        throw new ConflictException(DUPLICATE_NAME);
+      }
+      throw error;
+    }
+  }
+
+  /** Renames a site and/or changes its type, always inside the active tenant. */
+  async update(actor: RequestUser, id: string, input: UpdateLocationInput) {
+    const organizationId = this.requireAdmin(actor);
+    const current = await this.prisma.location.findFirst({
+      where: { id, organizationId },
+      select: siteFields,
+    });
+    if (!current) throw new NotFoundException('Location not found');
+
+    // The principal site hosts POS checkout, so it must stay a store.
+    if (current.isDefault && input.type === LocationType.WAREHOUSE) {
+      throw new BadRequestException(
+        'The principal site cannot become a warehouse',
+      );
+    }
+    if (input.name === undefined && input.type === undefined) return current;
+
+    try {
+      return await this.prisma.location.update({
+        where: { id_organizationId: { id, organizationId } },
+        data: {
+          ...(input.name === undefined ? {} : { name: input.name }),
+          ...(input.type === undefined ? {} : { type: input.type }),
+        },
+        select: siteFields,
+      });
+    } catch (error) {
+      if (isDuplicateSiteName(error)) {
+        throw new ConflictException(DUPLICATE_NAME);
+      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        // Deleted between the scoped read and the write.
+        throw new NotFoundException('Location not found');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Reads the access of one membership in the active organization: the explicit
+   * assignment rows `replaceAssignments` owns, plus whether the role itself
+   * already reaches every site. An organization-wide membership holds no rows —
+   * its access comes from the role, never from an empty assignment set.
+   */
+  async findAssignments(actor: RequestUser, userId: string) {
+    const organizationId = this.requireAdmin(actor);
+    const membership = await this.prisma.organizationUser.findUnique({
+      where: { userId_organizationId: { userId, organizationId } },
+      select: { role: true, user: { select: { isSuperAdmin: true } } },
+    });
+    if (!membership) throw new NotFoundException('Membership not found');
+
+    const grants = await this.prisma.membershipLocation.findMany({
+      where: { userId, organizationId },
+      select: { locationId: true },
+      orderBy: [{ locationId: 'asc' }],
+    });
+    return {
+      locationIds: grants.map(({ locationId }) => locationId),
+      orgWideAccess:
+        hasOrgWideAccess(membership.role) || membership.user.isSuperAdmin,
+    };
   }
 
   async replaceAssignments(
@@ -163,6 +290,15 @@ export class LocationsService {
           organizationId,
           assignments: { some: { userId: user.userId, organizationId } },
         };
+  }
+
+  private requireAdmin(user: RequestUser): string {
+    if (!hasOrgWideAccess(user.role)) {
+      throw new ForbiddenException(
+        'Only organization administrators can manage locations',
+      );
+    }
+    return this.requireOrganization(user);
   }
 
   private requireOrganization(user: RequestUser): string {

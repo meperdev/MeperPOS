@@ -207,6 +207,7 @@ describe("Sidebar", () => {
       "Empleados",
       "Nómina",
       "Tareas",
+      "Sedes",
     ]);
     expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
     // Account destinations live in the account menu, not in the rail spine.
@@ -243,6 +244,22 @@ describe("Sidebar", () => {
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     const link = screen.queryByRole("link", { name: "Nómina" });
     if (permitted) expect(link).toHaveAttribute("href", "/payroll");
+    else expect(link).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["OWNER", true], ["ADMIN", true], ["CASHIER", false],
+    ["MEMBER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
+  ])("shows the sites link for %s only when permitted", async (role, permitted) => {
+    useAuthMock.mockReturnValue({
+      user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
+      logout: vi.fn(), switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { organizations: [organizations[0]] } });
+    render(<Sidebar />, { wrapper });
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    const link = screen.queryByRole("link", { name: "Sedes" });
+    if (permitted) expect(link).toHaveAttribute("href", "/locations");
     else expect(link).not.toBeInTheDocument();
   });
 

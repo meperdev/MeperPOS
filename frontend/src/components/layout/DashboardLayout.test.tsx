@@ -114,6 +114,38 @@ describe("payroll route access", () => {
   });
 });
 
+describe("location route access", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentPathname = "/locations";
+  });
+  afterEach(cleanup);
+
+  it.each(["OWNER", "ADMIN"])("allows %s", (role) => {
+    setUser(role);
+    render(<DashboardLayout>Sedes</DashboardLayout>);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["CASHIER", "/pos"],
+    ["MEMBER", "/dashboard"],
+    ["INVENTORY_USER", "/dashboard"],
+    ["SUPER_ADMIN", "/dashboard"],
+  ])("redirects %s", (role, destination) => {
+    setUser(role);
+    render(<DashboardLayout>Sedes</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith(destination);
+  });
+
+  it("gates the nested site screen too", () => {
+    currentPathname = "/locations/new";
+    setUser("CASHIER");
+    render(<DashboardLayout>Nueva sede</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith("/pos");
+  });
+});
+
 describe("DashboardLayout route gating for /expenses", () => {
   beforeEach(() => {
     vi.clearAllMocks();

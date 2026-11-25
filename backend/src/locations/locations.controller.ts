@@ -3,6 +3,8 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
+  Post,
   Put,
   UseGuards,
   UseInterceptors,
@@ -11,10 +13,20 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiProperty,
+  ApiPropertyOptional,
   ApiTags,
 } from '@nestjs/swagger';
-import { OrgRole } from '@prisma/client';
-import { ArrayUnique, IsArray, IsUUID } from 'class-validator';
+import { LocationType, OrgRole } from '@prisma/client';
+import { Transform, type TransformFnParams } from 'class-transformer';
+import {
+  ArrayUnique,
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+} from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { AuditAction } from '../common/decorators/audit.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -25,6 +37,36 @@ import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organ
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { LocationsService } from './locations.service';
+
+/** Trimmed before validation so a padded name cannot be stored twice. */
+const trimName = ({ value }: TransformFnParams) =>
+  typeof value === 'string' ? value.trim() : value;
+
+class CreateLocationDto {
+  @ApiProperty({ maxLength: 80, description: 'Unique site name in the org' })
+  @Transform(trimName)
+  @IsString()
+  @Length(1, 80)
+  name!: string;
+
+  @ApiProperty({ enum: LocationType, description: 'Store or warehouse' })
+  @IsEnum(LocationType)
+  type!: LocationType;
+}
+
+class UpdateLocationDto {
+  @ApiPropertyOptional({ maxLength: 80 })
+  @IsOptional()
+  @Transform(trimName)
+  @IsString()
+  @Length(1, 80)
+  name?: string;
+
+  @ApiPropertyOptional({ enum: LocationType })
+  @IsOptional()
+  @IsEnum(LocationType)
+  type?: LocationType;
+}
 
 class ReplaceMembershipLocationsDto {
   @ApiProperty({
@@ -75,6 +117,37 @@ export class LocationsController {
   })
   find(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.locations.findAccessible(user, id);
+  }
+
+  @Post('locations')
+  @Roles(OrgRole.ADMIN)
+  @ApiOperation({
+    summary: 'Create a store or warehouse in the selected organization',
+  })
+  create(@CurrentUser() user: RequestUser, @Body() dto: CreateLocationDto) {
+    return this.locations.create(user, dto);
+  }
+
+  @Patch('locations/:id')
+  @Roles(OrgRole.ADMIN)
+  @ApiOperation({
+    summary: 'Rename a location or change its store/warehouse type',
+  })
+  update(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateLocationDto,
+  ) {
+    return this.locations.update(user, id, dto);
+  }
+
+  @Get('users/:id/locations')
+  @Roles(OrgRole.ADMIN)
+  @ApiOperation({
+    summary: 'Read the explicit location assignments of one membership',
+  })
+  assignments(@CurrentUser() user: RequestUser, @Param('id') userId: string) {
+    return this.locations.findAssignments(user, userId);
   }
 
   @Put('users/:id/locations')

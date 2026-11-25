@@ -384,8 +384,10 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/locations | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
+| /api/locations | POST | OWNER, ADMIN, SUPER_ADMIN | selected org; creates a store or warehouse and no assignment rows | backend/src/locations/locations.http.int.spec.ts |
 | /api/locations/pos-context | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; eligible checkout site must be assigned or accessible and the organization's sole default site | backend/src/locations/locations.pos-context.spec.ts |
 | /api/locations/:id | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
+| /api/locations/:id | PATCH | OWNER, ADMIN, SUPER_ADMIN | selected org; the principal site stays a store | backend/src/locations/locations.http.int.spec.ts |
 
 ## users
 
@@ -394,6 +396,7 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | /api/users | POST | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users | GET | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users/:id | PUT | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
+| /api/users/:id/locations | GET | OWNER, ADMIN, SUPER_ADMIN | selected org; reads the target membership's assignment rows and whether its role already reaches every site | backend/src/locations/locations.http.int.spec.ts |
 | /api/users/:id/locations | PUT | OWNER, ADMIN, SUPER_ADMIN | selected org; target membership and every location must belong to it | backend/src/locations/locations.http.int.spec.ts |
 | /api/users/:id/toggle-active | PUT | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users/:id/reset-password | POST | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |

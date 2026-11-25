@@ -55,6 +55,21 @@ vi.mock("@/lib/api", () => ({
   getApiErrorMessage: () => "Error",
 }));
 
+// The assignment dialog has its own suite; this one only owes it the right
+// member and a mount point.
+vi.mock("@/components/locations/SiteAssignmentModal", () => ({
+  SiteAssignmentModal: ({
+    isOpen,
+    user,
+  }: {
+    isOpen: boolean;
+    user: { name: string } | null;
+  }) =>
+    isOpen && user ? (
+      <div data-testid="site-assignment-modal">{user.name}</div>
+    ) : null,
+}));
+
 import UsersPage from "./UsersManagementPage";
 
 describe("Users list responsive layout", () => {
@@ -123,6 +138,32 @@ describe("Users list responsive layout", () => {
     );
 
     expect(password).toHaveAttribute("type", "text");
+  });
+
+  it("opts the selected member into the site assignment dialog", async () => {
+    const user = userEvent.setup();
+    render(<UsersPage />);
+
+    expect(screen.queryByTestId("site-assignment-modal")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Sedes de Caja Uno" }));
+
+    expect(screen.getByTestId("site-assignment-modal")).toHaveTextContent(
+      "Caja Uno",
+    );
+  });
+
+  it("offers site assignment only on other members' rows", () => {
+    render(<UsersPage />);
+
+    // The signed-in administrator manages everyone else; their own access is
+    // organization-wide and is never edited from this list.
+    expect(
+      screen.queryByRole("button", { name: "Sedes de Admin Principal" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Sedes de Caja Uno" }),
+    ).toBeInTheDocument();
   });
 
   it("renders the role label inside its badge without wrapping or shrinking it", () => {

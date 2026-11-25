@@ -85,10 +85,18 @@ model Organization {
 }
 
 // Site access is separate from inventory, which still uses Product.stock.
+/// A site is either a store (customer-facing, POS) or a warehouse (storage).
+/// The organization's default site is always a store.
+enum LocationType {
+  STORE
+  WAREHOUSE
+}
+
 model Location {
   id             String       @id @default(uuid())
   organizationId String
   name           String
+  type           LocationType @default(STORE)
   isDefault      Boolean      @default(false)
   createdAt      DateTime     @default(now())
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -98,7 +106,8 @@ model Location {
   saleOrigins    SaleOriginSite[]
   posLoanSaleIntentOrigins PosLoanSaleIntentOriginSite[]
 
-  // The partial unique index for the default site is defined in SQL.
+  // The partial unique index for the default site and the case-insensitive
+  // per-organization name index are defined in SQL.
   @@unique([id, organizationId])
   @@index([organizationId])
 }
