@@ -12,7 +12,16 @@ vi.mock("@/lib/api", () => ({
 const get = vi.mocked(api.get);
 
 const context = {
-  locations: [{ id: "site-a", name: "Centro", type: "STORE", isDefault: true }],
+  locations: [
+    {
+      id: "site-a",
+      name: "Centro",
+      type: "STORE",
+      isDefault: true,
+      address: "Calle 10 #5-20",
+      phone: "300 123 4567",
+    },
+  ],
   checkoutLocationId: "site-a",
 };
 
@@ -36,6 +45,11 @@ describe("usePosSiteContext", () => {
     });
 
     await waitFor(() => expect(result.current.data).toEqual(context));
+    // The picker draws each store's contact details straight from this payload.
+    expect(result.current.data?.locations[0]).toMatchObject({
+      address: "Calle 10 #5-20",
+      phone: "300 123 4567",
+    });
     const [url, params, config] = get.mock.calls[0];
     expect(url).toBe("/locations/pos-context");
     expect(params).toBeUndefined();

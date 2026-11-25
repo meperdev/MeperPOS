@@ -1,12 +1,18 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { ArrowLeft, Store } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { SitePicker } from "@/components/pos/SitePicker";
 import {
   usePosSiteContext,
   type PosSite,
   type PosSiteContext,
 } from "@/hooks/usePosSiteContext";
+import { cn } from "@/lib/utils";
 
 export interface PosCheckoutSite {
   /** The site every sale and financing of this workspace is written to. */
@@ -40,6 +46,26 @@ function listedStore(
 ): PosSite | undefined {
   if (!id) return undefined;
   return data?.locations.find((location) => location.id === id);
+}
+
+/**
+ * The gate's non-workspace states are screens, not leftovers: the cashier lands
+ * on one instead of the till, so each carries the page title and centers itself
+ * in the content box the shell hands down.
+ */
+function GateScreen({
+  children,
+  width = "max-w-md",
+}: {
+  children: ReactNode;
+  width?: string;
+}) {
+  return (
+    <div className="flex flex-1 items-center justify-center py-10 sm:py-14">
+      <h1 className="sr-only">Punto de venta</h1>
+      <div className={cn("w-full", width)}>{children}</div>
+    </div>
+  );
 }
 
 export function PosSiteGate({
@@ -96,66 +122,86 @@ export function PosSiteGate({
     return (
       <>
         {workspace}
-        <section className="space-y-3 p-4">
-          <h1 className="text-lg font-semibold">Punto de venta</h1>
-          <p role="alert">
-            No pudimos verificar tus sedes. No se habilitó el cobro.
-          </p>
-          <Button variant="secondary" onClick={() => void context.refetch()}>
-            Volver a intentar
-          </Button>
-        </section>
+        <GateScreen>
+          <ErrorState
+            title="No pudimos verificar tus sedes"
+            message="No se habilitó el cobro. Revisa la conexión y vuelve a intentar."
+            retryLabel="Volver a intentar"
+            onRetry={() => void context.refetch()}
+          />
+        </GateScreen>
       </>
     );
   }
   if (!data) {
     return (
-      <p role="status" className="p-4 text-sm text-muted-foreground">
-        Consultando sedes del punto de venta
-      </p>
+      <GateScreen width="max-w-sm">
+        <div role="status">
+          <LoadingState
+            icon={<Store className="h-5 w-5" />}
+            message="Consultando sedes del punto de venta"
+          />
+        </div>
+      </GateScreen>
     );
   }
 
   if (workspace) return <>{workspace}</>;
 
-  const selected =
-    listedStore(data, selectedId) ?? listedStore(data, data.checkoutLocationId);
+  if (locations.length === 0) {
+    return (
+      <GateScreen>
+        <EmptyState
+          icon={<Store className="h-5 w-5" />}
+          title="No tienes sedes asignadas"
+          subtitle="Un administrador tiene que asignarte una sede en Sedes para que puedas cobrar."
+        />
+      </GateScreen>
+    );
+  }
+
+  // Reopening the picker keeps the store the till is on as the marked one, so
+  // leaving it takes a deliberate click.
+  const current = listedStore(data, selectedId) ?? listedStore(data, data.checkoutLocationId);
+  const changing = picking && current !== undefined;
 
   return (
-    <section className="max-w-md space-y-3 p-4">
-      <h1 className="text-lg font-semibold">Punto de venta</h1>
-      {locations.length > 1 && (
-        <label className="flex flex-col gap-1 text-sm font-medium">
-          Sede
-          <select
-            className="min-h-11 rounded-lg border border-border bg-card px-3 text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-            value={selected?.id ?? ""}
-            onChange={(event) => {
-              setSelectedId(event.target.value);
-              setPicking(false);
-            }}
-          >
-            <option value="" disabled>
-              Selecciona una sede
-            </option>
-            {locations.map((loc) => (
-              <option key={loc.id} value={loc.id}>
-                {loc.name}
-              </option>
-            ))}
-          </select>
-        </label>
+    <GateScreen width="max-w-2xl">
+      <div className="text-center">
+        <h2 className="text-xl font-semibold tracking-tight text-balance text-foreground sm:text-2xl">
+          {changing ? "Cambiar de sede" : "¿Dónde vas a vender hoy?"}
+        </h2>
+        <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+          {changing ? (
+            <>
+              Ahora vendes en{" "}
+              <span className="font-medium text-foreground">{current.name}</span>
+              . Elige otra sede o sigue en la misma.
+            </>
+          ) : (
+            "El cobro, el catálogo y el stock son los de la sede que elijas."
+          )}
+        </p>
+      </div>
+
+      <SitePicker
+        sites={locations}
+        currentId={changing ? current.id : undefined}
+        onPick={(siteId) => {
+          setSelectedId(siteId);
+          setPicking(false);
+        }}
+        className="mt-6"
+      />
+
+      {changing && (
+        <div className="mt-5 flex justify-center">
+          <Button variant="secondary" onClick={() => setPicking(false)}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Seguir en {current.name}
+          </Button>
+        </div>
       )}
-      {picking && selected && (
-        <Button variant="secondary" onClick={() => setPicking(false)}>
-          Seguir en {selected.name}
-        </Button>
-      )}
-      <p role="status" className="text-sm text-muted-foreground">
-        {locations.length === 0
-          ? "No tienes sedes asignadas"
-          : "Selecciona la sede donde vas a cobrar para empezar a vender."}
-      </p>
-    </section>
+    </GateScreen>
   );
 }

@@ -11,6 +11,10 @@ export interface PosSite {
   name: string;
   type: "STORE" | "WAREHOUSE";
   isDefault: boolean;
+  /** Printed on the receipt; null until an administrator fills it in. */
+  address?: string | null;
+  /** A number the cashier can read back to a caller; null until it is set. */
+  phone?: string | null;
 }
 
 export interface PosSiteContext {

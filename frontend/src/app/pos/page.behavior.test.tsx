@@ -567,12 +567,13 @@ describe("POS site scope", () => {
     };
     render(<POSPage />);
     expect(
-      screen.getByText("Selecciona la sede donde vas a cobrar para empezar a vender."),
+      screen.getByRole("heading", { name: "¿Dónde vas a vender hoy?" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("El cobro, el catálogo y el stock son los de la sede que elijas."),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Scoped product" })).toBeNull();
-    const select = screen.getByRole<HTMLSelectElement>("combobox", { name: "Sede" });
-    await userEvent.selectOptions(select, "site-b");
-    expect(select.value).toBe("site-b");
+    await userEvent.click(screen.getByRole("button", { name: "Sede B" }));
     expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
     expect(createSaleMutateMock).not.toHaveBeenCalled();
   });
@@ -640,7 +641,10 @@ describe("POS site scope", () => {
     expect(screen.getByRole("button", { name: "Cambiar sede" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Pausar" }));
     await userEvent.click(screen.getByRole("button", { name: "Cambiar sede" }));
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Sede" }), "site-a");
+    expect(
+      screen.getByRole("heading", { name: "Cambiar de sede" }),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Sede principal" }));
     expect(screen.getByText("Sede principal")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
     expect(createSaleMutateMock).not.toHaveBeenCalled();
