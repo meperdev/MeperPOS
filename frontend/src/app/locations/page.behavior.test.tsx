@@ -86,6 +86,16 @@ describe("site management page", () => {
     ).toBeInTheDocument();
   });
 
+  it("splits the directory by type and names what each site is missing", () => {
+    state.sites = [principal, warehouse];
+    render(<LocationsPage />);
+
+    expect(screen.getByText("sucursal")).toBeInTheDocument();
+    expect(screen.getByText("bodega")).toBeInTheDocument();
+    expect(screen.getAllByText("Sin dirección")).toHaveLength(2);
+    expect(screen.getAllByText("Sin teléfono")).toHaveLength(2);
+  });
+
   it("invites the first site when the organization has none", () => {
     render(<LocationsPage />);
 
