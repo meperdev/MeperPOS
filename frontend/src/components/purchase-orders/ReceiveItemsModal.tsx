@@ -37,7 +37,12 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
   const sites = useLocations().data ?? [];
   const defaultSiteId = sites.find((site) => site.isDefault)?.id ?? "";
   const [pickedSiteId, setPickedSiteId] = useState<string | null>(null);
-  const locationId = pickedSiteId ?? defaultSiteId;
+  // A destination must be a site of the loaded directory: while it loads, when
+  // it is empty, or when the principal is not reachable and nothing was picked,
+  // there is no destination and the receipt cannot be sent.
+  const locationId = sites.some((site) => site.id === pickedSiteId)
+    ? (pickedSiteId as string)
+    : defaultSiteId;
 
   const siteOptions: SelectOption[] = sites.map((site) => ({
     value: site.id,
@@ -63,6 +68,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
   const totalPlanned = Object.values(values).reduce((a, b) => a + b, 0);
 
   const canSubmit =
+    locationId !== "" &&
     totalPlanned > 0 &&
     pendingItems.every((it) => {
       const v = values[it.id] ?? 0;
@@ -136,7 +142,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                 label="Sede de destino"
                 options={siteOptions}
                 value={locationId}
-                placeholder="Sede principal"
+                placeholder="Selecciona una sede"
                 onChange={setPickedSiteId}
               />
               <p className="text-[13px] text-muted-foreground">
@@ -144,6 +150,11 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
                 es la de por defecto.
               </p>
             </div>
+          )}
+          {siteOptions.length === 0 && (
+            <p role="status" className="text-[13px] text-muted-foreground">
+              Necesitas una sede asignada para registrar la recepción.
+            </p>
           )}
 
           <div className="@container rounded-xl border border-border/70 bg-card overflow-hidden">
