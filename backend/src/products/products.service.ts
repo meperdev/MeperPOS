@@ -37,6 +37,18 @@ export interface PromoPricingProduct {
   promotionValue?: Prisma.Decimal | number | null;
 }
 
+/** One site the caller is allowed to read, inside the caller's organization. */
+interface SiteScope {
+  locationId: string;
+  organizationId: string;
+}
+
+/** The balance a product holds at one site. */
+interface SiteStockProjection {
+  stock: number;
+  reservedStock: number;
+}
+
 /**
  * Derives the effective sale price for a product from its optional promotion:
  *
@@ -330,6 +342,7 @@ export class ProductsService {
     type?: ProductType,
     ids?: string[],
     available = false,
+    locationId?: string,
   ) {
     if (
       ids !== undefined &&
@@ -339,6 +352,7 @@ export class ProductsService {
       throw new BadRequestException('ids must contain UUID product IDs');
     }
     const { skip, take } = computeSkipTake(page, limit);
+    const site = this.siteScope(locationId, organizationId);
 
     const baseWhere: Record<string, unknown> = {
       ...(organizationId ? { organizationId } : {}),
@@ -370,13 +384,15 @@ export class ProductsService {
     // pagination bounds returned rows, not the favorite collection's reachability.
     if (ids !== undefined) baseWhere.id = { in: [...new Set(ids)] };
     if (available) {
-      const eligibility = {
-        OR: [
-          { type: ProductType.SERVICE },
-          { tracksStock: false },
-          { stock: { gt: this.prisma.product.fields.reservedStock } },
-        ],
-      };
+      const eligibility = site
+        ? this.siteAvailability(site)
+        : {
+            OR: [
+              { type: ProductType.SERVICE },
+              { tracksStock: false },
+              { stock: { gt: this.prisma.product.fields.reservedStock } },
+            ],
+          };
       baseWhere.AND = [...((baseWhere.AND as unknown[]) ?? []), eligibility];
     }
 
@@ -412,8 +428,15 @@ export class ProductsService {
     ]);
     const lowStockCount = unfilteredLowStockTotal ?? total;
 
+    // A requested site projects its own balance onto every row; `isLowStock`
+    // and `minStock` stay organization-level.
+    const balances = await this.readSiteBalances(
+      site,
+      products.map(({ id }) => id),
+    );
+
     return {
-      data: products.map((p) => this.enrichProduct(p)),
+      data: products.map((p) => this.enrichProduct(p, balances.get(p.id))),
       meta: {
         total,
         page,
@@ -453,6 +476,84 @@ export class ProductsService {
       where.type = ProductType.PRODUCT;
     }
     return where;
+  }
+
+  /**
+   * The site a read was scoped to, always inside the caller's organization.
+   *
+   * The controller has already authorized the site through the shared location
+   * read; the tenant here keeps the balance query from ever leaving it, and a
+   * site read without an organization is refused instead of silently answering
+   * for every tenant.
+   */
+  private siteScope(
+    locationId: string | undefined,
+    organizationId: string | undefined,
+  ): SiteScope | undefined {
+    if (!locationId) {
+      return undefined;
+    }
+    if (!organizationId) {
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
+    }
+    return { locationId, organizationId };
+  }
+
+  /**
+   * The `available` rule at one site: a tracked product is available there while
+   * its site balance keeps free units (`stock - reservedStock > 0`). A product
+   * with no row at that site has none, and services and untracked merchandise
+   * stay available everywhere because stock never governs them.
+   */
+  private siteAvailability(site: SiteScope): Record<string, unknown> {
+    return {
+      OR: [
+        { type: ProductType.SERVICE },
+        { tracksStock: false },
+        {
+          locationStocks: {
+            some: {
+              locationId: site.locationId,
+              organizationId: site.organizationId,
+              stock: { gt: this.prisma.productStock.fields.reservedStock },
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  /**
+   * The balance every returned product holds at the requested site. A product
+   * without a row there simply has no entry: the projection reads it as zero,
+   * which is what "no stock at this site" means. One extra indexed read keeps
+   * the product query itself unchanged.
+   */
+  private async readSiteBalances(
+    site: SiteScope | undefined,
+    productIds: string[],
+  ): Promise<Map<string, SiteStockProjection>> {
+    if (!site || productIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await this.prisma.productStock.findMany({
+      where: {
+        organizationId: site.organizationId,
+        locationId: site.locationId,
+        productId: { in: productIds },
+      },
+      select: { productId: true, stock: true, reservedStock: true },
+    });
+
+    return new Map(
+      rows.map(({ productId, stock, reservedStock }) => [
+        productId,
+        { stock, reservedStock },
+      ]),
+    );
   }
 
   async findOne(id: string, organizationId: string | undefined) {
@@ -827,7 +928,9 @@ export class ProductsService {
     query: string,
     limit = 20,
     organizationId: string | undefined,
+    locationId?: string,
   ) {
+    const site = this.siteScope(locationId, organizationId);
     const products = await this.prisma.product.findMany({
       where: {
         ...(organizationId ? { organizationId } : {}),
@@ -842,38 +945,28 @@ export class ProductsService {
       include: { category: true },
     });
 
-    return products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      sku: p.sku,
-      barcode: p.barcode,
-      salePrice: p.salePrice,
-      stock: p.stock,
-      availableStock: availableStock(p),
-      taxable: p.taxable,
-      taxRate: p.taxRate,
-      taxCode: p.taxCode,
-      effectiveTaxRate: resolveEffectiveTaxRate(p, p.category),
-      effectiveTaxCode: resolveEffectiveTaxCode(p, p.category),
-      minStock: p.minStock,
-      type: p.type,
-      tracksStock: p.tracksStock,
-      isLowStock: isLowStock(p, p.stock, p.minStock),
-      category: p.category,
-      imageUrl: p.imageUrl,
-      promotionType: p.promotionType,
-      promotionValue: p.promotionValue,
-      effectiveSalePrice: computeEffectiveSalePrice(p),
-    }));
+    const balances = await this.readSiteBalances(
+      site,
+      products.map(({ id }) => id),
+    );
+
+    return products.map((p) =>
+      this.projectProductSummary(p, balances.get(p.id)),
+    );
   }
 
-  async quickSearch(code: string, organizationId: string | undefined) {
+  async quickSearch(
+    code: string,
+    organizationId: string | undefined,
+    locationId?: string,
+  ) {
     const normalizedCode = code.trim();
 
     if (!normalizedCode) {
       return null;
     }
 
+    const site = this.siteScope(locationId, organizationId);
     const product = await this.prisma.product.findFirst({
       where: {
         ...(organizationId ? { organizationId } : {}),
@@ -892,29 +985,9 @@ export class ProductsService {
       return null;
     }
 
-    return {
-      id: product.id,
-      name: product.name,
-      sku: product.sku,
-      barcode: product.barcode,
-      salePrice: product.salePrice,
-      stock: product.stock,
-      availableStock: availableStock(product),
-      taxable: product.taxable,
-      taxRate: product.taxRate,
-      taxCode: product.taxCode,
-      effectiveTaxRate: resolveEffectiveTaxRate(product, product.category),
-      effectiveTaxCode: resolveEffectiveTaxCode(product, product.category),
-      minStock: product.minStock,
-      type: product.type,
-      tracksStock: product.tracksStock,
-      isLowStock: isLowStock(product, product.stock, product.minStock),
-      category: product.category,
-      imageUrl: product.imageUrl,
-      promotionType: product.promotionType,
-      promotionValue: product.promotionValue,
-      effectiveSalePrice: computeEffectiveSalePrice(product),
-    };
+    const balances = await this.readSiteBalances(site, [product.id]);
+
+    return this.projectProductSummary(product, balances.get(product.id));
   }
 
   /**
@@ -980,11 +1053,34 @@ export class ProductsService {
   }
 
   /**
+   * The stock figures a read projects: the requested site's balance when a site
+   * was asked for, the organization aggregate otherwise.
+   */
+  private availabilitySubject<T extends AvailabilitySubject>(
+    product: T,
+    site: SiteStockProjection | undefined,
+  ): AvailabilitySubject {
+    return site
+      ? {
+          type: product.type,
+          tracksStock: product.tracksStock,
+          stock: site.stock,
+          reservedStock: site.reservedStock,
+        }
+      : product;
+  }
+
+  /**
    * The single response shape for a persisted product row: promo-aware price, effective
    * tax rate + resolved tax code, physical low-stock flag and reservation-aware availability. Every read that
    * returns whole product rows (create,
    * findAll, findOne, update) goes through here, so a new derived field cannot reach only
    * some of the endpoints and leave the client to guess.
+   *
+   * `site` is the balance the caller asked to read (T3f, the POS catalogue): the
+   * projected `stock`, `reservedStock` and `availableStock` become that site's,
+   * while `isLowStock` and `minStock` stay organization-level, exactly like the
+   * reports and alerts that still read the aggregate.
    */
   private enrichProduct<
     T extends PromoPricingProduct &
@@ -1000,12 +1096,54 @@ export class ProductsService {
           defaultTaxCode?: DianTaxCode | null;
         } | null;
       },
-  >(product: T) {
+  >(product: T, site?: SiteStockProjection) {
+    const enriched = this.enrichWithLowStock(
+      this.enrichWithEffectiveTax(this.enrichWithPromo(product)),
+    );
+
     return {
-      ...this.enrichWithLowStock(
-        this.enrichWithEffectiveTax(this.enrichWithPromo(product)),
-      ),
-      availableStock: availableStock(product),
+      ...enriched,
+      // The aggregate the row carries is replaced, not merged: a site read must
+      // never leak another site's units.
+      ...(site ? { stock: site.stock, reservedStock: site.reservedStock } : {}),
+      availableStock: availableStock(this.availabilitySubject(product, site)),
+    };
+  }
+
+  /**
+   * The catalogue summary the POS search endpoints return: every derived field
+   * comes from {@link enrichProduct}, narrowed to the fields those endpoints
+   * have always exposed. A site projection therefore moves the numbers and
+   * never the payload shape.
+   */
+  private projectProductSummary(
+    product: Prisma.ProductGetPayload<{ include: { category: true } }>,
+    site?: SiteStockProjection,
+  ) {
+    const enriched = this.enrichProduct(product, site);
+
+    return {
+      id: enriched.id,
+      name: enriched.name,
+      sku: enriched.sku,
+      barcode: enriched.barcode,
+      salePrice: enriched.salePrice,
+      stock: enriched.stock,
+      availableStock: enriched.availableStock,
+      taxable: enriched.taxable,
+      taxRate: enriched.taxRate,
+      taxCode: enriched.taxCode,
+      effectiveTaxRate: enriched.effectiveTaxRate,
+      effectiveTaxCode: enriched.effectiveTaxCode,
+      minStock: enriched.minStock,
+      type: enriched.type,
+      tracksStock: enriched.tracksStock,
+      isLowStock: enriched.isLowStock,
+      category: enriched.category,
+      imageUrl: enriched.imageUrl,
+      promotionType: enriched.promotionType,
+      promotionValue: enriched.promotionValue,
+      effectiveSalePrice: enriched.effectiveSalePrice,
     };
   }
 
