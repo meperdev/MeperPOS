@@ -147,6 +147,25 @@ export class ReceiptsService {
       }
     }
 
+    // Where the sale happened, under the business identity. Nothing is printed
+    // for a sale that stored no origin: the receipt never guesses the site.
+    if (data.originSiteName) {
+      b.gap(1);
+      for (const line of [
+        `Sede: ${data.originSiteName}`,
+        data.originSiteAddress,
+        data.originSitePhone ? `Tel. ${data.originSitePhone}` : null,
+      ]) {
+        if (!line) continue;
+        b.paragraph(line, {
+          align: 'center',
+          size: 7,
+          color: MUTED,
+          lineHeight: 3.2,
+        });
+      }
+    }
+
     const customHeader = this.withoutCompanyNameHeader(
       data.header,
       data.companyName,

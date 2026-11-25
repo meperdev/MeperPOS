@@ -9,11 +9,18 @@ import { LocationType, OrgRole, Prisma } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
 
+/**
+ * The site shape every location response shares — directory, detail, create,
+ * patch and the POS context. The contact details ride along as `null` until an
+ * administrator fills them in, so a caller never has to probe for them.
+ */
 const siteFields = {
   id: true,
   name: true,
   type: true,
   isDefault: true,
+  address: true,
+  phone: true,
 } as const;
 
 const DUPLICATE_NAME = 'A location with this name already exists';
@@ -21,11 +28,17 @@ const DUPLICATE_NAME = 'A location with this name already exists';
 export interface CreateLocationInput {
   name: string;
   type?: LocationType;
+  /** Trimmed by the DTO; an empty value arrives as `null`. */
+  address?: string | null;
+  phone?: string | null;
 }
 
 export interface UpdateLocationInput {
   name?: string;
   type?: LocationType;
+  /** `undefined` leaves it untouched; `null` clears it. */
+  address?: string | null;
+  phone?: string | null;
 }
 
 const hasOrgWideAccess = (role: RequestUser['role']) =>
@@ -150,6 +163,8 @@ export class LocationsService {
           // A created site is never the principal site: that one is owned by
           // provisioning and keeps the organization's default topology.
           isDefault: false,
+          address: input.address ?? null,
+          phone: input.phone ?? null,
         },
         select: siteFields,
       });
@@ -176,7 +191,14 @@ export class LocationsService {
         'The principal site cannot become a warehouse',
       );
     }
-    if (input.name === undefined && input.type === undefined) return current;
+    if (
+      input.name === undefined &&
+      input.type === undefined &&
+      input.address === undefined &&
+      input.phone === undefined
+    ) {
+      return current;
+    }
 
     try {
       return await this.prisma.location.update({
@@ -184,6 +206,8 @@ export class LocationsService {
         data: {
           ...(input.name === undefined ? {} : { name: input.name }),
           ...(input.type === undefined ? {} : { type: input.type }),
+          ...(input.address === undefined ? {} : { address: input.address }),
+          ...(input.phone === undefined ? {} : { phone: input.phone }),
         },
         select: siteFields,
       });

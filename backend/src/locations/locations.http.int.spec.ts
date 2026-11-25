@@ -24,13 +24,31 @@ describe('Location access (HTTP integration)', () => {
   const memberEmail = `${prefix}-member@example.test`;
   const inventoryEmail = `${prefix}-inventory@example.test`;
   const foreignEmail = `${prefix}-foreign@example.test`;
-  const a = { id: randomUUID(), name: 'A', type: 'STORE', isDefault: true };
-  const b = { id: randomUUID(), name: 'B', type: 'STORE', isDefault: false };
+  // Every site response carries the optional contact fields, null until a
+  // fixture or the API sets them.
+  const a = {
+    id: randomUUID(),
+    name: 'A',
+    type: 'STORE',
+    isDefault: true,
+    address: null,
+    phone: null,
+  };
+  const b = {
+    id: randomUUID(),
+    name: 'B',
+    type: 'STORE',
+    isDefault: false,
+    address: null,
+    phone: null,
+  };
   const other = {
     id: randomUUID(),
     name: 'Other',
     type: 'STORE',
     isDefault: true,
+    address: null,
+    phone: null,
   };
   /**
    * Inserts a fixture site. The `type` column arrives with this feature, so the
@@ -238,7 +256,15 @@ describe('Location access (HTTP integration)', () => {
       .put(`/api/users/${id}/locations`)
       .set('Authorization', auth)
       .send({ locationIds });
-  const createSite = (auth: string, body: { name: string; type: string }) =>
+  const createSite = (
+    auth: string,
+    body: {
+      name: string;
+      type: string;
+      address?: string;
+      phone?: string;
+    },
+  ) =>
     request(app.getHttpServer())
       .post('/api/locations')
       .set('Authorization', auth)
@@ -246,7 +272,12 @@ describe('Location access (HTTP integration)', () => {
   const patchSite = (
     auth: string,
     id: string,
-    body: { name?: string; type?: string },
+    body: {
+      name?: string;
+      type?: string;
+      address?: string;
+      phone?: string;
+    },
   ) =>
     request(app.getHttpServer())
       .patch(`/api/locations/${id}`)
@@ -262,6 +293,8 @@ describe('Location access (HTTP integration)', () => {
     name: string;
     type: string;
     isDefault: boolean;
+    address: string | null;
+    phone: string | null;
   };
   const siteBody = (response: Response) => response.body as SiteBody;
   const assignmentsBody = (response: Response) =>
@@ -677,6 +710,88 @@ describe('Location access (HTTP integration)', () => {
       type: 'STORE',
     });
     await get(cashier, warehouse.id).expect(404);
+  });
+
+  it('stores, trims and clears the contact details of a site', async () => {
+    const created = siteBody(
+      await createSite(admin, {
+        name: 'Sucursal con contacto',
+        type: 'STORE',
+        address: '  Calle 10 # 5-20  ',
+        phone: '  +57 604 444 5566  ',
+      }).expect(201),
+    );
+    createdLocationIds.push(created.id);
+    expect(created).toMatchObject({
+      name: 'Sucursal con contacto',
+      address: 'Calle 10 # 5-20',
+      phone: '+57 604 444 5566',
+    });
+    await get(admin, created.id).expect(200, created);
+    expect((await get(admin).expect(200)).body).toEqual(
+      expect.arrayContaining([created]),
+    );
+
+    const patched = siteBody(
+      await patchSite(admin, created.id, {
+        address: 'Carrera 43 # 1-50',
+      }).expect(200),
+    );
+    expect(patched).toMatchObject({
+      address: 'Carrera 43 # 1-50',
+      phone: '+57 604 444 5566',
+    });
+
+    // A blank value clears the field; the rest of the site stays untouched.
+    const cleared = siteBody(
+      await patchSite(admin, created.id, {
+        address: '   ',
+        phone: '',
+      }).expect(200),
+    );
+    expect(cleared).toMatchObject({
+      name: 'Sucursal con contacto',
+      type: 'STORE',
+      address: null,
+      phone: null,
+    });
+
+    // A site created without contact details answers null, not an empty string.
+    const plain = siteBody(
+      await createSite(admin, {
+        name: 'Sucursal sin contacto',
+        type: 'STORE',
+      }).expect(201),
+    );
+    createdLocationIds.push(plain.id);
+    expect(plain).toMatchObject({ address: null, phone: null });
+
+    // The bounds follow the columns: 200 characters for the address, 40 for
+    // the phone.
+    await createSite(admin, {
+      name: 'Sucursal larga',
+      type: 'STORE',
+      address: 'x'.repeat(201),
+    }).expect(400);
+    await createSite(admin, {
+      name: 'Sucursal larga',
+      type: 'STORE',
+      phone: '1'.repeat(41),
+    }).expect(400);
+    await patchSite(admin, created.id, {
+      address: 'x'.repeat(201),
+    }).expect(400);
+    await patchSite(admin, created.id, {
+      phone: '1'.repeat(41),
+    }).expect(400);
+
+    // Rejected writes leave the stored site exactly as it was.
+    await get(admin, created.id).expect(200, cleared);
+    await expect(
+      prisma.location.count({
+        where: { name: 'Sucursal larga', organizationId: orgId },
+      }),
+    ).resolves.toBe(0);
   });
 
   it('refuses a duplicate site name in the same organization, ignoring case and spacing', async () => {

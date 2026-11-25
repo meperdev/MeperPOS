@@ -100,6 +100,10 @@ model Location {
   name           String
   type           LocationType @default(STORE)
   isDefault      Boolean      @default(false)
+  /// Contact details printed on a receipt: optional, null until an
+  /// administrator fills them in.
+  address        String?      @db.VarChar(200)
+  phone          String?      @db.VarChar(40)
   createdAt      DateTime     @default(now())
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments    MembershipLocation[]

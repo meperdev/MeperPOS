@@ -90,6 +90,30 @@ describe('ReceiptData contract (buildReceiptData)', () => {
     expect(data.logoUrl).toBe('data:image/png;base64,AAA');
   });
 
+  it('maps the stored origin site into the receipt header fields', () => {
+    const data = buildReceiptData(
+      {
+        ...baseSale,
+        originSite: {
+          name: 'Sucursal Norte',
+          address: 'Calle 10 # 5-20',
+          phone: '+57 604 444 5566',
+        },
+      } as never,
+      baseSettings as never,
+    );
+    expect(data.originSiteName).toBe('Sucursal Norte');
+    expect(data.originSiteAddress).toBe('Calle 10 # 5-20');
+    expect(data.originSitePhone).toBe('+57 604 444 5566');
+  });
+
+  it('adds no site fields to a sale without a stored origin', () => {
+    const data = buildReceiptData(baseSale as never, baseSettings as never);
+    expect(data.originSiteName).toBeNull();
+    expect(data.originSiteAddress).toBeNull();
+    expect(data.originSitePhone).toBeNull();
+  });
+
   it('falls back to the default company name when the organization name is empty', () => {
     const data = buildReceiptData(
       baseSale as never,
@@ -487,6 +511,36 @@ describe('receipt formatting and layout', () => {
     );
 
     expect(text).toContain('Cliente: Consumidor final');
+  });
+
+  it('prints the sale site under the business header when one is stored', async () => {
+    const { sale, settings } = inputs['fixture-1-normal-cash-change'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(
+        {
+          ...(sale as Record<string, unknown>),
+          originSite: {
+            name: 'Sucursal Norte',
+            address: 'Calle 10 # 5-20',
+            phone: '604 444 5566',
+          },
+        } as never,
+        settings as never,
+      ),
+    );
+
+    expect(text).toContain('Sede: Sucursal Norte');
+    expect(text).toContain('Calle 10 # 5-20');
+    expect(text).toContain('Tel. 604 444 5566');
+  });
+
+  it('prints no site line when the sale predates site attribution', async () => {
+    const { sale, settings } = inputs['fixture-1-normal-cash-change'];
+    const { text } = await extract(
+      await service.generateSaleReceiptPdf(sale as never, settings as never),
+    );
+
+    expect(text).not.toContain('Sede:');
   });
 
   it('shows the zero-rate IVA line on tax-free sales', async () => {

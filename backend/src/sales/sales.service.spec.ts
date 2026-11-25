@@ -213,6 +213,131 @@ describe('SalesService', () => {
     );
   });
 
+  it('exposes the stored origin site on the list and keeps an unfiltered query unchanged', async () => {
+    prismaMock.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-with-site',
+        userId: 'user-1',
+        user: null,
+        customer: null,
+        items: [],
+        payments: [],
+        posLoanSaleIntent: null,
+        originSite: { location: { id: 'site-1', name: 'Sucursal Norte' } },
+      },
+      {
+        id: 'sale-legacy',
+        userId: 'user-1',
+        user: null,
+        customer: null,
+        items: [],
+        payments: [],
+        posLoanSaleIntent: null,
+        originSite: null,
+      },
+    ]);
+    prismaMock.sale.count.mockResolvedValue(2);
+
+    const result = await service.findAll(
+      'org-1',
+      1,
+      10,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockUser({ role: 'ADMIN' }),
+    );
+
+    expect(result.data.map((sale) => sale.originSite)).toEqual([
+      { id: 'site-1', name: 'Sucursal Norte' },
+      null,
+    ]);
+    // No site filter: the clause is absent, so an unfiltered list keeps the
+    // rows it always returned.
+    expect(prismaMock.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.not.objectContaining({
+          originSite: expect.anything(),
+        }),
+        include: expect.objectContaining({
+          originSite: {
+            select: { location: { select: { id: true, name: true } } },
+          },
+        }),
+      }),
+    );
+    // The flattened relation is the only addition; the previous keys stay.
+    expect(result.data[0]).not.toHaveProperty('posLoanSaleIntent');
+    expect(result.data[0]).toMatchObject({
+      id: 'sale-with-site',
+      userId: 'user-1',
+      items: [],
+      payments: [],
+      financed: false,
+    });
+  });
+
+  it('filters the list by one stored origin site when a site is given', async () => {
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    prismaMock.sale.count.mockResolvedValue(0);
+
+    await service.findAll(
+      'org-1',
+      1,
+      10,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockUser({ role: 'ADMIN' }),
+      'site-1',
+    );
+
+    expect(prismaMock.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          originSite: { locationId: 'site-1' },
+        }),
+      }),
+    );
+    expect(prismaMock.sale.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        originSite: { locationId: 'site-1' },
+      }),
+    });
+  });
+
+  it('exposes the origin site on the sale detail and null when none is stored', async () => {
+    prismaMock.sale.findFirst.mockResolvedValue({
+      id: 'sale-1',
+      userId: 'user-1',
+      user: null,
+      customer: null,
+      items: [],
+      payments: [],
+      posLoanSaleIntent: null,
+      originSite: { location: { id: 'site-1', name: 'Sucursal Norte' } },
+    });
+    const detail = await service.findOne('sale-1', 'org-1');
+    expect(detail.originSite).toEqual({ id: 'site-1', name: 'Sucursal Norte' });
+
+    prismaMock.sale.findFirst.mockResolvedValue({
+      id: 'sale-2',
+      userId: 'user-1',
+      user: null,
+      customer: null,
+      items: [],
+      payments: [],
+      posLoanSaleIntent: null,
+      originSite: null,
+    });
+    const legacy = await service.findOne('sale-2', 'org-1');
+    expect(legacy.originSite).toBeNull();
+  });
+
   it('denies CASHIER access to another seller sale detail', async () => {
     prismaMock.sale.findFirst.mockResolvedValue({
       id: 'sale-foreign',
@@ -2270,6 +2395,9 @@ describe('SalesService.generateReceipt delegation', () => {
     sale: {
       findFirst: jest.fn(),
     },
+    location: {
+      findFirst: jest.fn(),
+    },
   };
 
   const cacheMock = { clear: jest.fn() };
@@ -2342,10 +2470,50 @@ describe('SalesService.generateReceipt delegation', () => {
     );
     expect(settingsServiceMock.find).toHaveBeenCalledWith('org-1');
     expect(receiptsServiceMock.generateSaleReceiptPdf).toHaveBeenCalledWith(
-      { ...receiptSale, financed: false },
+      { ...receiptSale, financed: false, originSite: null },
       receiptSettings,
     );
+    // No stored origin: the receipt adds no site lookup and no site lines.
+    expect(prismaMock.location.findFirst).not.toHaveBeenCalled();
     expect(response.sent).toBe(pdf);
+  });
+
+  it('prints the stored origin site of the sale with its contact details', async () => {
+    prismaMock.sale.findFirst.mockResolvedValue({
+      ...receiptSale,
+      organizationId: 'org-1',
+      originSite: { location: { id: 'site-1', name: 'Sucursal Norte' } },
+    });
+    prismaMock.location.findFirst.mockResolvedValue({
+      name: 'Sucursal Norte',
+      address: 'Calle 10 # 5-20',
+      phone: '+57 604 444 5566',
+    });
+    settingsServiceMock.find.mockResolvedValue(receiptSettings);
+    receiptsServiceMock.generateSaleReceiptPdf.mockResolvedValue(
+      Buffer.from('%PDF-site'),
+    );
+    const response = stubResponse();
+
+    await service.generateReceipt('sale-1', response as never, mockUser());
+
+    expect(prismaMock.location.findFirst).toHaveBeenCalledWith({
+      where: { id: 'site-1', organizationId: 'org-1' },
+      select: { name: true, address: true, phone: true },
+    });
+    expect(receiptsServiceMock.generateSaleReceiptPdf).toHaveBeenCalledWith(
+      {
+        ...receiptSale,
+        organizationId: 'org-1',
+        financed: false,
+        originSite: {
+          name: 'Sucursal Norte',
+          address: 'Calle 10 # 5-20',
+          phone: '+57 604 444 5566',
+        },
+      },
+      receiptSettings,
+    );
   });
 
   it('keeps the PDF download response headers', async () => {

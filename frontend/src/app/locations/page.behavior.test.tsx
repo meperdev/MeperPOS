@@ -122,6 +122,8 @@ describe("site management page", () => {
       expect(createMutateAsync).toHaveBeenCalledWith({
         name: "Bodega sur",
         type: "WAREHOUSE",
+        address: "",
+        phone: "",
       }),
     );
     expect(toastSuccess).toHaveBeenCalledWith(
@@ -156,7 +158,7 @@ describe("site management page", () => {
     await waitFor(() =>
       expect(updateMutateAsync).toHaveBeenCalledWith({
         id: principal.id,
-        data: { name: "Sede principal" },
+        data: { name: "Sede principal", address: "", phone: "" },
       }),
     );
     expect(toastSuccess).toHaveBeenCalledWith("Sede actualizada", {
@@ -180,7 +182,7 @@ describe("site management page", () => {
     await waitFor(() =>
       expect(updateMutateAsync).toHaveBeenCalledWith({
         id: warehouse.id,
-        data: { name: "Bodega norte", type: "STORE" },
+        data: { name: "Bodega norte", type: "STORE", address: "", phone: "" },
       }),
     );
   });
@@ -200,5 +202,69 @@ describe("site management page", () => {
       description: "Revisa el nombre y el tipo de sede.",
     });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("creates a site with its address and phone, trimmed", async () => {
+    const user = userEvent.setup();
+    render(<LocationsPage />);
+
+    await user.click(screen.getByRole("button", { name: /Nueva sede/ }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByRole("textbox", { name: /Nombre/ }), "Sucursal norte");
+    await user.type(
+      within(dialog).getByRole("textbox", { name: /Dirección/ }),
+      "  Calle 10 # 5-20  ",
+    );
+    await user.type(
+      within(dialog).getByRole("textbox", { name: /Teléfono/ }),
+      " +57 604 444 5566 ",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Crear sede" }));
+
+    await waitFor(() =>
+      expect(createMutateAsync).toHaveBeenCalledWith({
+        name: "Sucursal norte",
+        type: "STORE",
+        address: "Calle 10 # 5-20",
+        phone: "+57 604 444 5566",
+      }),
+    );
+  });
+
+  it("prefills the stored contact details and shows them in the list", async () => {
+    state.sites = [
+      {
+        ...principal,
+        address: "Calle 10 # 5-20",
+        phone: "+57 604 444 5566",
+      },
+    ];
+    const user = userEvent.setup();
+    render(<LocationsPage />);
+
+    expect(screen.getByText("Calle 10 # 5-20")).toBeInTheDocument();
+    expect(screen.getByText("+57 604 444 5566")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Editar sede Sede centro" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByRole("textbox", { name: /Dirección/ }),
+    ).toHaveValue("Calle 10 # 5-20");
+    expect(
+      within(dialog).getByRole("textbox", { name: /Teléfono/ }),
+    ).toHaveValue("+57 604 444 5566");
+
+    // Clearing the phone sends a blank value, which the API stores as null.
+    await user.clear(within(dialog).getByRole("textbox", { name: /Teléfono/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(updateMutateAsync).toHaveBeenCalledWith({
+        id: principal.id,
+        data: { name: "Sede centro", address: "Calle 10 # 5-20", phone: "" },
+      }),
+    );
   });
 });

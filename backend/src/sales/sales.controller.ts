@@ -18,6 +18,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { OrgRole } from '@prisma/client';
+import { LocationsService } from '../locations/locations.service';
 import { SalesService } from './sales.service';
 import {
   CreateSaleDto,
@@ -38,7 +39,10 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 @UseGuards(JwtAuthGuard, RolesGuard, OrganizationRequiredGuard)
 @UseInterceptors(AdminOrganizationInterceptor)
 export class SalesController {
-  constructor(private salesService: SalesService) {}
+  constructor(
+    private salesService: SalesService,
+    private locationsService: LocationsService,
+  ) {}
 
   @Post()
   @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
@@ -65,7 +69,16 @@ export class SalesController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'customerId', required: false })
-  findAll(@CurrentUser() user: RequestUser, @Query() query: FindSalesQueryDto) {
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description:
+      'Only sales whose stored origin is this accessible site; 404 otherwise',
+  })
+  async findAll(
+    @CurrentUser() user: RequestUser,
+    @Query() query: FindSalesQueryDto,
+  ) {
     const {
       page = 1,
       limit = 10,
@@ -74,7 +87,16 @@ export class SalesController {
       status,
       search,
       customerId,
+      locationId,
     } = query;
+
+    // One site-access rule for every route: `findAccessible` answers 404 for a
+    // site of another organization, an unassigned site or an unknown id, so
+    // this read never re-derives the membership rule.
+    const siteId =
+      locationId === undefined
+        ? undefined
+        : (await this.locationsService.findAccessible(user, locationId)).id;
 
     return this.salesService.findAll(
       user.organizationId,
@@ -86,6 +108,7 @@ export class SalesController {
       search,
       customerId,
       user,
+      siteId,
     );
   }
 

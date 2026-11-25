@@ -337,7 +337,7 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/sales | POST | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/sales/sales.service.int.spec.ts |
-| /api/sales | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/sales/sales.service.int.spec.ts |
+| /api/sales | GET | ADMIN, MEMBER, CASHIER | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and matches the stored sale origin | backend/src/sales/sales.service.int.spec.ts |
 | /api/sales/number/:saleNumber | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/sales/sales.service.int.spec.ts |
 | /api/sales/:id | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/sales/sales.service.int.spec.ts |
 | /api/sales/:id | PUT | ADMIN | org-scoped | backend/src/sales/sales.service.int.spec.ts |

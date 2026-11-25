@@ -176,4 +176,16 @@ export class FindSalesQueryDto {
   @MaxLength(64)
   @IsOptional()
   customerId?: string;
+
+  /**
+   * Only sales whose stored origin is this site. The controller authorizes the
+   * value through `LocationsService.findAccessible` before the list runs, so
+   * an operational caller can filter by a site they can read and gets 404 for
+   * any other.
+   */
+  @ApiPropertyOptional({ example: 'uuid-location-id' })
+  @IsString()
+  @MaxLength(64)
+  @IsOptional()
+  locationId?: string;
 }

@@ -29,12 +29,17 @@ Una sede es una sucursal o una bodega de la organización (`Location`):
 | `name`      | Nombre de la sede, único por organización sin distinguir mayúsculas |
 | `type`      | `STORE` (sucursal) o `WAREHOUSE` (bodega)                       |
 | `isDefault` | La sede principal; existe una sola por organización             |
+| `address`   | Dirección de la sede, opcional (máximo 200 caracteres)          |
+| `phone`     | Teléfono de la sede, opcional (máximo 40 caracteres)            |
 
 - La sede principal la crea el aprovisionamiento de la organización y **siempre
   es una sucursal**: es la que opera el punto de venta hoy, así que la API
   rechaza cambiarla a bodega.
 - El nombre se compara sin distinguir mayúsculas ni espacios sobrantes. Un
   nombre repetido responde `409`.
+- La dirección y el teléfono son opcionales y se imprimen en el comprobante de
+  venta, debajo del nombre del negocio. Se guardan recortados y un valor en
+  blanco los borra (`null`), nunca se guarda una cadena vacía.
 - En esta entrega no hay borrado de sedes.
 
 ## 3. Quién ve qué sede (regla de acceso)
@@ -75,9 +80,12 @@ alcanzables y ninguna principal a la vista, `checkoutLocationId` es `null` y el
 cajero elige en el POS. La sugerencia es una comodidad, no un permiso: la venta
 vuelve a autorizar la sede indicada en su propia transacción.
 
-`POST /api/locations` acepta `{ "name": string, "type": "STORE" | "WAREHOUSE" }`
-y devuelve la sede creada. `PATCH /api/locations/:id` acepta `name` y/o `type`;
-la sede principal responde `400` si se intenta convertir en bodega.
+`POST /api/locations` acepta
+`{ "name": string, "type": "STORE" | "WAREHOUSE", "address"?: string, "phone"?: string }`
+y devuelve la sede creada. `PATCH /api/locations/:id` acepta `name`, `type`,
+`address` y/o `phone`; un texto en blanco borra la dirección o el teléfono y la
+sede principal responde `400` si se intenta convertir en bodega. Toda respuesta
+de sede incluye `address` y `phone` como `null` cuando no se cargaron.
 
 `PUT /api/users/:id/locations` recibe `{ "locationIds": string[] }` y reemplaza
 el conjunto completo. Responde `404` si el vínculo o alguna sede no pertenecen a
@@ -88,11 +96,27 @@ explícitas y si el rol del vínculo ya alcanza todas las sedes, porque
 `GET /api/users` no informa roles y la pantalla necesita ese dato para no ofrecer
 casillas a un administrador.
 
+`GET /api/sales` acepta `locationId` y devuelve solo las ventas cuyo origen
+guardado es esa sede. El valor pasa por la misma regla de acceso: un `404` si el
+usuario de operación no alcanza la sede, y cualquier sede de la organización
+para dueños y administradores. Las ventas sin origen guardado (anteriores a las
+sedes, o hechas sin indicar una) nunca aparecen bajo un filtro de sede y su
+`originSite` es `null`: el historial no adivina la sede principal. La lista y el
+detalle de venta incluyen `originSite: { id, name } | null`, y sin el filtro la
+respuesta conserva sus campos de siempre.
+
+El comprobante de venta imprime, debajo del nombre y el NIT del negocio, la sede
+donde se hizo la venta (`Sede: <nombre>`, su dirección y su teléfono) cuando la
+venta tiene origen guardado; sin origen no agrega ninguna línea.
+
 ## 5. Pantallas
 
 - **Sedes** (`/locations`, solo propietarios y administradores): lista de sedes
-  con su tipo y la marca de principal, alta y edición. Al crear una sede el aviso
-  recuerda que el acceso se asigna por persona.
+  con su tipo, la marca de principal, la dirección y el teléfono, alta y edición.
+  Al crear una sede el aviso recuerda que el acceso se asigna por persona.
+- **Ventas** (`/sales`): la tabla muestra la sede de cada venta y, cuando la
+  organización tiene más de una sede visible, un filtro por sede; el detalle de
+  la venta también nombra la sede (o avisa que no tiene una registrada).
 - **Usuarios** (`/settings/team`): la acción de sedes de cada miembro abre las
   casillas con las sedes de la organización; para propietarios y administradores
   se muestra que acceden a todas.

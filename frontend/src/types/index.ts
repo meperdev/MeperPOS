@@ -94,6 +94,11 @@ export interface Sale {
   payments?: Payment[];
   /** A POS-financed sale: settled through the linked money loan, no cash rows. */
   financed?: boolean;
+  /**
+   * The site the sale was made at, stored with the sale. `null` on sales made
+   * before site attribution, so the history never guesses the default site.
+   */
+  originSite?: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -617,6 +622,8 @@ export interface SaleFilters {
   status?: string;
   search?: string;
   customerId?: string;
+  /** Only sales whose stored origin is this site. */
+  locationId?: string;
 }
 
 export type TaskStatus =
@@ -1144,6 +1151,9 @@ export interface LocationSite {
   name: string;
   type: LocationType;
   isDefault: boolean;
+  /** Printed on the receipt; null until an administrator fills it in. */
+  address?: string | null;
+  phone?: string | null;
 }
 
 /** Where a transfer stands: only an in-transit one can be received or cancelled. */

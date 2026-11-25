@@ -18,6 +18,9 @@ export const userLocationsQueryKey = (userId: string) =>
 export interface LocationPayload {
   name: string;
   type: LocationType;
+  /** Trimmed by the API; an empty value clears the stored field. */
+  address?: string | null;
+  phone?: string | null;
 }
 
 export interface UpdateLocationPayload {

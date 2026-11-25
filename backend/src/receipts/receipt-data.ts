@@ -27,10 +27,23 @@ export interface ReceiptSaleCustomerInput {
   documentNumber?: string | null;
 }
 
+/** The site the sale was made at, when one was stored with it. */
+export interface ReceiptSaleOriginSite {
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+}
+
 /** Structural input shape: the Prisma sale returned by SalesService.findOne. */
 export interface ReceiptSale {
   saleNumber: number;
   createdAt: Date | string;
+  /**
+   * The immutable origin stored with the sale. Absent on sales made before
+   * site attribution (or without naming a site): the receipt then prints no
+   * site line rather than guessing the organization's default site.
+   */
+  originSite?: ReceiptSaleOriginSite | null;
   status?: string | null;
   cancelReason?: string | null;
   cancelledAt?: Date | string | null;
@@ -83,6 +96,10 @@ export interface ReceiptData {
   companyTaxId: string | null;
   companyPhone: string | null;
   companyAddress: string | null;
+  /** The sale's site, printed under the business header; null when absent. */
+  originSiteName: string | null;
+  originSiteAddress: string | null;
+  originSitePhone: string | null;
   header: string;
   footer: string;
   logoUrl: string | null | undefined;
@@ -125,6 +142,9 @@ export function buildReceiptData(
     companyTaxId: settings.organization.taxId || null,
     companyPhone: settings.organization.phone || null,
     companyAddress: settings.organization.address || null,
+    originSiteName: sale.originSite?.name || null,
+    originSiteAddress: sale.originSite?.address || null,
+    originSitePhone: sale.originSite?.phone || null,
     header: settings.invoicing.printHeader || '',
     footer: settings.invoicing.printFooter || '',
     logoUrl: settings.organization.logoUrl,

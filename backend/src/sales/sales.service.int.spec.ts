@@ -792,7 +792,12 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
       expect(await snapshot()).toEqual(before);
 
       const sale = await create(principal, 'origin-new-sale');
-      expect(sale).not.toHaveProperty('originSite');
+      // The created sale answers with its detail, which now carries the stored
+      // origin; the row below is what proves nothing but that origin was written.
+      expect(sale.originSite).toEqual({
+        id: principal,
+        name: expect.any(String) as unknown as string,
+      });
       expect(
         await prisma.saleOriginSite.findFirstOrThrow({
           where: { saleId: sale.id },
@@ -1008,6 +1013,105 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
           'La solicitud ya corresponde a una venta con otra atribución de sede',
       });
       expect(await ledgerOf()).toEqual(before);
+    });
+
+    it('exposes the stored origin site and filters the list by it, leaving legacy sales unattributed', async () => {
+      const unique = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const site = await prisma.location.create({
+        data: {
+          organizationId: fixture.orgAId,
+          name: `Sucursal lectura ${unique}`,
+        },
+      });
+      const category = await prisma.category.findFirstOrThrow({
+        where: { organizationId: fixture.orgAId },
+        select: { id: true },
+      });
+      // Its own product and units: these read cases must not depend on what the
+      // earlier write cases already sold.
+      const product = await prisma.product.create({
+        data: {
+          name: `Sales INT read product ${unique}`,
+          sku: `SALES-READ-${unique}`,
+          salePrice: new Prisma.Decimal(1000),
+          costPrice: new Prisma.Decimal(500),
+          taxRate: new Prisma.Decimal(19),
+          stock: 5,
+          minStock: 1,
+          active: true,
+          categoryId: category.id,
+          organizationId: fixture.orgAId,
+        },
+      });
+      const sell = () =>
+        salesService.create(
+          buildSaleDto(product.id, customerId),
+          actor.userId,
+          actor.organizationId,
+        );
+      const withOrigin = await sell();
+      const legacy = await sell();
+      // The read path is what this case pins: one sale whose stored origin is
+      // the new site, and one with no origin row at all.
+      await prisma.saleOriginSite.create({
+        data: {
+          saleId: withOrigin.id,
+          organizationId: fixture.orgAId,
+          locationId: site.id,
+        },
+      });
+
+      const detail = await salesService.findOne(withOrigin.id, fixture.orgAId);
+      expect(detail.originSite).toEqual({ id: site.id, name: site.name });
+      const legacyDetail = await salesService.findOne(
+        legacy.id,
+        fixture.orgAId,
+      );
+      expect(legacyDetail.originSite).toBeNull();
+
+      // Unfiltered: both sales are listed and the flat site keeps the previous
+      // response fields untouched.
+      const unfiltered = await salesService.findAll(fixture.orgAId, 1, 100);
+      const ids = unfiltered.data.map((sale) => sale.id);
+      expect(ids).toEqual(expect.arrayContaining([withOrigin.id, legacy.id]));
+      expect(
+        unfiltered.data.find((sale) => sale.id === legacy.id)?.originSite,
+      ).toBeNull();
+
+      // Filtered by the stored origin: only the sales made at that site.
+      const filtered = await salesService.findAll(
+        fixture.orgAId,
+        1,
+        100,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        site.id,
+      );
+      expect(filtered.data.map((sale) => sale.id)).toContain(withOrigin.id);
+      expect(filtered.data.map((sale) => sale.id)).not.toContain(legacy.id);
+      expect(
+        filtered.data.every((sale) => sale.originSite?.id === site.id),
+      ).toBe(true);
+      expect(filtered.meta.total).toBe(filtered.data.length);
+
+      // Another tenant's site never matches a sale of this organization.
+      const foreign = await salesService.findAll(
+        fixture.orgAId,
+        1,
+        100,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outside,
+      );
+      expect(foreign.data).toHaveLength(0);
     });
   });
 });

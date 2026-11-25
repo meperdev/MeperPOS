@@ -26,6 +26,7 @@ import {
   IsString,
   IsUUID,
   Length,
+  MaxLength,
 } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { AuditAction } from '../common/decorators/audit.decorator';
@@ -42,6 +43,17 @@ import { LocationsService } from './locations.service';
 const trimName = ({ value }: TransformFnParams) =>
   typeof value === 'string' ? value.trim() : value;
 
+/**
+ * Trims optional contact text and turns a blank value into `null`, which is
+ * how a cleared address or phone is stored. `@IsOptional()` then skips the
+ * validators for that null instead of rejecting it as a short string.
+ */
+const normalizeOptionalText = ({ value }: TransformFnParams) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+};
+
 class CreateLocationDto {
   @ApiProperty({ maxLength: 80, description: 'Unique site name in the org' })
   @Transform(trimName)
@@ -52,6 +64,28 @@ class CreateLocationDto {
   @ApiProperty({ enum: LocationType, description: 'Store or warehouse' })
   @IsEnum(LocationType)
   type!: LocationType;
+
+  @ApiPropertyOptional({
+    maxLength: 200,
+    nullable: true,
+    description: 'Street address printed on the receipt',
+  })
+  @Transform(normalizeOptionalText)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string | null;
+
+  @ApiPropertyOptional({
+    maxLength: 40,
+    nullable: true,
+    description: 'Phone printed on the receipt',
+  })
+  @Transform(normalizeOptionalText)
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  phone?: string | null;
 }
 
 class UpdateLocationDto {
@@ -66,6 +100,28 @@ class UpdateLocationDto {
   @IsOptional()
   @IsEnum(LocationType)
   type?: LocationType;
+
+  @ApiPropertyOptional({
+    maxLength: 200,
+    nullable: true,
+    description: 'Street address printed on the receipt; blank clears it',
+  })
+  @Transform(normalizeOptionalText)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string | null;
+
+  @ApiPropertyOptional({
+    maxLength: 40,
+    nullable: true,
+    description: 'Phone printed on the receipt; blank clears it',
+  })
+  @Transform(normalizeOptionalText)
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  phone?: string | null;
 }
 
 class ReplaceMembershipLocationsDto {
@@ -131,7 +187,8 @@ export class LocationsController {
   @Patch('locations/:id')
   @Roles(OrgRole.ADMIN)
   @ApiOperation({
-    summary: 'Rename a location or change its store/warehouse type',
+    summary:
+      'Rename a location, change its store/warehouse type or set its contact details',
   })
   update(
     @CurrentUser() user: RequestUser,

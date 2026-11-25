@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSales } from "@/hooks/useSales";
+import { useLocations } from "@/hooks/useLocations";
 import { downloadReceiptPdf, openReceiptPdf } from "@/hooks/useReceipt";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -68,6 +69,7 @@ function SalesPageContent() {
   const isAdmin = hasAnyRole(currentUser?.role, ["ADMIN"]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [siteId, setSiteId] = useState("");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useEffectiveViewMode("sales");
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
@@ -76,6 +78,11 @@ function SalesPageContent() {
   const [endDate, setEndDate] = useState("");
   const customerId = searchParams.get("customerId") ?? "";
   const customerLabel = searchParams.get("customerName") ?? "";
+  // Only a multi-site organization gets the filter: with one readable site it
+  // would narrow nothing. The directory already applies the access rule.
+  const sites = useLocations();
+  const siteOptions = sites.data ?? [];
+  const showSiteFilter = siteOptions.length > 1;
 
   // Card view fills the viewport with the cards that fit; table view fits whole
   // rows between the table's top edge and the pager (see useResponsivePageSize).
@@ -156,6 +163,7 @@ function SalesPageContent() {
     endDate: endDate || undefined,
     search: search.trim() || undefined,
     customerId: customerId || undefined,
+    locationId: siteId || undefined,
   });
   // Only the first load paints a skeleton, and only after a short grace period.
   const showSkeleton = useDeferredLoading(isLoading);
@@ -245,6 +253,24 @@ function SalesPageContent() {
                   { value: "CANCELLED", label: "Cancelada" },
                 ]}
               />
+              {showSiteFilter && (
+                <Select
+                  value={siteId}
+                  onChange={(val) => {
+                    setPage(1);
+                    setSiteId(val);
+                  }}
+                  placeholder="Todas las sedes"
+                  className="w-full sm:w-44 shrink-0"
+                  options={[
+                    { value: "", label: "Todas las sedes" },
+                    ...siteOptions.map((site) => ({
+                      value: site.id,
+                      label: site.name,
+                    })),
+                  ]}
+                />
+              )}
               <FilterGroup label="Período">
                 <FilterOptionButton active={isAllDatesActive} onClick={setAllDates}>
                   Todas
@@ -280,7 +306,7 @@ function SalesPageContent() {
         ) : showSkeleton ? (
           <CollectionSkeleton
             viewMode={viewMode}
-            columns={isAdmin ? 8 : 7}
+            columns={isAdmin ? 9 : 8}
             rows={6}
             label="Cargando ventas..."
           />
@@ -321,6 +347,7 @@ function SalesPageContent() {
 
                     <div className="space-y-1.5 text-[13px]">
                       <SaleCardRow label="Cliente" truncate>{sale.customer?.name || "Sin cliente"}</SaleCardRow>
+                      <SaleCardRow label="Sede" truncate>{sale.originSite?.name || "Sin sede"}</SaleCardRow>
                       <SaleCardRow label="Fecha">
                         <span className="leading-tight text-[13px]">{formatDateTime(sale.createdAt)}</span>
                       </SaleCardRow>
@@ -400,6 +427,9 @@ function SalesPageContent() {
                         </TableCell>
                       )}
                       <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
+                        Sede
+                      </TableCell>
+                      <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                         Método
                       </TableCell>
                       <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
@@ -416,7 +446,7 @@ function SalesPageContent() {
                   <tbody>
                     {sales.length === 0 ? (
                       <tr>
-                        <td colSpan={isAdmin ? 8 : 7} className="text-center py-14">
+                        <td colSpan={isAdmin ? 9 : 8} className="text-center py-14">
                           <EmptyState icon={<Receipt className="w-6 h-6 text-muted-foreground/30" />} title="No hay ventas registradas" />
                         </td>
                       </tr>
@@ -459,6 +489,17 @@ function SalesPageContent() {
                               )}
                             </TableCell>
                           )}
+                          <TableCell className="max-w-[150px] truncate">
+                            {sale.originSite?.name ? (
+                              <span className="text-[13px] text-foreground">
+                                {sale.originSite.name}
+                              </span>
+                            ) : (
+                              <span className="text-[13px] text-muted-foreground/60">
+                                Sin sede
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <PaymentStateBadge payments={sale.payments} financed={sale.financed} short />
                           </TableCell>
@@ -540,6 +581,10 @@ function SalesPageContent() {
                 {
                   label: "Vendedor",
                   value: selectedSale.user?.name || "Sin asignar",
+                },
+                {
+                  label: "Sede",
+                  value: selectedSale.originSite?.name || "Sin sede registrada",
                 },
                 {
                   label: "Fecha",

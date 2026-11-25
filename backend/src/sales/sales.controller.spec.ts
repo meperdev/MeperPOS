@@ -1,4 +1,8 @@
-import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  type ExecutionContext,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { OrgRole } from '@prisma/client';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
@@ -15,6 +19,10 @@ describe('SalesController', () => {
     update: jest.fn(),
     forceClose: jest.fn(),
     generateReceipt: jest.fn(),
+  };
+
+  const locationsServiceMock = {
+    findAccessible: jest.fn(),
   };
 
   const cashierUser: RequestUser = {
@@ -83,7 +91,10 @@ describe('SalesController', () => {
   });
 
   it('denies CASHIER access to update sales', () => {
-    const controller = new SalesController(salesServiceMock as never);
+    const controller = new SalesController(
+      salesServiceMock as never,
+      locationsServiceMock as never,
+    );
     const guard = new RolesGuard(new Reflector());
 
     expect(() =>
@@ -92,7 +103,10 @@ describe('SalesController', () => {
   });
 
   it('denies CASHIER access to force-close sales', () => {
-    const controller = new SalesController(salesServiceMock as never);
+    const controller = new SalesController(
+      salesServiceMock as never,
+      locationsServiceMock as never,
+    );
     const guard = new RolesGuard(new Reflector());
 
     expect(() =>
@@ -101,7 +115,10 @@ describe('SalesController', () => {
   });
 
   it('delegates sale creation with cashier identity and organization', async () => {
-    const controller = new SalesController(salesServiceMock as never);
+    const controller = new SalesController(
+      salesServiceMock as never,
+      locationsServiceMock as never,
+    );
     const createSaleDto = {
       customerId: 'customer-1',
       items: [{ productId: 'prod-1', quantity: 1, discountAmount: 0 }],
@@ -123,5 +140,58 @@ describe('SalesController', () => {
       'org-1',
       cashierUser,
     );
+  });
+
+  it('authorizes the optional site filter through the shared site-access rule', async () => {
+    const controller = new SalesController(
+      salesServiceMock as never,
+      locationsServiceMock as never,
+    );
+    locationsServiceMock.findAccessible.mockResolvedValue({
+      id: 'site-1',
+      name: 'Sucursal Norte',
+      type: 'STORE',
+      isDefault: false,
+      address: null,
+      phone: null,
+    });
+    salesServiceMock.findAll.mockResolvedValue({
+      data: [],
+      meta: { total: 0, page: 1, limit: 10, totalPages: 0 },
+    });
+
+    await controller.findAll(cashierUser, { locationId: 'site-1' });
+
+    expect(locationsServiceMock.findAccessible).toHaveBeenCalledWith(
+      cashierUser,
+      'site-1',
+    );
+    expect(salesServiceMock.findAll).toHaveBeenCalledWith(
+      'org-1',
+      1,
+      10,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      cashierUser,
+      'site-1',
+    );
+  });
+
+  it('refuses a site the caller cannot read without listing any sales', async () => {
+    const controller = new SalesController(
+      salesServiceMock as never,
+      locationsServiceMock as never,
+    );
+    locationsServiceMock.findAccessible.mockRejectedValue(
+      new NotFoundException('Location not found'),
+    );
+
+    await expect(
+      controller.findAll(cashierUser, { locationId: 'foreign-site' }),
+    ).rejects.toThrow('Location not found');
+    expect(salesServiceMock.findAll).not.toHaveBeenCalled();
   });
 });

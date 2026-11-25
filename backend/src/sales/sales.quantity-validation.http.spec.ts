@@ -11,6 +11,7 @@ import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { OrganizationRequiredGuard } from '../common/guards/organization-required.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organization.interceptor';
+import { LocationsService } from '../locations/locations.service';
 import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 
@@ -45,7 +46,12 @@ describe('Sales HTTP quantity validation', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [SalesController],
-      providers: [{ provide: SalesService, useValue: salesService }],
+      providers: [
+        { provide: SalesService, useValue: salesService },
+        // The body boundary never reaches the site filter; the controller only
+        // needs the provider to be constructible.
+        { provide: LocationsService, useValue: { findAccessible: jest.fn() } },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(allow)

@@ -32,9 +32,18 @@ const TYPE_OPTIONS: SelectOption[] = [
   { value: "WAREHOUSE", label: TYPE_LABEL.WAREHOUSE },
 ];
 
-const EMPTY_FORM: { name: string; type: LocationType } = {
+type SiteForm = {
+  name: string;
+  type: LocationType;
+  address: string;
+  phone: string;
+};
+
+const EMPTY_FORM: SiteForm = {
   name: "",
   type: "STORE",
+  address: "",
+  phone: "",
 };
 
 /**
@@ -64,7 +73,12 @@ export default function LocationsPage() {
 
   const openEdit = (site: LocationSite) => {
     setEditing(site);
-    setForm({ name: site.name, type: site.type });
+    setForm({
+      name: site.name,
+      type: site.type,
+      address: site.address ?? "",
+      phone: site.phone ?? "",
+    });
     setIsFormOpen(true);
   };
 
@@ -74,6 +88,9 @@ export default function LocationsPage() {
     event.preventDefault();
     const name = form.name.trim();
     if (!name) return;
+    // The API trims and turns a blank value into null, which is how a cleared
+    // address or phone stops printing on the receipt.
+    const contact = { address: form.address.trim(), phone: form.phone.trim() };
 
     try {
       if (editing) {
@@ -81,11 +98,13 @@ export default function LocationsPage() {
         // the form never offers it.
         await updateLocation.mutateAsync({
           id: editing.id,
-          data: isPrincipal ? { name } : { name, type: form.type },
+          data: isPrincipal
+            ? { name, ...contact }
+            : { name, type: form.type, ...contact },
         });
         toast.success("Sede actualizada", { description: name });
       } else {
-        await createLocation.mutateAsync({ name, type: form.type });
+        await createLocation.mutateAsync({ name, type: form.type, ...contact });
         toast.success("Sede creada", {
           description: "Asigna el acceso a cada persona desde Usuarios.",
         });
@@ -158,6 +177,16 @@ export default function LocationsPage() {
                       <Badge variant="primary">Principal</Badge>
                     )}
                   </div>
+                  {(site.address || site.phone) && (
+                    <p className="flex flex-wrap items-baseline gap-x-2 text-[13px] text-muted-foreground">
+                      {site.address && (
+                        <span className="truncate">{site.address}</span>
+                      )}
+                      {site.phone && (
+                        <span className="id-text shrink-0">{site.phone}</span>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <Button
                   size="sm"
@@ -205,6 +234,24 @@ export default function LocationsPage() {
               como sucursal.
             </p>
           )}
+          <Input
+            label="Dirección"
+            value={form.address}
+            maxLength={200}
+            onChange={(event) =>
+              setForm({ ...form, address: event.target.value })
+            }
+          />
+          <Input
+            label="Teléfono"
+            value={form.phone}
+            maxLength={40}
+            onChange={(event) => setForm({ ...form, phone: event.target.value })}
+          />
+          <p className="text-[13px] text-muted-foreground">
+            La dirección y el teléfono se imprimen en el comprobante de venta,
+            debajo del nombre del negocio.
+          </p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={closeForm}>
               Cancelar

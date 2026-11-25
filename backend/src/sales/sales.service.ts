@@ -56,6 +56,31 @@ function withFinancedFlag<
   return { ...rest, financed: Boolean(posLoanSaleIntent) };
 }
 
+/** The stored origin selection shared by the sale list and detail reads. */
+const originSiteSelect = {
+  originSite: {
+    select: { location: { select: { id: true, name: true } } },
+  },
+} as const;
+
+/**
+ * Flattens the stored attribution to `{ id, name } | null`.
+ *
+ * A sale registered before site attribution — or one made without naming a
+ * site — has no stored origin, so the history never guesses the default site
+ * for it. The sale's own row is the only evidence.
+ */
+function withOriginSite<
+  T extends { originSite?: { location: { id: string; name: string } } | null },
+>(
+  sale: T,
+): Omit<T, 'originSite'> & {
+  originSite: { id: string; name: string } | null;
+} {
+  const { originSite, ...rest } = sale;
+  return { ...rest, originSite: originSite?.location ?? null };
+}
+
 /**
  * The idempotency key of `POST /api/sales` (SEC-014), stored the way the loans
  * module stores its own: only the SHA-256 of the normalized request reaches the
@@ -815,6 +840,7 @@ export class SalesService {
     search?: string,
     customerId?: string,
     user?: RequestUser,
+    locationId?: string,
   ) {
     const { skip, take } = computeSkipTake(page, limit);
 
@@ -829,6 +855,14 @@ export class SalesService {
 
     if (customerId) {
       where.customerId = customerId;
+    }
+
+    // Only sales whose *stored* origin is that site. A sale without an origin
+    // row (made at the default site or before attribution) is never matched,
+    // so the filter never guesses where it happened. The controller has
+    // already authorized the site through the one site-access rule.
+    if (locationId) {
+      where.originSite = { locationId };
     }
 
     if (startDate || endDate) {
@@ -883,6 +917,7 @@ export class SalesService {
           payments: true,
           ...this.financingInclude,
           ...this.sellerInclude,
+          ...originSiteSelect,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -890,7 +925,7 @@ export class SalesService {
     ]);
 
     return {
-      data: sales.map(withFinancedFlag),
+      data: sales.map((sale) => withFinancedFlag(withOriginSite(sale))),
       meta: {
         total,
         page,
@@ -915,6 +950,7 @@ export class SalesService {
         payments: true,
         ...this.financingInclude,
         ...this.sellerInclude,
+        ...originSiteSelect,
       },
     });
 
@@ -927,7 +963,7 @@ export class SalesService {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
-    return withFinancedFlag(sale);
+    return withFinancedFlag(withOriginSite(sale));
   }
 
   async findBySaleNumber(saleNumber: number, user?: RequestUser) {
@@ -1204,8 +1240,21 @@ export class SalesService {
   async generateReceipt(id: string, response: Response, user?: RequestUser) {
     const sale = await this.findOne(id, user?.organizationId, user);
     const settings = await this.settingsService.find(user?.organizationId);
+    // The receipt prints where the sale happened. The origin is immutable
+    // history the caller already reached through `findOne`, so the contact
+    // details are read inside the sale's own tenant — a cashier does not need
+    // an assignment to the site to read the receipt of their own sale.
+    const originSite = sale.originSite
+      ? await this.prisma.location.findFirst({
+          where: {
+            id: sale.originSite.id,
+            organizationId: sale.organizationId,
+          },
+          select: { name: true, address: true, phone: true },
+        })
+      : null;
     const pdf = await this.receiptsService.generateSaleReceiptPdf(
-      sale,
+      { ...sale, originSite },
       settings,
     );
     response.setHeader('Content-Type', 'application/pdf');
