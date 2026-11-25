@@ -13,6 +13,7 @@ import {
   useUploadProductImage,
 } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
+import { useLocations } from "@/hooks/useLocations";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import {
@@ -43,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import { ProductCard } from "@/components/products/ProductCard";
+import { ProductStockBySite } from "@/components/products/ProductStockBySite";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode, useMediaQuery } from "@/hooks/useEffectiveViewMode";
 import { useDeferredLoading } from "@/hooks/useDeferredLoading";
@@ -117,6 +119,9 @@ function InventoryContent() {
     setPage(1);
   }
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // T22: the stock columns follow one site when the caller picks one. `""` is
+  // the organization aggregate, which is what this screen has always shown.
+  const [siteFilter, setSiteFilter] = useState("");
   const [viewMode, setViewMode] = useEffectiveViewMode("inventory");
   const [showModal, setShowModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -159,6 +164,11 @@ function InventoryContent() {
   const updateSelectedCategory = (value: string | null) => {
     setPage(1);
     setSelectedCategory(value);
+  };
+
+  const updateSiteFilter = (value: string) => {
+    setPage(1);
+    setSiteFilter(value);
   };
 
   const toggleLowStockOnly = () => {
@@ -211,6 +221,10 @@ function InventoryContent() {
   // Server-side pagination: every request — filtered or not — is bounded to
   // one page of rows. Low stock and alphabetical order are resolved by the
   // backend (findAll lowStock/orderBy) so pages stay coherent.
+  const { data: sitesData } = useLocations();
+  const sites = sitesData ?? [];
+  const selectedSite = sites.find((site) => site.id === siteFilter) ?? null;
+  const multiSite = sites.length > 1;
   const {
     data,
     isLoading,
@@ -226,6 +240,9 @@ function InventoryContent() {
     status: statusFilter,
     lowStock: showLowStockOnly || undefined,
     orderBy: "name",
+    // The aggregate (the site omitted) keeps the request and the cache key it
+    // has always had; a chosen site projects its own units onto the list.
+    locationId: selectedSite?.id,
   });
   const { data: categoriesData } = useCategories();
 
@@ -566,6 +583,10 @@ function InventoryContent() {
   const hasFilter =
     selectedCategory || showLowStockOnly || statusFilter !== "active";
   const isEditingInactive = Boolean(editingProduct && !editingProduct.active);
+  // A counted product in a multi-site organization adjusts per site: the
+  // aggregate no longer accepts a number (the API answers 409 for one).
+  const stockIsAbsolute =
+    multiSite && !isService(formData) && formData.tracksStock !== false;
 
   return (
     <DashboardLayout>
@@ -595,6 +616,21 @@ function InventoryContent() {
           searchPlaceholder="Buscar por nombre, SKU..."
           filterControls={
             <>
+              {multiSite && (
+                <Select
+                  value={siteFilter}
+                  onChange={updateSiteFilter}
+                  className="w-full sm:w-44 shrink-0"
+                  placeholder="Todas las sedes"
+                  options={[
+                    { value: "", label: "Todas las sedes" },
+                    ...sites.map((site) => ({
+                      value: site.id,
+                      label: site.name,
+                    })),
+                  ]}
+                />
+              )}
               <Select
                 value={statusFilter}
                 onChange={updateStatusFilter}
@@ -790,6 +826,11 @@ function InventoryContent() {
                         </TableCell>
                         <TableCell as="th" className="text-right text-xs font-medium text-muted-foreground">
                           Existencias
+                          {selectedSite && (
+                            <span className="block text-xs font-normal">
+                              {selectedSite.name}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                           Estado
@@ -1195,17 +1236,26 @@ function InventoryContent() {
               </div>
               {formData.tracksStock !== false && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3">
-                  <Input
-                    label="Stock"
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={formData.stock || 0}
-                    onChange={(e) =>
-                      setFormData({ ...formData, stock: Number(e.target.value) })
-                    }
-                    required
-                  />
+                  <div>
+                    <Input
+                      label="Stock"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={formData.stock || 0}
+                      onChange={(e) =>
+                        setFormData({ ...formData, stock: Number(e.target.value) })
+                      }
+                      readOnly={stockIsAbsolute}
+                      className={stockIsAbsolute ? "bg-muted/40" : undefined}
+                      required
+                    />
+                    {stockIsAbsolute && (
+                      <p className="mt-1 text-[13px] text-muted-foreground">
+                        Ajusta las existencias por sede en la sección «Existencias por sede».
+                      </p>
+                    )}
+                  </div>
                   <Input
                     label="Stock mín."
                     type="number"
@@ -1224,6 +1274,15 @@ function InventoryContent() {
               )}
             </div>
           )}
+
+          {editingProduct &&
+            !isService(formData) &&
+            formData.tracksStock !== false && (
+              <ProductStockBySite
+                productId={editingProduct.id}
+                productName={editingProduct.name}
+              />
+            )}
 
           <div className="flex flex-col sm:flex-row gap-2 justify-end pt-4 border-t border-border/60">
             {editingProduct?.active && (

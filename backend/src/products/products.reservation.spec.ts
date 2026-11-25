@@ -68,6 +68,7 @@ describe('ProductsService reservation foundation', () => {
     expect.objectContaining(shape);
   const prisma = {
     category: { findFirst: jest.fn() },
+    location: { count: jest.fn() },
     product: {
       findFirst: jest.fn<Promise<ProductRow | null>, [LookupArgs]>(),
       findUnique: jest.fn(),
@@ -101,6 +102,9 @@ describe('ProductsService reservation foundation', () => {
     current = { ...snapshot };
     race = undefined;
     prisma.inventoryLoanItem.findFirst.mockResolvedValue(null);
+    // One site holds the whole balance: the absolute edit stays the delta at
+    // that site, exactly as before per-site adjustments existed.
+    prisma.location.count.mockResolvedValue(1);
     prisma.__defaultSite.mockReturnValue('site-1');
     prisma.__applySiteDelta.mockImplementation(applySiteDelta);
     prisma.$transaction.mockImplementation(

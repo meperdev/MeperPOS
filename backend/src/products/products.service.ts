@@ -4,9 +4,16 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, Product, ProductType, PromotionType } from '@prisma/client';
+import {
+  LocationType,
+  Prisma,
+  Product,
+  ProductType,
+  PromotionType,
+} from '@prisma/client';
 import { isUUID } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
+import type { RequestUser } from '../common/interfaces/request-user.interface';
 import {
   availableStock,
   type AvailabilitySubject,
@@ -18,10 +25,12 @@ import {
   type StockSubject,
 } from './product-type.logic';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import { StockAdjustmentDto } from './dto/stock-adjustment.dto';
 import {
   applySiteStockDelta,
   resolveDefaultSiteWithin,
 } from '../inventory/site-stock';
+import { resolveWritableSiteWithin } from '../locations/authorized-site';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import {
   DianTaxCode,
@@ -30,6 +39,59 @@ import {
 } from '../common/utils/tax.util';
 import { computeSkipTake } from '../common/utils/pagination';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
+
+/**
+ * Why a per-site adjustment is refused by the ledger itself (T22): the move
+ * would leave that site's stock below the units already reserved there, or
+ * take units it does not hold. The aggregate is never the answer to that
+ * question, which is why the site row refuses it.
+ */
+export const SITE_ADJUSTMENT_REFUSED =
+  'La sede no puede absorber el ajuste: quedaría por debajo de lo reservado o sin existencias';
+
+/** A stock edit is meaningless for an item whose units are not counted. */
+export const SITE_ADJUSTMENT_NEEDS_TRACKED_PRODUCT =
+  'Solo los productos que manejan inventario pueden ajustar existencias por sede';
+
+/** A movement without a motive is not history, it is noise. */
+export const SITE_ADJUSTMENT_REASON_REQUIRED =
+  'El motivo del ajuste es obligatorio';
+
+/** Nothing to correct. */
+export const SITE_ADJUSTMENT_EMPTY = 'El ajuste debe mover al menos una unidad';
+
+/** Two writers crossed; the caller retries with the fresh balance. */
+export const SITE_ADJUSTMENT_CONFLICT =
+  'Las existencias cambiaron mientras ajustabas: vuelve a intentarlo';
+
+/**
+ * An absolute stock edit in an organization that holds more than one site: the
+ * aggregate cannot say where the units should land, so the user adjusts per
+ * site instead (T22, replacing an edit that sent the whole delta to the
+ * principal site and failed when the stock sat elsewhere).
+ */
+export const MULTI_SITE_STOCK_EDIT_REFUSED =
+  'Esta organización tiene más de una sede: ajusta las existencias por sede en lugar de editar el stock total';
+
+/** One readable site, as the location directory describes it. */
+export interface ReadableSite {
+  id: string;
+  name: string;
+  type: LocationType;
+  isDefault: boolean;
+}
+
+/** What one product holds at one site (T22). */
+export interface SiteStockBreakdown {
+  /** The site key. Named `locationId` so it matches every other site payload. */
+  locationId: string;
+  name: string;
+  type: LocationType;
+  isDefault: boolean;
+  stock: number;
+  reservedStock: number;
+  availableStock: number;
+}
 
 export interface PromoPricingProduct {
   salePrice: Prisma.Decimal | number;
@@ -573,6 +635,210 @@ export class ProductsService {
     return this.enrichProduct(product);
   }
 
+  /**
+   * The product's balance at every site the caller may read (T22).
+   *
+   * The readable set is the caller's, resolved by the location directory before
+   * this read: an owner or administrator reaches every site of the
+   * organization, an operational membership only the sites an administrator
+   * assigned, and no assignments means no sites. A site without a
+   * `ProductStock` row holds zero units — the row is opened by the first
+   * receipt, not by the product's existence — so the breakdown always answers
+   * for every visible site instead of hiding the empty ones.
+   */
+  async stockBySite(
+    id: string,
+    organizationId: string | undefined,
+    sites: ReadableSite[],
+  ): Promise<SiteStockBreakdown[]> {
+    if (!organizationId) {
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
+    }
+
+    const product = await this.prisma.product.findFirst({
+      where: { id, organizationId, active: true },
+      select: { id: true },
+    });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+    if (sites.length === 0) return [];
+
+    const rows = await this.prisma.productStock.findMany({
+      where: {
+        organizationId,
+        productId: id,
+        locationId: { in: sites.map(({ id: siteId }) => siteId) },
+      },
+      select: { locationId: true, stock: true, reservedStock: true },
+    });
+    const balances = new Map(rows.map((row) => [row.locationId, row]));
+
+    return sites.map((site) => {
+      const balance = balances.get(site.id);
+      const stock = balance?.stock ?? 0;
+      const reservedStock = balance?.reservedStock ?? 0;
+      return {
+        locationId: site.id,
+        name: site.name,
+        type: site.type,
+        isDefault: site.isDefault,
+        stock,
+        reservedStock,
+        availableStock: stock - reservedStock,
+      };
+    });
+  }
+
+  /**
+   * Moves one site's balance and records why (T22).
+   *
+   * The write order is the one every site writer takes: the site row first (its
+   * trigger keeps `Product` the organization aggregate), then the product's
+   * optimistic version guard, so a concurrent edit still loses with the same
+   * 409 it has always answered and rolls the delta back with the transaction.
+   * The site is authorized inside this transaction — never from a read the
+   * caller did earlier — and the ledger, not the aggregate, decides whether the
+   * move is allowed to leave reservations uncovered.
+   */
+  async adjustSiteStock(
+    id: string,
+    input: StockAdjustmentDto,
+    actor: RequestUser,
+  ): Promise<{
+    product: ReturnType<ProductsService['enrichProduct']>;
+    site: SiteStockBreakdown;
+  }> {
+    const organizationId = actor.organizationId;
+    if (!organizationId) {
+      throw new BadRequestException(
+        'Organization ID is required for this operation',
+      );
+    }
+    const reason = input.reason?.trim() ?? '';
+    if (!reason) {
+      throw new BadRequestException(SITE_ADJUSTMENT_REASON_REQUIRED);
+    }
+    if (!Number.isInteger(input.quantity) || input.quantity === 0) {
+      throw new BadRequestException(SITE_ADJUSTMENT_EMPTY);
+    }
+
+    const existingProduct = await this.prisma.product.findFirst({
+      where: { id, organizationId, active: true },
+      select: { id: true, tracksStock: true },
+    });
+    if (!existingProduct) {
+      throw new NotFoundException('Product not found');
+    }
+    if (!existingProduct.tracksStock) {
+      throw new BadRequestException(SITE_ADJUSTMENT_NEEDS_TRACKED_PRODUCT);
+    }
+
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          // Site authorization and its row lock come before the aggregate: the
+          // delta's trigger is what writes `Product`, so the lock order is
+          // ProductStock → Product, as in every other site writer.
+          const site = await resolveWritableSiteWithin(
+            tx,
+            actor,
+            input.locationId,
+          );
+          const applied = await applySiteStockDelta(tx, {
+            organizationId: site.organizationId,
+            productId: id,
+            locationId: site.locationId,
+            stockDelta: input.quantity,
+            reservedDelta: 0,
+          });
+          if (!applied.applied) {
+            throw new ConflictException(SITE_ADJUSTMENT_REFUSED);
+          }
+
+          // The adjustment is a delta, so the site row's own CAS is what keeps
+          // the quantity right; requiring the version read before the
+          // transaction would refuse every adjustment that overlaps a sale,
+          // which bumps it too. The bump re-pins an active, counted product.
+          const versionBump = await tx.product.updateMany({
+            where: {
+              id,
+              organizationId,
+              active: true,
+              tracksStock: true,
+            },
+            data: { version: { increment: 1 } },
+          });
+          if (versionBump.count === 0) {
+            throw new ConflictException('Product was modified by another user');
+          }
+
+          const [product, location, balance] = await Promise.all([
+            tx.product.findFirst({
+              where: { id, organizationId },
+              include: { category: true },
+            }),
+            tx.location.findFirstOrThrow({
+              where: { id: site.locationId, organizationId },
+              select: { id: true, name: true, type: true, isDefault: true },
+            }),
+            tx.productStock.findUniqueOrThrow({
+              where: {
+                productId_locationId: {
+                  productId: id,
+                  locationId: site.locationId,
+                },
+              },
+              select: { stock: true, reservedStock: true },
+            }),
+          ]);
+          if (!product) {
+            throw new NotFoundException('Product not found');
+          }
+
+          // The movement explains the organization aggregate the trigger moved,
+          // exactly like the sale and receipt writers do, and names the site the
+          // units actually entered or left.
+          await this.createInventoryMovement(
+            id,
+            input.quantity > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
+            product.stock - input.quantity,
+            product.stock,
+            reason,
+            actor.userId,
+            organizationId,
+            undefined,
+            site.locationId,
+            tx.inventoryMovement,
+          );
+
+          return {
+            product: this.enrichProduct(product),
+            site: {
+              locationId: location.id,
+              name: location.name,
+              type: location.type,
+              isDefault: location.isDefault,
+              stock: balance.stock,
+              reservedStock: balance.reservedStock,
+              availableStock: balance.stock - balance.reservedStock,
+            },
+          };
+        },
+        // Two adjustments on the same product (or a sale) must not interleave
+        // their site rows and the version guard.
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (isSerializationFailure(error)) {
+        throw new ConflictException(SITE_ADJUSTMENT_CONFLICT);
+      }
+      throw error;
+    }
+  }
+
   async update(
     id: string,
     updateProductDto: UpdateProductDto,
@@ -665,6 +931,26 @@ export class ProductsService {
       stock: newStock,
       active: updateProductDto.active ?? existingProduct.active,
     });
+
+    // T22: an organization with more than one site cannot take an absolute
+    // stock number — the aggregate does not say which site holds the units, and
+    // sending the whole delta to the principal site failed whenever the stock
+    // sat elsewhere. Ask for a per-site adjustment instead. A single-site
+    // organization keeps the edit (a delta at its only site) exactly as it was,
+    // and so does a product that stops being counted: `stock: 0` there is the
+    // consequence of the type change, not a stock edit.
+    if (
+      requestedStock !== undefined &&
+      newStock !== previousStock &&
+      effectiveTracksStock
+    ) {
+      const siteCount = await this.prisma.location.count({
+        where: { organizationId },
+      });
+      if (siteCount > 1) {
+        throw new ConflictException(MULTI_SITE_STOCK_EDIT_REFUSED);
+      }
+    }
 
     // Apply the same opt-in tax invariant as create: `taxable=true` requires a
     // positive rate; `taxable=false` forces the stored rate back to 0 and clears
@@ -1256,4 +1542,28 @@ export class ProductsService {
       include: { category: true },
     });
   }
+}
+
+/** PostgreSQL codes that mean another transaction won the same race. */
+const SERIALIZATION_PG_CODES = ['40001', '40P01'];
+
+/**
+ * A site adjustment runs Serializable; Prisma reports the loser as `P2034`,
+ * and a raw locking read reports the same PostgreSQL code as `P2010`. Both are
+ * the same fact — someone else moved first — and neither retries itself.
+ */
+function isSerializationFailure(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === 'P2034') return true;
+  if (error.code !== 'P2010') return false;
+  const databaseCode = (error.meta as { code?: unknown } | undefined)?.code;
+  if (
+    typeof databaseCode === 'string' &&
+    SERIALIZATION_PG_CODES.includes(databaseCode)
+  ) {
+    return true;
+  }
+  return SERIALIZATION_PG_CODES.some((code) =>
+    error.message.includes(`Code: \`${code}\``),
+  );
 }

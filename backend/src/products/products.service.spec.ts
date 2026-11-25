@@ -32,6 +32,9 @@ describe('ProductsService — Opt-in tax resolution', () => {
     category: {
       findFirst: jest.fn(),
     },
+    location: {
+      count: jest.fn(),
+    },
     product: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -107,6 +110,9 @@ describe('ProductsService — Opt-in tax resolution', () => {
   // ── Lifecycle ──────────────────────────────────────────────────────
   beforeEach(() => {
     jest.clearAllMocks();
+    // One site holds the whole balance: an absolute edit is still the delta at
+    // that site.
+    prismaMock.location.count.mockResolvedValue(1);
     // A stock edit runs the product guard and the site delta in one transaction;
     // this mock is both the client and its transaction client.
     prismaMock.$transaction.mockImplementation(

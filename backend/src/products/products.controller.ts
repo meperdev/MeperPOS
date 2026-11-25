@@ -28,6 +28,7 @@ import {
 import { OrgRole, ProductType } from '@prisma/client';
 import { ProductsService } from './products.service';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import { StockAdjustmentDto } from './dto/stock-adjustment.dto';
 import { ProductSiteQueryPipe } from './dto/product-site.query';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { AuditAction } from '../common/decorators/audit.decorator';
@@ -84,7 +85,11 @@ export class ProductsController {
     example: 'active',
   })
   @ApiQuery({ name: 'type', required: false, enum: ProductType })
-  @ApiQuery({ name: 'ids', required: false, description: 'Comma-separated product UUIDs; empty means no products' })
+  @ApiQuery({
+    name: 'ids',
+    required: false,
+    description: 'Comma-separated product UUIDs; empty means no products',
+  })
   @ApiQuery({ name: 'available', required: false, type: Boolean })
   @ApiQuery({
     name: 'locationId',
@@ -101,9 +106,11 @@ export class ProductsController {
     @Query('status') status: 'active' | 'inactive' | 'all' = 'active',
     @Query('lowStock') lowStock?: string,
     @Query('orderBy') orderBy?: 'name' | 'createdAt',
-    @Query('type', new ParseEnumPipe(ProductType, { optional: true })) type?: ProductType,
+    @Query('type', new ParseEnumPipe(ProductType, { optional: true }))
+    type?: ProductType,
     @Query('ids') ids?: string,
-    @Query('available', new ParseBoolPipe({ optional: true })) available?: boolean,
+    @Query('available', new ParseBoolPipe({ optional: true }))
+    available?: boolean,
     @Query('locationId', ProductSiteQueryPipe) locationId?: string,
   ) {
     if (ids !== undefined && typeof ids !== 'string') {
@@ -215,6 +222,38 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get a product by ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.productsService.findOne(id, user.organizationId);
+  }
+
+  /**
+   * Per-site breakdown of one product (T22).
+   *
+   * Every role that can open a product may read it, and the directory answers
+   * only with the sites that role may see (owners and administrators: the whole
+   * organization; an operational membership: its assignments). The service
+   * keeps the read tenant-scoped.
+   */
+  @Get(':id/stock-by-site')
+  @ApiOperation({ summary: 'Get the stock balance of every readable site' })
+  async stockBySite(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    const sites = await this.locationsService.list(user);
+    return this.productsService.stockBySite(id, user.organizationId, sites);
+  }
+
+  /**
+   * Per-site stock adjustment (T22). It is a stock edit, so it admits exactly
+   * the roles the product edit does, and it leaves the same audit trail.
+   */
+  @Post(':id/stock-adjustments')
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @UseInterceptors(AuditInterceptor)
+  @AuditAction('PRODUCT_STOCK_ADJUST')
+  @ApiOperation({ summary: 'Adjust the stock of one site' })
+  adjustStock(
+    @Param('id') id: string,
+    @Body() stockAdjustmentDto: StockAdjustmentDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.productsService.adjustSiteStock(id, stockAdjustmentDto, user);
   }
 
   @Put(':id')

@@ -292,6 +292,8 @@ and only receives stock, loans and tasks.
 | /api/products/:id/deactivate | PUT | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
 | /api/products/:id/reactivate | PUT | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
 | /api/products/:id | DELETE | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
+| /api/products/:id/stock-by-site | GET | any org role | org-scoped; lists only the sites the caller can read (OWNER/ADMIN/SUPER_ADMIN all, others assigned) | backend/src/products/products.stock-by-site.postgres.spec.ts |
+| /api/products/:id/stock-adjustments | POST | ADMIN (OWNER inherits), MEMBER | org-scoped; site authorized in the transaction (404 when unassigned or foreign); audited PRODUCT_STOCK_ADJUST | backend/src/products/products.stock-by-site.postgres.spec.ts |
 | /api/products/upload | POST | ADMIN, MEMBER | org-scoped | backend/src/products/products.controller.spec.ts |
 | /api/products/:id/upload | POST | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
 

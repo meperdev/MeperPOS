@@ -40,6 +40,7 @@ describe('ProductsService — product versus service', () => {
 
   const prismaMock = {
     category: { findFirst: jest.fn() },
+    location: { count: jest.fn() },
     product: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -122,6 +123,9 @@ describe('ProductsService — product versus service', () => {
     );
     prismaMock.category.findFirst.mockResolvedValue(categoryRow());
     prismaMock.product.findUnique.mockResolvedValue(null);
+    // One site holds the whole balance: an absolute stock edit is still the
+    // delta at that site.
+    prismaMock.location.count.mockResolvedValue(1);
     prismaMock.inventoryMovement.create.mockResolvedValue({});
     prismaMock.inventoryLoanItem.findFirst.mockResolvedValue(null);
     prismaMock.__defaultSite.mockReturnValue('site-1');
@@ -734,6 +738,7 @@ describe('ProductsService conversion eligibility', () => {
     },
   };
   const prisma = {
+    location: { count: jest.fn<Promise<number>, []>() },
     product: {
       findFirst: jest.fn<Promise<Row>, [unknown]>(),
       updateMany: jest.fn<Promise<{ count: number }>, [Write]>(),
@@ -764,6 +769,9 @@ describe('ProductsService conversion eligibility', () => {
     state = { product: initialProduct(), items: [], movements: [] };
     loseCas = failMovement = false;
     events = [];
+    // One site holds the whole balance: the absolute edit stays the delta at
+    // that site.
+    prisma.location.count.mockResolvedValue(1);
     prisma.product.findFirst.mockImplementation(() =>
       Promise.resolve({ ...state.product }),
     );
