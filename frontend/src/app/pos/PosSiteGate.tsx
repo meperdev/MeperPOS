@@ -9,9 +9,17 @@ import {
 } from "@/hooks/usePosSiteContext";
 
 export interface PosCheckoutSite {
+  /** The site every sale and financing of this workspace is written to. */
+  id: string;
   name: string;
   available: boolean;
   revalidate: () => Promise<boolean>;
+  /**
+   * Opens the store picker again. Present only when the cashier can reach more
+   * than one store; the page offers it only with an empty, unlocked cart,
+   * because changing the site mounts a different workspace.
+   */
+  change?: () => void;
 }
 
 interface PosSiteGateProps {
@@ -21,12 +29,17 @@ interface PosSiteGateProps {
 }
 
 /**
- * Only the accessible principal site of an organization with exactly one site
- * may charge until per-site stock exists. A visible site is not a grant.
+ * Only a store the caller reaches may charge. The server lists the accessible
+ * stores and nominates one when it is obvious (the principal store, or the only
+ * reachable one); otherwise the cashier picks from that list. A nomination is
+ * never a grant: the sale transaction authorizes the site again.
  */
-function nominatedSite(data: PosSiteContext | undefined): PosSite | undefined {
-  const location = data?.locations.length === 1 ? data.locations[0] : undefined;
-  return location?.id === data?.checkoutLocationId ? location : undefined;
+function listedStore(
+  data: PosSiteContext | undefined,
+  id: string | null | undefined,
+): PosSite | undefined {
+  if (!id) return undefined;
+  return data?.locations.find((location) => location.id === id);
 }
 
 export function PosSiteGate({
@@ -36,24 +49,47 @@ export function PosSiteGate({
 }: PosSiteGateProps) {
   const context = usePosSiteContext(userId, organizationId);
   const [selectedId, setSelectedId] = useState("");
+  const [picking, setPicking] = useState(false);
 
   // A refetch error can retain the last successful response. Keep that site's
   // workspace state mounted but inaccessible until the site is verified again.
-  const site = context.isFetchedAfterMount
-    ? nominatedSite(context.data)
-    : undefined;
+  const data = context.isFetchedAfterMount ? context.data : undefined;
+  const locations = data?.locations ?? [];
+  // The cashier's own choice wins; otherwise the server's nomination; a single
+  // reachable store needs no click. Anything else waits on the picker below.
+  const activeId = picking
+    ? undefined
+    : (listedStore(data, selectedId)?.id ??
+      (listedStore(data, data?.checkoutLocationId)
+        ? (data?.checkoutLocationId as string)
+        : locations.length === 1
+          ? locations[0].id
+          : undefined));
+  const active = listedStore(data, activeId);
+
   const workspace =
-    site &&
+    data &&
+    active &&
     children(
       {
-        name: site.name,
+        id: active.id,
+        name: active.name,
         available: !context.isError,
         revalidate: async () => {
           const next = await context.refetch();
-          return !next.isError && nominatedSite(next.data)?.id === site.id;
+          return !next.isError && !!listedStore(next.data, active.id);
         },
+        change:
+          locations.length > 1
+            ? () => {
+                setSelectedId(active.id);
+                setPicking(true);
+              }
+            : undefined,
       },
-      JSON.stringify([userId, organizationId, site.id]),
+      // The cart, its paused drafts and every request of this till belong to
+      // this exact site: changing it mounts a different workspace.
+      JSON.stringify([userId, organizationId, active.id]),
     );
 
   if (context.isError) {
@@ -72,7 +108,7 @@ export function PosSiteGate({
       </>
     );
   }
-  if (!context.data || !context.isFetchedAfterMount) {
+  if (!data) {
     return (
       <p role="status" className="p-4 text-sm text-muted-foreground">
         Consultando sedes del punto de venta
@@ -80,15 +116,10 @@ export function PosSiteGate({
     );
   }
 
-  const { locations } = context.data;
-  const selected =
-    locations.length === 1
-      ? locations[0]
-      : locations.find(({ id }) => id === selectedId);
-
-  // A site selection is not a grant. Until site stock is available, never mount
-  // checkout in an organization where the server did not name its sole site.
   if (workspace) return <>{workspace}</>;
+
+  const selected =
+    listedStore(data, selectedId) ?? listedStore(data, data.checkoutLocationId);
 
   return (
     <section className="max-w-md space-y-3 p-4">
@@ -99,7 +130,10 @@ export function PosSiteGate({
           <select
             className="min-h-11 rounded-lg border border-border bg-card px-3 text-foreground focus-visible:outline-2 focus-visible:outline-primary"
             value={selected?.id ?? ""}
-            onChange={(event) => setSelectedId(event.target.value)}
+            onChange={(event) => {
+              setSelectedId(event.target.value);
+              setPicking(false);
+            }}
           >
             <option value="" disabled>
               Selecciona una sede
@@ -112,15 +146,15 @@ export function PosSiteGate({
           </select>
         </label>
       )}
-      {locations.length === 1 && (
-        <p className="text-sm font-medium">Sede: {selected?.name}</p>
+      {picking && selected && (
+        <Button variant="secondary" onClick={() => setPicking(false)}>
+          Seguir en {selected.name}
+        </Button>
       )}
       <p role="status" className="text-sm text-muted-foreground">
         {locations.length === 0
           ? "No tienes sedes asignadas"
-          : selected
-            ? "El cobro no está habilitado para esta sede"
-            : "Selecciona una sede para consultar su disponibilidad."}
+          : "Selecciona la sede donde vas a cobrar para empezar a vender."}
       </p>
     </section>
   );

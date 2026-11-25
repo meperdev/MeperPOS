@@ -25,9 +25,14 @@ import type {
  *
  * `posScope` binds the initiation and its retry to the user and tenant the till
  * was rendered for, so a session rotated by another tab cannot finance against
- * another organization.
+ * another organization. `checkoutLocationId` is the site the till is selling
+ * from: it is sent only when a site is active (T3g), so the hold reserves at
+ * that site's balance instead of the organization default.
  */
-export function useCreatePosLoan(posScope?: PosRequestScope) {
+export function useCreatePosLoan(
+  posScope?: PosRequestScope,
+  checkoutLocationId?: string,
+) {
   const queryClient = useQueryClient();
 
   return useMutation<PosLoanInitiation, Error, CreatePosLoanInput>({
@@ -55,6 +60,7 @@ export function useCreatePosLoan(posScope?: PosRequestScope) {
           ? { discountAmount: data.discountAmount }
           : {}),
         requestKey: data.requestKey ?? crypto.randomUUID(),
+        ...(checkoutLocationId ? { locationId: checkoutLocationId } : {}),
       };
       // No config at all outside the POS: the plain call stays byte-identical.
       return (

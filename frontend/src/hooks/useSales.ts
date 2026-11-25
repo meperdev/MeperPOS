@@ -45,8 +45,14 @@ export function useSaleByNumber(saleNumber: number) {
  * Records a sale. `posScope` binds the request to the user and tenant the till
  * was rendered for, so a session rotated by another tab cannot charge under a
  * different organization; callers outside the POS pass nothing.
+ * `checkoutLocationId` is the site the till is charging at: it is sent only
+ * when a site is active (T3g), and it stays out of the idempotency signature so
+ * a retried attempt keeps its pinned `requestKey`.
  */
-export function useCreateSale(posScope?: PosRequestScope) {
+export function useCreateSale(
+  posScope?: PosRequestScope,
+  checkoutLocationId?: string,
+) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -72,12 +78,18 @@ export function useCreateSale(posScope?: PosRequestScope) {
       // server already persisted replays that sale instead of selling twice.
       // Optional: a caller without an intent still posts a plain sale.
       requestKey?: string;
-    }) =>
+    }) => {
+      const body = {
+        ...data,
+        ...(checkoutLocationId ? { locationId: checkoutLocationId } : {}),
+      };
       // No config at all outside the POS: the plain call stays byte-identical.
-      (posScope
-        ? api.post<Sale>("/sales", data, { posScope })
-        : api.post<Sale>("/sales", data)
-      ).then((res) => res.data),
+      return (
+        posScope
+          ? api.post<Sale>("/sales", body, { posScope })
+          : api.post<Sale>("/sales", body)
+      ).then((res) => res.data);
+    },
     onSuccess: () => {
       // Payment confirmed: the one haptic that confirms money moved (S4.2).
       // It lives here, not in the POS page, so every sale path feels the same.

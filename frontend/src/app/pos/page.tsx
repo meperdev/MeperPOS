@@ -269,6 +269,10 @@ function POSWorkspace({
     };
   }, []);
 
+  // The site the gate verified for this workspace: the catalogue, the search
+  // and the scanner read its balance instead of the organization aggregate.
+  const activeSiteId = site.id;
+
   const toast = useToast();
   const { user, loading: authLoading } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -386,6 +390,7 @@ function POSWorkspace({
     type: selectedFilter === SERVICE_FILTER_VALUE ? "SERVICE" : undefined,
     ids: showFavoritesOnly ? favoriteProductIds : undefined,
     available: true,
+    locationId: activeSiteId,
   });
   const { data: categoriesData } = useCategories({ limit: 100 });
   const { data: customersData } = useCustomers();
@@ -398,10 +403,10 @@ function POSWorkspace({
       scopeUserId ? { userId: scopeUserId, organizationId } : undefined,
     [scopeUserId, organizationId],
   );
-  const createSale = useCreateSale(posScope);
+  const createSale = useCreateSale(posScope, activeSiteId);
   const [checkingOut, setCheckingOut] = useState(false);
   const checkingOutRef = useRef(false);
-  const createPosLoan = useCreatePosLoan(posScope);
+  const createPosLoan = useCreatePosLoan(posScope, activeSiteId);
   // An attempt is pinned to the exact payload it was minted for: a retry of the
   // same request reuses its key, while any change to the cart, customer or
   // discount mints a new one. Cleared on success so the next financing starts
@@ -466,7 +471,9 @@ function POSWorkspace({
   const checkoutAttemptRef = useRef<{ key: string; signature: string } | null>(
     null,
   );
-  const quickSearchProduct = useQuickSearchProduct();
+  const quickSearchProduct = useQuickSearchProduct({
+    locationId: activeSiteId,
+  });
 
   // SalesService explicitly permits CASHIER as well as managers. Keep this
   // exception local: checking inherited CASHIER would also admit MEMBER.
@@ -1261,10 +1268,28 @@ function POSWorkspace({
 
             {/* Unified search & scanner — types to filter the grid, Enter scans/adds */}
             <div className="@container flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15 max-lg:px-0 max-lg:bg-transparent">
-              <p className="text-xs text-muted-foreground">
-                Sede:{" "}
-                <span className="font-medium text-foreground">{site.name}</span>
-              </p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <p>
+                  Sede:{" "}
+                  <span className="font-medium text-foreground">{site.name}</span>
+                </p>
+                {site.change && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={site.change}
+                    disabled={cart.length > 0 || cartLocked}
+                    title={
+                      cart.length > 0
+                        ? "Pausa o termina la venta para cambiar de sede"
+                        : undefined
+                    }
+                    className="h-7 px-2 text-xs"
+                  >
+                    Cambiar sede
+                  </Button>
+                )}
+              </div>
               {/* Intrinsic wrap, like FilterBar: Favoritos and the category select share a row under the search when narrow. */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[14rem] flex-[999_1_16rem]">

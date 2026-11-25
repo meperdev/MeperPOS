@@ -27,9 +27,11 @@ type UseProductsParams = {
   type?: "PRODUCT" | "SERVICE";
   ids?: string[];
   available?: boolean;
+  locationId?: string;
 };
 
 const useProductsMock = vi.fn();
+const quickSearchHookMock = vi.fn();
 const quickSearchMutateMock = vi.fn();
 const createSaleMutateMock = vi.fn();
 const createPosLoanMutateMock = vi.fn();
@@ -318,10 +320,13 @@ vi.mock("@/components/ui/ConfirmDialog", () => ({
 
 vi.mock("@/hooks/useProducts", () => ({
   useProducts: (params?: UseProductsParams) => useProductsMock(params),
-  useQuickSearchProduct: () => ({
-    mutateAsync: quickSearchMutateMock,
-    isPending: false,
-  }),
+  useQuickSearchProduct: (options?: { locationId?: string }) => {
+    quickSearchHookMock(options);
+    return {
+      mutateAsync: quickSearchMutateMock,
+      isPending: false,
+    };
+  },
 }));
 
 vi.mock("@/hooks/useCategories", () => ({
@@ -555,17 +560,20 @@ describe("POS site scope", () => {
     expect(createSaleMutateMock).not.toHaveBeenCalled();
   });
 
-  it("lets the user choose an accessible site but cannot open checkout for another site", async () => {
+  it("asks the cashier to choose among the listed stores when none is nominated", async () => {
     siteState.data = {
       locations: [...siteState.data.locations, { id: "site-b", name: "Sede B", isDefault: false }],
       checkoutLocationId: null,
     };
     render(<POSPage />);
+    expect(
+      screen.getByText("Selecciona la sede donde vas a cobrar para empezar a vender."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Scoped product" })).toBeNull();
     const select = screen.getByRole<HTMLSelectElement>("combobox", { name: "Sede" });
     await userEvent.selectOptions(select, "site-b");
     expect(select.value).toBe("site-b");
-    expect(screen.getByText("El cobro no está habilitado para esta sede")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /finalizar venta|financiar/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
     expect(createSaleMutateMock).not.toHaveBeenCalled();
   });
 
@@ -620,15 +628,21 @@ describe("POS site scope", () => {
     }
   });
 
-  it("keeps checkout closed when the secondary site is listed first and nominated", async () => {
+  it("opens the nominated store and lets an empty till change store", async () => {
     siteState.data = {
       locations: [{ id: "site-b", name: "Sede B", isDefault: false }, ...siteState.data.locations],
       checkoutLocationId: "site-b",
     };
     render(<POSPage />);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Sede" }), "site-b");
-    expect(screen.getByText("El cobro no está habilitado para esta sede")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /finalizar venta|financiar/i })).toBeNull();
+    expect(screen.getByText("Sede B")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+    expect(screen.getByRole("button", { name: "Cambiar sede" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Pausar" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cambiar sede" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Sede" }), "site-a");
+    expect(screen.getByText("Sede principal")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
     expect(createSaleMutateMock).not.toHaveBeenCalled();
     expect(createPosLoanMutateMock).not.toHaveBeenCalled();
   });
@@ -648,11 +662,10 @@ describe("POS site scope", () => {
     expect(createPosLoanMutateMock).not.toHaveBeenCalled();
   });
 
-  it("does not offer checkout for a sole visible site without a server nomination", () => {
+  it("opens the only listed store without a server nomination", () => {
     siteState.data = { ...siteState.data, checkoutLocationId: null };
     render(<POSPage />);
-    expect(screen.getByText("El cobro no está habilitado para esta sede")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Scoped product" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
     expect(createSaleMutateMock).not.toHaveBeenCalled();
     expect(createPosLoanMutateMock).not.toHaveBeenCalled();
   });
@@ -839,6 +852,49 @@ describe("POS site scope", () => {
     render(<POSPage />);
     expect(screen.getByText("Consultando sedes del punto de venta")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Scoped product" })).toBeNull();
+  });
+
+  // T3f: the cashier at one site must not see another site's stock, so the
+  // catalogue and the scanner ask for the site the gate verified.
+  it("reads the catalogue and the scanner from the active POS site", async () => {
+    quickSearchHookMock.mockClear();
+    quickSearchMutateMock.mockReset();
+    quickSearchMutateMock.mockResolvedValue(makeProduct("scan-1", "Producto Escaneado"));
+
+    render(<POSPage />);
+
+    expect(useProductsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-a" }),
+    );
+    expect(quickSearchHookMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-a" }),
+    );
+
+    await userEvent.type(
+      screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código..."),
+      "7701234567890{enter}",
+    );
+
+    await waitFor(() => {
+      expect(quickSearchMutateMock).toHaveBeenCalledWith("7701234567890");
+    });
+  });
+
+  it("keeps the catalogue site in the query key so a site change refetches", async () => {
+    const { rerender } = render(<POSPage />);
+    expect(useProductsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-a" }),
+    );
+
+    siteState.data = {
+      locations: [{ id: "site-b", name: "Sede B", isDefault: true }],
+      checkoutLocationId: "site-b",
+    };
+    rerender(<POSPage />);
+
+    expect(useProductsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-b" }),
+    );
   });
 });
 
