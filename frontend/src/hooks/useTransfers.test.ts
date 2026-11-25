@@ -9,6 +9,7 @@ import {
   useCreateTransfer,
   useReceiveTransfer,
   useTransfer,
+  useTransferSummary,
   useTransfers,
 } from "./useTransfers";
 
@@ -190,5 +191,89 @@ describe("transfer API hooks", () => {
     expect(client.getQueryState(["transfers", undefined])?.isInvalidated).toBe(
       false,
     );
+  });
+});
+
+describe("transfer summary", () => {
+  /** One server total per state, as `meta.total` reports it. */
+  function totalsByStatus() {
+    const totals: Record<string, number> = {
+      IN_TRANSIT: 4,
+      RECEIVED: 12,
+      CANCELLED: 2,
+    };
+    vi.mocked(api.get).mockImplementation((_url, config) => {
+      const params = (config ?? {}) as { status?: string };
+      return Promise.resolve(
+        response({
+          data: [],
+          meta: {
+            total: totals[params.status ?? ""] ?? 0,
+            page: 1,
+            limit: 1,
+            totalPages: 1,
+          },
+        }),
+      );
+    });
+  }
+
+  it("reads one count per state for the current site scope", async () => {
+    totalsByStatus();
+    const { result } = renderHook(() => useTransferSummary("site-a"), {
+      wrapper,
+    });
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual({
+        inTransit: 4,
+        received: 12,
+        cancelled: 2,
+      }),
+    );
+    expect(api.get).toHaveBeenCalledWith("/transfers", {
+      status: "IN_TRANSIT",
+      limit: 1,
+      siteId: "site-a",
+    });
+    expect(api.get).toHaveBeenCalledWith("/transfers", {
+      status: "RECEIVED",
+      limit: 1,
+      siteId: "site-a",
+    });
+    expect(api.get).toHaveBeenCalledWith("/transfers", {
+      status: "CANCELLED",
+      limit: 1,
+      siteId: "site-a",
+    });
+  });
+
+  it("asks for every site when no site is chosen", async () => {
+    totalsByStatus();
+    renderHook(() => useTransferSummary(), { wrapper });
+
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith("/transfers", {
+        status: "IN_TRANSIT",
+        limit: 1,
+      }),
+    );
+  });
+
+  it("counts nothing until every state has answered", async () => {
+    vi.mocked(api.get).mockImplementation((_url, config) => {
+      const params = (config ?? {}) as { status?: string };
+      if (params.status === "CANCELLED") return new Promise(() => {});
+      return Promise.resolve(
+        response({
+          data: [],
+          meta: { total: 1, page: 1, limit: 1, totalPages: 1 },
+        }),
+      );
+    });
+    const { result } = renderHook(() => useTransferSummary(), { wrapper });
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(3));
+    expect(result.current.data).toBeUndefined();
   });
 });

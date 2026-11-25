@@ -38,10 +38,15 @@ const EMPTY_FORM = {
 
 const TYPE_LABEL = { STORE: "Sucursal", WAREHOUSE: "Bodega" } as const;
 
+const FORM_ID = "new-transfer-form";
+
 /**
  * Dispatch dialog: stock leaves an authorized origin site and travels to another
  * site of the same organization. Origin and destination are ordinary selects;
  * the lines are picked with the same product search the rest of the app uses.
+ *
+ * The sections run in the order the document is built — sites, then lines, then
+ * notes — and the actions live in the dialog footer, like every other form here.
  */
 export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
   const toast = useToast();
@@ -88,6 +93,8 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
         line.quantity >= 1 &&
         line.quantity <= line.available,
     );
+
+  const totalUnits = lines.reduce((total, line) => total + line.quantity, 0);
 
   const reset = () => {
     setForm(EMPTY_FORM);
@@ -161,50 +168,91 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={close} title="Nueva transferencia" size="lg">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <p className="text-sm text-muted-foreground">
+    <Modal
+      isOpen={isOpen}
+      onClose={close}
+      title="Nueva transferencia"
+      size="lg"
+      footer={
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="secondary" onClick={close}>
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            form={FORM_ID}
+            disabled={!canSubmit}
+            loading={create.isPending}
+          >
+            Despachar transferencia
+          </Button>
+        </div>
+      }
+    >
+      <form id={FORM_ID} onSubmit={handleSubmit} className="space-y-5">
+        <p className="text-[13px] text-muted-foreground">
           El stock sale de la sede de origen y queda en tránsito hasta que la
           sede de destino lo reciba.
         </p>
 
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
-          <Select
-            label="Sede de origen"
-            placeholder="Elige la sede de origen"
-            options={siteOptions}
-            value={form.fromLocationId}
-            onChange={(value) => {
-              setForm((current) => ({ ...current, fromLocationId: value }));
-              // Availability belongs to the origin: its lines start over.
-              setLines([]);
-            }}
-          />
-          <ArrowRight
-            aria-hidden="true"
-            className="mx-auto hidden h-4 w-4 text-muted-foreground sm:block sm:pb-2.5"
-          />
-          <Select
-            label="Sede de destino"
-            placeholder="Elige la sede de destino"
-            options={siteOptions}
-            value={form.toLocationId}
-            onChange={(value) =>
-              setForm((current) => ({ ...current, toLocationId: value }))
-            }
-          />
-        </div>
+        {/* Sites */}
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">Sedes</h3>
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+            <Select
+              label="Sede de origen"
+              placeholder="Elige la sede de origen"
+              options={siteOptions}
+              value={form.fromLocationId}
+              onChange={(value) => {
+                setForm((current) => ({ ...current, fromLocationId: value }));
+                // Availability belongs to the origin: its lines start over.
+                setLines([]);
+              }}
+            />
+            {/* Same height as the selects so the arrow sits on their axis. */}
+            <span
+              aria-hidden="true"
+              className="hidden h-9 w-8 items-center justify-center text-muted-foreground sm:flex"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </span>
+            <Select
+              label="Sede de destino"
+              placeholder="Elige la sede de destino"
+              options={siteOptions}
+              value={form.toLocationId}
+              onChange={(value) =>
+                setForm((current) => ({ ...current, toLocationId: value }))
+              }
+            />
+          </div>
 
-        {sameSite && (
-          <p role="alert" className="text-[13px] font-medium text-danger-text">
-            La sede de origen y la de destino deben ser diferentes.
-          </p>
-        )}
+          {sameSite && (
+            <p role="alert" className="text-[13px] font-medium text-danger-text">
+              La sede de origen y la de destino deben ser diferentes.
+            </p>
+          )}
+        </section>
 
-        <div className="space-y-2">
+        {/* Lines */}
+        <section className="space-y-2 border-t border-border/60 pt-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">Productos</h3>
+            {lines.length > 0 && (
+              <p className="text-[13px] text-muted-foreground">
+                <span className="tabular-nums">
+                  {lines.length} {lines.length === 1 ? "ítem" : "ítems"}
+                </span>
+                <span aria-hidden="true"> · </span>
+                <span className="tabular-nums">{totalUnits} und.</span>
+              </p>
+            )}
+          </div>
+
           <Input
             type="search"
-            label="Productos"
+            label="Buscar producto"
             icon={<Search className="h-3.5 w-3.5" />}
             placeholder={
               form.fromLocationId
@@ -272,80 +320,74 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
               )}
             </ul>
           )}
-        </div>
 
-        {lines.length === 0 ? (
-          <EmptyState
-            className="min-h-[140px]"
-            icon={<ArrowRight className="h-5 w-5" />}
-            title="Agrega al menos un producto"
-            subtitle="Busca el producto arriba y elige la cantidad que viaja."
+          {lines.length === 0 ? (
+            <EmptyState
+              className="min-h-[140px]"
+              icon={<ArrowRight className="h-5 w-5" />}
+              title="Agrega al menos un producto"
+              subtitle="Busca el producto arriba y elige la cantidad que viaja."
+            />
+          ) : (
+            <ul className="divide-y divide-border/60 rounded-xl border border-border/70 bg-card">
+              {lines.map((line) => (
+                <li
+                  key={line.productId}
+                  className="flex items-center gap-3 px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {line.name}
+                    </p>
+                    <p className="text-[13px] text-muted-foreground">
+                      <span className="id-text">{line.sku}</span>
+                      <span className="tabular-nums">
+                        {" "}
+                        · {line.available} disponibles en origen
+                      </span>
+                    </p>
+                  </div>
+                  <div
+                    role="group"
+                    aria-label={`Cantidad de ${line.name}`}
+                    className="shrink-0"
+                  >
+                    <Stepper
+                      value={line.quantity}
+                      min={1}
+                      max={Math.max(1, line.available)}
+                      size="sm"
+                      className="[&_input]:w-10"
+                      onChange={(value) => setQuantity(line.productId, value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeLine(line.productId)}
+                    aria-label={`Quitar ${line.name}`}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Notes */}
+        <div className="border-t border-border/60 pt-4">
+          <Input
+            label="Notas"
+            textarea
+            rows={2}
+            maxLength={500}
+            placeholder="Opcional: para qué se traslada la mercancía"
+            value={form.notes}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, notes: event.target.value }))
+            }
           />
-        ) : (
-          <ul className="divide-y divide-border/60 rounded-xl border border-border/70 bg-card">
-            {lines.map((line) => (
-              <li
-                key={line.productId}
-                className="flex items-center gap-3 px-4 py-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {line.name}
-                  </p>
-                  <p className="text-[13px] text-muted-foreground">
-                    <span className="id-text">{line.sku}</span>
-                    <span className="tabular-nums">
-                      {" "}
-                      · {line.available} disponibles en origen
-                    </span>
-                  </p>
-                </div>
-                <div
-                  role="group"
-                  aria-label={`Cantidad de ${line.name}`}
-                  className="shrink-0"
-                >
-                  <Stepper
-                    value={line.quantity}
-                    min={1}
-                    max={Math.max(1, line.available)}
-                    size="sm"
-                    className="[&_input]:w-10"
-                    onChange={(value) => setQuantity(line.productId, value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeLine(line.productId)}
-                  aria-label={`Quitar ${line.name}`}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <Input
-          label="Notas"
-          textarea
-          rows={2}
-          maxLength={500}
-          placeholder="Opcional: para qué se traslada la mercancía"
-          value={form.notes}
-          onChange={(event) =>
-            setForm((current) => ({ ...current, notes: event.target.value }))
-          }
-        />
-
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row sm:justify-end">
-          <Button type="button" variant="secondary" onClick={close}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={!canSubmit} loading={create.isPending}>
-            Despachar transferencia
-          </Button>
         </div>
       </form>
     </Modal>

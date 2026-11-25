@@ -3,8 +3,9 @@
 import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { Modal } from "@/components/ui/Modal";
+import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/Table";
 import { TransferStatusBadge } from "@/components/transfers/TransferStatusBadge";
 import { useReceiveTransfer, useTransfer } from "@/hooks/useTransfers";
 import { useToast } from "@/contexts/ToastContext";
@@ -27,6 +28,14 @@ interface Props {
 
 const TYPE_LABEL = { STORE: "Sucursal", WAREHOUSE: "Bodega" } as const;
 
+/** Units travelling, summed from the lines the server already sent. */
+function totalUnits(transfer: StockTransfer): number {
+  return transfer.items.reduce(
+    (total, item) => total + (Number(item.quantity) || 0),
+    0,
+  );
+}
+
 function SiteEnd({
   site,
   label,
@@ -46,8 +55,48 @@ function SiteEnd({
 }
 
 /**
+ * What happened to the document after it left the origin, as label/value rows:
+ * an instant keeps its readable wording (a date is text, so proportional
+ * figures), and the cancellation reason is read in full.
+ */
+function StatusFacts({ transfer }: { transfer: StockTransfer }) {
+  const rows: Array<{ label: string; value: string }> = [];
+  if (transfer.receivedAt) {
+    rows.push({ label: "Recibida", value: formatDateTime(transfer.receivedAt) });
+  }
+  if (transfer.receivedBy?.name) {
+    rows.push({ label: "Recibida por", value: transfer.receivedBy.name });
+  }
+  if (transfer.cancelledAt) {
+    rows.push({ label: "Cancelada", value: formatDateTime(transfer.cancelledAt) });
+  }
+  if (transfer.cancelledBy?.name) {
+    rows.push({ label: "Cancelada por", value: transfer.cancelledBy.name });
+  }
+  if (transfer.cancelReason) {
+    rows.push({ label: "Motivo", value: transfer.cancelReason });
+  }
+  if (rows.length === 0) return null;
+
+  return (
+    <dl className="grid grid-cols-1 gap-x-4 gap-y-2 rounded-xl border border-border/70 bg-card px-4 py-3 shadow-2xs sm:grid-cols-2">
+      {rows.map((row) => (
+        <div key={row.label} className="min-w-0">
+          <dt className="text-[13px] text-muted-foreground">{row.label}</dt>
+          <dd className="mt-0.5 break-words text-[13px] font-medium text-foreground">
+            {row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
  * One transfer, read-only, with the one action its status still admits:
- * receiving it at the destination while it is in transit.
+ * receiving it at the destination while it is in transit. The actions sit in the
+ * dialog footer, where every other house dialog keeps them, so the document is
+ * read top to bottom and acted on at its end.
  */
 export function TransferDetailModal({
   transfer,
@@ -81,26 +130,51 @@ export function TransferDetailModal({
     }
   };
 
+  const inTransit = shown?.status === "IN_TRANSIT";
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={shown ? `TR-${shown.number}` : "Transferencia"}
       size="lg"
+      footer={
+        shown ? (
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cerrar
+            </Button>
+            {inTransit && canCancel && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onAskCancel(shown)}
+              >
+                Cancelar
+              </Button>
+            )}
+            {inTransit && (
+              <Button type="button" onClick={handleReceive} loading={receive.isPending}>
+                Recibir
+              </Button>
+            )}
+          </div>
+        ) : undefined
+      }
     >
       {!shown ? (
         <LoadingState icon={<ArrowRight aria-hidden="true" />} message="Cargando transferencia…" />
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <TransferStatusBadge status={shown.status} />
-            <span className="text-[13px] text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               {formatDateTime(shown.createdAt)}
               {shown.createdBy?.name ? ` · ${shown.createdBy.name}` : ""}
-            </span>
+            </p>
           </div>
 
-          <div className="grid gap-3 rounded-xl border border-border/70 bg-card p-4 sm:grid-cols-[1fr_auto_1fr] sm:items-start">
+          <div className="grid gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-2xs sm:grid-cols-[1fr_auto_1fr] sm:items-start">
             <SiteEnd site={shown.fromLocation} label="Origen" />
             <ArrowRight
               aria-hidden="true"
@@ -109,82 +183,59 @@ export function TransferDetailModal({
             <SiteEnd site={shown.toLocation} label="Destino" />
           </div>
 
+          <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border/60 px-4 py-3">
+              <h3 className="text-sm font-semibold text-foreground">Productos</h3>
+              <p className="text-[13px] text-muted-foreground">
+                <span className="tabular-nums">
+                  {shown.items.length}{" "}
+                  {shown.items.length === 1 ? "ítem" : "ítems"}
+                </span>
+                <span aria-hidden="true"> · </span>
+                <span className="tabular-nums">{totalUnits(shown)} und.</span>
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[320px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableCell as="th">Producto</TableCell>
+                    <TableCell as="th" className="text-right">
+                      Cantidad
+                    </TableCell>
+                  </TableRow>
+                </TableHeader>
+                <tbody>
+                  {shown.items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {item.product?.name ?? item.productId}
+                        </p>
+                        <p className="truncate text-[13px] text-muted-foreground id-text">
+                          {item.product?.sku}
+                        </p>
+                      </TableCell>
+                      <TableCell numeric className="font-semibold text-foreground">
+                        {item.quantity}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          </div>
+
           {shown.notes && (
-            <p className="text-sm text-muted-foreground">{shown.notes}</p>
+            <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-2xs">
+              <h3 className="text-sm font-semibold text-foreground">Observaciones</h3>
+              <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground">
+                {shown.notes}
+              </p>
+            </div>
           )}
 
-          <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border/60 bg-muted/35">
-                  <th scope="col" className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                    Producto
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right text-xs font-medium text-muted-foreground">
-                    Cantidad
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.items.map((item) => (
-                  <tr key={item.id} className="border-b border-border/40 last:border-b-0">
-                    <td className="px-4 py-2">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {item.product?.name ?? item.productId}
-                      </p>
-                      <p className="text-[13px] text-muted-foreground id-text">
-                        {item.product?.sku}
-                      </p>
-                    </td>
-                    <td className="px-4 py-2 text-right text-sm font-semibold text-foreground tabular-nums">
-                      {item.quantity}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {shown.status === "RECEIVED" && shown.receivedAt && (
-            <p className="text-[13px] text-muted-foreground">
-              Recibida el {formatDateTime(shown.receivedAt)}
-              {shown.receivedBy?.name ? ` por ${shown.receivedBy.name}` : ""}.
-            </p>
-          )}
-          {shown.status === "CANCELLED" && (
-            <p className="text-[13px] text-muted-foreground">
-              Cancelada
-              {shown.cancelledAt ? ` el ${formatDateTime(shown.cancelledAt)}` : ""}
-              {shown.cancelledBy?.name ? ` por ${shown.cancelledBy.name}` : ""}.
-              {shown.cancelReason ? ` Motivo: ${shown.cancelReason}` : ""}
-            </p>
-          )}
-
-          <div className="flex flex-col justify-end gap-2 border-t border-border/60 pt-4 sm:flex-row">
-            <Button type="button" variant="secondary" onClick={onClose}>
-              Cerrar
-            </Button>
-            {shown.status === "IN_TRANSIT" && (
-              <>
-                {canCancel && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => onAskCancel(shown)}
-                  >
-                    Cancelar
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  onClick={handleReceive}
-                  loading={receive.isPending}
-                >
-                  Recibir
-                </Button>
-              </>
-            )}
-          </div>
+          <StatusFacts transfer={shown} />
         </div>
       )}
     </Modal>

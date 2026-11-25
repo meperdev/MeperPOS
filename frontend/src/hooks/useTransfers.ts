@@ -109,6 +109,63 @@ export function useTransfer(id: string) {
   });
 }
 
+/** How many transfers sit in each state for one site scope. */
+export interface TransferSummary {
+  inTransit: number;
+  received: number;
+  cancelled: number;
+}
+
+/** The summary reads one row per state; its total is all it needs. */
+const SUMMARY_LIMIT = 1;
+
+function summaryParams(siteId: string | undefined, status: StockTransferStatus) {
+  return {
+    status,
+    limit: SUMMARY_LIMIT,
+    ...(siteId ? { siteId } : {}),
+  };
+}
+
+/**
+ * The state counts the summary band shows. The server owns them: each one is the
+ * `meta.total` of a one-row list read, so the page never counts the rows it
+ * happens to have on screen, and the role/site rules of the list apply unchanged.
+ *
+ * Counts follow the site scope, never the state filter: the band answers "how
+ * much is where" for the list it sits above.
+ */
+export function useTransferSummary(siteId?: string) {
+  const read = (status: StockTransferStatus) => {
+    const params = summaryParams(siteId, status);
+    return {
+      queryKey: [...TRANSFERS_QUERY_KEY, "summary", params] as const,
+      queryFn: () =>
+        getTransfersRequest(params).then((res) => res.data.meta.total),
+    };
+  };
+
+  const inTransit = useQuery(read("IN_TRANSIT"));
+  const received = useQuery(read("RECEIVED"));
+  const cancelled = useQuery(read("CANCELLED"));
+
+  const data: TransferSummary | undefined =
+    inTransit.data !== undefined &&
+    received.data !== undefined &&
+    cancelled.data !== undefined
+      ? {
+          inTransit: inTransit.data,
+          received: received.data,
+          cancelled: cancelled.data,
+        }
+      : undefined;
+
+  return {
+    data,
+    isLoading: inTransit.isLoading || received.isLoading || cancelled.isLoading,
+  };
+}
+
 /** Dispatches stock from an authorized origin site to another site. */
 export function useCreateTransfer() {
   const queryClient = useQueryClient();

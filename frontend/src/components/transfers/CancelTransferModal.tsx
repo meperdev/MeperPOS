@@ -17,7 +17,8 @@ interface Props {
 
 /**
  * Cancelling an in-transit transfer sends its stock back to the origin, so the
- * server requires the reason the document will keep.
+ * server requires the reason the document will keep. The confirmation lives in
+ * the dialog footer, where every other house dialog keeps its actions.
  */
 export function CancelTransferModal({
   transferId,
@@ -59,6 +60,22 @@ export function CancelTransferModal({
       onClose={onClose}
       title={`Cancelar TR-${transferNumber}`}
       size="sm"
+      footer={
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Volver
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={handleSubmit}
+            disabled={!valid}
+            loading={cancelTransfer.isPending}
+          >
+            Cancelar transferencia
+          </Button>
+        </div>
+      }
     >
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-muted-foreground">
@@ -75,20 +92,6 @@ export function CancelTransferModal({
           onChange={(event) => setReason(event.target.value)}
           placeholder="Ej: La bodega no la recibe, se envió por error…"
         />
-        <div className="flex flex-col justify-end gap-3 border-t border-border/60 pt-4 sm:flex-row">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Volver
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            onClick={handleSubmit}
-            disabled={!valid}
-            loading={cancelTransfer.isPending}
-          >
-            Cancelar transferencia
-          </Button>
-        </div>
       </div>
     </Modal>
   );

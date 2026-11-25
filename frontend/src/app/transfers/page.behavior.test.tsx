@@ -18,6 +18,7 @@ const {
     transfers: [] as StockTransfer[],
     isLoading: false,
     isError: false,
+    summary: { inTransit: 1, received: 2, cancelled: 3 },
   };
   return {
     createMock: vi.fn(),
@@ -27,8 +28,14 @@ const {
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
     state,
-    /** S6: the same screen serves the destination cashier and the administrators. */
-    authState: { role: "ADMIN" as string },
+    /**
+     * S6: the same screen serves the destination cashier and the administrators.
+     * A platform super admin carries `isSuperAdmin` and may have no tenant role.
+     */
+    authState: {
+      role: "ADMIN" as string | undefined,
+      isSuperAdmin: false,
+    },
   };
 });
 
@@ -37,7 +44,14 @@ vi.mock("@/components/layout/DashboardLayout", () => ({
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ user: { id: "user-1", name: "Ana", role: authState.role } }),
+  useAuth: () => ({
+    user: {
+      id: "user-1",
+      name: "Ana",
+      role: authState.role,
+      isSuperAdmin: authState.isSuperAdmin,
+    },
+  }),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
@@ -72,6 +86,7 @@ vi.mock("@/hooks/useTransfers", () => ({
       refetch: vi.fn(),
     };
   },
+  useTransferSummary: () => ({ data: state.summary, isLoading: false }),
   useTransfer: () => ({ data: undefined }),
   useCreateTransfer: () => ({ mutateAsync: createMock, isPending: false }),
   useReceiveTransfer: () => ({ mutateAsync: receiveMock, isPending: false }),
@@ -113,6 +128,8 @@ vi.mock("@/hooks/useProducts", () => ({
 
 import TransfersPage from "./page";
 
+const VIEW_MODE_KEY = "meperpos:view-mode:transfers";
+
 function makeTransfer(overrides: Partial<StockTransfer> = {}): StockTransfer {
   return {
     id: "transfer-1",
@@ -148,14 +165,20 @@ beforeEach(() => {
   state.transfers = [makeTransfer()];
   state.isLoading = false;
   state.isError = false;
+  state.summary = { inTransit: 1, received: 2, cancelled: 3 };
   authState.role = "ADMIN";
+  authState.isSuperAdmin = false;
+  window.localStorage.setItem(VIEW_MODE_KEY, "grid");
   vi.clearAllMocks();
   createMock.mockResolvedValue(makeTransfer());
   receiveMock.mockResolvedValue(makeTransfer({ status: "RECEIVED" }));
   cancelMock.mockResolvedValue(makeTransfer({ status: "CANCELLED" }));
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  window.localStorage.removeItem(VIEW_MODE_KEY);
+  cleanup();
+});
 
 async function openDetail(user: ReturnType<typeof userEvent.setup>) {
   const [row] = screen.getAllByRole("button", {
@@ -177,12 +200,22 @@ describe("transfers page", () => {
     expect(screen.getByText("1 transferencia")).toBeInTheDocument();
   });
 
+  it("counts the transfers in each state for the current site scope", () => {
+    state.summary = { inTransit: 4, received: 12, cancelled: 2 };
+    render(<TransfersPage />);
+
+    const summary = screen.getByTestId("transfer-summary");
+    expect(within(summary).getByText("En tránsito")).toBeInTheDocument();
+    expect(within(summary).getByText("4")).toBeInTheDocument();
+    expect(within(summary).getByText("12")).toBeInTheDocument();
+    expect(within(summary).getByText("2")).toBeInTheDocument();
+  });
+
   it("filters by state and by site", async () => {
     const user = userEvent.setup();
     render(<TransfersPage />);
 
-    await user.click(screen.getByRole("button", { name: "Todos los estados" }));
-    await user.click(await screen.findByRole("option", { name: "Recibida" }));
+    await user.click(screen.getByRole("button", { name: "Recibidas" }));
 
     await waitFor(() =>
       expect(useTransfersMock).toHaveBeenLastCalledWith(
@@ -198,6 +231,21 @@ describe("transfers page", () => {
         expect.objectContaining({ siteId: "site-b", page: 1 }),
       ),
     );
+  });
+
+  it("switches between the cards and the dense table", async () => {
+    const user = userEvent.setup();
+    render(<TransfersPage />);
+
+    // Cards are the default layout: a phone always gets them.
+    expect(screen.queryByRole("table")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Vista en lista" }));
+
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Ruta")).toBeInTheDocument();
+    expect(within(table).getAllByText("TR-7").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Vista en tarjeta" })).toBeInTheDocument();
   });
 
   it("invites the first transfer when there is none", () => {
@@ -219,7 +267,7 @@ describe("transfers page", () => {
     await user.click(within(dialog).getByRole("button", { name: "Sede de destino" }));
     await user.click(await screen.findByRole("option", { name: /Bodega norte/ }));
 
-    await user.type(within(dialog).getByLabelText("Productos"), "Producto");
+    await user.type(within(dialog).getByLabelText("Buscar producto"), "Producto");
     // Only what the origin site can send is offered, with that site's units.
     expect(productsParams).toHaveBeenLastCalledWith(
       expect.objectContaining({ locationId: "site-a", available: true }),
@@ -259,11 +307,11 @@ describe("transfers page", () => {
 
     await user.click(screen.getByRole("button", { name: /Nueva transferencia/ }));
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByLabelText("Productos")).toBeDisabled();
+    expect(within(dialog).getByLabelText("Buscar producto")).toBeDisabled();
 
     await user.click(within(dialog).getByRole("button", { name: "Sede de origen" }));
     await user.click(await screen.findByRole("option", { name: /Sede centro/ }));
-    await user.type(within(dialog).getByLabelText("Productos"), "Producto");
+    await user.type(within(dialog).getByLabelText("Buscar producto"), "Producto");
     await user.click(await screen.findByRole("option", { name: /Producto Uno/ }));
 
     const quantity = within(dialog).getByRole("group", {
@@ -350,6 +398,42 @@ describe("transfers page", () => {
     ).toBeInTheDocument();
   });
 
+  it("lets a platform super admin dispatch", () => {
+    authState.role = "SUPER_ADMIN";
+    authState.isSuperAdmin = true;
+    render(<TransfersPage />);
+
+    expect(
+      screen.getByRole("button", { name: /Nueva transferencia/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("lets a platform super admin session without a tenant role dispatch", () => {
+    // The server admits SUPER_ADMIN; a platform identity that carries no org
+    // role of its own is the one shape the role list alone would lock out.
+    authState.role = undefined;
+    authState.isSuperAdmin = true;
+    render(<TransfersPage />);
+
+    expect(
+      screen.getByRole("button", { name: /Nueva transferencia/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("cancels an in-transit transfer from the card menu", async () => {
+    const user = userEvent.setup();
+    render(<TransfersPage />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Más acciones de TR-7" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Cancelar transferencia" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Cancelar TR-7" }),
+    ).toBeInTheDocument();
+  });
+
   it("receives an in-transit transfer from its detail", async () => {
     const user = userEvent.setup();
     render(<TransfersPage />);
@@ -409,7 +493,7 @@ describe("transfers page", () => {
     await user.click(await screen.findByRole("option", { name: /Sede centro/ }));
     await user.click(within(dialog).getByRole("button", { name: "Sede de destino" }));
     await user.click(await screen.findByRole("option", { name: /Bodega norte/ }));
-    await user.type(within(dialog).getByLabelText("Productos"), "Producto");
+    await user.type(within(dialog).getByLabelText("Buscar producto"), "Producto");
     await user.click(await screen.findByRole("option", { name: /Producto Uno/ }));
     await user.click(
       within(dialog).getByRole("button", { name: "Despachar transferencia" }),
