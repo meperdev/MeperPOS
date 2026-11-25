@@ -243,6 +243,11 @@ describe('Purchase order documents — Integration', () => {
       include: { items: { include: { product: true } } },
     });
     const [item] = before.items;
+    // A request with no destination lands at the organization default site.
+    const principal = await prisma.location.findFirstOrThrow({
+      where: { organizationId: fixture.orgAId, isDefault: true },
+      select: { id: true },
+    });
 
     await orders.receive(
       lateOrderId,
@@ -265,7 +270,7 @@ describe('Purchase order documents — Integration', () => {
       type: 'PURCHASE',
       quantity: 2,
       reason: `OC-${before.orderNumber}`,
-      locationId: null,
+      locationId: principal.id,
     });
   });
 
@@ -376,15 +381,19 @@ describe('Purchase order documents — Integration', () => {
     });
     expect(after.movements).toBe(before.movements + 1);
     expect(after.siteBalances).toBe(before.siteBalances);
-    // T3a: the product keeps exactly one default-site row, opened from the
-    // balance it was created with; this receipt still writes only the aggregate.
-    expect(after.siteLedger).toEqual(before.siteLedger);
+    // The receipt credits the destination site row; the organization aggregate
+    // follows through the ledger's delta trigger and stays the sum of the sites.
+    const destinationBefore = before.siteLedger.find(
+      (row) => row.locationId === principal.id,
+    )!;
     expect(after.siteLedger).toEqual([
-      expect.objectContaining({
+      {
         productId: item.productId,
         locationId: principal.id,
         organizationId,
-      }),
+        stock: destinationBefore.stock + qty,
+        reservedStock: 0,
+      },
     ]);
     expect(
       await prisma.inventoryMovement.findFirstOrThrow({
@@ -393,6 +402,7 @@ describe('Purchase order documents — Integration', () => {
           organizationId,
           locationId: principal.id,
         },
+        orderBy: { createdAt: 'desc' },
       }),
     ).toMatchObject({
       type: 'PURCHASE',

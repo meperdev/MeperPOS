@@ -28,6 +28,10 @@ import { SequenceService } from '../common/sequences/sequence.service';
 import { tracksStock } from '../products/product-type.logic';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { resolveWritableSiteWithin } from '../locations/authorized-site';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../inventory/site-stock';
 
 interface ComputedItem {
   productId: string;
@@ -634,7 +638,11 @@ export class PurchaseOrdersService {
 
     const { locationId } = dto;
     const receiveItems = async (tx: Prisma.TransactionClient) => {
-      let destinationId: string | undefined;
+      // The whole batch lands at one site. The explicit destination keeps the
+      // existing authorization and sole-principal gate; a legacy request with no
+      // destination lands at the organization default site, so every receipt has
+      // a site balance from now on.
+      let destinationId: string;
       if (locationId !== undefined) {
         if (
           actor?.userId !== userId ||
@@ -662,6 +670,8 @@ export class PurchaseOrdersService {
           );
         }
         destinationId = destination.locationId;
+      } else {
+        destinationId = await resolveDefaultSiteWithin(tx, organizationId);
       }
 
       // Lock the order before reading receipt quantities or changing inventory.
@@ -716,6 +726,9 @@ export class PurchaseOrdersService {
         // Defence in depth: a service line can only exist in an order drafted before
         // the validation above existed. Receiving one must not invent merchandise.
         if (tracksStock(product)) {
+          // previousStock/newStock keep documenting the organization-wide balance
+          // the kárdex has always recorded; the site is now the attribution and
+          // the ledger that actually moves.
           const previousStock = product.stock;
           const newStock = previousStock + r.qtyReceivedNow;
           const currentVersion = product.version;
@@ -723,8 +736,11 @@ export class PurchaseOrdersService {
           const oldCost = Number(product.costPrice);
           const costChanged = newUnitCost !== oldCost;
 
+          // The version guard is the optimistic-concurrency contract of product
+          // edits and stays exactly as it was; the stock itself now moves through
+          // the site row, whose trigger keeps the organization aggregate equal to
+          // the sum of its sites.
           const updateData: Record<string, unknown> = {
-            stock: { increment: r.qtyReceivedNow },
             version: { increment: 1 },
           };
           if (costChanged) {
@@ -742,6 +758,21 @@ export class PurchaseOrdersService {
             );
           }
 
+          const receipt = await applySiteStockDelta(tx, {
+            organizationId,
+            productId: item.productId,
+            locationId: destinationId,
+            stockDelta: r.qtyReceivedNow,
+            reservedDelta: 0,
+          });
+          if (!receipt.applied) {
+            // A receipt always raises availability, so this is the same product
+            // race the aggregate compare-and-swap used to report.
+            throw new ConflictException(
+              'Modificación concurrente detectada sobre el producto',
+            );
+          }
+
           await tx.inventoryMovement.create({
             data: {
               productId: item.productId,
@@ -752,9 +783,7 @@ export class PurchaseOrdersService {
               reason: `OC-${order.orderNumber}`,
               userId,
               organizationId,
-              ...(destinationId === undefined
-                ? {}
-                : { locationId: destinationId }),
+              locationId: destinationId,
             },
           });
 

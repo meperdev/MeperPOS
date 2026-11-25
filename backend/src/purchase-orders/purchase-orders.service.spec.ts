@@ -15,9 +15,16 @@ describe('PurchaseOrdersService', () => {
 
   const txMock = {
     $queryRaw: jest.fn(),
+    $executeRaw: jest.fn(),
     product: {
       findFirst: jest.fn(),
       updateMany: jest.fn(),
+    },
+    productStock: {
+      findFirst: jest.fn(),
+    },
+    location: {
+      findFirst: jest.fn(),
     },
     inventoryMovement: {
       create: jest.fn(),
@@ -92,6 +99,8 @@ describe('PurchaseOrdersService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     txMock.$queryRaw.mockResolvedValue([{ status: 'PENDING' }]);
+    txMock.$executeRaw.mockResolvedValue(1);
+    txMock.location.findFirst.mockResolvedValue({ id: 'site-1' });
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof txMock) => unknown) => callback(txMock),
     );
@@ -412,11 +421,27 @@ describe('PurchaseOrdersService', () => {
       'org-1',
     );
 
+    // The receipt lands at the organization default site, so the kárdex line is
+    // attributed to it and the stock moves through the site row only.
+    expect(txMock.location.findFirst).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', isDefault: true },
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+    expect(txMock.product.updateMany).toHaveBeenCalledWith({
+      where: { id: 'prod-1', version: 1 },
+      data: { version: { increment: 1 } },
+    });
+    expect(txMock.$executeRaw).toHaveBeenCalledTimes(1);
     expect(txMock.inventoryMovement.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           organizationId: 'org-1',
           type: 'PURCHASE',
+          quantity: 2,
+          previousStock: 10,
+          newStock: 12,
+          locationId: 'site-1',
         }),
       }),
     );
@@ -454,6 +479,83 @@ describe('PurchaseOrdersService', () => {
     expect(txMock.purchaseOrderItem.create).not.toHaveBeenCalled();
   });
 
+  it('stores the received unit cost and audits it without writing the aggregate', async () => {
+    prismaMock.purchaseOrder.findFirst.mockResolvedValue(buildOrder());
+    txMock.purchaseOrderItem.findUnique.mockResolvedValue({
+      id: 'poi-1',
+      purchaseOrderId: 'po-1',
+      productId: 'prod-1',
+      qtyOrdered: 5,
+      qtyReceived: 0,
+      unitCost: 150,
+    });
+    txMock.product.findFirst.mockResolvedValue({
+      id: 'prod-1',
+      stock: 10,
+      version: 1,
+      costPrice: 100,
+    });
+    txMock.product.updateMany.mockResolvedValue({ count: 1 });
+    txMock.purchaseOrderItem.findMany.mockResolvedValue([
+      { id: 'poi-1', qtyOrdered: 5, qtyReceived: 1 },
+    ]);
+
+    await service.receive(
+      'po-1',
+      { items: [{ itemId: 'poi-1', qtyReceivedNow: 1 }] },
+      'user-1',
+      'org-1',
+    );
+
+    expect(txMock.product.updateMany).toHaveBeenCalledWith({
+      where: { id: 'prod-1', version: 1 },
+      data: { version: { increment: 1 }, costPrice: 150 },
+    });
+    expect(txMock.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'PRODUCT_COST_UPDATED_FROM_PO',
+        resourceId: 'prod-1',
+        metadata: expect.objectContaining({ oldCost: 100, newCost: 150 }),
+      }),
+    });
+  });
+
+  it('keeps the existing product conflict when the site delta cannot be applied', async () => {
+    prismaMock.purchaseOrder.findFirst.mockResolvedValue(buildOrder());
+    txMock.purchaseOrderItem.findUnique.mockResolvedValue({
+      id: 'poi-1',
+      purchaseOrderId: 'po-1',
+      productId: 'prod-1',
+      qtyOrdered: 5,
+      qtyReceived: 0,
+      unitCost: 100,
+    });
+    txMock.product.findFirst.mockResolvedValue({
+      id: 'prod-1',
+      stock: 10,
+      version: 1,
+      costPrice: 100,
+    });
+    txMock.product.updateMany.mockResolvedValue({ count: 1 });
+    txMock.$executeRaw.mockResolvedValue(0);
+    txMock.productStock.findFirst.mockResolvedValue({
+      organizationId: 'org-1',
+    });
+
+    await expect(
+      service.receive(
+        'po-1',
+        { items: [{ itemId: 'poi-1', qtyReceivedNow: 2 }] },
+        'user-1',
+        'org-1',
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'Modificación concurrente detectada sobre el producto',
+    });
+    expect(txMock.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
   it('receives a service line without moving stock or the kárdex', async () => {
     prismaMock.purchaseOrder.findFirst.mockResolvedValue(buildOrder());
     txMock.purchaseOrderItem.findUnique.mockResolvedValue({
@@ -484,6 +586,7 @@ describe('PurchaseOrdersService', () => {
     );
 
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
+    expect(txMock.$executeRaw).not.toHaveBeenCalled();
     expect(txMock.inventoryMovement.create).not.toHaveBeenCalled();
     expect(txMock.auditLog.create).not.toHaveBeenCalled();
     // The received quantity must still be recorded, otherwise the order can never close.
@@ -556,6 +659,7 @@ describe('PurchaseOrdersService', () => {
     );
 
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
+    expect(txMock.$executeRaw).not.toHaveBeenCalled();
     expect(txMock.inventoryMovement.create).not.toHaveBeenCalled();
     expect(txMock.auditLog.create).not.toHaveBeenCalled();
     // The received quantity must still be recorded, otherwise the order can never close.

@@ -478,29 +478,25 @@ function settle<T>(work: Promise<T>) {
           },
           select: { productId: true, locationId: true, quantity: true },
         }),
-      ).toEqual([{ productId: a.productId, locationId: null, quantity: 5 }]);
-      // T3a: each product keeps exactly one default-site row carrying the
-      // balance it was created with; this receipt writes only the aggregate.
+      ).toEqual([{ productId: a.productId, locationId: site.id, quantity: 5 }]);
+      // T3d: the committed receipt credited the destination site row and the
+      // aggregate followed; the receipt that lost its snapshot wrote nothing, so
+      // its product keeps the empty row it was created with.
       const balances = await prisma.productStock.findMany({
         where: { productId: { in: [a.productId, b.productId] } },
         select: {
           productId: true,
-          locationId: true,
-          organizationId: true,
           stock: true,
           reservedStock: true,
         },
       });
+      expect(balances).toEqual(
+        expect.arrayContaining([
+          { productId: a.productId, stock: 5, reservedStock: 0 },
+          { productId: b.productId, stock: 0, reservedStock: 0 },
+        ]),
+      );
       expect(balances).toHaveLength(2);
-      for (const productId of [a.productId, b.productId]) {
-        expect(balances).toContainEqual({
-          productId,
-          locationId: site.id,
-          organizationId,
-          stock: 0,
-          reservedStock: 0,
-        });
-      }
     }, 16000);
   },
 );
