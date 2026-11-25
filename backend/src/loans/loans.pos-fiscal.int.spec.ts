@@ -207,8 +207,11 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     const fixture = await makeFixture('origin', {});
     const { organizationId, userId, productId } = fixture;
     const actor = actorOf(fixture);
-    const principal = await prisma.location.create({
-      data: { organizationId, name: 'Principal', isDefault: true },
+    // T3a: the fixture product already opened the tenant default-site row, so
+    // the sole principal site is the one that exists.
+    const principal = await prisma.location.findFirstOrThrow({
+      where: { organizationId, isDefault: true },
+      select: { id: true },
     });
     const foreign = await prisma.location.create({
       data: { organizationId: active.organizationId, name: 'Foreign site' },
@@ -253,7 +256,22 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     ).toEqual([{ locationId: principal.id }, { locationId: principal.id }]);
     const held = await snapshot();
     expect(held.product).toEqual({ stock: 10, reservedStock: 4 });
-    expect(held.siteBalances).toBe(0);
+    expect(held.siteBalances).toBe(1);
+    // T3a: the product keeps one default-site row equal to the balance it was
+    // created with; the hold still reserves on the aggregate only.
+    expect(
+      await prisma.productStock.findMany({
+        where: { productId, organizationId },
+      }),
+    ).toEqual([
+      {
+        productId,
+        locationId: principal.id,
+        organizationId,
+        stock: held.product.stock,
+        reservedStock: 0,
+      },
+    ]);
     const { locationId: _locationId, ...omitted } = dto;
     await expect(initiate(dto)).resolves.toEqual(finance);
     await expect(

@@ -679,9 +679,11 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
   });
 
   describe('direct POS origin before the stock cutover', () => {
-    const principal = 'sales-int-origin-principal';
+    // T3a: creating the fixture products already opened their default-site rows,
+    // so each tenant's sole principal site is the one that exists.
+    let principal: string;
     const warehouse = 'sales-int-origin-warehouse';
-    const outside = 'sales-int-origin-other-tenant';
+    let outside: string;
     let actor: RequestUser;
 
     beforeAll(async () => {
@@ -699,22 +701,18 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
           role: actor.role as OrgRole,
         },
       });
-      await prisma.location.createMany({
-        data: [
-          {
-            id: principal,
-            organizationId: fixture.orgAId,
-            name: 'Principal',
-            isDefault: true,
-          },
-          {
-            id: outside,
-            organizationId: fixture.orgBId,
-            name: 'Foreign site',
-            isDefault: true,
-          },
-        ],
-      });
+      const [principalSite, outsideSite] = await Promise.all([
+        prisma.location.findFirstOrThrow({
+          where: { organizationId: fixture.orgAId, isDefault: true },
+          select: { id: true },
+        }),
+        prisma.location.findFirstOrThrow({
+          where: { organizationId: fixture.orgBId, isDefault: true },
+          select: { id: true },
+        }),
+      ]);
+      principal = principalSite.id;
+      outside = outsideSite.id;
     });
 
     const create = (locationId: string | undefined, requestKey: string) => {
@@ -737,6 +735,16 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
         origins: await prisma.saleOriginSite.count({ where }),
         movements: await prisma.inventoryMovement.count({ where }),
         siteBalances: await prisma.productStock.count({ where }),
+        siteLedger: await prisma.productStock.findMany({
+          where: { productId, organizationId: fixture.orgAId },
+          select: {
+            productId: true,
+            locationId: true,
+            organizationId: true,
+            stock: true,
+            reservedStock: true,
+          },
+        }),
         product: await prisma.product.findUniqueOrThrow({
           where: { id: productId },
           select: { stock: true, reservedStock: true, version: true },
@@ -878,6 +886,17 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
           version: after.product.version + 1,
         },
       });
+      // T3a: the sale and its reversal write only the aggregate, so the product
+      // keeps the single default-site row it was opened with.
+      const ledger = (await snapshot()).siteLedger;
+      expect(ledger).toEqual(before.siteLedger);
+      expect(ledger).toEqual([
+        expect.objectContaining({
+          productId,
+          locationId: principal,
+          organizationId: fixture.orgAId,
+        }),
+      ]);
     });
   });
 });

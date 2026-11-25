@@ -282,15 +282,16 @@ describe('Purchase order documents — Integration', () => {
     await prisma.organizationUser.create({
       data: { organizationId, userId, role: actor.role },
     });
-    const principal = await prisma.location.create({
-      data: { organizationId, name: 'Principal', isDefault: true },
+    // T3a: each fixture product already opened its own tenant's default-site
+    // row, so both sites exist and the receipt only accepts the sole principal
+    // site of the receiving tenant.
+    const principal = await prisma.location.findFirstOrThrow({
+      where: { organizationId, isDefault: true },
+      select: { id: true },
     });
-    const foreign = await prisma.location.create({
-      data: {
-        organizationId: fixture.orgBId,
-        name: 'Foreign site',
-        isDefault: true,
-      },
+    const foreign = await prisma.location.findFirstOrThrow({
+      where: { organizationId: fixture.orgBId, isDefault: true },
+      select: { id: true },
     });
     const snapshot = async () => ({
       order: await prisma.purchaseOrder.findUniqueOrThrow({
@@ -303,6 +304,17 @@ describe('Purchase order documents — Integration', () => {
       audits: await prisma.auditLog.count({ where: { organizationId } }),
       siteBalances: await prisma.productStock.count({
         where: { organizationId },
+      }),
+      siteLedger: await prisma.productStock.findMany({
+        where: { organizationId },
+        orderBy: { productId: 'asc' },
+        select: {
+          productId: true,
+          locationId: true,
+          organizationId: true,
+          stock: true,
+          reservedStock: true,
+        },
       }),
     });
     const before = await snapshot();
@@ -363,7 +375,17 @@ describe('Purchase order documents — Integration', () => {
       },
     });
     expect(after.movements).toBe(before.movements + 1);
-    expect(after.siteBalances).toBe(0);
+    expect(after.siteBalances).toBe(before.siteBalances);
+    // T3a: the product keeps exactly one default-site row, opened from the
+    // balance it was created with; this receipt still writes only the aggregate.
+    expect(after.siteLedger).toEqual(before.siteLedger);
+    expect(after.siteLedger).toEqual([
+      expect.objectContaining({
+        productId: item.productId,
+        locationId: principal.id,
+        organizationId,
+      }),
+    ]);
     expect(
       await prisma.inventoryMovement.findFirstOrThrow({
         where: {

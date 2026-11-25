@@ -124,10 +124,35 @@ Cobrar o reversar un abono no mueve inventario. Completar la venta financiada co
 
 Cada llamada a `POST /api/purchase-orders/:id/receive` puede indicar un `locationId` de destino para la entrega actual. Si se envía, el servidor verifica el permiso vigente y solo acepta la única sede principal de la organización mientras el saldo sea global. El mismo destino queda en los movimientos de los productos con control de stock, no en la orden ni en el PDF del proveedor. Omitir `locationId` mantiene la recepción anterior sin atribución. Una entrega parcial no fija el destino de entregas futuras.
 
+## Saldo por sede listo para ser la fuente
+
+La migración `20261125120000_product_stock_authority` deja `ProductStock` con una fila por producto en la sede predeterminada de su organización y agrega los disparadores que mantienen `Product.stock` y `Product.reservedStock` como el agregado de la organización. La aplicación sigue leyendo y escribiendo `Product`: los escritores cambian de a uno en las entregas siguientes y la base todavía no rechaza una escritura directa al agregado.
+
+**Qué carga.** Cada producto existente recibe una fila con su stock y sus reservas actuales en la sede predeterminada de su propia organización. Un producto con saldo cero, inactivo, de tipo servicio o con stock negativo heredado se copia tal cual: la migración no normaliza valores. Las organizaciones sin productos no generan filas.
+
+**Cómo se mantiene el agregado.** Un disparador sobre `ProductStock` aplica a `Product` el delta de cada alta, cambio o baja de una fila de sede, con aritmética (`stock + delta`) y no recalculando una suma, de modo que dos sedes que cambian a la vez no se pisan. Al terminar cada sentencia se cumple `Product.stock = SUM(ProductStock.stock)` y lo mismo para las reservas. Un alta de producto abre su fila en la sede predeterminada con los saldos que esa alta ya escribió, sin sumarlos dos veces, así que el alta de productos, las importaciones, los seeds y el backfill siguen funcionando sin cambios. En producción toda organización ya tiene su sede principal desde `20261118120000_initial_organization_location`; el camino que crea una `Sede principal` cuando falta sirve solo para altas directas en la base o en los seeds de prueba, y existe para que ningún producto quede sin saldo por sede.
+
+**Cuándo falla.** La migración se revierte completa, con un mensaje determinista, si `ProductStock` no está vacía, si un producto pertenece a una organización sin sede predeterminada, o si un saldo no cumple el mismo límite de reservas que `Product` (`reservedStock >= 0` y `reservedStock <= stock` cuando el stock no es negativo). Nunca reescribe ni normaliza stock o reservas: esos casos se corrigen en los datos antes de desplegar. Aplicar con las escrituras de inventario pausadas y las transacciones en curso terminadas: la migración bloquea `Product` en modo `SHARE ROW EXCLUSIVE` y `Location` en `SHARE`, con un máximo de 5 segundos de espera por bloqueo o el límite positivo menor ya configurado. Si se agota la espera (SQLSTATE `55P03`), se revierte y el despliegue se repite después de resolver la transacción que bloquea.
+
+**Antes de desplegar.** El ensayo de solo lectura de este documento tiene que pasar **antes** de aplicar esta migración: comprueba que el saldo y las reservas se pueden traspasar a la sede inicial y exige `ProductStock` vacía, así que después de esta migración falla por diseño y deja de ser la comprobación previa. Si el ensayo falla o no se ejecutó, no desplegar.
+
+**Cómo comprobarlo.** En una base desechable `meperpos_stock_rehearsal_…` con todas las migraciones anteriores aplicadas, desplegar y ejecutar la prueba desde `backend/`:
+
+```bash
+DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy
+```
+
+```bash
+T3A_TEST_DATABASE_URL="$TEST_DATABASE_URL" \
+  npx jest --runInBand src/inventory
+```
+
+La prueba de PostgreSQL cubre la fila de la sede inicial, el agregado después de altas, cambios y bajas en dos sedes, el rechazo de un retiro mayor que el disponible, el alta de una fila de sede faltante, el aislamiento entre organizaciones y dos bajas concurrentes. También comprueba que un alta de producto no duplica el saldo y que el borrado de un producto no deja filas de sede. Los casos de falla de la migración se comprueban en una copia previa a la migración, aplicando `psql -X -w -v ON_ERROR_STOP=1 -f prisma/migrations/20261125120000_product_stock_authority/migration.sql`: cada uno debe terminar con código de salida 3, el mensaje correspondiente y la reversión completa (sin filas en `ProductStock` y sin los disparadores).
+
 ## Entrega futura: cambiar la fuente de stock
 
 1. **Fijar la base de comparación.** Con una copia verificable y los escritores de inventario detenidos, tomar un registro por organización y producto del stock y sus reservas. Incluir productos con saldo cero e inactivos. El registro debe conservar la identidad del producto, no solo el total de la organización.
-2. **Asignar cada saldo una sola vez.** Crear el saldo del producto en la sede inicial de su propia organización. Una clave única producto–ubicación y relaciones que respeten la organización deben impedir duplicados y asociaciones entre organizaciones. En el corte, el saldo y las reservas en la sede inicial tienen que coincidir con el registro de origen producto por producto; ninguna otra sede recibe una copia. El ensayo de solo lectura del apartado anterior es la comprobación previa de esta condición: si falla, no hay corte.
+2. **Asignar cada saldo una sola vez.** Crear el saldo del producto en la sede inicial de su propia organización. Una clave única producto–ubicación y relaciones que respeten la organización deben impedir duplicados y asociaciones entre organizaciones. En el corte, el saldo y las reservas en la sede inicial tienen que coincidir con el registro de origen producto por producto; ninguna otra sede recibe una copia. La asignación inicial ya la hace `20261125120000_product_stock_authority`: el corte vuelve a comparar esa fila contra el registro de origen antes de reanudar las escrituras. El ensayo de solo lectura del apartado anterior es la comprobación previa de esta condición: si falla, no hay corte.
 3. **Cambiar las operaciones juntas.** Validar que POS, compras, devoluciones, ajustes, reservas, importaciones y consultas usen el saldo por ubicación antes de reanudar las escrituras con el nuevo modelo. Usar una sola fuente activa; no mantener dos saldos editables. Reanudar solo si coinciden todos los saldos y las reservas. No borrar la columna anterior como parte de este corte. Una vez que haya operaciones nuevas, no volver al stock anterior sin reconciliar esas operaciones.
 4. **Habilitar la segunda tienda.** Su saldo empieza en cero. Si parte del saldo global anterior corresponde físicamente a esa tienda, asignarlo a partir de un conteo y registrar el traspaso de saldo de apertura; no sumarlo por segunda vez. Si lo contado no coincide con el saldo anterior, documentar y autorizar el ajuste por separado.
 
