@@ -241,6 +241,49 @@ interface OrganizationFixture {
       });
     });
 
+    it('creates one default site when products of a site-less organization are inserted concurrently', async () => {
+      const organization = await tenant('no-default-site-race');
+      const row = (stock: number) => ({
+        organizationId: organization.id,
+        categoryId: organization.categoryId,
+        sku: randomUUID(),
+        name: `${label}-${stock}`,
+        costPrice: 100,
+        salePrice: 200,
+        stock,
+        reservedStock: 0,
+      });
+      // Both inserts find no default site. The first one keeps its new site
+      // uncommitted until the second is blocked on it; the second must then
+      // reuse that site instead of failing on the unique site name.
+      let second: Promise<{ id: string }> | undefined;
+      const first = await prisma.$transaction(async (tx) => {
+        const own = await tx.product.create({ data: row(2) });
+        // Prisma queries are lazy: `.then` dispatches this one right now.
+        second = peer.product.create({ data: row(3) }).then((made) => made);
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          const [{ waiting }] = await peer.$queryRaw<{ waiting: number }[]>`
+            SELECT count(*)::int AS waiting FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+          if (waiting > 0) break;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return own;
+      });
+      const created = [first, await second!];
+
+      const sites = await prisma.location.findMany({
+        where: { organizationId: organization.id },
+        select: { id: true, isDefault: true },
+      });
+      expect(sites).toEqual([{ id: expect.any(String), isDefault: true }]);
+      for (const row of created) {
+        await expect(siteRows(row.id)).resolves.toEqual([
+          expect.objectContaining({ locationId: sites[0].id }),
+        ]);
+      }
+    });
+
     it('keeps the aggregate equal to the sum of every site row', async () => {
       const organization = await tenant('aggregate', {
         withDefaultSite: true,
