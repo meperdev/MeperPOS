@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Select, type SelectOption } from "@/components/ui/Select";
+import { Stepper } from "@/components/ui/Stepper";
 import { useLocations } from "@/hooks/useLocations";
 import { useProducts } from "@/hooks/useProducts";
 import { useCreateTransfer } from "@/hooks/useTransfers";
@@ -25,6 +26,8 @@ interface TransferLine {
   name: string;
   sku: string;
   quantity: number;
+  /** Units the origin site can send, read when the line was added. */
+  available: number;
 }
 
 const EMPTY_FORM = {
@@ -50,12 +53,16 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
   const [term, setTerm] = useState("");
 
   // A search field only shows results once it says something: an empty field
-  // would otherwise print the whole catalogue under the site selects.
-  const searching = term.trim().length > 0;
+  // would otherwise print the whole catalogue under the site selects. Results
+  // come from the origin site, so only what that site can send is offered,
+  // with that site's available units.
+  const searching = term.trim().length > 0 && form.fromLocationId !== "";
   const { data: productsData, isFetching } = useProducts({
     limit: 20,
     search: term.trim() || undefined,
     status: "active",
+    available: true,
+    locationId: form.fromLocationId || undefined,
     enabled: searching,
   });
   const results = useMemo(() => productsData?.data ?? [], [productsData]);
@@ -75,7 +82,12 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
     form.toLocationId !== "" &&
     !sameSite &&
     lines.length > 0 &&
-    lines.every((line) => Number.isInteger(line.quantity) && line.quantity >= 1);
+    lines.every(
+      (line) =>
+        Number.isInteger(line.quantity) &&
+        line.quantity >= 1 &&
+        line.quantity <= line.available,
+    );
 
   const reset = () => {
     setForm(EMPTY_FORM);
@@ -100,6 +112,7 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
         name: product.name,
         sku: product.sku,
         quantity: 1,
+        available: product.availableStock ?? 0,
       },
     ]);
     setTerm("");
@@ -161,9 +174,11 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
             placeholder="Elige la sede de origen"
             options={siteOptions}
             value={form.fromLocationId}
-            onChange={(value) =>
-              setForm((current) => ({ ...current, fromLocationId: value }))
-            }
+            onChange={(value) => {
+              setForm((current) => ({ ...current, fromLocationId: value }));
+              // Availability belongs to the origin: its lines start over.
+              setLines([]);
+            }}
           />
           <ArrowRight
             aria-hidden="true"
@@ -191,7 +206,12 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
             type="search"
             label="Productos"
             icon={<Search className="h-3.5 w-3.5" />}
-            placeholder="Busca un producto por nombre o SKU…"
+            placeholder={
+              form.fromLocationId
+                ? "Busca un producto por nombre o SKU…"
+                : "Elige primero la sede de origen"
+            }
+            disabled={form.fromLocationId === ""}
             value={term}
             autoComplete="off"
             onChange={(event) => setTerm(event.target.value)}
@@ -233,8 +253,17 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
                             {product.sku}
                           </span>
                         </span>
-                        <span className="shrink-0 text-[13px] font-medium text-muted-foreground">
-                          {added ? "Agregado" : <Plus className="h-4 w-4" />}
+                        <span className="flex shrink-0 items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                          {added ? (
+                            "Agregado"
+                          ) : (
+                            <>
+                              <span className="tabular-nums">
+                                {product.availableStock ?? 0} disp.
+                              </span>
+                              <Plus className="h-4 w-4" />
+                            </>
+                          )}
                         </span>
                       </button>
                     </li>
@@ -263,23 +292,28 @@ export function NewTransferModal({ isOpen, onClose, onCreated }: Props) {
                   <p className="truncate text-sm font-medium text-foreground">
                     {line.name}
                   </p>
-                  <p className="text-[13px] text-muted-foreground id-text">
-                    {line.sku}
+                  <p className="text-[13px] text-muted-foreground">
+                    <span className="id-text">{line.sku}</span>
+                    <span className="tabular-nums">
+                      {" "}
+                      · {line.available} disponibles en origen
+                    </span>
                   </p>
                 </div>
-                <Input
-                  type="number"
-                  min={1}
+                <div
+                  role="group"
                   aria-label={`Cantidad de ${line.name}`}
-                  value={line.quantity}
-                  onChange={(event) =>
-                    setQuantity(
-                      line.productId,
-                      Math.max(0, Math.floor(Number(event.target.value) || 0)),
-                    )
-                  }
-                  className="w-24 shrink-0 px-2.5 text-right"
-                />
+                  className="shrink-0"
+                >
+                  <Stepper
+                    value={line.quantity}
+                    min={1}
+                    max={Math.max(1, line.available)}
+                    size="sm"
+                    className="[&_input]:w-10"
+                    onChange={(value) => setQuantity(line.productId, value)}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => removeLine(line.productId)}

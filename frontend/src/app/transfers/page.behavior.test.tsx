@@ -89,14 +89,19 @@ const products = [
     salePrice: 150,
     taxRate: 19,
     stock: 10,
+    availableStock: 5,
     minStock: 1,
     active: true,
     categoryId: "cat-1",
   },
 ];
 
+const productsParams = vi.hoisted(() => vi.fn());
 vi.mock("@/hooks/useProducts", () => ({
-  useProducts: () => ({ data: { data: products }, isFetching: false }),
+  useProducts: (params: unknown) => {
+    productsParams(params);
+    return { data: { data: products }, isFetching: false };
+  },
 }));
 
 import TransfersPage from "./page";
@@ -207,9 +212,22 @@ describe("transfers page", () => {
     await user.click(await screen.findByRole("option", { name: /Bodega norte/ }));
 
     await user.type(within(dialog).getByLabelText("Productos"), "Producto");
+    // Only what the origin site can send is offered, with that site's units.
+    expect(productsParams).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-a", available: true }),
+    );
+    expect(
+      await screen.findByRole("option", { name: /Producto Uno.*5 disp\./ }),
+    ).toBeInTheDocument();
     await user.click(await screen.findByRole("option", { name: /Producto Uno/ }));
-    await user.clear(within(dialog).getByLabelText("Cantidad de Producto Uno"));
-    await user.type(within(dialog).getByLabelText("Cantidad de Producto Uno"), "4");
+    const quantity = within(dialog).getByRole("group", {
+      name: "Cantidad de Producto Uno",
+    });
+    const more = within(quantity).getByRole("button", {
+      name: "Aumentar cantidad",
+    });
+    for (let step = 0; step < 3; step += 1) await user.click(more);
+    expect(within(quantity).getByLabelText("Cantidad")).toHaveValue("4");
 
     await user.click(
       within(dialog).getByRole("button", { name: "Despachar transferencia" }),
@@ -225,6 +243,30 @@ describe("transfers page", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Transferencia despachada", {
       description: "TR-7",
     });
+  });
+
+  it("caps a line at the units the origin site can send", async () => {
+    const user = userEvent.setup();
+    render(<TransfersPage />);
+
+    await user.click(screen.getByRole("button", { name: /Nueva transferencia/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Productos")).toBeDisabled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Sede de origen" }));
+    await user.click(await screen.findByRole("option", { name: /Sede centro/ }));
+    await user.type(within(dialog).getByLabelText("Productos"), "Producto");
+    await user.click(await screen.findByRole("option", { name: /Producto Uno/ }));
+
+    const quantity = within(dialog).getByRole("group", {
+      name: "Cantidad de Producto Uno",
+    });
+    const more = within(quantity).getByRole("button", {
+      name: "Aumentar cantidad",
+    });
+    for (let step = 0; step < 6; step += 1) await user.click(more);
+    expect(within(quantity).getByLabelText("Cantidad")).toHaveValue("5");
+    expect(more).toBeDisabled();
   });
 
   it("refuses to dispatch to the same site", async () => {

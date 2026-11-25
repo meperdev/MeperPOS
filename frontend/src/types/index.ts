@@ -16,6 +16,11 @@ export interface Product {
   taxRate: number;
   effectiveTaxRate?: number;
   stock: number;
+  /**
+   * Server-computed units that can still leave (stock minus reservations). With a
+   * `locationId` query it is that site's figure; absent on older payloads.
+   */
+  availableStock?: number;
   minStock: number;
   /** Merchandise or sold labour. Absent means merchandise. */
   type?: ProductType;
