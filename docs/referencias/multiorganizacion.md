@@ -1,9 +1,9 @@
 # Organizaciones, sedes y accesos
 
 La aplicación es multiinquilino: cada organización tiene sus propios productos,
-ventas y sedes. Este documento describe el modelo y las reglas de acceso que hoy
-están en producción. El detalle de stock por sede y las transferencias quedan
-para la entrega siguiente.
+ventas y sedes. Este documento describe el modelo y las reglas de acceso, y cómo
+se reparte el stock entre sedes. El detalle operativo del corte de stock está en
+`docs/planes/implementacion/multisede-corte-stock.md`.
 
 ## 1. Organización y rol
 
@@ -55,12 +55,20 @@ La regla es explícita y no se hereda sola:
 | Ruta                                  | Método | Rol            | Para                                              |
 | ------------------------------------- | ------ | -------------- | ------------------------------------------------- |
 | `/api/locations`                      | `GET`  | todos          | Sedes accesibles en la organización activa        |
-| `/api/locations/pos-context`          | `GET`  | todos          | Sedes del POS y la sede habilitada para cobrar    |
+| `/api/locations/pos-context`          | `GET`  | todos          | Sucursales del POS y la sede sugerida para cobrar |
 | `/api/locations/:id`                  | `GET`  | todos          | Una sede, solo si es accesible                    |
 | `/api/locations`                      | `POST` | `OWNER`/`ADMIN`| Crear una sucursal o bodega                       |
 | `/api/locations/:id`                  | `PATCH`| `OWNER`/`ADMIN`| Renombrar o cambiar el tipo de una sede           |
 | `/api/users/:id/locations`            | `GET`  | `OWNER`/`ADMIN`| Asignaciones explícitas de un vínculo             |
 | `/api/users/:id/locations`            | `PUT`  | `OWNER`/`ADMIN`| Reemplazar el conjunto exacto de asignaciones     |
+
+`GET /api/locations/pos-context` devuelve `{ locations, checkoutLocationId }` con
+**solo las sucursales** accesibles (una bodega nunca se ofrece al punto de venta)
+y la sede que el servidor sugiere cobrar: la principal cuando el usuario la
+alcanza, o la única sucursal accesible cuando hay una sola. Con varias sucursales
+alcanzables y ninguna principal a la vista, `checkoutLocationId` es `null` y el
+cajero elige en el POS. La sugerencia es una comodidad, no un permiso: la venta
+vuelve a autorizar la sede indicada en su propia transacción.
 
 `POST /api/locations` acepta `{ "name": string, "type": "STORE" | "WAREHOUSE" }`
 y devuelve la sede creada. `PATCH /api/locations/:id` acepta `name` y/o `type`;
@@ -87,3 +95,22 @@ casillas a un administrador.
 La navegación y los chequeos de pantalla son solo presentación: el límite real
 es el backend, que responde `403` a cualquier rol que no sea propietario o
 administrador en las rutas de gestión.
+
+## 6. Stock por sede
+
+- `ProductStock` guarda una fila por producto y sede (`stock` y `reservedStock`)
+  y es la fuente de verdad del inventario.
+- `Product.stock` y `Product.reservedStock` siguen existiendo como el agregado de
+  la organización: los disparadores de la base los igualan a la suma de las filas
+  de sede después de cada sentencia. Los reportes y las alertas siguen leyendo la
+  organización a través de `Product`, sin cambios.
+- El agregado no se escribe a mano: un disparador rechaza cualquier `UPDATE` a
+  `Product.stock`/`reservedStock` que no venga del delta de una fila de sede. Las
+  altas de producto siguen permitidas y abren la fila de la sede principal.
+- El POS cobra y financia en una **sucursal** accesible (una bodega no tiene
+  caja). La recepción de compras y las transferencias pueden usar cualquier sede
+  del tenant autorizada para el usuario. Cada operación descuenta o acredita el
+  saldo de la sede que indica, no el de la organización.
+- Las transferencias entre sedes (`/api/transfers`) descuentan la sede de origen
+  al despachar y acreditan la de destino al recibir, con su historial de
+  inventario en ambas sedes.

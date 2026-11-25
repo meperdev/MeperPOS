@@ -342,16 +342,13 @@ describe('Purchase order documents — Integration', () => {
     }
     const grant = { organizationId, userId, locationId: principal.id };
     await prisma.membershipLocation.create({ data: grant });
-    const warehouse = await prisma.location.create({
+    // T3g: a second site no longer reserves receipts for a sole principal site.
+    // The batch below lands at the explicitly authorized store while the
+    // organization already has two sites, and nothing is written before it.
+    await prisma.location.create({
       data: { organizationId, name: 'Second site' },
     });
-    await expect(receive(principal.id)).rejects.toMatchObject({
-      status: 409,
-      message:
-        'El stock global solo permite recibir compras en la única sede principal',
-    });
     expect(await snapshot()).toEqual(before);
-    await prisma.location.delete({ where: { id: warehouse.id } });
 
     const readPdf = async () => {
       const { buffer } = await documents.generatePdf(

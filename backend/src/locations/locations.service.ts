@@ -82,29 +82,42 @@ export class LocationsService {
 
   async posContext(user: RequestUser) {
     const organizationId = this.requireOrganization(user);
-    const accessible = this.accessibleTo(user);
 
     return this.prisma.$transaction(
       async (tx) => {
-        const topology = await tx.location.findMany({
-          where: { organizationId },
-          select: { id: true, isDefault: true },
-          take: 2,
-        });
+        // T3g: only stores charge. A warehouse has no till, so the POS never
+        // lists one and the picker cannot offer one.
         const locations = await tx.location.findMany({
-          where: accessible,
+          where: {
+            ...this.accessibleTo(user),
+            type: LocationType.STORE,
+          },
           select: siteFields,
           orderBy: [{ isDefault: 'desc' }, { name: 'asc' }, { id: 'asc' }],
         });
-        const sole = topology.length === 1 ? topology[0] : undefined;
+        const principal = await tx.location.findFirst({
+          where: { organizationId, isDefault: true },
+          select: { id: true, type: true },
+          orderBy: { id: 'asc' },
+        });
+        const reachable = new Set(locations.map(({ id }) => id));
+        // The server nominates the principal store when the caller reaches it,
+        // and the single reachable store when there is only one; otherwise the
+        // cashier chooses from the list above (checkoutLocationId: null).
+        // A nomination is a convenience, never a grant: the sale transaction
+        // authorizes the named site again.
         const checkoutLocationId =
-          sole?.isDefault && locations.some(({ id }) => id === sole.id)
-            ? sole.id
-            : null;
+          principal &&
+          principal.type === LocationType.STORE &&
+          reachable.has(principal.id)
+            ? principal.id
+            : locations.length === 1
+              ? locations[0].id
+              : null;
         return { locations, checkoutLocationId };
       },
-      // Permissions and topology must come from one snapshot. A restricted
-      // list containing just one site is not evidence of a single-site org.
+      // Permissions and topology must come from one snapshot, so a list and the
+      // principal site it is compared against cannot disagree.
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
   }

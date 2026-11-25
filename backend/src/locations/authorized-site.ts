@@ -1,6 +1,24 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { OrgRole, type Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { LocationType, OrgRole, type Prisma } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
+
+/** User-facing refusal when a caller needs a store and named a warehouse. */
+export const WAREHOUSE_IS_NOT_A_STORE =
+  'La sede seleccionada es una bodega: solo una sucursal puede ser el origen de una venta o una financiación';
+
+export interface WritableSiteOptions {
+  /**
+   * POS money paths only: a sale or a financing originates at a store, because
+   * a warehouse has no till. Receipts, transfers and inventory edits accept
+   * either type. The rule is checked on the same locked read that authorizes
+   * the site, so it cannot race a type change.
+   */
+  requireStore?: boolean;
+}
 
 /**
  * Check the exact site inside the inventory transaction, before acquiring any
@@ -11,6 +29,7 @@ export async function resolveWritableSiteWithin(
   tx: Prisma.TransactionClient,
   actor: RequestUser,
   requestedLocationId: string,
+  options: WritableSiteOptions = {},
 ): Promise<{ organizationId: string; locationId: string }> {
   const { organizationId, userId } = actor;
   if (!organizationId) {
@@ -57,13 +76,13 @@ export async function resolveWritableSiteWithin(
   const hasOrgWideAccess =
     platform || actor.role === OrgRole.OWNER || actor.role === OrgRole.ADMIN;
   const [location] = hasOrgWideAccess
-    ? await tx.$queryRaw<{ id: string }[]>`
-        SELECT "id" FROM "Location"
+    ? await tx.$queryRaw<{ id: string; type: LocationType }[]>`
+        SELECT "id", "type" FROM "Location"
         WHERE "id" = ${requestedLocationId} AND "organizationId" = ${organizationId}
         FOR SHARE
       `
-    : await tx.$queryRaw<{ id: string }[]>`
-        SELECT site."id"
+    : await tx.$queryRaw<{ id: string; type: LocationType }[]>`
+        SELECT site."id", site."type"
         FROM "Location" AS site
         JOIN "MembershipLocation" AS assignment
           ON assignment."locationId" = site."id"
@@ -74,5 +93,8 @@ export async function resolveWritableSiteWithin(
         FOR SHARE OF site, assignment
       `;
   if (!location) throw new NotFoundException('Location not found');
+  if (options.requireStore && location.type !== LocationType.STORE) {
+    throw new BadRequestException(WAREHOUSE_IS_NOT_A_STORE);
+  }
   return { organizationId, locationId: location.id };
 }

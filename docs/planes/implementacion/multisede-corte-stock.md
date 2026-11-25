@@ -1,6 +1,6 @@
 # Multisede: conservar el saldo al pasar a stock por sede
 
-La primera entrega **crea una `Sede principal` por organización sin tocar las existencias**. El cambio de fuente de stock queda para otra entrega: hoy el POS y los otros módulos siguen leyendo y escribiendo `Product.stock`. No hay segunda sede habilitada ni transferencias.
+La primera entrega **crea una `Sede principal` por organización sin tocar las existencias**. Las entregas siguientes agregan el saldo por sede, los permisos y el POS por sucursal, y terminan con el corte: `ProductStock` pasa a ser la fuente de verdad y `Product.stock`/`reservedStock` quedan como el agregado de la organización, mantenido por la base. Este documento conserva el ensayo previo de cada migración y describe el estado final, el orden de despliegue y la vuelta atrás.
 
 ## Entrega 1: sede inicial
 
@@ -13,16 +13,16 @@ La primera entrega **crea una `Sede principal` por organización sin tocar las e
 ## Acceso a sedes
 
 - `GET /api/locations` lista las sedes de la organización activa: `OWNER`, `ADMIN` y `SUPER_ADMIN` con una organización seleccionada ven todas; los roles operativos ven solo las sedes asignadas a su membresía. `PUT /api/users/:id/locations` reemplaza el conjunto exacto de una membresía no administrativa.
-- `GET /api/locations/pos-context` es la consulta de solo lectura del POS: devuelve `{ locations, checkoutLocationId }` con las sedes accesibles en el mismo orden que `GET /api/locations`. `checkoutLocationId` solo tiene valor cuando la organización tiene una única sede, esa sede es la principal y el usuario puede acceder a ella. Una sola sede asignada dentro de una organización con varias sedes no habilita el cobro con saldo global. La consulta no autoriza ventas, no cambia el stock y elegir una sede en el navegador no concede permisos.
-- Esta ruta no agrega migraciones ni cambia el despliegue de acceso descrito aquí: el orden para pausar altas y escrituras de membresías antes de aplicar la migración de acceso sigue siendo el mismo. El POS continúa leyendo el stock global en este corte; operar una segunda tienda queda para una entrega posterior.
+- `GET /api/locations/pos-context` es la consulta de solo lectura del POS: devuelve `{ locations, checkoutLocationId }` con las **sucursales** accesibles en el mismo orden que `GET /api/locations` (una bodega nunca se ofrece como caja). `checkoutLocationId` es la sede principal cuando el usuario puede acceder a ella y es una sucursal; si no, la única sucursal accesible; si hay varias sucursales alcanzables y ninguna principal, es `null` y el cajero elige en el POS. La consulta no autoriza ventas, no cambia el stock y elegir una sede en el navegador no concede permisos: la venta vuelve a autorizar la sede indicada.
+- Esta ruta no agrega migraciones ni cambia el despliegue de acceso descrito aquí: el orden para pausar altas y escrituras de membresías antes de aplicar la migración de acceso sigue siendo el mismo. Con el corte de stock, el POS cobra en una sucursal accesible y el saldo que descuenta es el de esa sede.
 - La migración de acceso asigna la sede principal solo a las membresías operativas existentes cuando esa sede es la única de la organización. No crea asignaciones para `OWNER`/`ADMIN` ni al crear una sede nueva; cada sede adicional se asigna de forma explícita.
 - Antes de aplicar esta migración, detener las altas de organizaciones y las escrituras de membresías y roles con el código anterior, incluidas las altas de usuarios o miembros por API y los seeds. Esperar a que terminen las operaciones en curso y mantener esas escrituras pausadas hasta que esté activa la versión nueva. Las ventas no necesitan pausarse. El reemplazo de asignaciones y el cambio de rol sobre la misma membresía se serializan: la operación que obtiene el bloqueo primero puede completar su escritura; el reemplazo responde `409` si pierde por un conflicto de concurrencia y no reintenta. La migración no cambia el stock ni la sede predeterminada.
 
-## POS antes del corte de stock por sede
+## POS por sucursal
 
 - **Orden de despliegue:** habilitar primero la API de contexto de sede y después el frontend del POS. Sin esa API, el frontend nuevo no puede verificar la sede y no habilita el cobro.
-- **Cobrar:** el POS habilita el cobro solo en la sede principal accesible de una organización con una única sede. Vuelve a comprobar esa sede antes de enviar un cobro o iniciar una financiación. La validación no cambia el saldo global ni habilita el cobro en una segunda sede.
-- **Cambiar de organización:** terminar, pausar o vaciar el carrito antes de cambiar. Mientras el cobro se está verificando o enviando, no se puede pausar el carrito ni cerrar el diálogo de pago. Si la sesión cambia de usuario u organización, el POS no envía la solicitud bajo la otra sesión.
+- **Cobrar:** el POS cobra en una sucursal accesible. Si el contexto nombra una (`checkoutLocationId`), el POS la usa; si no, el cajero elige entre las sucursales listadas. Antes de enviar un cobro o iniciar una financiación vuelve a comprobar que esa sucursal sigue accesible, y envía su `locationId` en la venta y en la financiación: el saldo que se descuenta es el de esa sede. Una bodega no se ofrece y, si se envía igual, la API responde `400`.
+- **Cambiar de organización o de sede:** terminar, pausar o vaciar el carrito antes de cambiar. Mientras el cobro se está verificando o enviando, no se puede pausar el carrito ni cerrar el diálogo de pago. Si la sesión cambia de usuario u organización, el POS no envía la solicitud bajo la otra sesión. El carrito, sus borradores pausados y sus solicitudes pertenecen a la sede activa: cambiar de sede monta otro espacio de trabajo y no arrastra el carrito.
 - **Ventas pausadas:** se muestran solo para el usuario, la organización y la sede que las guardaron. Antes de habilitar este POS, terminar las ventas pausadas que queden en la versión anterior: los borradores sin sede quedan en el navegador, pero el POS nuevo no los muestra ni los reasigna.
 
 ## Entrega 2: almacenamiento de stock por sede, todavía vacío
@@ -108,25 +108,29 @@ Borrar una sede que conserve una atribución se rechaza; si una operación se el
 
 Para verificarla desde `backend/`, usar una base desechable `meperpos_stock_rehearsal_t16_…` con las migraciones aplicadas y el fixture `test/migrations/product-stock.fixture.sql`. Ejecutar `psql -X -w -v ON_ERROR_STOP=1 -f test/migrations/sale-origin-site.constraints.sql` con la conexión explícita a esa base. Debe terminar en `ROLLBACK` con código 0.
 
-### Ventas directas antes del corte
+### Ventas directas
 
-`POST /api/sales` admite `locationId` opcional. Si se envía, debe ser un texto no vacío; un número o `null` devuelve `400`. El servidor comprueba el permiso vigente en la misma transacción y acepta la venta solo cuando esa sede es la única sede de la organización y es la principal. Guarda la sede de origen junto con la venta y el movimiento. Sin `locationId` se mantiene el comportamiento anterior; no se atribuye una sede por defecto. El saldo descontado sigue siendo `Product.stock`.
+`POST /api/sales` admite `locationId` opcional. Si se envía, debe ser un texto no vacío; un número o `null` devuelve `400`. El servidor comprueba el permiso vigente en la misma transacción y acepta la venta cuando la sede es una **sucursal** a la que el usuario tiene acceso: cualquiera de las sucursales de la organización, no solo la principal. Una bodega responde `400`; una sede ajena o sin asignación responde `404`. Guarda la sede de origen junto con la venta y el movimiento, y descuenta el saldo de esa sede. Sin `locationId` se mantiene el comportamiento anterior y la venta se descuenta en la sede principal.
 
-Un reintento con el mismo contenido y clave devuelve la venta original. Si el reintento indica una sede, tiene que coincidir con la ya registrada: otra sede o una venta anterior sin sede devuelve `409` sin duplicar la venta ni cambiar el saldo. Una anulación de una venta atribuida registra la devolución en su sede original y comprueba los permisos vigentes, sin volver a exigir que sea la única sede. La respuesta de venta conserva sus campos anteriores.
+Un reintento con el mismo contenido y clave devuelve la venta original. Si el reintento indica una sede, tiene que coincidir con la ya registrada: otra sede o una venta anterior sin sede devuelve `409` sin duplicar la venta ni cambiar el saldo. Una anulación de una venta atribuida registra la devolución en su sede original y comprueba los permisos vigentes, sin volver a exigir que sea la única. La respuesta de venta conserva sus campos anteriores.
 
-### Financiación POS antes del corte
+### Financiación POS
 
-`POST /api/loans/pos-initiation` acepta `locationId` opcional con las mismas reglas de sede principal y permisos que una venta directa. Si se envía, la reserva guarda su origen sin cambiar la cotización ni el JSON del reintento. Un reintento con sede distinta, o que agrega una sede a una financiación histórica sin atribución, devuelve `409` sin crear otra reserva. Omitir la sede mantiene el comportamiento anterior.
+`POST /api/loans/pos-initiation` acepta `locationId` opcional con las mismas reglas que una venta directa: sucursal accesible, `400` para una bodega y `404` para una sede ajena. Si se envía, la reserva guarda su origen sin cambiar la cotización ni el JSON del reintento. Un reintento con sede distinta, o que agrega una sede a una financiación histórica sin atribución, devuelve `409` sin crear otra reserva. Omitir la sede mantiene el comportamiento anterior y reserva en la sede principal.
 
-Cobrar o reversar un abono no mueve inventario. Completar la venta financiada consume la reserva y registra la sede guardada en la venta y su movimiento. Cancelar libera la reserva global, sin crear un movimiento. En esas dos operaciones se valida el permiso vigente sobre la sede de origen, sin exigir que siga siendo la única. Los saldos y las reservas siguen en `Product` hasta el corte.
+Cobrar o reversar un abono no mueve inventario. Completar la venta financiada consume la reserva y registra la sede guardada en la venta y su movimiento. Cancelar libera la reserva de esa sede, sin crear un movimiento. En esas dos operaciones se valida el permiso vigente sobre la sede de origen, sin exigir que siga siendo la única.
 
-### Recepción de compras antes del corte
+### Recepción de compras
 
-Cada llamada a `POST /api/purchase-orders/:id/receive` puede indicar un `locationId` de destino para la entrega actual. Si se envía, el servidor verifica el permiso vigente y solo acepta la única sede principal de la organización mientras el saldo sea global. El mismo destino queda en los movimientos de los productos con control de stock, no en la orden ni en el PDF del proveedor. Omitir `locationId` mantiene la recepción anterior sin atribución. Una entrega parcial no fija el destino de entregas futuras.
+Cada llamada a `POST /api/purchase-orders/:id/receive` puede indicar un `locationId` de destino para la entrega actual. Si se envía, el servidor verifica el permiso vigente y lo acepta sin importar el tipo de sede: una bodega es un destino válido. El mismo destino queda en los movimientos de los productos con control de stock, no en la orden ni en el PDF del proveedor. Omitir `locationId` mantiene la recepción en la sede principal. Una entrega parcial no fija el destino de entregas futuras.
 
-## Saldo por sede listo para ser la fuente
+### Transferencias entre sedes
 
-La migración `20261125120000_product_stock_authority` deja `ProductStock` con una fila por producto en la sede predeterminada de su organización y agrega los disparadores que mantienen `Product.stock` y `Product.reservedStock` como el agregado de la organización. La aplicación sigue leyendo y escribiendo `Product`: los escritores cambian de a uno en las entregas siguientes y la base todavía no rechaza una escritura directa al agregado.
+`POST /api/transfers` despacha desde una sede autorizada y `POST /api/transfers/:id/receive` acredita la sede de destino, ambas de la organización activa. Despachar descuenta el saldo de la sede de origen y recibir lo acredita en la de destino, con un movimiento de inventario en cada lado; ninguna de las dos toca el saldo de otra sede. En la primera versión, despachar autoriza solo la sede de origen y el destino debe existir en la organización.
+
+## Saldo por sede: la fuente de verdad
+
+La migración `20261125120000_product_stock_authority` deja `ProductStock` con una fila por producto en la sede predeterminada de su organización y agrega los disparadores que mantienen `Product.stock` y `Product.reservedStock` como el agregado de la organización. Con `20261125150000_product_stock_guard`, la base además rechaza cualquier escritura directa a esos dos campos: solo las filas de sede mueven el agregado. Todos los escritores de la aplicación (ventas, anulaciones, financiación POS, recepción de compras, préstamos de inventario, edición de productos, importaciones, seeds, backfill y transferencias) escriben la fila de la sede a través del helper `applySiteStockDelta`.
 
 **Qué carga.** Cada producto existente recibe una fila con su stock y sus reservas actuales en la sede predeterminada de su propia organización. Un producto con saldo cero, inactivo, de tipo servicio o con stock negativo heredado se copia tal cual: la migración no normaliza valores. Las organizaciones sin productos no generan filas.
 
@@ -149,12 +153,39 @@ T3A_TEST_DATABASE_URL="$TEST_DATABASE_URL" \
 
 La prueba de PostgreSQL cubre la fila de la sede inicial, el agregado después de altas, cambios y bajas en dos sedes, el rechazo de un retiro mayor que el disponible, el alta de una fila de sede faltante, el aislamiento entre organizaciones y dos bajas concurrentes. También comprueba que un alta de producto no duplica el saldo y que el borrado de un producto no deja filas de sede. Los casos de falla de la migración se comprueban en una copia previa a la migración, aplicando `psql -X -w -v ON_ERROR_STOP=1 -f prisma/migrations/20261125120000_product_stock_authority/migration.sql`: cada uno debe terminar con código de salida 3, el mensaje correspondiente y la reversión completa (sin filas en `ProductStock` y sin los disparadores).
 
-## Entrega futura: cambiar la fuente de stock
+**El cerrojo final.** `20261125150000_product_stock_guard` agrega un disparador `BEFORE UPDATE` sobre `Product`: si `stock` o `reservedStock` cambian y la escritura no viene del delta de una fila de sede, la base la rechaza con SQLSTATE `23514` y un mensaje que nombra los saldos por sede. Las demás columnas del producto (nombre, precios, `version`, estado) se siguen editando normalmente, y las altas siguen permitidas porque abren la fila de la sede principal. El reconocimiento se hace con `pg_trigger_depth()`: el delta de sede corre a un nivel de disparador y su `UPDATE` sobre `Product` llega al segundo; una sentencia de la aplicación llega al primero. No se usa una marca de sesión porque cualquier cliente podría activarla, mientras que llegar al segundo nivel exige que exista otro disparador.
 
-1. **Fijar la base de comparación.** Con una copia verificable y los escritores de inventario detenidos, tomar un registro por organización y producto del stock y sus reservas. Incluir productos con saldo cero e inactivos. El registro debe conservar la identidad del producto, no solo el total de la organización.
-2. **Asignar cada saldo una sola vez.** Crear el saldo del producto en la sede inicial de su propia organización. Una clave única producto–ubicación y relaciones que respeten la organización deben impedir duplicados y asociaciones entre organizaciones. En el corte, el saldo y las reservas en la sede inicial tienen que coincidir con el registro de origen producto por producto; ninguna otra sede recibe una copia. La asignación inicial ya la hace `20261125120000_product_stock_authority`: el corte vuelve a comparar esa fila contra el registro de origen antes de reanudar las escrituras. El ensayo de solo lectura del apartado anterior es la comprobación previa de esta condición: si falla, no hay corte.
-3. **Cambiar las operaciones juntas.** Validar que POS, compras, devoluciones, ajustes, reservas, importaciones y consultas usen el saldo por ubicación antes de reanudar las escrituras con el nuevo modelo. Usar una sola fuente activa; no mantener dos saldos editables. Reanudar solo si coinciden todos los saldos y las reservas. No borrar la columna anterior como parte de este corte. Una vez que haya operaciones nuevas, no volver al stock anterior sin reconciliar esas operaciones.
-4. **Habilitar la segunda tienda.** Su saldo empieza en cero. Si parte del saldo global anterior corresponde físicamente a esa tienda, asignarlo a partir de un conteo y registrar el traspaso de saldo de apertura; no sumarlo por segunda vez. Si lo contado no coincide con el saldo anterior, documentar y autorizar el ajuste por separado.
+Comprobación del cerrojo en una base desechable `meperpos_stock_rehearsal_…` con todas las migraciones aplicadas, desde `backend/`:
+
+```bash
+T3G_TEST_DATABASE_URL="$TEST_DATABASE_URL" \
+  npx jest --runInBand src/inventory/product-stock-guard.postgres.spec.ts
+```
+
+Debe pasar completa. Contra una copia **previa** a `20261125150000_product_stock_guard` la escritura directa se acepta y las comprobaciones de rechazo fallan: eso es el resultado esperado antes de aplicar la migración, no un defecto. La migración toma `Product` en `SHARE ROW EXCLUSIVE` antes de crear el disparador, con el mismo límite de 5 segundos por bloqueo.
+
+## Corte final: estado, despliegue y vuelta atrás
+
+**Estado final.** `ProductStock` es la fuente de verdad y `Product.stock`/`reservedStock` son su agregado de organización, mantenido por disparadores y protegido por el cerrojo. Ya no existe ninguna compuerta de "única sede principal": una venta o una financiación se acepta en cualquier sucursal autorizada, una recepción o una transferencia en cualquier sede autorizada, y `checkoutLocationId` solo sugiere una sucursal. Los reportes, exportaciones y alertas siguen leyendo `Product`, es decir el total de la organización; el detalle por sede en reportes no forma parte de esta entrega.
+
+**Antes de desplegar.** Todo en una sola ventana:
+
+1. Pausar las escrituras de inventario (ventas, financiación POS, recepción de compras, transferencias, préstamos, edición de productos, importaciones y backfill) y las altas de organizaciones, usuarios y membresías. Esperar a que terminen las transacciones en curso.
+2. Correr el ensayo de solo lectura de este documento sobre una copia verificable, **antes** de aplicar `20261125120000_product_stock_authority`: exige `ProductStock` vacía y comprueba producto por producto que el saldo y las reservas se pueden traspasar. Si falla, no hay corte.
+3. Comprobar el precheck de nombres de sede repetidos **antes** de `20261125130000_location_type`: esa migración crea el índice único `(organizationId, lower(name))`, así que dos sedes de la misma organización que solo difieran en mayúsculas o espacios lo hacen fallar. Detectarlas y renombrarlas antes de desplegar:
+   ```sql
+   SELECT "organizationId", lower(btrim("name")) AS repeated, array_agg("id") AS ids
+   FROM "Location" GROUP BY 1, 2 HAVING count(*) > 1;
+   ```
+4. Aplicar **todas** las migraciones de la entrega juntas, con `prisma migrate deploy`. Están ordenadas por marca de tiempo y no se aplican por separado: `20261125120000_product_stock_authority`, `20261125130000_location_type`, `20261125140000_stock_transfers` y `20261125150000_product_stock_guard`. El cerrojo va al final a propósito; aplicarlo antes del último escritor rompería las escrituras que todavía pasaban por `Product`.
+5. Activar la versión nueva del backend y después la del frontend.
+6. Comprobar que cada usuario operativo que cobra tiene su sede asignada (`PUT /api/users/:id/locations`, o la pantalla de equipo): sin asignación el POS le responde "No tienes sedes asignadas" y no puede cobrar, y el cobro con `locationId` se autoriza contra esa asignación. Recién entonces reabrir las escrituras y las altas.
+
+**Comprobaciones después del despliegue.** Con la aplicación ya en la versión nueva: iniciar sesión como dueño, abrir el POS y verificar que lista las sucursales; cobrar una venta en una sucursal distinta de la principal y comprobar que se descuenta esa sede y no la principal (`SELECT * FROM "ProductStock" WHERE "productId" = …`); recibir una compra en una bodega; despachar y recibir una transferencia entre dos sedes; y confirmar que `SELECT p."stock" - coalesce(sum(s."stock"), 0) FROM "Product" p LEFT JOIN "ProductStock" s ON s."productId" = p."id" GROUP BY p."id"` devuelve solo ceros. En los reportes, el total de la organización no debe cambiar por una transferencia.
+
+**Vuelta atrás.** Si hay que volver a la versión anterior de la aplicación después del corte, hacerlo con las escrituras pausadas y **sin** revertir el esquema: el código anterior escribiría `Product.stock` directamente y el cerrojo lo rechazaría. Para volver al modelo de saldo global hay que, en una ventana con escrituras detenidas, reconciliar el agregado con las filas de sede (`UPDATE "Product" FROM (suma por producto)`), quitar el disparador del cerrojo y recién después reactivar la versión anterior. Las operaciones hechas en sedes distintas de la principal no se pueden deshacer por sí solas: sus movimientos de inventario quedan registrados con su sede y su saldo debe sumarse a mano al total si se vuelve a un único libro. Nunca borrar `ProductStock` para "volver atrás": es el único registro de dónde está cada unidad.
+
+**Saldo de apertura de una sede nueva.** Una sede nueva empieza en cero. Si parte del saldo anterior corresponde físicamente a esa sede, pasarlo con una transferencia desde la principal (o con un ajuste autorizado), nunca sumándolo dos veces. Si lo contado no coincide con el saldo anterior, documentar y autorizar el ajuste por separado.
 
 **Criterio del piloto:** con 5 unidades en A y 3 en B, una venta de 2 en B deja A en 5 y B en 1, y la venta figura en B. Si B no tiene unidades suficientes, la venta se rechaza aunque A tenga stock.
 

@@ -638,10 +638,11 @@ export class PurchaseOrdersService {
 
     const { locationId } = dto;
     const receiveItems = async (tx: Prisma.TransactionClient) => {
-      // The whole batch lands at one site. The explicit destination keeps the
-      // existing authorization and sole-principal gate; a legacy request with no
+      // The whole batch lands at one site. T3g: an explicit destination only
+      // needs the actor to be authorized for it — a receipt is not a sale, so a
+      // warehouse is a valid destination too. A legacy request with no
       // destination lands at the organization default site, so every receipt has
-      // a site balance from now on.
+      // a site balance.
       let destinationId: string;
       if (locationId !== undefined) {
         if (
@@ -655,20 +656,6 @@ export class PurchaseOrdersService {
           actor,
           locationId,
         );
-        const sites = await tx.location.findMany({
-          where: { organizationId },
-          select: { id: true, isDefault: true },
-          take: 2,
-        });
-        if (
-          sites.length !== 1 ||
-          !sites[0].isDefault ||
-          sites[0].id !== destination.locationId
-        ) {
-          throw new ConflictException(
-            'El stock global solo permite recibir compras en la única sede principal',
-          );
-        }
         destinationId = destination.locationId;
       } else {
         destinationId = await resolveDefaultSiteWithin(tx, organizationId);

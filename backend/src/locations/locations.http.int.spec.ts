@@ -372,11 +372,29 @@ describe('Location access (HTTP integration)', () => {
     await get(cashierInOtherOrg).expect(200, []);
   });
 
-  it('lists permitted POS sites without granting global checkout in a multi-site organization', async () => {
+  it('nominates the reachable principal store and lists stores only', async () => {
     await assign(admin, cashierId, [a.id]).expect(200, { locationIds: [a.id] });
     await get(cashier, 'pos-context').expect(200, {
       locations: [a],
-      checkoutLocationId: null,
+      checkoutLocationId: a.id,
+    });
+    // A warehouse is never offered to the till, even when it is assigned.
+    const bodegaId = randomUUID();
+    createdLocationIds.push(bodegaId);
+    await prisma.location.create({
+      data: {
+        id: bodegaId,
+        organizationId: orgId,
+        name: `${prefix}-bodega`,
+        type: 'WAREHOUSE',
+      },
+    });
+    await assign(admin, cashierId, [a.id, bodegaId]).expect(200, {
+      locationIds: [a.id, bodegaId],
+    });
+    await get(cashier, 'pos-context').expect(200, {
+      locations: [a],
+      checkoutLocationId: a.id,
     });
     await get(cashierInOtherOrg, 'pos-context').expect(200, {
       locations: [],
@@ -403,9 +421,11 @@ describe('Location access (HTTP integration)', () => {
       await prisma.location.create({
         data: { id: addedId, organizationId: otherOrgId, name: 'New site' },
       });
+      // T3g: the principal store stays nominated while the caller reaches it;
+      // adding a site no longer takes checkout away from it.
       await context().expect(200, {
         locations: [other],
-        checkoutLocationId: null,
+        checkoutLocationId: other.id,
       });
 
       await prisma.location.delete({ where: { id: addedId } });
@@ -429,7 +449,7 @@ describe('Location access (HTTP integration)', () => {
     });
     await get(superAdmin, 'pos-context')
       .set('x-organization-id', orgId)
-      .expect(200, { locations: [a, b], checkoutLocationId: null });
+      .expect(200, { locations: [a, b], checkoutLocationId: a.id });
   });
 
   it('serializes a role promotion behind the assignment replacement it overlaps', async () => {

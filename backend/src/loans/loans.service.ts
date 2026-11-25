@@ -38,7 +38,10 @@ import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emissi
 import { DianTaxCode } from '../common/utils/tax.util';
 import { tracksStock } from '../products/product-type.logic';
 import { SequenceService } from '../common/sequences/sequence.service';
-import { resolveWritableSiteWithin } from '../locations/authorized-site';
+import {
+  resolveWritableSiteWithin,
+  type WritableSiteOptions,
+} from '../locations/authorized-site';
 import {
   applySiteStockDelta,
   resolveDefaultSiteWithin,
@@ -743,23 +746,9 @@ export class LoansService {
           const origin =
             locationId === undefined
               ? undefined
-              : await this.resolvePosOrigin(tx, orgId, actor, locationId);
-          if (origin) {
-            const sites = await tx.location.findMany({
-              where: { organizationId: orgId },
-              select: { id: true, isDefault: true },
-              take: 2,
-            });
-            if (
-              sites.length !== 1 ||
-              !sites[0].isDefault ||
-              sites[0].id !== origin.locationId
-            ) {
-              throw new ConflictException(
-                'El stock global solo permite ventas en la única sede principal',
-              );
-            }
-          }
+              : await this.resolvePosOrigin(tx, orgId, actor, locationId, {
+                  requireStore: true,
+                });
           const user = await tx.user.findFirst({
             where: { id: actor.userId, active: true },
             select: { id: true },
@@ -1510,12 +1499,13 @@ export class LoansService {
     organizationId: string,
     actor: RequestUser,
     locationId: string,
+    options: WritableSiteOptions = {},
   ) {
     if (actor.organizationId !== organizationId) {
       throw new ForbiddenException('Organization scope required');
     }
     try {
-      return await resolveWritableSiteWithin(tx, actor, locationId);
+      return await resolveWritableSiteWithin(tx, actor, locationId, options);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

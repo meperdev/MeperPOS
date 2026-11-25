@@ -16,6 +16,10 @@ const cloudinaryServiceMock = {
   uploadImage: jest.fn(),
 };
 
+/** T3g: a warehouse cannot be the origin of a sale or a POS financing. */
+const WAREHOUSE_ORIGIN =
+  'La sede seleccionada es una bodega: solo una sucursal puede ser el origen de una venta o una financiación';
+
 describe('SalesService — Integration (Numbering + Isolation)', () => {
   let prisma: TwoOrgFixture['prisma'];
   let fixture: TwoOrgFixture;
@@ -828,20 +832,20 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
           id: warehouse,
           organizationId: fixture.orgAId,
           name: 'Warehouse',
+          type: 'WAREHOUSE',
         },
       });
+      // T3g: a warehouse is never a POS origin. A fresh request is refused with
+      // a client error before anything is written; a replay still answers its
+      // stored sale's mismatch, read-only.
       await expect(create(warehouse, 'origin-new-sale')).rejects.toMatchObject({
         status: 409,
         message:
           'La solicitud ya corresponde a una venta con otra atribución de sede',
       });
-      for (const site of [principal, warehouse]) {
-        await expect(create(site, 'origin-topology')).rejects.toMatchObject({
-          status: 409,
-          message:
-            'El stock global solo permite ventas en la única sede principal',
-        });
-      }
+      await expect(create(warehouse, 'origin-warehouse')).rejects.toMatchObject(
+        { status: 400, message: WAREHOUSE_ORIGIN },
+      );
       expect(await snapshot()).toEqual(after);
 
       await prisma.organizationUser.updateMany({
@@ -907,6 +911,103 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
           organizationId: fixture.orgAId,
         }),
       ]);
+    });
+
+    it('sells from any authorized store of a multi-site organization', async () => {
+      const unique = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const [store, otherStore] = await Promise.all([
+        prisma.location.create({
+          data: { organizationId: fixture.orgAId, name: `Sucursal ${unique}` },
+        }),
+        prisma.location.create({
+          data: {
+            organizationId: fixture.orgAId,
+            name: `Sucursal B ${unique}`,
+          },
+        }),
+      ]);
+      const category = await prisma.category.findFirstOrThrow({
+        where: { organizationId: fixture.orgAId },
+        select: { id: true },
+      });
+      const secondProduct = await prisma.product.create({
+        data: {
+          name: `Sales INT site product ${unique}`,
+          sku: `SALES-SITE-${unique}`,
+          salePrice: new Prisma.Decimal(1000),
+          costPrice: new Prisma.Decimal(500),
+          taxRate: new Prisma.Decimal(19),
+          stock: 1,
+          minStock: 1,
+          active: true,
+          categoryId: category.id,
+          organizationId: fixture.orgAId,
+        },
+      });
+      // Stock that belongs to this branch only: the principal-site row keeps
+      // the other unit, so a sale at the second store has to come from its own.
+      await prisma.productStock.create({
+        data: {
+          productId: secondProduct.id,
+          locationId: store.id,
+          organizationId: fixture.orgAId,
+          stock: 2,
+          reservedStock: 0,
+        },
+      });
+      const sell = (locationId: string, requestKey: string) =>
+        salesService.create(
+          {
+            ...buildSaleDto(secondProduct.id, customerId),
+            locationId,
+            requestKey,
+          },
+          actor.userId,
+          actor.organizationId,
+          actor,
+        );
+      const ledgerOf = () =>
+        prisma.productStock.findMany({
+          where: { productId: secondProduct.id },
+          orderBy: { locationId: 'asc' },
+          select: { locationId: true, stock: true, reservedStock: true },
+        });
+
+      const sale = await sell(store.id, `origin-multi-store-${unique}`);
+
+      expect(
+        await prisma.saleOriginSite.findFirstOrThrow({
+          where: { saleId: sale.id },
+        }),
+      ).toEqual({
+        saleId: sale.id,
+        organizationId: fixture.orgAId,
+        locationId: store.id,
+      });
+      expect(await ledgerOf()).toEqual(
+        [
+          { locationId: store.id, stock: 1, reservedStock: 0 },
+          { locationId: principal, stock: 1, reservedStock: 0 },
+        ].sort((a, b) => (a.locationId < b.locationId ? -1 : 1)),
+      );
+      expect(
+        await prisma.product.findUniqueOrThrow({
+          where: { id: secondProduct.id },
+          select: { stock: true },
+        }),
+      ).toEqual({ stock: 2 });
+
+      // Replaying the same key at another store is still a conflict, and it
+      // writes nothing.
+      const before = await ledgerOf();
+      await expect(
+        sell(otherStore.id, `origin-multi-store-${unique}`),
+      ).rejects.toMatchObject({
+        status: 409,
+        message:
+          'La solicitud ya corresponde a una venta con otra atribución de sede',
+      });
+      expect(await ledgerOf()).toEqual(before);
     });
   });
 });

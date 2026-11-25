@@ -184,6 +184,54 @@ const databaseUrl = process.env.T15_TEST_DATABASE_URL;
       }
     });
 
+    it('gates a caller that needs a store on the type of the site it names', async () => {
+      // A real warehouse, created for this case only so the other fixtures keep
+      // their store type.
+      const warehouseSite = `${prefix}-bodega`;
+      await prisma.location.create({
+        data: {
+          id: warehouseSite,
+          organizationId: org,
+          name: 'Bodega real',
+          type: 'WAREHOUSE',
+        },
+      });
+      const warehouseGrant = { ...grant, locationId: warehouseSite };
+      await prisma.membershipLocation.create({ data: warehouseGrant });
+      try {
+        // A warehouse is a valid site for the inventory paths.
+        await expect(resolve(actor, warehouseSite)).resolves.toEqual({
+          organizationId: org,
+          locationId: warehouseSite,
+        });
+        // A POS money path needs a store, and is refused on the same locked read
+        // that authorized the site.
+        await expect(
+          inTransaction((tx) =>
+            resolveWritableSiteWithin(tx, actor, warehouseSite, {
+              requireStore: true,
+            }),
+          ),
+        ).rejects.toMatchObject({
+          status: 400,
+          message:
+            'La sede seleccionada es una bodega: solo una sucursal puede ser el origen de una venta o una financiación',
+        });
+        await expect(
+          inTransaction((tx) =>
+            resolveWritableSiteWithin(tx, actor, site, {
+              requireStore: true,
+            }),
+          ),
+        ).resolves.toEqual({ organizationId: org, locationId: site });
+      } finally {
+        await prisma.membershipLocation.deleteMany({
+          where: warehouseGrant,
+        });
+        await prisma.location.delete({ where: { id: warehouseSite } });
+      }
+    });
+
     it('rejects a teammate’s grant and an inactive account with its own grant', async () => {
       const rollback = new Error('Roll back authorization fixtures');
       await expect(

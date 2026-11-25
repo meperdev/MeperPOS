@@ -350,11 +350,69 @@ function settle<T>(work: Promise<T>) {
       ).toMatchObject({ quantity: 5, locationId: tenant.defaultSiteId });
     });
 
-    it('refuses a destination outside the sole principal site and leaves every balance as it was', async () => {
+    it('receives into any explicitly authorized site, of either type, in a multi-site organization', async () => {
       const tenant = await createTenant();
-      await prisma.location.create({
-        data: { organizationId: tenant.organizationId, name: 'Bodega' },
+      const warehouse = await prisma.location.create({
+        data: {
+          organizationId: tenant.organizationId,
+          name: `${label} bodega`,
+          type: 'WAREHOUSE',
+        },
       });
+      const tracked = await product(tenant);
+      const purchaseOrder = await order(tenant, tracked.id);
+      const [item] = purchaseOrder.items;
+
+      // T3g: the sole-principal gate is gone. A receipt is not a sale, so its
+      // destination may be a warehouse as much as a store; the only rule left
+      // is that the actor must be authorized for it.
+      await service.receive(
+        purchaseOrder.id,
+        {
+          items: [{ itemId: item.id, qtyReceivedNow: 5 }],
+          locationId: warehouse.id,
+        },
+        tenant.userId,
+        tenant.organizationId,
+        actorFor(tenant),
+      );
+
+      expect(await siteLedger(tracked.id)).toContainEqual({
+        locationId: warehouse.id,
+        organizationId: tenant.organizationId,
+        stock: 5,
+        reservedStock: 0,
+      });
+      expect(await siteLedger(tracked.id)).toContainEqual({
+        locationId: tenant.defaultSiteId,
+        organizationId: tenant.organizationId,
+        stock: 3,
+        reservedStock: 0,
+      });
+      expect(await expectAggregateIsSumOfSites(tracked.id)).toBe(8);
+      expect(
+        await prisma.inventoryMovement.findFirstOrThrow({
+          where: {
+            productId: tracked.id,
+            organizationId: tenant.organizationId,
+          },
+        }),
+      ).toMatchObject({
+        type: 'PURCHASE',
+        quantity: 5,
+        locationId: warehouse.id,
+      });
+      expect(
+        (
+          await prisma.purchaseOrder.findUniqueOrThrow({
+            where: { id: purchaseOrder.id },
+          })
+        ).status,
+      ).toBe('RECEIVED');
+    });
+
+    it('refuses a destination from another organization and leaves every balance as it was', async () => {
+      const tenant = await createTenant();
       const tracked = await product(tenant);
       const purchaseOrder = await order(tenant, tracked.id);
       const [item] = purchaseOrder.items;
@@ -362,22 +420,29 @@ function settle<T>(work: Promise<T>) {
         ledger: await siteLedger(tracked.id),
         aggregate: await aggregate(tracked.id),
       };
+      // An administrator reaches every site of their own organization, so the
+      // remaining boundary is the tenant: another organization's site is not a
+      // destination.
+      const other = await createTenant();
+      const foreign = await prisma.location.findFirstOrThrow({
+        where: { organizationId: other.organizationId },
+        select: { id: true },
+      });
 
       await expect(
         service.receive(
           purchaseOrder.id,
           {
             items: [{ itemId: item.id, qtyReceivedNow: 5 }],
-            locationId: tenant.defaultSiteId,
+            locationId: foreign.id,
           },
           tenant.userId,
           tenant.organizationId,
           actorFor(tenant),
         ),
       ).rejects.toMatchObject({
-        status: 409,
-        message:
-          'El stock global solo permite recibir compras en la única sede principal',
+        status: 404,
+        message: 'Location not found',
       });
 
       expect({

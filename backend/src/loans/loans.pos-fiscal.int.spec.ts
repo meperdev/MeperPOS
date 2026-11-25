@@ -280,11 +280,21 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     await expect(
       initiate({ ...dto, locationId: second.id }),
     ).rejects.toMatchObject({ status: 409 });
+    // T3g: the sole-principal gate is gone. A warehouse still cannot originate
+    // a financing: 400 with nothing written, while the store grant above is the
+    // only permission a store needs.
+    const warehouse = await prisma.location.create({
+      data: { organizationId, name: 'Bodega', type: 'WAREHOUSE' },
+    });
+    await prisma.membershipLocation.create({
+      data: { userId, organizationId, locationId: warehouse.id },
+    });
     await expect(
-      initiate({ ...dto, requestKey: nextTag() }),
+      initiate({ ...dto, requestKey: nextTag(), locationId: warehouse.id }),
     ).rejects.toMatchObject({
-      status: 409,
-      message: 'El stock global solo permite ventas en la única sede principal',
+      status: 400,
+      message:
+        'La sede seleccionada es una bodega: solo una sucursal puede ser el origen de una venta o una financiación',
     });
     expect(await snapshot()).toEqual(held);
 

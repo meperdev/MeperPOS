@@ -5,21 +5,66 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { LocationsController } from './locations.controller';
 import { LocationsService } from './locations.service';
 
-type Site = { id: string; name: string; isDefault: boolean };
+type SiteType = 'STORE' | 'WAREHOUSE';
+type Site = {
+  id: string;
+  name: string;
+  type: SiteType;
+  isDefault: boolean;
+};
 
 const cashier = {
   userId: 'test-cashier',
   organizationId: 'org-a',
   role: OrgRole.CASHIER,
 } as RequestUser;
-const main = { id: 'a', name: 'Main', isDefault: true };
-const secondary = { id: 'b', name: 'Secondary', isDefault: false };
+const main: Site = { id: 'a', name: 'Main', type: 'STORE', isDefault: true };
+const secondary: Site = {
+  id: 'b',
+  name: 'Secondary',
+  type: 'STORE',
+  isDefault: false,
+};
+const warehouse: Site = {
+  id: 'w',
+  name: 'Bodega',
+  type: 'WAREHOUSE',
+  isDefault: false,
+};
+const foreign: Site = {
+  id: 'foreign',
+  name: 'Foreign',
+  type: 'STORE',
+  isDefault: true,
+};
 
 type AssignmentFilter = {
   some?: { organizationId?: string; userId?: string };
 };
 
+const byId = (left: { id: string }, right: { id: string }) =>
+  left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+
+/** The order `posContext` asks for: principal first, then name, then id. */
+const byNominatingOrder = (left: Site, right: Site) =>
+  Number(right.isDefault) - Number(left.isDefault) ||
+  (left.name < right.name ? -1 : left.name > right.name ? 1 : 0) ||
+  byId(left, right);
+
+/**
+ * A stand-in for the two reads `posContext` performs: the accessible store list
+ * and the organization's principal site. It honors the where-clauses the
+ * service uses (organization, grant list, type) so a test can only pass by the
+ * rule it claims to pin.
+ */
 function fixture(sites: Site[], assignments: string[]) {
+  const rows = [
+    ...sites.map((site) => ({ organizationId: 'org-a', site })),
+    { organizationId: 'org-b', site: foreign },
+  ];
+  const inOrganization = (organizationId: string) =>
+    rows.filter((row) => row.organizationId === organizationId);
+
   const findMany = jest.fn(
     async ({
       where,
@@ -28,26 +73,42 @@ function fixture(sites: Site[], assignments: string[]) {
       where: Prisma.LocationWhereInput;
       take?: number;
     }) => {
-      const organizations = [
-        ...sites.map((site) => ({ organizationId: 'org-a', site })),
-        { organizationId: 'org-b', site: { ...main, id: 'foreign' } },
-      ];
-      const selected = organizations
-        .filter((row) => row.organizationId === where.organizationId)
+      const grant = (where.assignments as AssignmentFilter | undefined)?.some;
+      const selected = inOrganization(String(where.organizationId))
         .filter(({ site }) => {
-          if (!where.assignments) return true;
-          const grant = (where.assignments as AssignmentFilter).some;
+          if (where.type !== undefined && site.type !== where.type)
+            return false;
+          if (!grant) return true;
           return (
-            grant?.organizationId === 'org-a' &&
+            grant.organizationId === 'org-a' &&
             grant.userId === cashier.userId &&
             assignments.includes(site.id)
           );
         })
-        .map(({ site }) => site);
+        .map(({ site }) => site)
+        .sort(byNominatingOrder);
       return take === undefined ? selected : selected.slice(0, take);
     },
   );
-  const location = { findMany };
+  const findFirst = jest.fn(
+    async ({
+      where,
+      take,
+    }: {
+      where: Prisma.LocationWhereInput;
+      take?: number;
+    }) => {
+      const selected = inOrganization(String(where.organizationId))
+        .filter(({ site }) =>
+          where.isDefault === undefined ? true : site.isDefault,
+        )
+        .map(({ site }) => site)
+        .sort(byId);
+      const rows = take === undefined ? selected : selected.slice(0, take);
+      return rows[0] ?? null;
+    },
+  );
+  const location = { findMany, findFirst };
   const transaction = jest.fn(
     async (
       read: (tx: { location: typeof location }) => unknown,
@@ -62,10 +123,19 @@ function fixture(sites: Site[], assignments: string[]) {
 }
 
 describe('POS location context', () => {
-  it('allows global-stock checkout at the accessible sole default location', async () => {
-    const { controller, transaction } = fixture([main], [main.id]);
+  it('nominates the accessible principal store of a multi-site organization', async () => {
+    const { controller, transaction } = fixture([main, secondary], [main.id]);
     await expect(controller.posContext(cashier)).resolves.toEqual({
       locations: [main],
+      checkoutLocationId: main.id,
+    });
+
+    // The same organization, seen by an organization-wide role: the principal
+    // store is nominated even though another store exists.
+    const admin = { ...cashier, role: OrgRole.ADMIN };
+    const wide = fixture([main, secondary], []);
+    await expect(wide.controller.posContext(admin)).resolves.toEqual({
+      locations: [main, secondary],
       checkoutLocationId: main.id,
     });
     expect(transaction).toHaveBeenCalledTimes(1);
@@ -74,11 +144,59 @@ describe('POS location context', () => {
     });
   });
 
-  it('does not mistake one assigned location for the organization having one location', async () => {
-    const { controller } = fixture([main, secondary], [main.id]);
+  it('nominates the single accessible store when the principal is out of reach', async () => {
+    const { controller } = fixture([main, secondary], [secondary.id]);
+    await expect(controller.posContext(cashier)).resolves.toEqual({
+      locations: [secondary],
+      checkoutLocationId: secondary.id,
+    });
+  });
+
+  it('never lists a warehouse as a checkout site', async () => {
+    const { controller } = fixture([main, warehouse], [main.id, warehouse.id]);
     await expect(controller.posContext(cashier)).resolves.toEqual({
       locations: [main],
+      checkoutLocationId: main.id,
+    });
+
+    const onlyWarehouse = fixture([main, warehouse], [warehouse.id]);
+    await expect(onlyWarehouse.controller.posContext(cashier)).resolves.toEqual(
+      { locations: [], checkoutLocationId: null },
+    );
+  });
+
+  it('asks the cashier to choose when several stores are reachable and none is principal', async () => {
+    // The principal site was turned into a warehouse: the stores that remain are
+    // both non-default, and neither is the obvious default.
+    const warehousePrincipal: Site = { ...main, type: 'WAREHOUSE' };
+    const storeA: Site = {
+      id: 'c',
+      name: 'Norte',
+      type: 'STORE',
+      isDefault: false,
+    };
+    const storeB: Site = {
+      id: 'd',
+      name: 'Sur',
+      type: 'STORE',
+      isDefault: false,
+    };
+    const { controller } = fixture([warehousePrincipal, storeA, storeB], []);
+    await expect(
+      controller.posContext({ ...cashier, role: OrgRole.ADMIN }),
+    ).resolves.toEqual({
+      locations: [storeA, storeB],
       checkoutLocationId: null,
+    });
+
+    // With exactly one of those stores reachable, it is the default again.
+    const restricted = fixture(
+      [warehousePrincipal, storeA, storeB],
+      [storeA.id],
+    );
+    await expect(restricted.controller.posContext(cashier)).resolves.toEqual({
+      locations: [storeA],
+      checkoutLocationId: storeA.id,
     });
   });
 
@@ -91,10 +209,12 @@ describe('POS location context', () => {
   });
 
   it('does not infer a checkout location from one non-default location', async () => {
+    // A single reachable store is nominated even when it is not the principal
+    // one; it is never promoted into a principal, and the shape is unchanged.
     const { controller } = fixture([secondary], [secondary.id]);
     await expect(controller.posContext(cashier)).resolves.toEqual({
       locations: [secondary],
-      checkoutLocationId: null,
+      checkoutLocationId: secondary.id,
     });
   });
 

@@ -471,24 +471,6 @@ export class SalesService {
                   organizationId,
                   locationId,
                 );
-          if (origin) {
-            // Global stock is safe for an explicit site only while this is the
-            // sole principal site in the entire tenant, not just in the grant list.
-            const sites = await tx.location.findMany({
-              where: { organizationId },
-              select: { id: true, isDefault: true },
-              take: 2,
-            });
-            if (
-              sites.length !== 1 ||
-              !sites[0].isDefault ||
-              sites[0].id !== origin.locationId
-            ) {
-              throw new ConflictException(
-                'El stock global solo permite ventas en la única sede principal',
-              );
-            }
-          }
           const { number: saleNumber } = await this.sequenceService.nextNumber(
             tx,
             organizationId,
@@ -775,7 +757,11 @@ export class SalesService {
     if (user?.userId !== userId || user.organizationId !== organizationId) {
       throw new ForbiddenException('Organization scope required');
     }
-    return resolveWritableSiteWithin(tx, user, locationId);
+    // T3g: any store the actor is authorized to write is a valid POS origin;
+    // a warehouse is not a till.
+    return resolveWritableSiteWithin(tx, user, locationId, {
+      requireStore: true,
+    });
   }
 
   /** Replay legacy digests unchanged, but never switch an explicit origin. */

@@ -427,8 +427,9 @@ type Fixture = {
           orderBy: { locationId: 'asc' },
         }),
       ).resolves.toEqual(before.siteRows);
-      // The sole-principal gate is untouched: with two sites an explicit origin
-      // is still refused before any write, even when the actor may write there.
+      // T3g: the sole-principal gate is gone. A warehouse still cannot be a POS
+      // origin (400, nothing written), while an authorized store reserves at
+      // its own balance.
       await prisma.membershipLocation.create({
         data: {
           userId: fixture.userId,
@@ -436,12 +437,54 @@ type Fixture = {
           locationId: secondSiteId,
         },
       });
+      const warehouse = await prisma.location.create({
+        data: {
+          organizationId: fixture.organizationId,
+          name: `${label}-bodega-${randomUUID()}`,
+          type: 'WAREHOUSE',
+        },
+      });
+      await prisma.membershipLocation.create({
+        data: {
+          userId: fixture.userId,
+          organizationId: fixture.organizationId,
+          locationId: warehouse.id,
+        },
+      });
+      await expect(
+        initiate(fixture, { quantity: 1, locationId: warehouse.id }),
+      ).rejects.toMatchObject({
+        status: 400,
+        message:
+          'La sede seleccionada es una bodega: solo una sucursal puede ser el origen de una venta o una financiación',
+      });
+      await expect(
+        prisma.productStock.findMany({
+          where: { productId: fixture.productId },
+          orderBy: { locationId: 'asc' },
+        }),
+      ).resolves.toEqual(before.siteRows);
+
       await expect(
         initiate(fixture, { quantity: 1, locationId: secondSiteId }),
-      ).rejects.toMatchObject({
-        status: 409,
-        message:
-          'El stock global solo permite ventas en la única sede principal',
+      ).resolves.toMatchObject({ organizationId: fixture.organizationId });
+      await expect(siteRowAt(fixture.productId, secondSiteId)).resolves.toEqual(
+        {
+          productId: fixture.productId,
+          locationId: secondSiteId,
+          organizationId: fixture.organizationId,
+          stock: 10,
+          reservedStock: 1,
+        },
+      );
+      await expect(
+        siteRowAt(fixture.productId, fixture.defaultSiteId),
+      ).resolves.toEqual({
+        productId: fixture.productId,
+        locationId: fixture.defaultSiteId,
+        organizationId: fixture.organizationId,
+        stock: 0,
+        reservedStock: 0,
       });
       await expectAggregateMatchesSites(fixture.productId);
     });
