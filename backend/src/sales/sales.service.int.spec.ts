@@ -756,16 +756,18 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
       };
     };
 
-    it('preserves legacy replay without writing a site or accepting retroactive attribution', async () => {
+    it('preserves legacy replay without storing an origin site or accepting retroactive attribution', async () => {
       const legacy = await create(undefined, 'origin-legacy');
       const after = await snapshot();
       expect(after.origins).toBe(0);
+      // T3b: no origin is stored, but the units still left the default site
+      // that fulfilled the sale.
       expect(
         await prisma.inventoryMovement.findFirstOrThrow({
           where: { saleId: legacy.id },
           select: { locationId: true },
         }),
-      ).toEqual({ locationId: null });
+      ).toEqual({ locationId: principal });
       await expect(create(undefined, 'origin-legacy')).resolves.toMatchObject({
         id: legacy.id,
       });
@@ -777,7 +779,7 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
       expect(await snapshot()).toEqual(after);
     });
 
-    it('persists the authorized principal on sale and reversal, without activating site balances', async () => {
+    it('persists the authorized principal and moves its site balance on sale and reversal', async () => {
       const before = await snapshot();
       await expect(create(outside, 'origin-foreign')).rejects.toMatchObject({
         status: 404,
@@ -801,6 +803,12 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
         sales: before.sales + 1,
         origins: before.origins + 1,
         movements: before.movements + 1,
+        // T3b: the sale left the site that fulfilled it, and `Product` still
+        // reports the organization aggregate the trigger derives from it.
+        siteLedger: before.siteLedger.map((row) => ({
+          ...row,
+          stock: row.stock - 1,
+        })),
         product: {
           ...before.product,
           stock: before.product.stock - 1,
@@ -880,14 +888,16 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
       expect(await snapshot()).toEqual({
         ...after,
         movements: after.movements + 1,
+        // The reversal put the unit back on the site it left.
+        siteLedger: before.siteLedger,
         product: {
           ...after.product,
           stock: before.product.stock,
           version: after.product.version + 1,
         },
       });
-      // T3a: the sale and its reversal write only the aggregate, so the product
-      // keeps the single default-site row it was opened with.
+      // T3b: the sale and its reversal both move the same site row, so the
+      // product ends with the row it was opened with, back at its balance.
       const ledger = (await snapshot()).siteLedger;
       expect(ledger).toEqual(before.siteLedger);
       expect(ledger).toEqual([

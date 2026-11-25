@@ -6,6 +6,17 @@ import {
 import { Prisma } from '@prisma/client';
 import { SalesService } from './sales.service';
 
+// T3b: the site ledger is proven against real PostgreSQL in
+// `inventory/site-stock.postgres.spec.ts` and
+// `sales-site-stock.postgres.spec.ts`. These unit specs assert the delta
+// `SalesService` requests, not the ledger's SQL.
+jest.mock('../inventory/site-stock', () => ({
+  applySiteStockDelta: jest.fn(() =>
+    Promise.resolve({ applied: true, created: false }),
+  ),
+  resolveDefaultSiteWithin: jest.fn(() => Promise.resolve('site-default')),
+}));
+
 /**
  * FASE 7 commercial-integrity hardening (docs/security/FINDINGS.md):
  *

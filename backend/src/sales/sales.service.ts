@@ -39,6 +39,10 @@ import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emissi
 import { voidSaleFiscalDocument } from '../electronic-invoicing/fiscal-document.service';
 import { isElectronicInvoicingActive } from '../settings/schema';
 import { resolveWritableSiteWithin } from '../locations/authorized-site';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../inventory/site-stock';
 
 /**
  * A POS-financed sale carries no cash/card rows, so the derived flag travels
@@ -492,6 +496,12 @@ export class SalesService {
             year,
           );
 
+          // T3b: the site that fulfils the sale and carries the balance it
+          // takes from. Resolved once, inside this transaction: the explicit
+          // authorized origin when the request names one, else the
+          // organization default site. A sale of services never needs it.
+          let saleSiteId: string | undefined = origin?.locationId;
+
           const createdSale = await tx.sale.create({
             data: {
               saleNumber,
@@ -547,41 +557,19 @@ export class SalesService {
                 tracksStock: saleItem.productTracksStock,
               })
             ) {
-              // Read inside the transaction, including repeated lines for the
-              // same product: each decrement advances its version.
-              const observed = await tx.product.findFirst({
-                where: { id: saleItem.productId, organizationId },
-                select: { stock: true, reservedStock: true, version: true },
+              // T3b: the sold units leave the site row of the site that
+              // fulfils the sale, and that row is what refuses an over-draw.
+              // The database trigger keeps `Product.stock` as the
+              // organization-wide aggregate every report still reads.
+              saleSiteId ??= await resolveDefaultSiteWithin(tx, organizationId);
+              const applied = await applySiteStockDelta(tx, {
+                organizationId,
+                productId: saleItem.productId,
+                locationId: saleSiteId,
+                stockDelta: -saleItem.quantity,
+                reservedDelta: 0,
               });
-              if (
-                !observed ||
-                !Number.isInteger(observed.version) ||
-                !Number.isInteger(observed.reservedStock) ||
-                observed.reservedStock < 0 ||
-                observed.stock - observed.reservedStock < saleItem.quantity
-              ) {
-                throw new ConflictException(
-                  `Insufficient stock for product ${saleItem.productId}`,
-                );
-              }
-              const updatedProduct = await tx.product.updateMany({
-                where: {
-                  id: saleItem.productId,
-                  organizationId,
-                  active: true,
-                  type: ProductType.PRODUCT,
-                  tracksStock: true,
-                  version: observed.version,
-                  reservedStock: observed.reservedStock,
-                  stock: { gte: observed.reservedStock + saleItem.quantity },
-                },
-                data: {
-                  stock: { decrement: saleItem.quantity },
-                  version: { increment: 1 },
-                },
-              });
-
-              if (updatedProduct.count === 0) {
+              if (!applied.applied) {
                 throw new ConflictException(
                   `Insufficient stock for product ${saleItem.productId}`,
                 );
@@ -595,6 +583,28 @@ export class SalesService {
               if (!productAfterUpdate) {
                 throw new NotFoundException(
                   `Product with ID ${saleItem.productId} not found`,
+                );
+              }
+
+              // The product's optimistic-concurrency version still advances
+              // with every stock change, so the existing product edits keep
+              // their contract; the balance itself now belongs to the site.
+              // The bump also re-pins what the old stock CAS pinned: a product
+              // deactivated or turned into an untracked line after pricing is
+              // refused exactly as before.
+              const bumped = await tx.product.updateMany({
+                where: {
+                  id: saleItem.productId,
+                  organizationId,
+                  active: true,
+                  type: ProductType.PRODUCT,
+                  tracksStock: true,
+                },
+                data: { version: { increment: 1 } },
+              });
+              if (bumped.count === 0) {
+                throw new ConflictException(
+                  `Insufficient stock for product ${saleItem.productId}`,
                 );
               }
 
@@ -612,7 +622,7 @@ export class SalesService {
                   userId,
                   saleId: createdSale.id,
                   organizationId,
-                  ...(origin ? { locationId: origin.locationId } : {}),
+                  locationId: saleSiteId,
                 },
               });
             }
@@ -1057,6 +1067,11 @@ export class SalesService {
           );
         }
 
+        // T3b: the restore lands on the site the sale was fulfilled from. A
+        // sale with a stored origin already authorized it above; one without
+        // (legacy and no-site sales) took its units from the organization
+        // default site, which is where they come back.
+        let restoreSiteId = locationId;
         for (const [productId, signedQuantity] of soldByProduct) {
           const restoreQuantity = -signedQuantity;
           if (restoreQuantity <= 0) continue;
@@ -1066,39 +1081,38 @@ export class SalesService {
               id: productId,
               organizationId: existingSale.organizationId,
             },
+            select: { stock: true },
           });
 
           if (product) {
-            if (
-              !Number.isInteger(product.version) ||
-              !Number.isInteger(product.reservedStock) ||
-              product.reservedStock < 0 ||
-              product.reservedStock > product.stock
-            ) {
+            restoreSiteId ??= await resolveDefaultSiteWithin(
+              tx,
+              existingSale.organizationId,
+            );
+            const previousStock = product.stock;
+
+            const restored = await applySiteStockDelta(tx, {
+              organizationId: existingSale.organizationId,
+              productId,
+              locationId: restoreSiteId,
+              stockDelta: restoreQuantity,
+              reservedDelta: 0,
+            });
+            if (!restored.applied) {
               throw new ConflictException(
                 `Stock changed for product ${productId}`,
               );
             }
-            const previousStock = product.stock;
-            const newStock = previousStock + restoreQuantity;
 
-            const restored = await tx.product.updateMany({
+            // Same version bump the sale made: the product's optimistic
+            // concurrency stays observable to product edits.
+            await tx.product.updateMany({
               where: {
                 id: productId,
-                organizationId,
-                version: product.version,
-                reservedStock: product.reservedStock,
+                organizationId: existingSale.organizationId,
               },
-              data: {
-                stock: { increment: restoreQuantity },
-                version: { increment: 1 },
-              },
+              data: { version: { increment: 1 } },
             });
-            if (restored.count === 0) {
-              throw new ConflictException(
-                `Stock changed for product ${productId}`,
-              );
-            }
 
             await tx.inventoryMovement.create({
               data: {
@@ -1106,12 +1120,12 @@ export class SalesService {
                 type: 'RETURN' as const,
                 quantity: restoreQuantity,
                 previousStock,
-                newStock,
+                newStock: previousStock + restoreQuantity,
                 reason: `Sale #${existingSale.saleNumber} cancelled`,
                 userId,
                 saleId: existingSale.id,
                 organizationId: existingSale.organizationId,
-                ...(locationId === undefined ? {} : { locationId }),
+                locationId: restoreSiteId,
               },
             });
           }
