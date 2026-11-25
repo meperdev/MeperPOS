@@ -126,7 +126,9 @@ export interface InventoryMovement {
     | "DAMAGE"
     | "RETURN"
     | "LOAN_DELIVERY"
-    | "LOAN_RETURN";
+    | "LOAN_RETURN"
+    | "TRANSFER_OUT"
+    | "TRANSFER_IN";
   quantity: number;
   previousStock: number;
   newStock: number;
@@ -1137,4 +1139,52 @@ export interface LocationSite {
   name: string;
   type: LocationType;
   isDefault: boolean;
+}
+
+/** Where a transfer stands: only an in-transit one can be received or cancelled. */
+export type StockTransferStatus = "IN_TRANSIT" | "RECEIVED" | "CANCELLED";
+
+/** One end of a transfer, embedded by the transfers API. */
+export interface StockTransferSite {
+  id: string;
+  name: string;
+  type: LocationType;
+}
+
+/** The person named on a transfer leg, embedded by the transfers API. */
+export interface StockTransferUser {
+  id: string;
+  name: string;
+}
+
+/** One line of a transfer; the product travels named and keyed. */
+export interface StockTransferItem {
+  id: string;
+  productId: string;
+  quantity: number;
+  product?: { id: string; name: string; sku: string };
+}
+
+/** One transfer document, as `GET /api/transfers` returns it. */
+export interface StockTransfer {
+  id: string;
+  number: number;
+  organizationId: string;
+  status: StockTransferStatus;
+  fromLocationId: string;
+  toLocationId: string;
+  fromLocation: StockTransferSite;
+  toLocation: StockTransferSite;
+  notes: string | null;
+  createdById: string | null;
+  createdBy?: StockTransferUser | null;
+  createdAt: string;
+  receivedAt: string | null;
+  receivedById: string | null;
+  receivedBy?: StockTransferUser | null;
+  cancelledAt: string | null;
+  cancelledById: string | null;
+  cancelledBy?: StockTransferUser | null;
+  cancelReason: string | null;
+  items: StockTransferItem[];
 }

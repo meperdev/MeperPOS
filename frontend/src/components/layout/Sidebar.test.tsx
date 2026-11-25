@@ -201,6 +201,7 @@ describe("Sidebar", () => {
       "Categorías",
       "Proveedores",
       "Compras",
+      "Transferencias",
       "Salidas",
       "Reportes",
       "Préstamos",
@@ -260,6 +261,22 @@ describe("Sidebar", () => {
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     const link = screen.queryByRole("link", { name: "Sedes" });
     if (permitted) expect(link).toHaveAttribute("href", "/locations");
+    else expect(link).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["OWNER", true], ["ADMIN", true], ["MEMBER", true],
+    ["CASHIER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", true],
+  ])("shows the transfers link for %s only when permitted", async (role, permitted) => {
+    useAuthMock.mockReturnValue({
+      user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
+      logout: vi.fn(), switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { organizations: [organizations[0]] } });
+    render(<Sidebar />, { wrapper });
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    const link = screen.queryByRole("link", { name: "Transferencias" });
+    if (permitted) expect(link).toHaveAttribute("href", "/transfers");
     else expect(link).not.toBeInTheDocument();
   });
 

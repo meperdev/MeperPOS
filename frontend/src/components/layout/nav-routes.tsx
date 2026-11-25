@@ -13,6 +13,7 @@ import {
   Banknote,
   HandCoins,
   Building2,
+  ArrowLeftRight,
 } from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
 import { hasAnyRole, type AppRole } from "@/lib/auth";
@@ -97,6 +98,15 @@ export const navItems: NavItem[] = [
     href: "/purchase-orders",
     icon: <ClipboardList className="w-4 h-4" />,
     roles: ["ADMIN", "INVENTORY_USER"],
+    group: "Inventario",
+  },
+  {
+    // Transfers are the one inventory section an operational member runs: the
+    // server admits ADMIN and MEMBER, and CASHIER does not inherit MEMBER.
+    label: "Transferencias",
+    href: "/transfers",
+    icon: <ArrowLeftRight className="w-4 h-4" />,
+    roles: ["ADMIN", "MEMBER"],
     group: "Inventario",
   },
   {

@@ -146,6 +146,36 @@ describe("location route access", () => {
   });
 });
 
+describe("transfer route access", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentPathname = "/transfers";
+  });
+  afterEach(cleanup);
+
+  it.each(["OWNER", "ADMIN", "MEMBER"])("allows %s", (role) => {
+    setUser(role);
+    render(<DashboardLayout>Transferencias</DashboardLayout>);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["CASHIER", "/pos"],
+    ["INVENTORY_USER", "/dashboard"],
+  ])("redirects %s", (role, destination) => {
+    setUser(role);
+    render(<DashboardLayout>Transferencias</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith(destination);
+  });
+
+  it("gates a transfer detail path too", () => {
+    currentPathname = "/transfers/abc";
+    setUser("CASHIER");
+    render(<DashboardLayout>Transferencia</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith("/pos");
+  });
+});
+
 describe("DashboardLayout route gating for /expenses", () => {
   beforeEach(() => {
     vi.clearAllMocks();
