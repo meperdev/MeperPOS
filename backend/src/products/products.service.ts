@@ -18,6 +18,10 @@ import {
   type StockSubject,
 } from './product-type.logic';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../inventory/site-stock';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import {
   DianTaxCode,
@@ -292,6 +296,12 @@ export class ProductsService {
     const initialMovement = resolveInitialStockMovement(product, product.stock);
 
     if (initialMovement) {
+      // The insert opened the default-site row through the database trigger, so
+      // the movement that explains the opening balance belongs to that site.
+      const siteId = await resolveDefaultSiteWithin(
+        this.prisma,
+        organizationId,
+      );
       await this.createInventoryMovement(
         product.id,
         initialMovement.type,
@@ -300,6 +310,8 @@ export class ProductsService {
         'Initial stock',
         userId,
         organizationId,
+        undefined,
+        siteId,
       );
     }
 
@@ -472,7 +484,11 @@ export class ProductsService {
       );
     }
     assertNoReservationInput(updateProductDto);
-    const { taxCode: requestedTaxCode, ...updateFields } = updateProductDto;
+    const {
+      taxCode: requestedTaxCode,
+      stock: requestedStock,
+      ...updateFields
+    } = updateProductDto;
     const existingProduct = await this.prisma.product.findFirst({
       where: { id, organizationId, active: true },
     });
@@ -540,7 +556,7 @@ export class ProductsService {
     };
     const newStock = normalizeStock(
       effectiveSubject,
-      updateProductDto.stock ?? previousStock,
+      requestedStock ?? previousStock,
     );
 
     assertReservationCompatible(existingProduct, {
@@ -588,6 +604,10 @@ export class ProductsService {
     const changesEligibility =
       effectiveType !== existingProduct.type ||
       effectiveTracksStock !== existingProduct.tracksStock;
+    // `Product.stock` is the organization-wide aggregate now; the per-site
+    // ledger is the source of truth, so an edit becomes a signed delta at the
+    // tenant default site instead of an absolute write.
+    const stockDelta = newStock - previousStock;
 
     // Reuse the existing write path without changing ordinary-edit atomicity.
     const writeProduct = async (client: Prisma.TransactionClient) => {
@@ -603,7 +623,6 @@ export class ProductsService {
           ...updateFields,
           ...taxData,
           ...taxCodeData,
-          stock: newStock,
           tracksStock: effectiveTracksStock,
           barcode: normalizedBarcode,
           version: { increment: 1 },
@@ -612,6 +631,23 @@ export class ProductsService {
 
       if (updateResult.count === 0) {
         throw new ConflictException('Product was modified by another user');
+      }
+
+      let siteId: string | undefined;
+      if (stockDelta !== 0) {
+        siteId = await resolveDefaultSiteWithin(client, organizationId);
+        const applied = await applySiteStockDelta(client, {
+          organizationId,
+          productId: id,
+          locationId: siteId,
+          stockDelta,
+          reservedDelta: 0,
+        });
+        if (!applied.applied) {
+          throw new ConflictException(
+            'La sede principal no puede absorber el ajuste de stock: quedaría por debajo de lo reservado o sin existencias',
+          );
+        }
       }
 
       const product = await client.product.findFirst({
@@ -643,6 +679,7 @@ export class ProductsService {
           userId,
           organizationId,
           undefined,
+          siteId,
           client.inventoryMovement,
         );
       }
@@ -650,28 +687,35 @@ export class ProductsService {
       return product;
     };
 
-    const product = changesEligibility
-      ? await this.prisma.$transaction(
-          async (tx) => {
-            const outstanding = await tx.inventoryLoanItem.findFirst({
-              where: {
-                organizationId,
-                productId: id,
-                deliveredQuantity: {
-                  gt: tx.inventoryLoanItem.fields.returnedQuantity,
-                },
-              },
-            });
-            if (outstanding) {
-              throw new ConflictException(
-                'No se puede cambiar el tipo o seguimiento de inventario mientras hay unidades prestadas pendientes de devolución',
-              );
-            }
-            return writeProduct(tx);
-          },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-        )
-      : await writeProduct(this.prisma);
+    const product =
+      changesEligibility || stockDelta !== 0
+        ? await this.prisma.$transaction(
+            async (tx) => {
+              if (changesEligibility) {
+                const outstanding = await tx.inventoryLoanItem.findFirst({
+                  where: {
+                    organizationId,
+                    productId: id,
+                    deliveredQuantity: {
+                      gt: tx.inventoryLoanItem.fields.returnedQuantity,
+                    },
+                  },
+                });
+                if (outstanding) {
+                  throw new ConflictException(
+                    'No se puede cambiar el tipo o seguimiento de inventario mientras hay unidades prestadas pendientes de devolución',
+                  );
+                }
+              }
+              return writeProduct(tx);
+            },
+            changesEligibility
+              ? {
+                  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+                }
+              : undefined,
+          )
+        : await writeProduct(this.prisma);
 
     return this.enrichProduct(product);
   }
@@ -980,6 +1024,7 @@ export class ProductsService {
     userId: string,
     organizationId: string,
     saleId?: string,
+    locationId?: string,
     movementDelegate = this.prisma.inventoryMovement,
   ) {
     await movementDelegate.create({
@@ -993,6 +1038,7 @@ export class ProductsService {
         userId,
         organizationId,
         saleId,
+        ...(locationId ? { locationId } : {}),
       },
     });
   }

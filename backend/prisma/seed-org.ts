@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma, OrgRole, SupplierAccountType, CustomerSegment } from '@prisma/client';
 import { faker } from '@faker-js/faker';
+import { applySiteStockDelta, resolveDefaultSiteWithin } from '../src/inventory/site-stock';
 
 const prisma = new PrismaClient();
 
@@ -178,34 +179,63 @@ async function seedProducts(orgId: string, categoryIds: Record<string, string>):
 
   for (const p of PRODUCTS) {
     const categoryId = categoryIds[p.category];
-    await prisma.product.upsert({
-      where: {
-        organizationId_sku: { organizationId: orgId, sku: p.sku },
-      },
-      update: {
-        name: p.name,
-        costPrice: d(p.costPrice),
-        salePrice: d(p.salePrice),
-        stock: p.stock,
-        minStock: p.minStock,
-        taxRate: d(p.taxable ? 19 : 0),
-        taxable: p.taxable,
-        categoryId,
-        active: true,
-      },
-      create: {
-        name: p.name,
-        sku: p.sku,
-        costPrice: d(p.costPrice),
-        salePrice: d(p.salePrice),
-        taxRate: d(p.taxable ? 19 : 0),
-        taxable: p.taxable,
-        stock: p.stock,
-        minStock: p.minStock,
-        active: true,
-        categoryId,
-        organizationId: orgId,
-      },
+    // The per-site ledger is the source of truth, so a re-seeded balance becomes a
+    // signed delta at the tenant default site; inserting a new product keeps
+    // writing only the aggregate, exactly as before (the trigger opens its row).
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.product.findUnique({
+        where: { organizationId_sku: { organizationId: orgId, sku: p.sku } },
+        select: { id: true, stock: true },
+      });
+
+      if (existing) {
+        const stockDelta = p.stock - existing.stock;
+        if (stockDelta !== 0) {
+          const siteId = await resolveDefaultSiteWithin(tx, orgId);
+          const applied = await applySiteStockDelta(tx, {
+            organizationId: orgId,
+            productId: existing.id,
+            locationId: siteId,
+            stockDelta,
+            reservedDelta: 0,
+          });
+          if (!applied.applied) {
+            throw new Error(
+              `No se puede sembrar "${p.name}": la sede principal no puede absorber el ajuste de ${stockDelta} unidades.`,
+            );
+          }
+        }
+
+        await tx.product.update({
+          where: { id: existing.id },
+          data: {
+            name: p.name,
+            costPrice: d(p.costPrice),
+            salePrice: d(p.salePrice),
+            minStock: p.minStock,
+            taxRate: d(p.taxable ? 19 : 0),
+            taxable: p.taxable,
+            categoryId,
+            active: true,
+          },
+        });
+      } else {
+        await tx.product.create({
+          data: {
+            name: p.name,
+            sku: p.sku,
+            costPrice: d(p.costPrice),
+            salePrice: d(p.salePrice),
+            taxRate: d(p.taxable ? 19 : 0),
+            taxable: p.taxable,
+            stock: p.stock,
+            minStock: p.minStock,
+            active: true,
+            categoryId,
+            organizationId: orgId,
+          },
+        });
+      }
     });
     created += 1;
   }

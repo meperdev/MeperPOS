@@ -17,6 +17,33 @@ import {
 } from './dto/inventory-loan-operation.dto';
 import { InventoryLoansService } from './inventory-loans.service';
 
+// The per-site ledger is a database contract with its own PostgreSQL suite
+// (`src/inventory/site-stock.postgres.spec.ts`). These service cases need only
+// the seam: the fake transaction below answers with a single organization site
+// whose balance is the product aggregate, exactly like one seeded site row.
+interface SiteDoubleTransaction {
+  __defaultSite(organizationId: string): string;
+  __applySiteDelta(delta: {
+    organizationId: string;
+    productId: string;
+    stockDelta: number;
+    reservedDelta: number;
+  }): { applied: true; created: false } | { applied: false; reason: string };
+}
+
+jest.mock('../inventory/site-stock', () => {
+  const actual = jest.requireActual('../inventory/site-stock');
+  return {
+    ...actual,
+    resolveDefaultSiteWithin: async (tx: unknown) =>
+      (tx as SiteDoubleTransaction).__defaultSite('org'),
+    applySiteStockDelta: async (tx: unknown, delta: unknown) =>
+      (tx as SiteDoubleTransaction).__applySiteDelta(
+        delta as Parameters<SiteDoubleTransaction['__applySiteDelta']>[0],
+      ),
+  };
+});
+
 const p1 = '00000000-0000-4000-8000-000000000001';
 const p2 = '00000000-0000-4000-8000-000000000003';
 const personId = '00000000-0000-4000-8000-000000000002';
@@ -192,32 +219,53 @@ function harness() {
     ({ where }: Prisma.InventoryLoanCountArgs) =>
       working.loans.filter((row) => matches(row, where as Row)).length,
   );
+  // Stock and reservations are no longer columns this path writes: the version
+  // bump keeps the product-edit optimistic concurrency contract.
   const update = jest.fn(({ where, data }: Prisma.ProductUpdateManyArgs) => {
-    calls.push('reserve');
     if (fail === 'cas' || (fail === 'later-product' && where?.id === p2))
       return { count: 0 };
     if (fail === 'product-throw') throw new Error('product failure');
     const product = working.products.find((row) => matches(row, where as Row));
     if (!product) return { count: 0 };
-    if (data.reservedStock)
-      product.reservedStock += (
-        data.reservedStock as { increment: number }
-      ).increment;
-    if (data.stock)
-      product.stock += (data.stock as { increment: number }).increment;
+    if (data.stock || data.reservedStock)
+      throw new Error('direct aggregate stock write');
     product.version += (data.version as { increment: number }).increment;
     return { count: 1 };
   });
+  // One organization site holding the whole balance of each product, which is
+  // what the migration seeds, plus the helper's conditional guards.
+  const defaultSite = (_organizationId: string) => 'site-1';
+  const applySiteDelta = (delta: {
+    organizationId: string;
+    productId: string;
+    stockDelta: number;
+    reservedDelta: number;
+  }) => {
+    const product = working.products.find(
+      (row) =>
+        row.id === delta.productId &&
+        row.organizationId === delta.organizationId,
+    );
+    if (!product) throw new Error('missing product');
+    const reserved = product.reservedStock + delta.reservedDelta;
+    const available = product.stock + delta.stockDelta - reserved;
+    if (reserved < 0 || available < 0)
+      return { applied: false as const, reason: 'insufficient-stock' };
+    calls.push('reserve');
+    product.stock += delta.stockDelta;
+    product.reservedStock += delta.reservedDelta;
+    return { applied: true as const, created: false as const };
+  };
   const loanCreate = jest.fn(
     ({ data, select }: Prisma.InventoryLoanCreateArgs) => {
       calls.push('loan');
       const items = data.items!.create as Array<{
-        productId: string;
         quantity: number;
-        organizationId: string;
+        product: { connect: { id: string; organizationId: string } };
       }>;
+      const loanId = `loan-${working.loans.length}`;
       const loan: Loan = {
-        id: `loan-${working.loans.length}`,
+        id: loanId,
         organizationId: data.organizationId!,
         createdById: data.createdById!,
         createdAt: new Date('2026-10-09T00:00:00Z'),
@@ -227,9 +275,11 @@ function harness() {
         supplierId: data.supplierId ?? null,
         employeeId: data.employeeId ?? null,
         items: items.map((item, index) => ({
-          ...item,
           id: `00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`,
-          loanId: `loan-${working.loans.length}`,
+          loanId,
+          organizationId: item.product.connect.organizationId,
+          productId: item.product.connect.id,
+          quantity: item.quantity,
           deliveredQuantity: 0,
           returnedQuantity: 0,
           cancelledQuantity: 0,
@@ -412,6 +462,8 @@ function harness() {
     throw new Error('forbidden financial/physical write');
   });
   const db = {
+    __defaultSite: defaultSite,
+    __applySiteDelta: applySiteDelta,
     organizationUser: { findFirst: find('members') },
     customer: { findFirst: find('customers') },
     supplier: { findFirst: find('suppliers') },
@@ -509,10 +561,8 @@ describe('unwired inventory creation', () => {
         type: 'PRODUCT',
         tracksStock: true,
         version: 7,
-        reservedStock: 1,
-        stock: { equals: 10, gte: 3 },
       },
-      data: { reservedStock: { increment: 2 }, version: { increment: 1 } },
+      data: { version: { increment: 1 } },
     });
     expect(h.db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: 'Serializable',
@@ -1081,20 +1131,8 @@ describe.each(['deliver', 'returnItems'] as const)(
           type: 'PRODUCT',
           tracksStock: true,
           version: method === 'deliver' ? 8 : 9,
-          stock: {
-            equals: method === 'deliver' ? 10 : 8,
-            gte: method === 'deliver' ? 1 : 0,
-          },
-          reservedStock: {
-            equals: method === 'deliver' ? 3 : 1,
-            gte: method === 'deliver' ? 1 : 0,
-          },
         },
-        data: {
-          stock: { increment: method === 'deliver' ? -1 : 1 },
-          ...(method === 'deliver' ? { reservedStock: { increment: -1 } } : {}),
-          version: { increment: 1 },
-        },
+        data: { version: { increment: 1 } },
       });
       expect(h.db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
         isolationLevel: 'Serializable',
@@ -1392,8 +1430,7 @@ describe.each(['deliver', 'returnItems'] as const)(
       });
       await h.service[method](loan.id, input, actor);
       expect(h.db.product.updateMany).toHaveBeenCalledTimes(1);
-      expect(h.db.product.updateMany.mock.calls[0][0].data).toMatchObject({
-        stock: { increment: method === 'deliver' ? -2 : 2 },
+      expect(h.db.product.updateMany.mock.calls[0][0].data).toEqual({
         version: { increment: 1 },
       });
       expect(h.state().products[0].reservedStock).toBe(
@@ -2113,15 +2150,13 @@ describe.each(['cancel', 'close'] as const)(
             type: 'PRODUCT',
             tracksStock: true,
             version: product.version,
-            stock: { equals: product.stock, gte: product.reservedStock },
-            reservedStock: { equals: product.reservedStock, gte: release },
           },
-          data: {
-            reservedStock: { increment: -release },
-            version: { increment: 1 },
-          },
+          data: { version: { increment: 1 } },
         });
         expect(h.state().products[index].stock).toBe(product.stock);
+        expect(h.state().products[index].reservedStock).toBe(
+          product.reservedStock - release,
+        );
       }
       expect(
         h.db.product.updateMany.mock.calls.map(([args]) => args.where?.id),
@@ -2281,7 +2316,6 @@ describe.each(['cancel', 'close'] as const)(
         }
         expect(h.db.product.updateMany).toHaveBeenCalledTimes(1);
         expect(h.db.product.updateMany.mock.calls[0][0].data).toEqual({
-          reservedStock: { increment: method === 'cancel' ? -4 : -3 },
           version: { increment: 1 },
         });
       },
