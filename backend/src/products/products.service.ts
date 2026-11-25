@@ -712,6 +712,28 @@ export class ProductsService {
 
     // Reuse the existing write path without changing ordinary-edit atomicity.
     const writeProduct = async (client: Prisma.TransactionClient) => {
+      // Lock order: the default-site row first, the aggregate second, because
+      // the site delta's trigger is what updates "Product" — the same order
+      // every other site writer takes. The version compare-and-swap below keeps
+      // its exact contract: it still refuses a concurrent edit, and losing it
+      // rolls the delta back with the transaction.
+      let siteId: string | undefined;
+      if (stockDelta !== 0) {
+        siteId = await resolveDefaultSiteWithin(client, organizationId);
+        const applied = await applySiteStockDelta(client, {
+          organizationId,
+          productId: id,
+          locationId: siteId,
+          stockDelta,
+          reservedDelta: 0,
+        });
+        if (!applied.applied) {
+          throw new ConflictException(
+            'La sede principal no puede absorber el ajuste de stock: quedaría por debajo de lo reservado o sin existencias',
+          );
+        }
+      }
+
       const updateResult = await client.product.updateMany({
         where: {
           id,
@@ -732,23 +754,6 @@ export class ProductsService {
 
       if (updateResult.count === 0) {
         throw new ConflictException('Product was modified by another user');
-      }
-
-      let siteId: string | undefined;
-      if (stockDelta !== 0) {
-        siteId = await resolveDefaultSiteWithin(client, organizationId);
-        const applied = await applySiteStockDelta(client, {
-          organizationId,
-          productId: id,
-          locationId: siteId,
-          stockDelta,
-          reservedDelta: 0,
-        });
-        if (!applied.applied) {
-          throw new ConflictException(
-            'La sede principal no puede absorber el ajuste de stock: quedaría por debajo de lo reservado o sin existencias',
-          );
-        }
       }
 
       const product = await client.product.findFirst({

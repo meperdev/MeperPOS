@@ -227,6 +227,7 @@ interface TenantFixture {
       shop: TenantFixture,
       quantity: number,
       extra: { locationId?: string; requestKey?: string } = {},
+      actor: RequestUser = shop.actor,
     ) {
       return service.create(
         {
@@ -234,10 +235,55 @@ interface TenantFixture {
           payments: [{ method: 'CASH' as const, amount: 1000 * quantity }],
           ...extra,
         },
-        shop.actor.userId,
+        actor.userId,
         shop.organizationId,
-        shop.actor,
+        actor,
       );
+    }
+
+    /**
+     * A cashier whose whole assignment is one site. The principal-site grant the
+     * membership baseline installs is removed, which is what an administrator
+     * replacing the set leaves behind.
+     */
+    async function restrictedCashier(
+      shop: TenantFixture,
+      locationId: string,
+    ): Promise<RequestUser> {
+      const email = `${label}-cashier-${randomUUID()}@example.com`;
+      const user = await prisma.user.create({
+        data: {
+          email,
+          password: 'hash',
+          name: `Cashier ${label}`,
+          tokenVersion: 0,
+        },
+      });
+      await prisma.organizationUser.create({
+        data: {
+          userId: user.id,
+          organizationId: shop.organizationId,
+          role: OrgRole.CASHIER,
+        },
+      });
+      await prisma.membershipLocation.deleteMany({
+        where: { userId: user.id },
+      });
+      await prisma.membershipLocation.create({
+        data: {
+          userId: user.id,
+          organizationId: shop.organizationId,
+          locationId,
+        },
+      });
+      return {
+        userId: user.id,
+        email,
+        organizationId: shop.organizationId,
+        role: OrgRole.CASHIER,
+        tokenVersion: 0,
+        isSuperAdmin: false,
+      };
     }
 
     const cancel = (shop: TenantFixture, saleId: string) =>
@@ -533,6 +579,46 @@ interface TenantFixture {
       ).resolves.toEqual([
         expect.objectContaining({ stock: 0, reservedStock: 0 }),
       ]);
+    });
+
+    it('authorizes the implicit default site like an explicit one', async () => {
+      const shop = await openTenant('implicit-grant', { stock: 10 });
+      const otherSiteId = await openWarehouse(shop, 0);
+      // Assigned to another site only: the default site is not hers.
+      const cashier = await restrictedCashier(shop, otherSiteId);
+      const before = await snapshot(shop);
+
+      await expect(sell(shop, 1, {}, cashier)).rejects.toMatchObject({
+        status: 404,
+        message: 'Location not found',
+      });
+      await expect(snapshot(shop)).resolves.toEqual(before);
+
+      // The legacy no-site request keeps working, byte for byte, once an
+      // administrator assigns the principal site.
+      await prisma.membershipLocation.create({
+        data: {
+          userId: cashier.userId,
+          organizationId: shop.organizationId,
+          locationId: shop.defaultSiteId,
+        },
+      });
+      const sale = await sell(shop, 1, {}, cashier);
+
+      await expect(
+        prisma.saleOriginSite.findFirst({ where: { saleId: sale.id } }),
+      ).resolves.toBeNull();
+      await expect(
+        siteRowAt(shop.productId, shop.defaultSiteId),
+      ).resolves.toMatchObject({ stock: 9, reservedStock: 0 });
+      await expect(movementsOf(sale.id)).resolves.toEqual([
+        expect.objectContaining({
+          type: 'SALE',
+          quantity: -1,
+          locationId: shop.defaultSiteId,
+        }),
+      ]);
+      await expectAggregateMatchesSites(shop.productId);
     });
   },
 );

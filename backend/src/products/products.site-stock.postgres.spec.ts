@@ -300,6 +300,75 @@ interface Fixture {
       await expectAggregateMatchesSites(product.id);
     });
 
+    it('rolls the site delta back when the concurrent-edit guard loses', async () => {
+      const created = await fixture();
+      const product = await create(created, { stock: 10 });
+      const before = {
+        product: await aggregate(product.id),
+        defaultSite: await siteRowAt(product.id, created.defaultSiteId),
+        movements: await prisma.inventoryMovement.count({
+          where: { productId: product.id },
+        }),
+      };
+
+      // Bumps the version after the service read the product and before it
+      // writes: exactly the concurrent edit the optimistic-concurrency contract
+      // has always refused, now after the site row was moved.
+      const racingPrisma = new Proxy(prisma, {
+        get(target, property, receiver) {
+          if (property === '$transaction') {
+            return async (
+              run: (tx: unknown) => Promise<unknown>,
+              ...rest: unknown[]
+            ) => {
+              await prisma.product.update({
+                where: { id: product.id },
+                data: { version: { increment: 1 } },
+              });
+              return (
+                target.$transaction as unknown as (
+                  ...args: unknown[]
+                ) => Promise<unknown>
+              )(run, ...rest);
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      const racing = new ProductsService(
+        racingPrisma as unknown as PrismaService,
+        { uploadImage: jest.fn() } as never,
+        { invalidateCache: jest.fn() } as never,
+      );
+
+      await expect(
+        racing.update(
+          product.id,
+          { stock: 12 },
+          created.userId,
+          created.organizationId,
+        ),
+      ).rejects.toMatchObject({
+        status: 409,
+        message: 'Product was modified by another user',
+      });
+
+      // The delta had already been applied when the guard lost: it rolled back
+      // with the transaction, so only the competing version bump remains.
+      expect(await siteRowAt(product.id, created.defaultSiteId)).toEqual(
+        before.defaultSite,
+      );
+      expect(await aggregate(product.id)).toEqual({
+        ...before.product,
+        version: before.product.version + 1,
+      });
+      await expect(
+        prisma.inventoryMovement.count({ where: { productId: product.id } }),
+      ).resolves.toBe(before.movements);
+      await expectAggregateMatchesSites(product.id);
+    });
+
     it('deactivates, reactivates and removes without touching the quantities', async () => {
       const created = await fixture();
       const product = await create(created, { stock: 5 });

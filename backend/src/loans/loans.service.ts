@@ -743,12 +743,15 @@ export class LoansService {
           ) {
             throw new BadRequestException('Solicitud de financiación inválida');
           }
-          const origin =
-            locationId === undefined
-              ? undefined
-              : await this.resolvePosOrigin(tx, orgId, actor, locationId, {
-                  requireStore: true,
-                });
+          // The site this financing will move is authorized here, whether the
+          // request names it or the organization default is implied: omitting
+          // the field never widens access (S3). A warehouse is not a till.
+          const origin = await this.resolvePosOriginForRequest(
+            tx,
+            orgId,
+            actor,
+            locationId,
+          );
           const user = await tx.user.findFirst({
             where: { id: actor.userId, active: true },
             select: { id: true },
@@ -813,13 +816,10 @@ export class LoansService {
           });
           const holds = [...quantities].sort(([a], [b]) => a.localeCompare(b));
           if (holds.length > 0) {
-            // T3c: the hold is a reservation at one site. An explicit origin was
-            // authorized above and is the only permitted site, so the default
-            // site is the same one; without it the hold goes to the organization
-            // default. The sole-principal gate above still decides whether an
-            // explicit origin is allowed at all.
-            const reserveSiteId =
-              origin?.locationId ?? (await resolveDefaultSiteWithin(tx, orgId));
+            // T3c: the hold is a reservation at one site, the one authorized
+            // above from the explicit origin or the implied organization
+            // default.
+            const reserveSiteId = origin.locationId;
             for (const [id, quantity] of holds) {
               const product = byId.get(id)!;
               if (
@@ -906,7 +906,9 @@ export class LoansService {
               initiationResult: result,
             },
           });
-          if (origin) {
+          // Only an explicit site is recorded as the intent's origin; a legacy
+          // request that omitted it keeps its stored shape.
+          if (locationId !== undefined) {
             await tx.posLoanSaleIntentOriginSite.create({
               data: { intentId, ...origin },
             });
@@ -1492,6 +1494,19 @@ export class LoansService {
       }
       throw error;
     }
+  }
+
+  private async resolvePosOriginForRequest(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    actor: RequestUser,
+    locationId?: string,
+  ) {
+    const siteId =
+      locationId ?? (await resolveDefaultSiteWithin(tx, organizationId));
+    return this.resolvePosOrigin(tx, organizationId, actor, siteId, {
+      requireStore: true,
+    });
   }
 
   private async resolvePosOrigin(

@@ -595,6 +595,23 @@ export class PurchaseOrdersService {
     return this.findOne(id, organizationId);
   }
 
+  private async resolveReceiveDestination(
+    tx: Prisma.TransactionClient,
+    actor: RequestUser | undefined,
+    userId: string,
+    organizationId: string,
+    locationId: string,
+  ) {
+    if (
+      !actor ||
+      actor.userId !== userId ||
+      actor.organizationId !== organizationId
+    ) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    return resolveWritableSiteWithin(tx, actor, locationId);
+  }
+
   async receive(
     id: string,
     dto: ReceivePurchaseOrderDto,
@@ -641,24 +658,35 @@ export class PurchaseOrdersService {
       // The whole batch lands at one site. T3g: an explicit destination only
       // needs the actor to be authorized for it — a receipt is not a sale, so a
       // warehouse is a valid destination too. A legacy request with no
-      // destination lands at the organization default site, so every receipt has
-      // a site balance.
+      // destination lands at the organization default site, under the same
+      // authorization: omitting the field never widens access (S3).
       let destinationId: string;
       if (locationId !== undefined) {
-        if (
-          actor?.userId !== userId ||
-          actor.organizationId !== organizationId
-        ) {
-          throw new ForbiddenException('Organization scope required');
-        }
-        const destination = await resolveWritableSiteWithin(
-          tx,
-          actor,
-          locationId,
-        );
-        destinationId = destination.locationId;
+        destinationId = (
+          await this.resolveReceiveDestination(
+            tx,
+            actor,
+            userId,
+            organizationId,
+            locationId,
+          )
+        ).locationId;
       } else {
-        destinationId = await resolveDefaultSiteWithin(tx, organizationId);
+        const impliedSiteId = await resolveDefaultSiteWithin(
+          tx,
+          organizationId,
+        );
+        destinationId = actor
+          ? (
+              await this.resolveReceiveDestination(
+                tx,
+                actor,
+                userId,
+                organizationId,
+                impliedSiteId,
+              )
+            ).locationId
+          : impliedSiteId;
       }
 
       // Lock the order before reading receipt quantities or changing inventory.
@@ -734,17 +762,11 @@ export class PurchaseOrdersService {
             updateData.costPrice = newUnitCost;
           }
 
-          const updated = await tx.product.updateMany({
-            where: { id: item.productId, version: currentVersion },
-            data: updateData,
-          });
-
-          if (updated.count === 0) {
-            throw new ConflictException(
-              'Modificación concurrente detectada sobre el producto',
-            );
-          }
-
+          // Lock order: the site row first, the aggregate second. The delta
+          // trigger updates "Product" from the same statement that moves
+          // "ProductStock", so every writer of both takes them in this order —
+          // sales, financing holds and product edits too. The version bump then
+          // only re-pins the optimistic-concurrency contract of product edits.
           const receipt = await applySiteStockDelta(tx, {
             organizationId,
             productId: item.productId,
@@ -755,6 +777,17 @@ export class PurchaseOrdersService {
           if (!receipt.applied) {
             // A receipt always raises availability, so this is the same product
             // race the aggregate compare-and-swap used to report.
+            throw new ConflictException(
+              'Modificación concurrente detectada sobre el producto',
+            );
+          }
+
+          const updated = await tx.product.updateMany({
+            where: { id: item.productId, version: currentVersion },
+            data: updateData,
+          });
+
+          if (updated.count === 0) {
             throw new ConflictException(
               'Modificación concurrente detectada sobre el producto',
             );

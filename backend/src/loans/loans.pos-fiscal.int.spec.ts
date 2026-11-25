@@ -195,6 +195,19 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
         currentNumber: 0,
       },
     });
+    // T3h: an operational membership starts with the organization's principal
+    // site. The product insert above opened it, after the membership existed.
+    const principalSite = await prisma.location.findFirstOrThrow({
+      where: { organizationId: organization.id, isDefault: true },
+      select: { id: true },
+    });
+    await prisma.membershipLocation.create({
+      data: {
+        userId: user.id,
+        organizationId: organization.id,
+        locationId: principalSite.id,
+      },
+    });
     return {
       organizationId: organization.id,
       customerId: customer.id,
@@ -217,7 +230,6 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
       data: { organizationId: active.organizationId, name: 'Foreign site' },
     });
     const grant = { userId, organizationId, locationId: principal.id };
-    await prisma.membershipLocation.create({ data: grant });
     const snapshot = async () => {
       const where = { organizationId };
       return {

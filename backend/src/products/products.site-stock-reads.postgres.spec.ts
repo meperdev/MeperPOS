@@ -41,7 +41,6 @@ interface Fixture {
   foreignOrganizationId: string;
   foreignSiteId: string;
   owner: RequestUser;
-  cashierUserId: string;
   cashier: RequestUser;
   /** Five units at the principal site, two of them reserved, minStock 5. */
   atPrincipal: SiteProduct;
@@ -242,7 +241,6 @@ const USER_SHAPE = { tokenVersion: 0, isSuperAdmin: false } as const;
           role: OrgRole.OWNER,
           ...USER_SHAPE,
         },
-        cashierUserId: cashier.id,
         cashier: {
           userId: cashier.id,
           email: cashier.email,
@@ -476,24 +474,19 @@ const USER_SHAPE = { tokenVersion: 0, isSuperAdmin: false } as const;
       expect(unknown).toBeInstanceOf(NotFoundException);
 
       // A restricted role reads only the sites an administrator assigned; the
-      // products read reuses that rule instead of deriving its own.
+      // products read reuses that rule instead of deriving its own. Every
+      // operational membership starts with the principal site (T3h), so the
+      // warehouse is the site this cashier does not hold.
       const unassigned = await controller
         .quickSearch(
           fixture.cashier,
           fixture.atPrincipal.sku,
-          fixture.principalSiteId,
+          fixture.warehouseId,
         )
         .then(() => undefined)
         .catch((error: unknown) => error);
       expect(unassigned).toBeInstanceOf(NotFoundException);
 
-      await prisma.membershipLocation.create({
-        data: {
-          userId: fixture.cashierUserId,
-          organizationId: fixture.organizationId,
-          locationId: fixture.principalSiteId,
-        },
-      });
       await expect(
         controller.quickSearch(
           fixture.cashier,

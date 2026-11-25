@@ -224,6 +224,15 @@ interface SiteFixture {
             locationId: origin.id,
           },
         ],
+        // T3h: the principal site is the baseline grant of every operational
+        // membership, so the explicit rows above may already be there.
+        skipDuplicates: true,
+      });
+      // The zero-assignment member keeps meaning "an administrator removed the
+      // baseline grant": the membership trigger installed it when the
+      // membership was created.
+      await prisma.membershipLocation.deleteMany({
+        where: { userId: bare.id },
       });
 
       const jwt = app.get(JwtService);

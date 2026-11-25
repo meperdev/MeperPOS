@@ -104,13 +104,8 @@ type Fixture = {
           role: OrgRole.CASHIER,
         },
       });
-      await prisma.membershipLocation.create({
-        data: {
-          userId: user.id,
-          organizationId: organization.id,
-          locationId: defaultSite.id,
-        },
-      });
+      // The principal-site grant is the membership baseline: the
+      // OrganizationUser trigger installed it above.
       const customer = await prisma.customer.create({
         data: {
           name: `${unique} customer`,
@@ -168,6 +163,7 @@ type Fixture = {
     const initiate = (
       fixture: Fixture,
       changes: { quantity?: number; locationId?: string } = {},
+      actor: RequestUser = fixture.actor,
     ) =>
       loans.initiateFromPos(
         {
@@ -187,8 +183,52 @@ type Fixture = {
             : { locationId: changes.locationId }),
         },
         fixture.organizationId,
-        fixture.actor,
+        actor,
       );
+
+    /**
+     * A cashier whose whole assignment is one site: the principal-site grant the
+     * membership baseline installs is removed, which is what an administrator
+     * replacing the set leaves behind.
+     */
+    async function restrictedCashier(
+      fixture: Fixture,
+      locationId: string,
+    ): Promise<RequestUser> {
+      const unique = `${label}-restricted-${randomUUID()}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `${unique}@t3c.test`,
+          password: 'not-a-real-password',
+          name: `T3c ${unique} cashier`,
+        },
+      });
+      await prisma.organizationUser.create({
+        data: {
+          userId: user.id,
+          organizationId: fixture.organizationId,
+          role: OrgRole.CASHIER,
+        },
+      });
+      await prisma.membershipLocation.deleteMany({
+        where: { userId: user.id },
+      });
+      await prisma.membershipLocation.create({
+        data: {
+          userId: user.id,
+          organizationId: fixture.organizationId,
+          locationId,
+        },
+      });
+      return {
+        userId: user.id,
+        email: user.email,
+        organizationId: fixture.organizationId,
+        role: OrgRole.CASHIER,
+        isSuperAdmin: false,
+        tokenVersion: 0,
+      };
+    }
 
     /** The invariant after every write: Product is its site rows' sum. */
     async function expectAggregateMatchesSites(productId: string) {
@@ -486,6 +526,52 @@ type Fixture = {
         stock: 0,
         reservedStock: 0,
       });
+      await expectAggregateMatchesSites(fixture.productId);
+    });
+
+    it('authorizes the implicit default site before holding stock', async () => {
+      const fixture = await tenant('implicit-grant', {
+        stock: 10,
+        extraSites: 1,
+      });
+      const [otherSiteId] = fixture.extraSiteIds;
+      // Assigned to another site only: the default site is not hers.
+      const cashier = await restrictedCashier(fixture, otherSiteId);
+      const snapshot = async () => ({
+        intents: await prisma.posLoanSaleIntent.count({
+          where: { organizationId: fixture.organizationId },
+        }),
+        loans: await prisma.moneyLoan.count({
+          where: { organizationId: fixture.organizationId },
+        }),
+        sites: await prisma.productStock.findMany({
+          where: { productId: fixture.productId },
+          orderBy: { locationId: 'asc' },
+        }),
+      });
+      const before = await snapshot();
+
+      await expect(initiate(fixture, {}, cashier)).rejects.toMatchObject({
+        status: 404,
+        message: 'Location not found',
+      });
+      await expect(snapshot()).resolves.toEqual(before);
+
+      // Once an administrator assigns the principal site, the legacy no-site
+      // request holds at the organization default exactly as before.
+      await prisma.membershipLocation.create({
+        data: {
+          userId: cashier.userId,
+          organizationId: fixture.organizationId,
+          locationId: fixture.defaultSiteId,
+        },
+      });
+      await expect(initiate(fixture, {}, cashier)).resolves.toMatchObject({
+        organizationId: fixture.organizationId,
+      });
+      await expect(
+        siteRowAt(fixture.productId, fixture.defaultSiteId),
+      ).resolves.toMatchObject({ stock: 10, reservedStock: 2 });
       await expectAggregateMatchesSites(fixture.productId);
     });
   },

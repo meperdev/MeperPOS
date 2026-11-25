@@ -895,7 +895,7 @@ describe('ProductsService conversion eligibility', () => {
     expect(result.stock).toBe(0);
     expect(result.availableStock).toBeNull();
     expect(state.product.version).toBe(3);
-    expect(events).toEqual(['query', 'cas', 'site', 'read', 'movement']);
+    expect(events).toEqual(['query', 'site', 'cas', 'read', 'movement']);
     expect(tx.inventoryLoanItem.findFirst).toHaveBeenCalledWith({
       where: {
         organizationId: 'org-1',
@@ -983,7 +983,7 @@ describe('ProductsService conversion eligibility', () => {
       stock: 5,
     });
     expect(result.stock).toBe(5);
-    expect(events).toEqual(['query', 'cas', 'site', 'read', 'movement']);
+    expect(events).toEqual(['query', 'site', 'cas', 'read', 'movement']);
     expect(state.movements[0].data).toMatchObject({
       type: 'ADJUSTMENT_IN',
       quantity: 5,
@@ -1005,7 +1005,7 @@ describe('ProductsService conversion eligibility', () => {
       const before = structuredClone(state);
       await expect(update()).rejects.toBeInstanceOf(ConflictException);
       expect(state).toEqual(before);
-      expect(events).toEqual(['query', 'cas']);
+      expect(events).toEqual(['query', 'site', 'cas']);
       expect(tx.product.findFirst).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
       expect(prisma.product.updateMany).not.toHaveBeenCalled();
@@ -1017,7 +1017,7 @@ describe('ProductsService conversion eligibility', () => {
     failMovement = true;
     const before = structuredClone(state);
     await expect(update()).rejects.toThrow('late movement failure');
-    expect(events).toEqual(['query', 'cas', 'site', 'read', 'movement']);
+    expect(events).toEqual(['query', 'site', 'cas', 'read', 'movement']);
     expect(state).toEqual(before);
     expect(prisma.product.updateMany).not.toHaveBeenCalled();
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();

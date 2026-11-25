@@ -19,6 +19,16 @@ jest.mock('../inventory/site-stock', () => ({
   resolveDefaultSiteWithin: jest.fn(() => Promise.resolve('site-default')),
 }));
 
+// The site authorization of the implicit default site is proven against real
+// PostgreSQL (`sales-site-stock.postgres.spec.ts`, `multisedes.independent`).
+// Here the sale keeps its own contract: the resolver accepts the site.
+jest.mock('../locations/authorized-site', () => ({
+  resolveWritableSiteWithin: jest.fn(
+    (_tx: unknown, _actor: unknown, locationId: string) =>
+      Promise.resolve({ organizationId: 'org-1', locationId }),
+  ),
+}));
+
 describe('SalesService', () => {
   let service: SalesService;
   const stockRow = () => ({ stock: 10, reservedStock: 0, version: 0 });

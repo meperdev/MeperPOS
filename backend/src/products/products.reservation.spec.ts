@@ -104,7 +104,17 @@ describe('ProductsService reservation foundation', () => {
     prisma.__defaultSite.mockReturnValue('site-1');
     prisma.__applySiteDelta.mockImplementation(applySiteDelta);
     prisma.$transaction.mockImplementation(
-      (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma),
+      async (callback: (tx: typeof prisma) => Promise<unknown>) => {
+        // A transaction: a rejected write restores the model's row, so the
+        // checks below see what a rollback would leave behind.
+        const before = { ...current };
+        try {
+          return await callback(prisma);
+        } catch (error) {
+          current = before;
+          throw error;
+        }
+      },
     );
     prisma.product.findFirst
       .mockImplementationOnce(() => Promise.resolve({ ...snapshot }))

@@ -196,6 +196,48 @@ function settle<T>(work: Promise<T>) {
       isSuperAdmin: false,
     });
 
+    /**
+     * A member whose whole assignment is one site: the principal-site grant the
+     * membership baseline installs is removed, which is what an administrator
+     * replacing the set leaves behind.
+     */
+    async function restrictedMember(tenant: Tenant, locationId: string) {
+      const unique = `${label}-member-${randomUUID()}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `${unique}@example.test`,
+          password: 'not-a-login-credential',
+          name: unique,
+        },
+      });
+      users.push(user.id);
+      await prisma.organizationUser.create({
+        data: {
+          organizationId: tenant.organizationId,
+          userId: user.id,
+          role: 'MEMBER',
+        },
+      });
+      await prisma.membershipLocation.deleteMany({
+        where: { userId: user.id },
+      });
+      await prisma.membershipLocation.create({
+        data: {
+          userId: user.id,
+          organizationId: tenant.organizationId,
+          locationId,
+        },
+      });
+      return {
+        userId: user.id,
+        email: user.email,
+        organizationId: tenant.organizationId,
+        role: 'MEMBER' as const,
+        tokenVersion: 0,
+        isSuperAdmin: false,
+      };
+    }
+
     const siteLedger = (productId: string) =>
       prisma.productStock.findMany({
         where: { productId },
@@ -653,6 +695,73 @@ function settle<T>(work: Promise<T>) {
           })
         ).qtyReceived,
       ).toBe(0);
+    });
+
+    it('authorizes the implicit destination before receiving', async () => {
+      const tenant = await createTenant();
+      const warehouse = await prisma.location.create({
+        data: { organizationId: tenant.organizationId, name: 'Bodega' },
+      });
+      const tracked = await product(tenant);
+      const purchaseOrder = await order(tenant, tracked.id);
+      const [item] = purchaseOrder.items;
+      // Assigned to the warehouse only: the default site is not his.
+      const member = await restrictedMember(tenant, warehouse.id);
+      const snapshot = async () => ({
+        ledger: await siteLedger(tracked.id),
+        aggregate: await aggregate(tracked.id),
+        order: await prisma.purchaseOrder.findUniqueOrThrow({
+          where: { id: purchaseOrder.id },
+          select: { status: true, receivedAt: true },
+        }),
+        movements: await prisma.inventoryMovement.count({
+          where: { organizationId: tenant.organizationId },
+        }),
+      });
+      const before = await snapshot();
+
+      const refused = await settle(
+        service.receive(
+          purchaseOrder.id,
+          { items: [{ itemId: item.id, qtyReceivedNow: 5 }] },
+          member.userId,
+          tenant.organizationId,
+          member,
+        ),
+      );
+      expect(refused).toMatchObject({
+        ok: false,
+        error: { status: 404, message: 'Location not found' },
+      });
+      await expect(snapshot()).resolves.toEqual(before);
+
+      // Once an administrator assigns the principal site, the legacy no-site
+      // receipt lands at the organization default exactly as before.
+      await prisma.membershipLocation.create({
+        data: {
+          userId: member.userId,
+          organizationId: tenant.organizationId,
+          locationId: tenant.defaultSiteId,
+        },
+      });
+      await expect(
+        service.receive(
+          purchaseOrder.id,
+          { items: [{ itemId: item.id, qtyReceivedNow: 5 }] },
+          member.userId,
+          tenant.organizationId,
+          member,
+        ),
+      ).resolves.toMatchObject({ status: 'RECEIVED' });
+      await expect(siteLedger(tracked.id)).resolves.toEqual([
+        {
+          locationId: tenant.defaultSiteId,
+          organizationId: tenant.organizationId,
+          stock: 8,
+          reservedStock: 0,
+        },
+      ]);
+      await expectAggregateIsSumOfSites(tracked.id);
     });
   },
 );

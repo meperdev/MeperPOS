@@ -111,19 +111,19 @@ Para verificarla desde `backend/`, usar una base desechable `meperpos_stock_rehe
 
 ### Ventas directas
 
-`POST /api/sales` admite `locationId` opcional. Si se envía, debe ser un texto no vacío; un número o `null` devuelve `400`. El servidor comprueba el permiso vigente en la misma transacción y acepta la venta cuando la sede es una **sucursal** a la que el usuario tiene acceso: cualquiera de las sucursales de la organización, no solo la principal. Una bodega responde `400`; una sede ajena o sin asignación responde `404`. Guarda la sede de origen junto con la venta y el movimiento, y descuenta el saldo de esa sede. Sin `locationId` se mantiene el comportamiento anterior y la venta se descuenta en la sede principal.
+`POST /api/sales` admite `locationId` opcional. Si se envía, debe ser un texto no vacío; un número o `null` devuelve `400`. El servidor comprueba el permiso vigente en la misma transacción y acepta la venta cuando la sede es una **sucursal** a la que el usuario tiene acceso: cualquiera de las sucursales de la organización, no solo la principal. Una bodega responde `400`; una sede ajena o sin asignación responde `404`. Guarda la sede de origen junto con la venta y el movimiento, y descuenta el saldo de esa sede. Sin `locationId` la venta se descuenta en la sede principal, pero solo si el usuario tiene acceso a ella: se aplica la misma comprobación de permiso que con una sede explícita y, si no la tiene, responde `404`. En ese caso la sede de origen no se guarda, como antes.
 
 Un reintento con el mismo contenido y clave devuelve la venta original. Si el reintento indica una sede, tiene que coincidir con la ya registrada: otra sede o una venta anterior sin sede devuelve `409` sin duplicar la venta ni cambiar el saldo. Una anulación de una venta atribuida registra la devolución en su sede original y comprueba los permisos vigentes, sin volver a exigir que sea la única. La respuesta de venta conserva sus campos anteriores.
 
 ### Financiación POS
 
-`POST /api/loans/pos-initiation` acepta `locationId` opcional con las mismas reglas que una venta directa: sucursal accesible, `400` para una bodega y `404` para una sede ajena. Si se envía, la reserva guarda su origen sin cambiar la cotización ni el JSON del reintento. Un reintento con sede distinta, o que agrega una sede a una financiación histórica sin atribución, devuelve `409` sin crear otra reserva. Omitir la sede mantiene el comportamiento anterior y reserva en la sede principal.
+`POST /api/loans/pos-initiation` acepta `locationId` opcional con las mismas reglas que una venta directa: sucursal accesible, `400` para una bodega y `404` para una sede ajena. Si se envía, la reserva guarda su origen sin cambiar la cotización ni el JSON del reintento. Un reintento con sede distinta, o que agrega una sede a una financiación histórica sin atribución, devuelve `409` sin crear otra reserva. Omitir la sede reserva en la sede principal con la misma comprobación de permiso: un usuario sin acceso a la sede principal recibe `404`.
 
 Cobrar o reversar un abono no mueve inventario. Completar la venta financiada consume la reserva y registra la sede guardada en la venta y su movimiento. Cancelar libera la reserva de esa sede, sin crear un movimiento. En esas dos operaciones se valida el permiso vigente sobre la sede de origen, sin exigir que siga siendo la única.
 
 ### Recepción de compras
 
-Cada llamada a `POST /api/purchase-orders/:id/receive` puede indicar un `locationId` de destino para la entrega actual. Si se envía, el servidor verifica el permiso vigente y lo acepta sin importar el tipo de sede: una bodega es un destino válido. El mismo destino queda en los movimientos de los productos con control de stock, no en la orden ni en el PDF del proveedor. Omitir `locationId` mantiene la recepción en la sede principal. Una entrega parcial no fija el destino de entregas futuras.
+Cada llamada a `POST /api/purchase-orders/:id/receive` puede indicar un `locationId` de destino para la entrega actual. Si se envía, el servidor verifica el permiso vigente y lo acepta sin importar el tipo de sede: una bodega es un destino válido. El mismo destino queda en los movimientos de los productos con control de stock, no en la orden ni en el PDF del proveedor. Omitir `locationId` recibe en la sede principal con la misma comprobación de permiso; un usuario sin acceso a ella recibe `404`. Una entrega parcial no fija el destino de entregas futuras.
 
 ### Transferencias entre sedes
 

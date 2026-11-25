@@ -333,15 +333,14 @@ describe('Purchase order documents — Integration', () => {
         organizationId,
         actor,
       );
-    for (const site of [principal.id, foreign.id]) {
-      await expect(receive(site)).rejects.toMatchObject({
-        status: 404,
-        message: 'Location not found',
-      });
-      expect(await snapshot()).toEqual(before);
-    }
-    const grant = { organizationId, userId, locationId: principal.id };
-    await prisma.membershipLocation.create({ data: grant });
+    // T3h: the membership baseline gives every operational member the
+    // principal site, so the remaining boundary is the tenant: another
+    // organization's site is refused.
+    await expect(receive(foreign.id)).rejects.toMatchObject({
+      status: 404,
+      message: 'Location not found',
+    });
+    expect(await snapshot()).toEqual(before);
     // T3g: a second site no longer reserves receipts for a sole principal site.
     // The batch below lands at the explicitly authorized store while the
     // organization already has two sites, and nothing is written before it.

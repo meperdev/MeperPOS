@@ -58,6 +58,17 @@ type Event = Row & {
   amount: Prisma.Decimal | null;
   reversesId: string | null;
 };
+
+// The in-memory transaction cannot answer the authorization SQL; the real
+// resolver is proven against PostgreSQL in `loans.site-stock.postgres.spec.ts`
+// and `multisedes.independent`. Here it accepts whatever site the request names
+// or the default site resolves to.
+jest.mock('../locations/authorized-site', () => ({
+  resolveWritableSiteWithin: jest.fn(
+    (_tx: unknown, _actor: unknown, locationId: string) =>
+      Promise.resolve({ organizationId: 'org', locationId }),
+  ),
+}));
 const initialLoan = () => ({
   id: 'loan',
   organizationId: 'org',
@@ -822,20 +833,33 @@ describe('POS financing through LoansService (unwired)', () => {
     expect(f.state().audits).toHaveLength(1);
   });
 
-  it.each(['OWNER', 'ADMIN', 'CASHIER', 'MEMBER', 'SUPER_ADMIN'] as const)(
-    'permits %s financing; global SUPER_ADMIN needs no membership',
+  it.each(['OWNER', 'ADMIN', 'CASHIER', 'MEMBER'] as const)(
+    'permits %s financing',
     async (role) => {
       const f = fixture();
-      const principal = actor(role);
-      if (role === 'SUPER_ADMIN') {
-        f.tx.organizationUser.findFirst.mockResolvedValue(null);
-        principal.organizationId = undefined;
-      }
-      await expect(f.initiate(request(), principal)).resolves.toMatchObject({
+      await expect(f.initiate(request(), actor(role))).resolves.toMatchObject({
         loanId: 'loan',
       });
     },
   );
+  it('permits a scoped SUPER_ADMIN financing and refuses one with no organization scope', async () => {
+    const f = fixture();
+    // A platform principal acting inside an organization it is scoped to keeps
+    // its organization-wide access, without a membership row.
+    f.tx.organizationUser.findFirst.mockResolvedValue(null);
+    await expect(
+      f.initiate(request(), actor('SUPER_ADMIN')),
+    ).resolves.toMatchObject({
+      loanId: 'loan',
+    });
+    // Without a scope there is no organization to authorize the implied site
+    // in, exactly like any other site operation.
+    const global = actor('SUPER_ADMIN');
+    global.organizationId = undefined;
+    await expect(
+      f.initiate({ ...request(), requestKey: 'pos-key-global' }, global),
+    ).rejects.toThrow(ForbiddenException);
+  });
   it.each(['inventory', 'missing', 'scope', 'foreign'])(
     'denies %s actor/scope before effects',
     async (kind) => {

@@ -461,16 +461,17 @@ export class SalesService {
     const runSaleTransaction = () =>
       this.prisma.$transaction(
         async (tx) => {
-          const origin =
-            locationId === undefined
-              ? undefined
-              : await this.resolveSaleLocation(
-                  tx,
-                  user,
-                  userId,
-                  organizationId,
-                  locationId,
-                );
+          // T3g: the site that fulfils the sale, authorized inside this
+          // transaction whether the request names it or the organization
+          // default is implied. S3 applies the same grant to both: omitting the
+          // field does not widen anyone's access.
+          const origin = await this.resolveSaleLocation(
+            tx,
+            user,
+            userId,
+            organizationId,
+            locationId,
+          );
           const { number: saleNumber } = await this.sequenceService.nextNumber(
             tx,
             organizationId,
@@ -478,11 +479,10 @@ export class SalesService {
             year,
           );
 
-          // T3b: the site that fulfils the sale and carries the balance it
-          // takes from. Resolved once, inside this transaction: the explicit
-          // authorized origin when the request names one, else the
-          // organization default site. A sale of services never needs it.
-          let saleSiteId: string | undefined = origin?.locationId;
+          // T3b: the balance the sale takes from. The explicit authorized
+          // origin when the request names one, else the authorized
+          // organization default site.
+          const saleSiteId = origin.locationId;
 
           const createdSale = await tx.sale.create({
             data: {
@@ -503,7 +503,9 @@ export class SalesService {
             },
           });
 
-          if (origin) {
+          // Only an explicit site is recorded as the sale's origin. A legacy
+          // request that omitted it keeps its stored shape: no origin row.
+          if (locationId !== undefined) {
             await tx.saleOriginSite.create({
               data: { saleId: createdSale.id, ...origin },
             });
@@ -543,7 +545,6 @@ export class SalesService {
               // fulfils the sale, and that row is what refuses an over-draw.
               // The database trigger keeps `Product.stock` as the
               // organization-wide aggregate every report still reads.
-              saleSiteId ??= await resolveDefaultSiteWithin(tx, organizationId);
               const applied = await applySiteStockDelta(tx, {
                 organizationId,
                 productId: saleItem.productId,
@@ -747,19 +748,33 @@ export class SalesService {
     }
   }
 
-  private resolveSaleLocation(
+  private async resolveSaleLocation(
     tx: Prisma.TransactionClient,
     user: RequestUser | undefined,
     userId: string,
     organizationId: string,
-    locationId: string,
+    locationId?: string,
   ) {
-    if (user?.userId !== userId || user.organizationId !== organizationId) {
+    // The explicit site, else the organization default: both are the site the
+    // sale writes to, so both take the same authorization. Omitting the field
+    // never widens access (S3).
+    const siteId =
+      locationId ?? (await resolveDefaultSiteWithin(tx, organizationId));
+    if (!user) {
+      // Legacy in-process callers (seeds, imports, older tests) do not carry an
+      // authenticated actor. The HTTP route always does, and only an actor can
+      // be authorized for an explicit site.
+      if (locationId !== undefined) {
+        throw new ForbiddenException('Organization scope required');
+      }
+      return { organizationId, locationId: siteId };
+    }
+    if (user.userId !== userId || user.organizationId !== organizationId) {
       throw new ForbiddenException('Organization scope required');
     }
     // T3g: any store the actor is authorized to write is a valid POS origin;
     // a warehouse is not a till.
-    return resolveWritableSiteWithin(tx, user, locationId, {
+    return resolveWritableSiteWithin(tx, user, siteId, {
       requireStore: true,
     });
   }

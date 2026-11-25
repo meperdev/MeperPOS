@@ -13,9 +13,10 @@ import { Prisma } from '@prisma/client';
  *
  * Callers are expected to:
  *
- *  1. authorize the site inside the same transaction (`resolveWritableSiteWithin`
- *     for an explicit site, `resolveDefaultSiteWithin` for the organization
- *     default) before writing;
+ *  1. authorize the site inside the same transaction with
+ *     `resolveWritableSiteWithin` before writing — also when the site was
+ *     defaulted with `resolveDefaultSiteWithin`, which only finds the default
+ *     site and never authorizes it;
  *  2. keep their own error for `{ applied: false }`, typically their existing
  *     "Insufficient stock" rejection. The helper carries no user-facing copy.
  *
