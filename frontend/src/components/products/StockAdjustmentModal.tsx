@@ -111,6 +111,9 @@ export function StockAdjustmentModal({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Portaled to the body, but React still bubbles this submit through the
+    // component tree to the product editor's <form> it is opened from.
+    event.stopPropagation();
     if (!canSubmit || !site) return;
 
     const signedQuantity = direction === "in" ? quantity : -effectiveQuantity;

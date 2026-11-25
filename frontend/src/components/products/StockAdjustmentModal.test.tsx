@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ProductSiteStock } from "@/hooks/useProductStock";
 
@@ -158,6 +158,35 @@ describe("StockAdjustmentModal", () => {
     ).toBeDisabled();
   });
 
+  it("never submits the product editor form it is opened from", async () => {
+    // The dialog is portaled to the body, but React still bubbles its submit
+    // through the component tree to the editor's <form>, which used to save
+    // the product with a stale version at the same time.
+    const user = userEvent.setup();
+    adjustMutateAsync.mockResolvedValue({});
+    const outerSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    render(
+      <form onSubmit={outerSubmit}>
+        <StockAdjustmentModal
+          isOpen
+          onClose={vi.fn()}
+          productId="p-1"
+          productName="Café molido"
+          sites={[principal, warehouse]}
+        />
+      </form>,
+    );
+    fireEvent.change(within(dialog()).getByLabelText(/Motivo/), {
+      target: { value: "Conteo físico" },
+    });
+    await user.click(
+      within(dialog()).getByRole("button", { name: "Guardar ajuste" }),
+    );
+
+    expect(adjustMutateAsync).toHaveBeenCalledTimes(1);
+    expect(outerSubmit).not.toHaveBeenCalled();
+  });
+
   it("requires a motive and a whole number of units", async () => {
     const user = userEvent.setup();
     renderModal();
@@ -193,7 +222,11 @@ describe("StockAdjustmentModal", () => {
       />,
     );
 
-    await user.type(within(dialog()).getByLabelText(/Motivo/), "Merma");
+    // Set directly: the dialog moves focus to its first field on the next
+    // animation frame, which can swallow keystrokes typed before it.
+    fireEvent.change(within(dialog()).getByLabelText(/Motivo/), {
+      target: { value: "Merma" },
+    });
     await user.click(
       within(dialog()).getByRole("button", { name: "Guardar ajuste" }),
     );

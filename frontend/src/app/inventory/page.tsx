@@ -521,10 +521,19 @@ function InventoryContent() {
 
       if (editingProduct) {
         const nextImage = imageUrl ?? null;
+        // An untouched stock is left out: the copy the editor opened with can be
+        // older than a per-site adjustment made meanwhile, and sending it back
+        // would undo that move (or be refused in a multi-site organization).
+        const { stock: editedStock, ...withoutStock } = editableFields;
+        const stockUnchanged =
+          editableFields.tracksStock &&
+          editingProduct.tracksStock !== false &&
+          editingProduct.type !== "SERVICE" &&
+          editedStock === editingProduct.stock;
         await updateProduct.mutateAsync({
           id: editingProduct.id,
           data: {
-            ...editableFields,
+            ...(stockUnchanged ? withoutStock : editableFields),
             ...(nextImage !== editingProduct.imageUrl
               ? { imageUrl: nextImage ?? "" }
               : {}),
