@@ -47,6 +47,11 @@ La regla es explícita y no se hereda sola:
 - **El resto de los roles** accede solo a las sedes que un administrador le
   asignó (`MembershipLocation`), una por una. Cero asignaciones significa cero
   sedes visibles, nunca todas.
+- **Una membresía operativa nueva arranca en la sede principal.** Al crear un
+  `CASHIER`, `MEMBER` o `INVENTORY_USER`, la base le asigna la sede principal de
+  su organización (y lo mismo si un `OWNER`/`ADMIN` sin ninguna asignación baja a
+  uno de esos roles). Es la línea base que S3 promete: el acceso a la sede
+  principal se conserva y cada sede adicional la asigna un administrador.
 - **Crear una sede no amplía el acceso de nadie.** La sede nueva nace sin
   asignaciones y un administrador tiene que habilitarla por persona.
 

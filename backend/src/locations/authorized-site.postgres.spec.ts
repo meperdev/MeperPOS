@@ -79,7 +79,12 @@ const databaseUrl = process.env.T15_TEST_DATABASE_URL;
       await prisma.organizationUser.create({
         data: { ...membershipKey, role: OrgRole.CASHIER },
       });
-      await prisma.membershipLocation.create({ data: grant });
+      // T3h: the membership insert already grants the organization's principal
+      // site, which is the site under test here; the explicit grant is not
+      // written again.
+      await expect(
+        prisma.membershipLocation.count({ where: grant }),
+      ).resolves.toBe(1);
     });
 
     afterAll(async () => {
@@ -236,6 +241,9 @@ const databaseUrl = process.env.T15_TEST_DATABASE_URL;
       const rollback = new Error('Roll back authorization fixtures');
       await expect(
         inTransaction(async (tx) => {
+          // T3h: creating the teammate's operational membership already grants
+          // it the principal site, so removing the actor's own grant leaves the
+          // same site in another membership of the same organization.
           await tx.organizationUser.create({
             data: {
               organizationId: org,
@@ -244,15 +252,17 @@ const databaseUrl = process.env.T15_TEST_DATABASE_URL;
             },
           });
           await tx.membershipLocation.deleteMany({ where: grant });
-          await tx.membershipLocation.create({
-            data: { ...grant, userId: platform },
-          });
           await expect(
             resolveWritableSiteWithin(tx, actor, site),
           ).rejects.toMatchObject({
             status: 404,
             message: 'Location not found',
           });
+          expect(
+            await tx.membershipLocation.count({
+              where: { ...grant, userId: platform },
+            }),
+          ).toBe(1);
 
           await tx.membershipLocation.create({ data: grant });
           await tx.user.update({

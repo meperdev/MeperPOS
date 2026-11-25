@@ -329,13 +329,15 @@ describe('Location access (HTTP integration)', () => {
   };
 
   it('scopes the cashier to explicit assignments in the selected membership, even with the same token', async () => {
-    await get(cashier).expect(200, []);
+    // T3h: a new operational membership starts with its own organization's
+    // principal site — and with nothing else.
+    await get(cashier).expect(200, [a]);
     await assign(admin, cashierId, [a.id]).expect(200, { locationIds: [a.id] });
     await get(cashier).expect(200, [a]);
     await get(cashier, a.id).expect(200, a);
     const denied = await get(cashier, b.id).expect(404);
     expect(denied.body).toMatchObject({ message: 'Location not found' });
-    await get(cashierInOtherOrg).expect(200, []);
+    await get(cashierInOtherOrg).expect(200, [other]);
 
     await assign(admin, cashierId, [a.id, b.id]).expect(200, {
       locationIds: [a.id, b.id],
@@ -356,7 +358,9 @@ describe('Location access (HTTP integration)', () => {
     await get(admin, a.id).expect(200, a);
     await get(admin, b.id).expect(200, b);
     await get(admin, other.id).expect(404);
-    await get(adminAsCashier).expect(200, []);
+    // Ana's cashier membership in the other organization holds that tenant's
+    // principal site, never the sites of the organization she administers.
+    await get(adminAsCashier).expect(200, [other]);
     await assign(admin, adminId, [a.id]).expect(409);
   });
 
@@ -369,7 +373,7 @@ describe('Location access (HTTP integration)', () => {
     expect(foreign.body).toMatchObject({ message: 'Location not found' });
     await assign(admin, cashierId, [a.id, a.id]).expect(400);
     await get(cashier).expect(200, [a]);
-    await get(cashierInOtherOrg).expect(200, []);
+    await get(cashierInOtherOrg).expect(200, [other]);
   });
 
   it('nominates the reachable principal store and lists stores only', async () => {
@@ -397,8 +401,8 @@ describe('Location access (HTTP integration)', () => {
       checkoutLocationId: a.id,
     });
     await get(cashierInOtherOrg, 'pos-context').expect(200, {
-      locations: [],
-      checkoutLocationId: null,
+      locations: [other],
+      checkoutLocationId: other.id,
     });
   });
 
