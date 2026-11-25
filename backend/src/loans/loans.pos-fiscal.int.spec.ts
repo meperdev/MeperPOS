@@ -228,6 +228,9 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
         saleOrigins: await prisma.saleOriginSite.count({ where }),
         movements: await prisma.inventoryMovement.count({ where }),
         siteBalances: await prisma.productStock.count({ where }),
+        siteRow: await prisma.productStock.findFirstOrThrow({
+          where: { productId, organizationId },
+        }),
         product: await prisma.product.findUniqueOrThrow({
           where: { id: productId },
           select: { stock: true, reservedStock: true },
@@ -257,21 +260,15 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     const held = await snapshot();
     expect(held.product).toEqual({ stock: 10, reservedStock: 4 });
     expect(held.siteBalances).toBe(1);
-    // T3a: the product keeps one default-site row equal to the balance it was
-    // created with; the hold still reserves on the aggregate only.
-    expect(
-      await prisma.productStock.findMany({
-        where: { productId, organizationId },
-      }),
-    ).toEqual([
-      {
-        productId,
-        locationId: principal.id,
-        organizationId,
-        stock: held.product.stock,
-        reservedStock: 0,
-      },
-    ]);
+    // T3c: both holds reserved at the origin site, and the aggregate is exactly
+    // the sum of its site rows.
+    expect(held.siteRow).toEqual({
+      productId,
+      locationId: principal.id,
+      organizationId,
+      stock: 10,
+      reservedStock: 4,
+    });
     const { locationId: _locationId, ...omitted } = dto;
     await expect(initiate(dto)).resolves.toEqual(finance);
     await expect(
@@ -324,6 +321,15 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     ).toEqual({ type: 'SALE', quantity: -2, locationId: principal.id });
     const completed = await snapshot();
     expect(completed.product).toEqual({ stock: 8, reservedStock: 2 });
+    // T3c: completion consumed both the stock and the reservation at the same
+    // origin site, and the aggregate still equals its site rows.
+    expect(completed.siteRow).toEqual({
+      productId,
+      locationId: principal.id,
+      organizationId,
+      stock: 8,
+      reservedStock: 2,
+    });
     await expect(finish()).resolves.toEqual(result);
     expect(await snapshot()).toEqual(completed);
 
@@ -348,10 +354,12 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
       data: { role: OrgRole.ADMIN },
     });
     await expect(cancel()).resolves.toMatchObject({ status: 'CANCELLED' });
+    // T3c: the release freed the second intent's reservation at the same site.
     expect(await snapshot()).toEqual({
       ...completed,
       events: completed.events + 1,
       product: { stock: 8, reservedStock: 0 },
+      siteRow: { ...completed.siteRow, reservedStock: 0 },
     });
     const reservations = await prisma.posLoanSaleReservation.findMany({
       where: { organizationId },
@@ -604,6 +612,9 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     const stockBefore = await prisma.product.findFirstOrThrow({
       where: { id: active.productId },
     });
+    const siteRowBefore = await prisma.productStock.findFirstOrThrow({
+      where: { productId: active.productId },
+    });
     const salesBefore = await prisma.sale.count({
       where: { customerId: active.customerId },
     });
@@ -653,6 +664,12 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
       stockBefore.reservedStock,
       stockBefore.version,
     ]);
+    // T3c: the cancelled transaction left the site row untouched too.
+    await expect(
+      prisma.productStock.findFirstOrThrow({
+        where: { productId: active.productId },
+      }),
+    ).resolves.toEqual(siteRowBefore);
   });
 
   it('keeps refusing an inactive actor before any write', async () => {
