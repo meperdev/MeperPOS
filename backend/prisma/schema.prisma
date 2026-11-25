@@ -80,6 +80,8 @@ model Organization {
   whatsAppLinkChallenges WhatsAppLinkChallenge[]
   productStockAlerts ProductStockAlert[]
   productStockAlertEvents ProductStockAlertEvent[]
+  stockTransfers     StockTransfer[]
+  stockTransferItems StockTransferItem[]
 
   @@index([status, trialEndsAt])
 }
@@ -105,6 +107,8 @@ model Location {
   movements      InventoryMovement[]
   saleOrigins    SaleOriginSite[]
   posLoanSaleIntentOrigins PosLoanSaleIntentOriginSite[]
+  transfersFrom  StockTransfer[] @relation("StockTransferOrigin")
+  transfersTo    StockTransfer[] @relation("StockTransferDestination")
 
   // The partial unique index for the default site and the case-insensitive
   // per-organization name index are defined in SQL.
@@ -435,6 +439,9 @@ model User {
   moneyLoanEvents    MoneyLoanEvent[]    @relation("MoneyLoanEventCreatedBy")
   inventoryLoansCreated InventoryLoan[] @relation("InventoryLoanCreatedBy")
   inventoryLoanEvents InventoryLoanEvent[] @relation("InventoryLoanEventCreatedBy")
+  stockTransfersCreated StockTransfer[] @relation("StockTransferCreatedBy")
+  stockTransfersReceived StockTransfer[] @relation("StockTransferReceivedBy")
+  stockTransfersCancelled StockTransfer[] @relation("StockTransferCancelledBy")
 }
 
 model OrganizationUser {
@@ -562,6 +569,7 @@ model Product {
   stockAlerts         ProductStockAlert[]
   stockAlertEvents    ProductStockAlertEvent[]
   locationStocks      ProductStock[]
+  transferItems       StockTransferItem[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, sku])
@@ -584,6 +592,65 @@ model ProductStock {
 
   @@id([productId, locationId])
   @@index([locationId, organizationId])
+}
+
+/// A dispatch of tracked stock from one site to another inside one tenant.
+/// The stock leaves the organization aggregate while the transfer is in transit
+/// and returns to it at the destination when it is received.
+enum StockTransferStatus {
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+model StockTransfer {
+  id             String              @id @default(uuid())
+  /// Consecutive per organization, allocated from "OrganizationSequence".
+  number         Int
+  organizationId String
+  fromLocationId String
+  toLocationId   String
+  status         StockTransferStatus @default(IN_TRANSIT)
+  notes          String?
+  createdById    String?
+  createdAt      DateTime            @default(now())
+  receivedAt     DateTime?
+  receivedById   String?
+  cancelledAt    DateTime?
+  cancelledById  String?
+  cancelReason   String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Both ends must be sites of the caller's tenant: the composite foreign key
+  // carries the organization, so a cross-tenant pair is unrepresentable.
+  fromLocation Location @relation("StockTransferOrigin", fields: [fromLocationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
+  toLocation Location @relation("StockTransferDestination", fields: [toLocationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
+  createdBy User? @relation("StockTransferCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  receivedBy User? @relation("StockTransferReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  cancelledBy User? @relation("StockTransferCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  items StockTransferItem[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, number])
+  @@index([organizationId, status, createdAt])
+  @@index([fromLocationId, organizationId])
+  @@index([toLocationId, organizationId])
+}
+
+model StockTransferItem {
+  id             String @id @default(uuid())
+  transferId     String
+  organizationId String
+  productId      String
+  quantity       Int
+
+  transfer StockTransfer @relation(fields: [transferId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+  // A line is history: deleting the product must not erase what was moved.
+  product Product @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([transferId, productId])
+  @@index([productId, organizationId])
 }
 
 model InventoryMovement {
@@ -1369,6 +1436,11 @@ enum MovementType {
   RETURN
   LOAN_DELIVERY
   LOAN_RETURN
+  /// Stock left a site because of a transfer that is now in transit.
+  TRANSFER_OUT
+  /// Stock entered a site because of a transfer (a receipt, or a cancellation
+  /// returning it to the origin).
+  TRANSFER_IN
 }
 
 enum CustomerSegment {

@@ -389,6 +389,22 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | /api/locations/:id | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
 | /api/locations/:id | PATCH | OWNER, ADMIN, SUPER_ADMIN | selected org; the principal site stays a store | backend/src/locations/locations.http.int.spec.ts |
 
+## transfers
+
+A transfer moves tracked stock between two sites of the same organization. Both requests that change
+its fate (receipt and cancellation) claim the document row first, so exactly one of two competing
+requests wins and the other answers 409. Every write is scoped by the caller's organization, the source
+and destination site are authorized inside the inventory transaction, and a restricted membership only
+reads documents that touch a site it was assigned.
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/transfers | POST | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; source site authorized in the transaction, destination must be a site of the same organization | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers | GET | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; restricted memberships only see transfers touching an assigned site | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers/:id | GET | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; restricted memberships only see transfers touching an assigned site | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers/:id/receive | POST | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; destination site authorized in the transaction | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers/:id/cancel | POST | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; origin site authorized in the transaction | backend/src/transfers/transfers.http.int.spec.ts |
+
 ## users
 
 | Route | Method | Role(s) | Org-scope | Test reference |
