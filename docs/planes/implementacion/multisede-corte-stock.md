@@ -165,6 +165,18 @@ T3G_TEST_DATABASE_URL="$TEST_DATABASE_URL" \
 
 Debe pasar completa. Contra una copia **previa** a `20261125150000_product_stock_guard` la escritura directa se acepta y las comprobaciones de rechazo fallan: eso es el resultado esperado antes de aplicar la migración, no un defecto. La migración toma `Product` en `SHARE ROW EXCLUSIVE` antes de crear el disparador, con el mismo límite de 5 segundos por bloqueo.
 
+## Ensayo de actualización antes de desplegar
+
+El corte completo se puede ensayar sobre una base desechable, sin tocar datos reales. El script `backend/test/migrations/multisedes-upgrade.rehearse.sh` despliega la cadena de migraciones anterior al feature extraída de `origin/master`, inserta datos heredados (dos organizaciones, productos con saldo y reservas —incluido cero, un servicio, uno inactivo y un saldo negativo—, una membresía por rol y un préstamo de inventario abierto con su reserva), guarda un checksum de `Product(id, stock, reservedStock)` y de las membresías, aplica la cadena de la rama y verifica que el saldo no cambió y que la migración no amplió permisos: una fila de `ProductStock` en la sede principal por producto, igual a `Product`; exactamente la sede principal asignada a cada membresía operativa y ninguna a dueños ni administradores; todas las sedes creadas como sucursal; y todas las migraciones terminadas.
+
+```bash
+createdb -h 127.0.0.1 -p 55440 -U postgres meperpos_stock_rehearsal_release_upgrade
+backend/test/migrations/multisedes-upgrade.rehearse.sh \
+  'postgresql://postgres@127.0.0.1:55440/meperpos_stock_rehearsal_release_upgrade?schema=public'
+```
+
+El script se niega a correr contra cualquier base cuyo nombre no empiece con `meperpos_stock_rehearsal_release` o que escuche en el puerto 5432, exige `?schema=public` y pide una base vacía: cada corrida necesita una base nueva. Termina con código distinto de cero y con el diff de los productos afectados si un saldo o una asignación cambió; el directorio temporal con la cadena base extraída queda como evidencia. Si falla, no desplegar.
+
 ## Corte final: estado, despliegue y vuelta atrás
 
 **Estado final.** `ProductStock` es la fuente de verdad y `Product.stock`/`reservedStock` son su agregado de organización, mantenido por disparadores y protegido por el cerrojo. Ya no existe ninguna compuerta de "única sede principal": una venta o una financiación se acepta en cualquier sucursal autorizada, una recepción o una transferencia en cualquier sede autorizada, y `checkoutLocationId` solo sugiere una sucursal. Los reportes, exportaciones y alertas siguen leyendo `Product`, es decir el total de la organización; el detalle por sede en reportes no forma parte de esta entrega.
@@ -172,15 +184,15 @@ Debe pasar completa. Contra una copia **previa** a `20261125150000_product_stock
 **Antes de desplegar.** Todo en una sola ventana:
 
 1. Pausar las escrituras de inventario (ventas, financiación POS, recepción de compras, transferencias, préstamos, edición de productos, importaciones y backfill) y las altas de organizaciones, usuarios y membresías. Esperar a que terminen las transacciones en curso.
-2. Correr el ensayo de solo lectura de este documento sobre una copia verificable, **antes** de aplicar `20261125120000_product_stock_authority`: exige `ProductStock` vacía y comprueba producto por producto que el saldo y las reservas se pueden traspasar. Si falla, no hay corte.
+2. Correr el ensayo de solo lectura de este documento sobre una copia verificable, **antes** de aplicar `20261125120000_product_stock_authority`: exige `ProductStock` vacía y comprueba producto por producto que el saldo y las reservas se pueden traspasar. Si falla, no hay corte. Antes de eso, correr el ensayo de actualización de «Ensayo de actualización antes de desplegar»: es el que prueba la cadena completa de la rama sobre una base anterior, sin mover saldos ni ampliar accesos.
 3. Comprobar el precheck de nombres de sede repetidos **antes** de `20261125130000_location_type`: esa migración crea el índice único `(organizationId, lower(name))`, así que dos sedes de la misma organización que solo difieran en mayúsculas o espacios lo hacen fallar. Detectarlas y renombrarlas antes de desplegar:
    ```sql
    SELECT "organizationId", lower(btrim("name")) AS repeated, array_agg("id") AS ids
    FROM "Location" GROUP BY 1, 2 HAVING count(*) > 1;
    ```
-4. Aplicar **todas** las migraciones de la entrega juntas, con `prisma migrate deploy`. Están ordenadas por marca de tiempo y no se aplican por separado: `20261125120000_product_stock_authority`, `20261125130000_location_type`, `20261125140000_stock_transfers` y `20261125150000_product_stock_guard`. El cerrojo va al final a propósito; aplicarlo antes del último escritor rompería las escrituras que todavía pasaban por `Product`.
+4. Aplicar **todas** las migraciones de la entrega juntas, con `prisma migrate deploy`. Están ordenadas por marca de tiempo y no se aplican por separado: `20261125120000_product_stock_authority`, `20261125130000_location_type`, `20261125140000_stock_transfers`, `20261125150000_product_stock_guard`, `20261125160000_membership_principal_grant`, `20261125170000_default_site_trigger_any_conflict` y `20261125180000_location_contact` (además de las de sedes, accesos y atribución de fechas `20261118…`–`20261123…` que traiga la misma entrega). El cerrojo va al final a propósito; aplicarlo antes del último escritor rompería las escrituras que todavía pasaban por `Product`.
 5. Activar la versión nueva del backend y después la del frontend.
-6. Comprobar que cada usuario operativo que cobra tiene su sede asignada (`PUT /api/users/:id/locations`, o la pantalla de equipo): sin asignación el POS le responde "No tienes sedes asignadas" y no puede cobrar, y el cobro con `locationId` se autoriza contra esa asignación. Recién entonces reabrir las escrituras y las altas.
+6. Comprobar las asignaciones: `20261125160000_membership_principal_grant` da la sede principal a cada usuario operativo que no tenía ninguna, y a los que se creen después. Las sedes adicionales las asigna un administrador (`PUT /api/users/:id/locations` o la pantalla de equipo); el cobro, con o sin `locationId`, se autoriza contra esa asignación. Recién entonces reabrir las escrituras y las altas.
 
 **Comprobaciones después del despliegue.** Con la aplicación ya en la versión nueva: iniciar sesión como dueño, abrir el POS y verificar que lista las sucursales; cobrar una venta en una sucursal distinta de la principal y comprobar que se descuenta esa sede y no la principal (`SELECT * FROM "ProductStock" WHERE "productId" = …`); recibir una compra en una bodega; despachar y recibir una transferencia entre dos sedes; y confirmar que `SELECT p."stock" - coalesce(sum(s."stock"), 0) FROM "Product" p LEFT JOIN "ProductStock" s ON s."productId" = p."id" GROUP BY p."id"` devuelve solo ceros. En los reportes, el total de la organización no debe cambiar por una transferencia.
 
