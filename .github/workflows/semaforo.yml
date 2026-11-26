@@ -49,6 +49,10 @@ jobs:
         continue-on-error: true
 
       - name: Label the pull request
+        # GitHub creates this token for every run but never exports it on its
+        # own; run.mjs reads it from the environment and skips without it.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # `|| true` and continue-on-error: a failure here is never a red X.
         run: node .github/semaforo/run.mjs || echo "::warning title=semaforo::semaforo did not finish, nothing was changed"
         continue-on-error: true
