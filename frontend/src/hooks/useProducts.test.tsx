@@ -114,6 +114,98 @@ describe("useProducts site scope", () => {
   });
 });
 
+describe("useProducts site assortment", () => {
+  beforeEach(() => {
+    client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    wrapper = ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    vi.mocked(api.get).mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    client.clear();
+  });
+
+  it("carries the assortment switch with the requested site and keys the query by it", async () => {
+    vi.mocked(api.get).mockResolvedValue(respond(page([{ id: "p1" }])));
+
+    const { result } = renderHook(
+      () =>
+        useProducts({
+          page: 1,
+          limit: 3,
+          locationId: "site-a",
+          carriedAtSite: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
+    expect(api.get).toHaveBeenCalledWith("/products", {
+      page: 1,
+      limit: 3,
+      locationId: "site-a",
+      carriedAtSite: true,
+    });
+    expect(
+      client
+        .getQueryCache()
+        .findAll({ queryKey: ["products"] })
+        .map((query) => query.queryKey),
+    ).toEqual([
+      ["products", { page: 1, limit: 3, locationId: "site-a", carriedAtSite: true }],
+    ]);
+  });
+
+  it("sends the whole catalog for the same site when the switch is off", async () => {
+    vi.mocked(api.get).mockResolvedValue(respond(page()));
+
+    const { result } = renderHook(
+      () =>
+        useProducts({
+          page: 1,
+          limit: 3,
+          locationId: "site-a",
+          carriedAtSite: false,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(api.get).toHaveBeenCalledWith("/products", {
+      page: 1,
+      limit: 3,
+      locationId: "site-a",
+      carriedAtSite: false,
+    });
+  });
+
+  it("never shows the site assortment while the whole catalog loads", async () => {
+    vi.mocked(api.get)
+      .mockResolvedValueOnce(respond(page([{ id: "carried-product" }])))
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    const { result, rerender } = renderHook(
+      ({ carriedAtSite }: { carriedAtSite: boolean }) =>
+        useProducts({ page: 1, limit: 3, locationId: "site-a", carriedAtSite }),
+      { wrapper, initialProps: { carriedAtSite: true } },
+    );
+
+    await waitFor(() =>
+      expect(result.current.data?.data).toEqual([{ id: "carried-product" }]),
+    );
+
+    rerender({ carriedAtSite: false });
+
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.isPlaceholderData).toBe(false);
+  });
+});
+
 describe("useSearchProducts site scope", () => {
   beforeEach(() => {
     client = new QueryClient({

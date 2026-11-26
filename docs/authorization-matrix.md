@@ -283,7 +283,7 @@ and only receives stock, loans and tasks.
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/products | POST | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
-| /api/products | GET | any org role | org-scoped | backend/src/products/products.service.int.spec.ts |
+| /api/products | GET | any org role | org-scoped; optional `locationId` reads one accessible site (404 when foreign/unassigned); `carriedAtSite=true` narrows it to the products that site carries (400 without `locationId`; pinned by products.site-assortment.postgres.spec.ts) | backend/src/products/products.service.int.spec.ts |
 | /api/products/low-stock | GET | ADMIN, MEMBER, INVENTORY_USER | org-scoped | backend/src/products/products.low-stock-roles.spec.ts |
 | /api/products/search | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/products/products.controller.spec.ts |
 | /api/products/quick-search | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/products/products.controller.spec.ts |

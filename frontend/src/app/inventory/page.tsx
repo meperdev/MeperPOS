@@ -36,6 +36,8 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import {
   FilterBar,
+  FilterGroup,
+  FilterOptionButton,
 } from "@/components/ui/FilterBar";
 import {
   Table,
@@ -122,6 +124,12 @@ function InventoryContent() {
   // T22: the stock columns follow one site when the caller picks one. `""` is
   // the organization aggregate, which is what this screen has always shown.
   const [siteFilter, setSiteFilter] = useState("");
+  // T25: a site opens on the products it actually carries, not the whole
+  // catalog wearing that site's numbers. "Todo el catálogo" reveals the rest so
+  // they can be stocked from here.
+  const [siteAssortment, setSiteAssortment] = useState<"carried" | "catalog">(
+    "carried",
+  );
   const [viewMode, setViewMode] = useEffectiveViewMode("inventory");
   const [showModal, setShowModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -169,6 +177,14 @@ function InventoryContent() {
   const updateSiteFilter = (value: string) => {
     setPage(1);
     setSiteFilter(value);
+    // Every site opens on its own assortment: the choice made for the previous
+    // site must not decide what the next one shows.
+    setSiteAssortment("carried");
+  };
+
+  const updateSiteAssortment = (value: "carried" | "catalog") => {
+    setPage(1);
+    setSiteAssortment(value);
   };
 
   const toggleLowStockOnly = () => {
@@ -225,6 +241,10 @@ function InventoryContent() {
   const sites = sitesData ?? [];
   const selectedSite = sites.find((site) => site.id === siteFilter) ?? null;
   const multiSite = sites.length > 1;
+  // Only a chosen site has an assortment to narrow; the aggregate stays the
+  // whole catalog and sends no flag at all.
+  const carriedAtSite =
+    selectedSite === null ? undefined : siteAssortment === "carried";
   const {
     data,
     isLoading,
@@ -243,6 +263,9 @@ function InventoryContent() {
     // The aggregate (the site omitted) keeps the request and the cache key it
     // has always had; a chosen site projects its own units onto the list.
     locationId: selectedSite?.id,
+    // ...and lists only what that site carries, unless the caller asks for the
+    // whole catalog to stock something new here.
+    carriedAtSite,
   });
   const { data: categoriesData } = useCategories();
 
@@ -592,6 +615,10 @@ function InventoryContent() {
   const hasFilter =
     selectedCategory || showLowStockOnly || statusFilter !== "active";
   const isEditingInactive = Boolean(editingProduct && !editingProduct.active);
+  // A site with nothing in it yet is not a search that found nothing: it has no
+  // products to show until one is brought here (T25).
+  const siteHasNoProducts =
+    carriedAtSite === true && !hasFilter && search.trim() === "";
   // A counted product in a multi-site organization adjusts per site: the
   // aggregate no longer accepts a number (the API answers 409 for one).
   const stockIsAbsolute =
@@ -639,6 +666,22 @@ function InventoryContent() {
                     })),
                   ]}
                 />
+              )}
+              {selectedSite && (
+                <FilterGroup>
+                  <FilterOptionButton
+                    active={siteAssortment === "carried"}
+                    onClick={() => updateSiteAssortment("carried")}
+                  >
+                    Solo de esta sede
+                  </FilterOptionButton>
+                  <FilterOptionButton
+                    active={siteAssortment === "catalog"}
+                    onClick={() => updateSiteAssortment("catalog")}
+                  >
+                    Todo el catálogo
+                  </FilterOptionButton>
+                </FilterGroup>
               )}
               <Select
                 value={statusFilter}
@@ -756,11 +799,19 @@ function InventoryContent() {
             label="Cargando productos..."
           />
         ) : isLoading ? null : displayProducts.length === 0 ? (
-          <EmptyState
-            icon={<Package className="w-5 h-5 text-muted-foreground" />}
-            title={hasFilter ? "No se encontraron productos" : "No hay productos aún"}
-            subtitle={hasFilter ? "Intenta con otros filtros" : "Crea tu primer producto"}
-          />
+          siteHasNoProducts ? (
+            <EmptyState
+              icon={<Package className="w-5 h-5 text-muted-foreground" />}
+              title="Esta sede aún no tiene productos"
+              subtitle="Transfiere unidades, recibe una compra o ajusta existencias desde «Todo el catálogo» para traerlas a esta sede."
+            />
+          ) : (
+            <EmptyState
+              icon={<Package className="w-5 h-5 text-muted-foreground" />}
+              title={hasFilter ? "No se encontraron productos" : "No hay productos aún"}
+              subtitle={hasFilter ? "Intenta con otros filtros" : "Crea tu primer producto"}
+            />
+          )
         ) : (
           <>
             {isFetching && (

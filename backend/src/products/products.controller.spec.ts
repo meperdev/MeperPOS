@@ -122,6 +122,7 @@ describe('ProductsController — findAll additive params (D5)', () => {
       undefined,
       false,
       undefined,
+      undefined,
     );
   });
 
@@ -156,6 +157,7 @@ describe('ProductsController — findAll additive params (D5)', () => {
       undefined,
       [id, id],
       true,
+      undefined,
       undefined,
     );
     await controller.findAll(
@@ -265,6 +267,7 @@ describe('ProductsController — findAll additive params (D5)', () => {
       undefined,
       false,
       undefined,
+      undefined,
     );
   });
 
@@ -298,6 +301,7 @@ describe('ProductsController — findAll additive params (D5)', () => {
       undefined,
       undefined,
       false,
+      undefined,
       undefined,
     );
   });
@@ -511,6 +515,68 @@ describe('ProductsController — optional site scope (T3f)', () => {
       undefined,
       true,
       'site-a',
+      undefined,
+    );
+  });
+
+  it('forwards the assortment switch with the authorized site (T25)', async () => {
+    locations.findAccessible.mockResolvedValue({ id: 'site-a' });
+    const controller = new ProductsController(
+      serviceMock as never,
+      locations as never,
+    );
+    const call = (carriedAtSite: boolean) =>
+      controller.findAll(
+        user as never,
+        1,
+        10,
+        undefined,
+        undefined,
+        'active',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        'site-a',
+        carriedAtSite,
+      );
+
+    await call(true);
+    await call(false);
+
+    expect(locations.findAccessible).toHaveBeenCalledTimes(2);
+    expect(serviceMock.findAll).toHaveBeenNthCalledWith(
+      1,
+      'org-1',
+      1,
+      10,
+      undefined,
+      undefined,
+      'active',
+      false,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      'site-a',
+      true,
+    );
+    expect(serviceMock.findAll).toHaveBeenNthCalledWith(
+      2,
+      'org-1',
+      1,
+      10,
+      undefined,
+      undefined,
+      'active',
+      false,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      'site-a',
+      false,
     );
   });
 
@@ -542,6 +608,7 @@ describe('ProductsController — optional site scope (T3f)', () => {
       undefined,
       undefined,
       false,
+      undefined,
       undefined,
     );
   });

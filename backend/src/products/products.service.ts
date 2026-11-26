@@ -405,6 +405,7 @@ export class ProductsService {
     ids?: string[],
     available = false,
     locationId?: string,
+    carriedAtSite?: boolean,
   ) {
     if (
       ids !== undefined &&
@@ -415,6 +416,11 @@ export class ProductsService {
     }
     const { skip, take } = computeSkipTake(page, limit);
     const site = this.siteScope(locationId, organizationId);
+    // The assortment switch only has a meaning inside a site view: there is no
+    // "products this organization carries", the aggregate is the whole catalog.
+    if (carriedAtSite !== undefined && !site) {
+      throw new BadRequestException('carriedAtSite requires a locationId');
+    }
 
     const baseWhere: Record<string, unknown> = {
       ...(organizationId ? { organizationId } : {}),
@@ -445,6 +451,12 @@ export class ProductsService {
     // Explicit [] is restrictive, unlike an omitted filter. Never truncate IDs:
     // pagination bounds returned rows, not the favorite collection's reachability.
     if (ids !== undefined) baseWhere.id = { in: [...new Set(ids)] };
+    if (carriedAtSite && site) {
+      baseWhere.AND = [
+        ...((baseWhere.AND as unknown[]) ?? []),
+        this.siteAssortment(site),
+      ];
+    }
     if (available) {
       const eligibility = site
         ? this.siteAvailability(site)
@@ -584,6 +596,29 @@ export class ProductsService {
           },
         },
       ],
+    };
+  }
+
+  /**
+   * The assortment rule of a site view (T25): the products that site actually
+   * carries.
+   *
+   * A site carries a tracked product while it holds a balance row for it —
+   * opened at the default site when the product is created, and at any other
+   * site by the first receipt, transfer or adjustment. The row outlives the
+   * units, so a product that sold out stays in the assortment at zero instead
+   * of disappearing. Services and uncounted merchandise are never carried: no
+   * site holds their units, so they stay in "Todas las sedes" only.
+   */
+  private siteAssortment(site: SiteScope): Record<string, unknown> {
+    return {
+      tracksStock: true,
+      locationStocks: {
+        some: {
+          locationId: site.locationId,
+          organizationId: site.organizationId,
+        },
+      },
     };
   }
 

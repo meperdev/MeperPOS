@@ -26,15 +26,22 @@ export function useProducts(params?: {
    * organization-wide one it has always been.
    */
   locationId?: string;
+  /**
+   * With a site, list only the products that site carries instead of the whole
+   * catalog (T25). It is meaningless without `locationId`, so it is sent only
+   * when the caller has one.
+   */
+  carriedAtSite?: boolean;
   enabled?: boolean;
 }) {
-  const { enabled = true, ids, locationId, ...other } = params ?? {};
+  const { enabled = true, ids, locationId, carriedAtSite, ...other } = params ?? {};
   // A string preserves the important empty-list vs omitted distinction on the wire.
   const rest = {
     ...other,
     ...(ids === undefined ? {} : { ids: [...new Set(ids)].sort().join(',') }),
     // An omitted site keeps the request (and its cache key) byte-identical.
     ...(locationId === undefined ? {} : { locationId }),
+    ...(carriedAtSite === undefined ? {} : { carriedAtSite }),
   };
   return useQuery({
     queryKey: ["products", rest],
@@ -44,10 +51,11 @@ export function useProducts(params?: {
       ),
     enabled,
     placeholderData: (previousData, previousQuery) => {
-      const previousParams = previousQuery?.queryKey[1] as { categoryId?: string; type?: ProductType; ids?: string; available?: boolean; locationId?: string } | undefined;
+      const previousParams = previousQuery?.queryKey[1] as { categoryId?: string; type?: ProductType; ids?: string; available?: boolean; locationId?: string; carriedAtSite?: boolean } | undefined;
       // A site change is not a refinement of the previous page: keeping it as a
-      // placeholder would show one site's stock while the next site loads.
-      return previousParams?.categoryId === rest.categoryId && previousParams?.type === rest.type && previousParams?.ids === rest.ids && previousParams?.available === rest.available && previousParams?.locationId === rest.locationId
+      // placeholder would show one site's stock while the next site loads. The
+      // same holds for the assortment switch, which changes the set itself.
+      return previousParams?.categoryId === rest.categoryId && previousParams?.type === rest.type && previousParams?.ids === rest.ids && previousParams?.available === rest.available && previousParams?.locationId === rest.locationId && previousParams?.carriedAtSite === rest.carriedAtSite
         ? keepPreviousData(previousData) : undefined;
     },
   });

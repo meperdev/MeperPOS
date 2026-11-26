@@ -97,6 +97,13 @@ export class ProductsController {
     description:
       'Read one accessible site balance; omit it for the organization aggregate',
   })
+  @ApiQuery({
+    name: 'carriedAtSite',
+    required: false,
+    type: Boolean,
+    description:
+      'Only valid with locationId: list the products that site carries instead of the whole catalog',
+  })
   async findAll(
     @CurrentUser() user: RequestUser,
     @Query('page') page: number = 1,
@@ -112,6 +119,8 @@ export class ProductsController {
     @Query('available', new ParseBoolPipe({ optional: true }))
     available?: boolean,
     @Query('locationId', ProductSiteQueryPipe) locationId?: string,
+    @Query('carriedAtSite', new ParseBoolPipe({ optional: true }))
+    carriedAtSite?: boolean,
   ) {
     if (ids !== undefined && typeof ids !== 'string') {
       throw new BadRequestException('ids must be a comma-separated string');
@@ -135,6 +144,7 @@ export class ProductsController {
       ids === undefined ? undefined : ids === '' ? [] : ids.split(','),
       available ?? false,
       locationSiteId,
+      carriedAtSite,
     );
   }
 
