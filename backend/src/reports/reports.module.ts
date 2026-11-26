@@ -6,9 +6,10 @@ import { DailyReportService } from './daily-report.service';
 import { OrganizationRequiredGuard } from '../common/guards/organization-required.guard';
 import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organization.interceptor';
 import { ExpensesModule } from '../expenses/expenses.module';
+import { LocationsModule } from '../locations/locations.module';
 
 @Module({
-  imports: [ExpensesModule],
+  imports: [ExpensesModule, LocationsModule],
   controllers: [ReportsController, DailyReportController],
   providers: [
     ReportsService,

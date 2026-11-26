@@ -29,6 +29,15 @@ describe('ReportsController', () => {
     getCashFlow: jest.fn(),
     getInventorySnapshot: jest.fn(),
   };
+  // Every site-scoped route resolves its site through this one rule (404 for a
+  // site the caller cannot read); the requests here carry no site.
+  const locationsServiceMock = { findAccessible: jest.fn() };
+
+  const createController = () =>
+    new ReportsController(
+      reportsServiceMock as never,
+      locationsServiceMock as never,
+    );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -53,7 +62,7 @@ describe('ReportsController', () => {
   });
 
   it('denies analytics access to unauthorized business roles', () => {
-    const controller = new ReportsController(reportsServiceMock as never);
+    const controller = createController();
     const guard = new RolesGuard(new Reflector());
 
     expect(() =>
@@ -86,7 +95,7 @@ describe('ReportsController', () => {
   });
 
   it('forwards date filters to service and returns metadata-bearing response', async () => {
-    const controller = new ReportsController(reportsServiceMock as never);
+    const controller = createController();
     reportsServiceMock.getDashboardKPIs.mockResolvedValue({
       totalSales: 0,
       appliedRange: {
@@ -111,13 +120,14 @@ describe('ReportsController', () => {
       'org-1',
       '2026-03-01',
       '2026-03-31',
+      undefined,
     );
     expect(result.appliedRange.timezone).toBe('America/Bogota');
     expect(result.comparisonRange).toBeDefined();
   });
 
   it('forwards organization scope to the financial endpoint', async () => {
-    const controller = new ReportsController(reportsServiceMock as never);
+    const controller = createController();
     reportsServiceMock.getFinancialOverview.mockResolvedValue({
       current: { netIncome: '0.00' },
     });
@@ -132,7 +142,7 @@ describe('ReportsController', () => {
   });
 
   it('forwards organization scope to cash and inventory contracts', async () => {
-    const controller = new ReportsController(reportsServiceMock as never);
+    const controller = createController();
 
     await controller.getCash(mockUser, '2026-03-01', '2026-03-31');
     await controller.getInventory(mockUser, '2026-03-01', '2026-03-31');
@@ -146,11 +156,12 @@ describe('ReportsController', () => {
       'org-1',
       '2026-03-01',
       '2026-03-31',
+      undefined,
     );
   });
 
   it('parses compare and userIds before delegating user performance analytics', async () => {
-    const controller = new ReportsController(reportsServiceMock as never);
+    const controller = createController();
     reportsServiceMock.getUserPerformance.mockResolvedValue({
       data: [],
       appliedRange: {
@@ -174,6 +185,7 @@ describe('ReportsController', () => {
       '2026-03-31',
       false,
       ['user-1', 'user-2'],
+      undefined,
     );
   });
 });

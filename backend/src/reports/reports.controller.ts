@@ -1,4 +1,10 @@
-import { Controller, Get, Query, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -7,6 +13,7 @@ import {
 } from '@nestjs/swagger';
 import { OrgRole } from '@prisma/client';
 import { ReportsService } from './reports.service';
+import { LocationsService } from '../locations/locations.service';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -15,6 +22,10 @@ import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organ
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 
+/** Shared description of the optional site filter every sales figure accepts. */
+const SITE_QUERY_DESCRIPTION =
+  'Only sales whose stored origin is this accessible site; sales recorded without an origin never count in a site view. 404 for a site the caller cannot read.';
+
 @ApiTags('Reports')
 @Controller('reports')
 @UseGuards(JwtAuthGuard, RolesGuard, OrganizationRequiredGuard)
@@ -22,7 +33,10 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 @Roles(OrgRole.ADMIN)
 @ApiBearerAuth()
 export class ReportsController {
-  constructor(private reportsService: ReportsService) {}
+  constructor(
+    private reportsService: ReportsService,
+    private locationsService: LocationsService,
+  ) {}
 
   private parseUserIds(userIds?: string): string[] | undefined {
     if (!userIds) {
@@ -55,24 +69,51 @@ export class ReportsController {
     return true;
   }
 
+  /**
+   * Resolves the requested site through the one site-access rule the sales list
+   * already uses: `findAccessible` answers 404 for a site of another
+   * organization, an unassigned site or an unknown id, so no report re-derives
+   * the membership rule.
+   */
+  private async resolveSiteId(
+    user: RequestUser,
+    locationId?: string,
+  ): Promise<string | undefined> {
+    if (locationId === undefined) {
+      return undefined;
+    }
+
+    return (await this.locationsService.findAccessible(user, locationId)).id;
+  }
+
   @Get('dashboard')
   @ApiOperation({ summary: 'Get dashboard KPIs' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  getDashboard(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description: SITE_QUERY_DESCRIPTION,
+  })
+  async getDashboard(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getDashboardKPIs(
       user.organizationId,
       startDate,
       endDate,
+      await this.resolveSiteId(user, locationId),
     );
   }
 
   @Get('economic')
-  @ApiOperation({ summary: 'Get organization financial economics' })
+  @ApiOperation({
+    summary:
+      'Get organization financial economics (always organization-wide: expenses carry no site)',
+  })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   getEconomic(
@@ -88,7 +129,10 @@ export class ReportsController {
   }
 
   @Get('economic/cash')
-  @ApiOperation({ summary: 'Get cash collections and expense payments' })
+  @ApiOperation({
+    summary:
+      'Get cash collections and expense payments (always organization-wide: expense payments carry no site)',
+  })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   getCash(
@@ -107,15 +151,23 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get current inventory economics and movements' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  getInventory(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description:
+      'Value the stock this accessible site holds and its own movements; 404 for a site the caller cannot read.',
+  })
+  async getInventory(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getInventorySnapshot(
       user.organizationId,
       startDate,
       endDate,
+      await this.resolveSiteId(user, locationId),
     );
   }
 
@@ -123,15 +175,22 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get sales by payment method' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  getSalesByPaymentMethod(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description: SITE_QUERY_DESCRIPTION,
+  })
+  async getSalesByPaymentMethod(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getSalesByPaymentMethod(
       user.organizationId,
       startDate,
       endDate,
+      await this.resolveSiteId(user, locationId),
     );
   }
 
@@ -139,15 +198,22 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get sales by category' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  getSalesByCategory(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description: SITE_QUERY_DESCRIPTION,
+  })
+  async getSalesByCategory(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getSalesByCategory(
       user.organizationId,
       startDate,
       endDate,
+      await this.resolveSiteId(user, locationId),
     );
   }
 
@@ -155,15 +221,22 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get daily sales grouped by category' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  getSalesByCategoryDaily(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description: SITE_QUERY_DESCRIPTION,
+  })
+  async getSalesByCategoryDaily(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getSalesByCategoryDaily(
       user.organizationId,
       startDate,
       endDate,
+      await this.resolveSiteId(user, locationId),
     );
   }
 
@@ -172,17 +245,24 @@ export class ReportsController {
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
-  getTopSellingProducts(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description: SITE_QUERY_DESCRIPTION,
+  })
+  async getTopSellingProducts(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('limit') limit?: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getTopSellingProducts(
       user.organizationId,
       startDate,
       endDate,
       limit ? parseInt(limit) : 10,
+      await this.resolveSiteId(user, locationId),
     );
   }
 
@@ -190,15 +270,22 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get customer statistics' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
-  getCustomerStatistics(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description: SITE_QUERY_DESCRIPTION,
+  })
+  async getCustomerStatistics(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getCustomerStatistics(
       user.organizationId,
       startDate,
       endDate,
+      await this.resolveSiteId(user, locationId),
     );
   }
 
@@ -212,12 +299,18 @@ export class ReportsController {
     required: false,
     description: 'Comma-separated user ids to compare with the same filters',
   })
-  getUserPerformance(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description: SITE_QUERY_DESCRIPTION,
+  })
+  async getUserPerformance(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('compare') compare?: string,
     @Query('userIds') userIds?: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getUserPerformance(
       user.organizationId,
@@ -225,6 +318,7 @@ export class ReportsController {
       endDate,
       this.parseCompare(compare),
       this.parseUserIds(userIds),
+      await this.resolveSiteId(user, locationId),
     );
   }
 
@@ -232,15 +326,22 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get daily sales' })
   @ApiQuery({ name: 'startDate', required: true })
   @ApiQuery({ name: 'endDate', required: true })
-  getDailySales(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description: SITE_QUERY_DESCRIPTION,
+  })
+  async getDailySales(
     @CurrentUser() user: RequestUser,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
+    @Query('locationId') locationId?: string,
   ) {
     return this.reportsService.getDailySales(
       user.organizationId,
       startDate,
       endDate,
+      await this.resolveSiteId(user, locationId),
     );
   }
 }

@@ -322,17 +322,17 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 |---|---|---|---|---|
 | /api/reports/daily-report | GET | ADMIN | org-scoped | backend/src/reports/daily-report.http.spec.ts |
 | /api/reports/daily-report/pdf | GET | ADMIN | org-scoped | backend/src/reports/daily-report.http.spec.ts |
-| /api/reports/dashboard | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
+| /api/reports/dashboard | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
 | /api/reports/economic | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
 | /api/reports/economic/cash | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
-| /api/reports/economic/inventory | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
-| /api/reports/sales/payment-method | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/sales/category | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/sales/category-daily | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/products/top-selling | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/customers/statistics | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/users/performance | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/sales/daily | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
+| /api/reports/economic/inventory | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/financial-reports.service.int.spec.ts |
+| /api/reports/sales/payment-method | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/sales/category | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/sales/category-daily | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/products/top-selling | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/customers/statistics | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/users/performance | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/sales/daily | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
 
 ## sales
 
