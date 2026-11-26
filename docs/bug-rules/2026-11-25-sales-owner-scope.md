@@ -19,6 +19,11 @@ that owner rang up, so sales made by cashiers at another store looked lost.
 The list now treats `OWNER`, `ADMIN`, `SUPER_ADMIN` and an `isSuperAdmin`
 session as organization-wide, and keeps MEMBER/CASHIER on their own sales.
 `sales.service.spec.ts` pins all four organization-wide identities (RED: OWNER,
-SUPER_ADMIN and the platform session failed; ADMIN passed). A lint rule was not
-added: the same role check is spelled out by hand in several services, and the
-durable fix is one shared "org-wide access" helper, left as a follow-up.
+SUPER_ADMIN and the platform session failed; ADMIN passed).
+
+A pre-PR review then found the same hand-written `role !== 'ADMIN'` check in
+`findOne`, `findBySaleNumber` (receipt) and `update` (cancel): the list showed
+an owner a colleague's sale whose detail and receipt then answered 403. All
+four now go through one private `readsEverySale(user)` helper, pinned by a
+test that opens a colleague's sale by id and by number as OWNER and
+SUPER_ADMIN (RED before the change) and still refuses a cashier.

@@ -189,16 +189,23 @@ export class SalesService {
    * - CASHIER → own sales only (sale.userId = user.userId)
    * - Default (INVENTORY_USER / unknown) → own sales only (deny-by-default)
    */
-  private buildScopeFilter(user: RequestUser): Record<string, unknown> {
-    // OWNER inherits ADMIN and a super admin is above both: they read the
-    // whole organization. Comparing only against 'ADMIN' used to narrow an
-    // owner to the sales they rang up themselves.
-    if (
-      user.isSuperAdmin ||
+  /**
+   * The one rule for who reads every sale of the organization: OWNER inherits
+   * ADMIN and a super admin is above both. Every list, detail, receipt and
+   * cancellation check goes through here, so they cannot disagree again (the
+   * list once showed an owner a sale its detail then refused).
+   */
+  private readsEverySale(user: RequestUser): boolean {
+    return (
+      user.isSuperAdmin === true ||
       user.role === 'SUPER_ADMIN' ||
       user.role === OrgRole.OWNER ||
       user.role === OrgRole.ADMIN
-    ) {
+    );
+  }
+
+  private buildScopeFilter(user: RequestUser): Record<string, unknown> {
+    if (this.readsEverySale(user)) {
       return {};
     }
     // Deny-by-default: every other role sees only its own sales.
@@ -967,7 +974,7 @@ export class SalesService {
     }
 
     // Deny-by-default: if user context is provided, enforce scope
-    if (user && user.role !== 'ADMIN' && sale.userId !== user.userId) {
+    if (user && !this.readsEverySale(user) && sale.userId !== user.userId) {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
@@ -1001,7 +1008,7 @@ export class SalesService {
     }
 
     // Deny-by-default: if user context is provided, enforce scope
-    if (user && user.role !== 'ADMIN' && sale.userId !== user.userId) {
+    if (user && !this.readsEverySale(user) && sale.userId !== user.userId) {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
@@ -1035,7 +1042,11 @@ export class SalesService {
     }
 
     // Deny-by-default: non-ADMIN users can only update own sales
-    if (user && user.role !== 'ADMIN' && existingSale.userId !== user.userId) {
+    if (
+      user &&
+      !this.readsEverySale(user) &&
+      existingSale.userId !== user.userId
+    ) {
       throw new ForbiddenException('You do not have access to this sale');
     }
 

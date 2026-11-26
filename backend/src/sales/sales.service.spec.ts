@@ -394,6 +394,50 @@ describe('SalesService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it.each(['OWNER', 'SUPER_ADMIN'] as const)(
+    'lets %s open a sale rung up by a colleague, by id and by number',
+    async (role) => {
+      const colleagueSale = {
+        id: 'sale-colleague',
+        saleNumber: 42,
+        userId: 'cashier-1',
+        user: { id: 'cashier-1', name: 'Caja', email: 'caja@example.com' },
+        customer: null,
+        items: [],
+        payments: [],
+      };
+      prismaMock.sale.findFirst.mockResolvedValue(colleagueSale);
+      prismaMock.sale.findUnique.mockResolvedValue(colleagueSale);
+      const owner = mockUser({ userId: 'owner-1', role });
+
+      // The list already shows the sale to an owner; opening it (detail,
+      // receipt by number) must not answer 403 for the same reader.
+      await expect(
+        service.findOne('sale-colleague', 'org-1', owner),
+      ).resolves.toEqual(expect.objectContaining({ id: 'sale-colleague' }));
+      await expect(service.findBySaleNumber(42, owner)).resolves.toEqual(
+        expect.objectContaining({ id: 'sale-colleague' }),
+      );
+    },
+  );
+
+  it('still refuses a cashier the sale of a colleague', async () => {
+    prismaMock.sale.findFirst.mockResolvedValue({
+      id: 'sale-colleague',
+      userId: 'cashier-2',
+      customer: null,
+      items: [],
+      payments: [],
+    });
+    await expect(
+      service.findOne(
+        'sale-colleague',
+        'org-1',
+        mockUser({ userId: 'cashier-1', role: 'CASHIER' }),
+      ),
+    ).rejects.toThrow('You do not have access to this sale');
+  });
+
   it('allows CASHIER drill-down for own sale detail', async () => {
     prismaMock.sale.findFirst.mockResolvedValue({
       id: 'sale-own',
