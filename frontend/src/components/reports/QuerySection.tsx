@@ -26,6 +26,22 @@ export function BlockNote({ children }: { children: ReactNode }) {
 }
 
 /**
+ * The scope a block keeps when the page is read for one site: the figure is the
+ * organization's, because what it adds up (expenses, cash, the catalog) carries
+ * no site. Saying it is the difference between a view and a wrong number.
+ */
+export function OrganizationScopeNote() {
+  return (
+    <p
+      data-testid="organization-scope-note"
+      className="mb-3 inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+    >
+      Valores de toda la organización
+    </p>
+  );
+}
+
+/**
  * The four states every analysis block repeats — skeleton, error with retry, a
  * single line when there is nothing worth a table, and the content itself —
  * without the section frame. A block that shares its card with another query

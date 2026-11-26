@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/hooks/useLocations", () => ({
+  // The page only offers the site selector when the caller reads more than one
+  // site; these suites keep the organization-wide view.
+  useLocations: () => ({ data: [] }),
+}));
+
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 

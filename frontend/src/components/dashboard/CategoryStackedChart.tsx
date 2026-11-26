@@ -247,11 +247,14 @@ export function CategoryDayDetailModal({
 export function CategoryStackedChart({
   startDate,
   endDate,
+  siteId,
 }: {
   startDate: string;
   endDate: string;
+  /** Only the requested site's sales, when the dashboard is read for one. */
+  siteId?: string;
 }) {
-  const { data } = useSalesByCategoryDaily(startDate, endDate);
+  const { data } = useSalesByCategoryDaily(startDate, endDate, siteId);
   const containerRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState<number>(500);
   const [selectedDay, setSelectedDay] = useState<StackedDay | null>(null);

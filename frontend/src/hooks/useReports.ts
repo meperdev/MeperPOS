@@ -37,19 +37,44 @@ function buildDateRangeParams(startDate?: string, endDate?: string) {
   return params;
 }
 
-export function useDashboard(startDate?: string, endDate?: string) {
+/**
+ * The query string of every sales-based report: the shared period plus the
+ * optional site. A site is sent only when one is chosen, so the
+ * organization-wide request stays byte-identical to what it always was. The
+ * value is an authorized site id — the API answers 404 for any other one.
+ */
+function buildReportParams(
+  startDate?: string,
+  endDate?: string,
+  locationId?: string,
+) {
+  return {
+    ...buildDateRangeParams(startDate, endDate),
+    ...(locationId ? { locationId } : {}),
+  };
+}
+
+export function useDashboard(
+  startDate?: string,
+  endDate?: string,
+  locationId?: string,
+) {
   return useQuery({
-    queryKey: ["dashboard", startDate, endDate],
+    queryKey: ["dashboard", startDate, endDate, locationId],
     queryFn: () =>
       api
         .get<DashboardResponse>(
           "/reports/dashboard",
-          buildDateRangeParams(startDate, endDate),
+          buildReportParams(startDate, endDate, locationId),
         )
         .then((res) => res.data),
   });
 }
 
+/**
+ * Organization economics: always the whole organization, because operating
+ * expenses and payroll carry no site.
+ */
 export function useEconomicOverview(startDate?: string, endDate?: string) {
   return useQuery({
     queryKey: ["reports", "economic", startDate, endDate],
@@ -60,6 +85,7 @@ export function useEconomicOverview(startDate?: string, endDate?: string) {
   });
 }
 
+/** Organization cash: expense payments carry no site. */
 export function useCashFlow(startDate?: string, endDate?: string) {
   return useQuery({
     queryKey: ["reports", "economic", "cash", startDate, endDate],
@@ -70,53 +96,69 @@ export function useCashFlow(startDate?: string, endDate?: string) {
   });
 }
 
-export function useInventorySnapshot(startDate?: string, endDate?: string) {
+export function useInventorySnapshot(
+  startDate?: string,
+  endDate?: string,
+  locationId?: string,
+) {
   return useQuery({
-    queryKey: ["reports", "economic", "inventory", startDate, endDate],
+    queryKey: ["reports", "economic", "inventory", startDate, endDate, locationId],
     queryFn: () =>
       api
-        .get<InventorySnapshotReport>("/reports/economic/inventory", buildDateRangeParams(startDate, endDate))
+        .get<InventorySnapshotReport>(
+          "/reports/economic/inventory",
+          buildReportParams(startDate, endDate, locationId),
+        )
         .then((res) => res.data),
   });
 }
 
 export function useSalesByPaymentMethod(
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  locationId?: string,
 ) {
   return useQuery({
-    queryKey: ["reports", "sales", "payment-method", startDate, endDate],
+    queryKey: ["reports", "sales", "payment-method", startDate, endDate, locationId],
     queryFn: () =>
       api
         .get<ReportEnvelope<SaleByPaymentMethod[]>>(
           "/reports/sales/payment-method",
-          buildDateRangeParams(startDate, endDate),
+          buildReportParams(startDate, endDate, locationId),
         )
         .then((res) => res.data),
   });
 }
 
-export function useSalesByCategory(startDate?: string, endDate?: string) {
+export function useSalesByCategory(
+  startDate?: string,
+  endDate?: string,
+  locationId?: string,
+) {
   return useQuery({
-    queryKey: ["reports", "sales", "category", startDate, endDate],
+    queryKey: ["reports", "sales", "category", startDate, endDate, locationId],
     queryFn: () =>
       api
         .get<ReportEnvelope<SaleByCategory[]>>(
           "/reports/sales/category",
-          buildDateRangeParams(startDate, endDate),
+          buildReportParams(startDate, endDate, locationId),
         )
         .then((res) => res.data),
   });
 }
 
-export function useSalesByCategoryDaily(startDate?: string, endDate?: string) {
+export function useSalesByCategoryDaily(
+  startDate?: string,
+  endDate?: string,
+  locationId?: string,
+) {
   return useQuery({
-    queryKey: ["reports", "sales", "category-daily", startDate, endDate],
+    queryKey: ["reports", "sales", "category-daily", startDate, endDate, locationId],
     queryFn: () =>
       api
         .get<ReportEnvelope<SaleByCategoryDaily[]>>(
           "/reports/sales/category-daily",
-          buildDateRangeParams(startDate, endDate),
+          buildReportParams(startDate, endDate, locationId),
         )
         .then((res) => res.data),
   });
@@ -125,16 +167,25 @@ export function useSalesByCategoryDaily(startDate?: string, endDate?: string) {
 export function useTopSellingProducts(
   startDate?: string,
   endDate?: string,
-  limit = 10
+  limit = 10,
+  locationId?: string,
 ) {
   return useQuery({
-    queryKey: ["reports", "products", "top-selling", startDate, endDate, limit],
+    queryKey: [
+      "reports",
+      "products",
+      "top-selling",
+      startDate,
+      endDate,
+      limit,
+      locationId,
+    ],
     queryFn: () =>
       api
         .get<ReportEnvelope<TopSellingProduct[]>>(
           "/reports/products/top-selling",
           {
-            ...buildDateRangeParams(startDate, endDate),
+            ...buildReportParams(startDate, endDate, locationId),
             limit,
           },
         )
@@ -145,14 +196,15 @@ export function useTopSellingProducts(
 export function useCustomerStatistics(
   startDate?: string,
   endDate?: string,
+  locationId?: string,
 ) {
   return useQuery({
-    queryKey: ["reports", "customers", "statistics", startDate, endDate],
+    queryKey: ["reports", "customers", "statistics", startDate, endDate, locationId],
     queryFn: () =>
       api
         .get<CustomerStatistics>(
           "/reports/customers/statistics",
-          buildDateRangeParams(startDate, endDate),
+          buildReportParams(startDate, endDate, locationId),
         )
         .then((res) => res.data),
   });
@@ -163,14 +215,17 @@ export function useCustomerStatistics(
  * same window the rest of the analysis uses instead of the backend's shifted
  * comparison period.
  */
-export function useUserPerformance(startDate: string, endDate: string) {
+export function useUserPerformance(
+  startDate: string,
+  endDate: string,
+  locationId?: string,
+) {
   return useQuery({
-    queryKey: ["reports", "users", "performance", startDate, endDate],
+    queryKey: ["reports", "users", "performance", startDate, endDate, locationId],
     queryFn: () =>
       api
         .get<UserPerformanceReport>("/reports/users/performance", {
-          startDate,
-          endDate,
+          ...buildReportParams(startDate, endDate, locationId),
           compare: "false",
         })
         .then((res) => res.data),
@@ -178,15 +233,19 @@ export function useUserPerformance(startDate: string, endDate: string) {
   });
 }
 
-export function useDailySales(startDate: string, endDate: string) {
+export function useDailySales(
+  startDate: string,
+  endDate: string,
+  locationId?: string,
+) {
   return useQuery({
-    queryKey: ["reports", "sales", "daily", startDate, endDate],
+    queryKey: ["reports", "sales", "daily", startDate, endDate, locationId],
     queryFn: () =>
       api
-        .get<ReportEnvelope<DailySale[]>>("/reports/sales/daily", {
-          startDate,
-          endDate,
-        })
+        .get<ReportEnvelope<DailySale[]>>(
+          "/reports/sales/daily",
+          buildReportParams(startDate, endDate, locationId),
+        )
         .then((res) => res.data),
     enabled: !!startDate && !!endDate,
   });

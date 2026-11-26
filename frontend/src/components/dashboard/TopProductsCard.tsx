@@ -14,14 +14,18 @@ const TOP_PRODUCTS_LIMIT = 5;
 export function TopProductsCard({
   startDate,
   endDate,
+  siteId,
 }: {
   startDate: string;
   endDate: string;
+  /** Only the requested site's ranking, when the dashboard is read for one. */
+  siteId?: string;
 }) {
   const { data, isLoading, isError, refetch } = useTopSellingProducts(
     startDate,
     endDate,
     TOP_PRODUCTS_LIMIT,
+    siteId,
   );
   const products = (data?.data ?? []).slice(0, TOP_PRODUCTS_LIMIT);
 
