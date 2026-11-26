@@ -53,6 +53,8 @@ import {
   User,
   Wrench,
   HandCoins,
+  Store,
+  ArrowLeftRight,
 } from "lucide-react";
 import { cn, formatCurrency, safeGetItem, safeSetItem } from "@/lib/utils";
 import { toCheckoutCents } from "@/lib/pos-checkout-money";
@@ -1268,26 +1270,39 @@ function POSWorkspace({
 
             {/* Unified search & scanner — types to filter the grid, Enter scans/adds */}
             <div className="@container flex shrink-0 flex-col gap-2 p-4 border-b border-border/60 bg-muted/15 max-lg:px-0 max-lg:bg-transparent">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <p>
-                  Sede:{" "}
-                  <span className="font-medium text-foreground">{site.name}</span>
-                </p>
-                {site.change && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
+              {/* The active store is the context of every price, stock figure and
+                  sale on this screen, so it reads as a control, not a footnote. */}
+              <div className="flex flex-wrap items-center gap-2">
+                {site.change ? (
+                  <button
+                    type="button"
                     onClick={site.change}
                     disabled={cart.length > 0 || cartLocked}
-                    title={
-                      cart.length > 0
-                        ? "Pausa o termina la venta para cambiar de sede"
-                        : undefined
-                    }
-                    className="h-7 px-2 text-xs"
+                    className={cn(
+                      "inline-flex min-h-9 max-w-full items-center gap-2 rounded-lg border border-border/70 bg-card px-3 text-[13px] shadow-xs transition-colors",
+                      "hover:border-primary/40 hover:bg-primary-light/40",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                      "disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border/70 disabled:hover:bg-card",
+                    )}
                   >
-                    Cambiar sede
-                  </Button>
+                    <Store className="h-4 w-4 shrink-0 text-primary-text" aria-hidden="true" />
+                    <span className="truncate font-semibold text-foreground">{site.name}</span>
+                    <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+                    <span className="inline-flex shrink-0 items-center gap-1 font-medium text-primary-text">
+                      <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden="true" />
+                      Cambiar sede
+                    </span>
+                  </button>
+                ) : (
+                  <span className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 text-[13px]">
+                    <Store className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="truncate font-semibold text-foreground">{site.name}</span>
+                  </span>
+                )}
+                {site.change && cart.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    Pausa o termina la venta para cambiar de sede
+                  </span>
                 )}
               </div>
               {/* Intrinsic wrap, like FilterBar: Favoritos and the category select share a row under the search when narrow. */}

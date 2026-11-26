@@ -638,9 +638,12 @@ describe("POS site scope", () => {
     expect(screen.getByText("Sede B")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
-    expect(screen.getByRole("button", { name: "Cambiar sede" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Cambiar sede/ })).toBeDisabled();
+    expect(
+      screen.getByText("Pausa o termina la venta para cambiar de sede"),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Pausar" }));
-    await userEvent.click(screen.getByRole("button", { name: "Cambiar sede" }));
+    await userEvent.click(screen.getByRole("button", { name: /Cambiar sede/ }));
     expect(
       screen.getByRole("heading", { name: "Cambiar de sede" }),
     ).toBeTruthy();
