@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { Prisma, ProductType } from '@prisma/client';
+import { OrgRole, Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateSaleDto,
@@ -190,10 +190,18 @@ export class SalesService {
    * - Default (INVENTORY_USER / unknown) → own sales only (deny-by-default)
    */
   private buildScopeFilter(user: RequestUser): Record<string, unknown> {
-    if (user.role === 'ADMIN') {
+    // OWNER inherits ADMIN and a super admin is above both: they read the
+    // whole organization. Comparing only against 'ADMIN' used to narrow an
+    // owner to the sales they rang up themselves.
+    if (
+      user.isSuperAdmin ||
+      user.role === 'SUPER_ADMIN' ||
+      user.role === OrgRole.OWNER ||
+      user.role === OrgRole.ADMIN
+    ) {
       return {};
     }
-    // Deny-by-default: any non-ADMIN role sees only own sales
+    // Deny-by-default: every other role sees only its own sales.
     return { userId: user.userId };
   }
 

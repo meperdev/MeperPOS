@@ -109,8 +109,9 @@ describe('SalesService', () => {
   const mockUser = (
     overrides: Partial<{
       userId: string;
-      role: 'ADMIN' | 'MEMBER' | 'OWNER' | 'CASHIER';
+      role: 'ADMIN' | 'MEMBER' | 'OWNER' | 'CASHIER' | 'SUPER_ADMIN';
       organizationId: string;
+      isSuperAdmin: boolean;
     }> = {},
   ) => ({
     userId: 'user-1',
@@ -134,6 +135,42 @@ describe('SalesService', () => {
   });
 
   // ---- existing tests preserved ----
+
+  it.each([
+    ['OWNER', {}],
+    ['ADMIN', {}],
+    ['SUPER_ADMIN', {}],
+    ['a platform session', { isSuperAdmin: true }],
+  ] as const)(
+    'lists every sale of the organization for %s',
+    async (role, extra) => {
+      prismaMock.sale.findMany.mockResolvedValue([]);
+      prismaMock.sale.count.mockResolvedValue(0);
+
+      await service.findAll(
+        'org-1',
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockUser({
+          userId: 'owner-1',
+          role: role === 'a platform session' ? 'MEMBER' : role,
+          ...extra,
+        }),
+      );
+
+      // OWNER inherits ADMIN; a super admin is above both. Neither may be
+      // narrowed to the sales they rang up themselves.
+      const { where } = prismaMock.sale.findMany.mock.calls[0][0] as {
+        where: Record<string, unknown>;
+      };
+      expect(where).toEqual({ organizationId: 'org-1' });
+    },
+  );
 
   it('applies own-sales scope for MEMBER in list queries', async () => {
     prismaMock.sale.findMany.mockResolvedValue([
