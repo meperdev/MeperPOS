@@ -53,7 +53,7 @@ describe('UsersController', () => {
     ).toBe(true);
   });
 
-  it('delegates update with the acting admin id and organizationId', async () => {
+  it('delegates update with the acting admin id, organizationId and the actor', async () => {
     const controller = new UsersController(usersServiceMock as never);
     const dto = { name: 'Ana Admin' };
     const user = {
@@ -76,11 +76,59 @@ describe('UsersController', () => {
     await expect(controller.update('user-2', dto, user)).resolves.toEqual(
       expected,
     );
+    // The actor decides whether an admin-rank account may be edited.
     expect(usersServiceMock.update).toHaveBeenCalledWith(
       'admin-1',
       'user-2',
       dto,
       'org-1',
+      user,
+    );
+  });
+
+  it('delegates toggle-active with the acting admin id, organizationId and the actor', async () => {
+    const controller = new UsersController(usersServiceMock as never);
+    const user = {
+      userId: 'admin-1',
+      organizationId: 'org-1',
+      role: 'ADMIN' as const,
+      email: 'a@a.com',
+      tokenVersion: 1,
+      isSuperAdmin: false,
+    };
+    usersServiceMock.toggleActive.mockResolvedValue({ id: 'user-2' });
+
+    await controller.toggleActive('user-2', user);
+
+    // Without the actor the service cannot tell the primary owner from any
+    // admin, so the route must always forward it.
+    expect(usersServiceMock.toggleActive).toHaveBeenCalledWith(
+      'admin-1',
+      'user-2',
+      'org-1',
+      user,
+    );
+  });
+
+  it('delegates remove with the acting admin id, organizationId and the actor', async () => {
+    const controller = new UsersController(usersServiceMock as never);
+    const user = {
+      userId: 'admin-1',
+      organizationId: 'org-1',
+      role: 'ADMIN' as const,
+      email: 'a@a.com',
+      tokenVersion: 1,
+      isSuperAdmin: false,
+    };
+    usersServiceMock.remove.mockResolvedValue({ message: 'ok' });
+
+    await controller.remove('user-2', user);
+
+    expect(usersServiceMock.remove).toHaveBeenCalledWith(
+      'admin-1',
+      'user-2',
+      'org-1',
+      user,
     );
   });
 

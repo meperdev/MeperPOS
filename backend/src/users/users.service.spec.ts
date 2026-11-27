@@ -45,6 +45,14 @@ describe('UsersService', () => {
     );
   });
 
+  // These removal tests pin the last-admin and primary-owner rules, so they act
+  // as a SUPER_ADMIN, which the admin-account rule always lets through.
+  const superAdminActor = {
+    userId: 'super-1',
+    role: 'SUPER_ADMIN' as const,
+    isSuperAdmin: true,
+  };
+
   it('creates users without returning password fields', async () => {
     prismaMock.user.findFirst.mockResolvedValue(null);
     prismaMock.user.create.mockResolvedValue({
@@ -152,7 +160,13 @@ describe('UsersService', () => {
     prismaMock.user.findFirst.mockResolvedValue({ id: 'user-3' });
 
     await expect(
-      service.update('admin-1', 'user-2', { email: 'taken@example.com' }),
+      service.update(
+        'admin-1',
+        'user-2',
+        { email: 'taken@example.com' },
+        undefined,
+        undefined,
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -173,10 +187,16 @@ describe('UsersService', () => {
       updatedAt: new Date('2026-03-24T01:00:00.000Z'),
     });
 
-    const result = await service.update('admin-1', 'user-2', {
-      email: 'new@example.com',
-      name: 'New Name',
-    });
+    const result = await service.update(
+      'admin-1',
+      'user-2',
+      {
+        email: 'new@example.com',
+        name: 'New Name',
+      },
+      undefined,
+      undefined,
+    );
 
     expect(result).toEqual(
       expect.objectContaining({
@@ -201,15 +221,15 @@ describe('UsersService', () => {
 
   it('prevents admins from deactivating themselves', async () => {
     await expect(
-      service.toggleActive('admin-1', 'admin-1'),
+      service.toggleActive('admin-1', 'admin-1', undefined, undefined),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
   });
 
   it('prevents admins from deleting themselves', async () => {
-    await expect(service.remove('admin-1', 'admin-1')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.remove('admin-1', 'admin-1', undefined, undefined),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(prismaMock.user.delete).not.toHaveBeenCalled();
   });
 
@@ -222,7 +242,12 @@ describe('UsersService', () => {
     });
     prismaMock.user.delete.mockResolvedValue({ id: 'user-2' });
 
-    const result = await service.remove('admin-1', 'user-2');
+    const result = await service.remove(
+      'admin-1',
+      'user-2',
+      undefined,
+      undefined,
+    );
 
     expect(result).toEqual({ message: 'User deleted successfully' });
     expect(Object.getOwnPropertyDescriptor(result, '__auditContext')).toEqual(
@@ -258,6 +283,7 @@ describe('UsersService', () => {
         newPassword: 'NuevaClaveSegura123',
       },
       'org-1',
+      undefined,
     );
 
     expect(result).toEqual({ message: 'Contraseña restablecida exitosamente' });
@@ -308,7 +334,13 @@ describe('UsersService', () => {
     prismaMock.organizationUser.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.update('admin-1', 'user-2', { name: 'Hacked' }, 'org-1'),
+      service.update(
+        'admin-1',
+        'user-2',
+        { name: 'Hacked' },
+        'org-1',
+        undefined,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -329,7 +361,13 @@ describe('UsersService', () => {
     prismaMock.organizationUser.count.mockResolvedValue(2);
 
     await expect(
-      service.update('admin-1', 'shared-user', { name: 'Mutated' }, 'org-1'),
+      service.update(
+        'admin-1',
+        'shared-user',
+        { name: 'Mutated' },
+        'org-1',
+        undefined,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
@@ -354,6 +392,7 @@ describe('UsersService', () => {
         'shared-user',
         { newPassword: 'NuevaClaveSegura123' },
         'org-1',
+        undefined,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prismaMock.user.update).not.toHaveBeenCalled();
@@ -375,7 +414,7 @@ describe('UsersService', () => {
     prismaMock.organizationUser.count.mockResolvedValue(2);
 
     await expect(
-      service.toggleActive('admin-1', 'shared-user', 'org-1'),
+      service.toggleActive('admin-1', 'shared-user', 'org-1', undefined),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
@@ -396,7 +435,7 @@ describe('UsersService', () => {
     });
 
     await expect(
-      service.remove('admin-1', 'user-2', 'org-1'),
+      service.remove('admin-1', 'user-2', 'org-1', undefined),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prismaMock.user.delete).not.toHaveBeenCalled();
     expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
@@ -419,7 +458,7 @@ describe('UsersService', () => {
     prismaMock.organizationUser.count.mockResolvedValue(1);
 
     await expect(
-      service.remove('admin-1', 'user-2', 'org-1'),
+      service.remove('admin-1', 'user-2', 'org-1', superAdminActor),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prismaMock.user.delete).not.toHaveBeenCalled();
     expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
@@ -448,7 +487,12 @@ describe('UsersService', () => {
         where.role === 'ADMIN' ? 2 : 1,
     );
 
-    const result = await service.remove('owner-1', 'user-2', 'org-1');
+    const result = await service.remove(
+      'owner-1',
+      'user-2',
+      'org-1',
+      superAdminActor,
+    );
 
     expect(prismaMock.organizationUser.count).toHaveBeenCalledWith({
       where: { organizationId: 'org-1', role: 'ADMIN' },
@@ -477,7 +521,12 @@ describe('UsersService', () => {
     // One membership remains in the other organization.
     prismaMock.organizationUser.count.mockResolvedValue(1);
 
-    const result = await service.remove('admin-1', 'user-2', 'org-1');
+    const result = await service.remove(
+      'admin-1',
+      'user-2',
+      'org-1',
+      undefined,
+    );
 
     expect(prismaMock.organizationUser.delete).toHaveBeenCalledWith({
       where: { id: 'ou-1' },
@@ -504,7 +553,12 @@ describe('UsersService', () => {
     prismaMock.organizationUser.count.mockResolvedValue(0);
     prismaMock.user.delete.mockResolvedValue({ id: 'user-2' });
 
-    const result = await service.remove('admin-1', 'user-2', 'org-1');
+    const result = await service.remove(
+      'admin-1',
+      'user-2',
+      'org-1',
+      undefined,
+    );
 
     expect(prismaMock.organizationUser.delete).toHaveBeenCalledWith({
       where: { id: 'ou-1' },
@@ -537,7 +591,12 @@ describe('UsersService', () => {
     prismaMock.organizationUser.delete.mockResolvedValue({ id: 'ou-1' });
     prismaMock.user.delete.mockResolvedValue({ id: 'user-2' });
 
-    const result = await service.remove('admin-1', 'user-2', 'org-1');
+    const result = await service.remove(
+      'admin-1',
+      'user-2',
+      'org-1',
+      superAdminActor,
+    );
 
     expect(result).toEqual({ message: 'User deleted successfully' });
     expect(prismaMock.user.delete).toHaveBeenCalledWith({
@@ -802,6 +861,203 @@ describe('UsersService', () => {
       expect(prismaMock.user.update).toHaveBeenCalledWith({
         where: { id: 'owner-1' },
         data: { password: expect.any(String) },
+      });
+    });
+
+    describe('editing and deactivating admin-rank accounts', () => {
+      const ordinaryAdmin = {
+        userId: 'admin-1',
+        role: OrgRole.ADMIN,
+        isSuperAdmin: false,
+      };
+
+      it.each([
+        ['the primary owner', 'owner-1', true],
+        ['another ADMIN', 'admin-2', false],
+      ] as const)(
+        'refuses an ordinary ADMIN editing %s',
+        async (_label, target, targetIsPrimaryOwner) => {
+          mockTargetAndActor(target, targetIsPrimaryOwner, false);
+
+          await expect(
+            service.update(
+              'admin-1',
+              target,
+              { name: 'Renamed' },
+              'org-1',
+              ordinaryAdmin,
+            ),
+          ).rejects.toBeInstanceOf(ForbiddenException);
+          expect(prismaMock.user.update).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([
+        ['the primary owner', 'owner-1', true],
+        ['another ADMIN', 'admin-2', false],
+      ] as const)(
+        'refuses an ordinary ADMIN deactivating %s',
+        async (_label, target, targetIsPrimaryOwner) => {
+          mockTargetAndActor(target, targetIsPrimaryOwner, false);
+
+          await expect(
+            service.toggleActive('admin-1', target, 'org-1', ordinaryAdmin),
+          ).rejects.toBeInstanceOf(ForbiddenException);
+          expect(prismaMock.user.update).not.toHaveBeenCalled();
+        },
+      );
+
+      it('lets the primary owner edit and deactivate another ADMIN', async () => {
+        mockTargetAndActor('admin-2', false, true);
+
+        await service.update(
+          'admin-1',
+          'admin-2',
+          { name: 'Renamed' },
+          'org-1',
+          ordinaryAdmin,
+        );
+        await service.toggleActive(
+          'admin-1',
+          'admin-2',
+          'org-1',
+          ordinaryAdmin,
+        );
+
+        expect(prismaMock.user.update).toHaveBeenCalledTimes(2);
+      });
+
+      it('lets a SUPER_ADMIN deactivate the primary owner', async () => {
+        mockTargetAndActor('owner-1', true, false);
+
+        await service.toggleActive('super-1', 'owner-1', 'org-1', {
+          userId: 'super-1',
+          role: 'SUPER_ADMIN',
+          isSuperAdmin: true,
+        });
+
+        expect(prismaMock.user.update).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ['a missing actor', undefined],
+        ['an ordinary ADMIN', ordinaryAdmin],
+      ] as const)(
+        'protects a leftover OWNER without the flag from %s',
+        async (_label, actor) => {
+          mockTargetAndActor('legacy-1', false, false, 'OWNER');
+
+          await expect(
+            service.update(
+              'admin-1',
+              'legacy-1',
+              { name: 'Edited' },
+              'org-1',
+              actor,
+            ),
+          ).rejects.toBeInstanceOf(ForbiddenException);
+          await expect(
+            service.toggleActive('admin-1', 'legacy-1', 'org-1', actor),
+          ).rejects.toBeInstanceOf(ForbiddenException);
+          expect(prismaMock.user.update).not.toHaveBeenCalled();
+        },
+      );
+
+      it('refuses an ordinary ADMIN removing another ADMIN from the organization', async () => {
+        mockTargetAndActor('admin-2', false, false);
+        prismaMock.organizationUser.count.mockResolvedValue(2);
+
+        await expect(
+          service.remove('admin-1', 'admin-2', 'org-1', ordinaryAdmin),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
+        expect(prismaMock.user.delete).not.toHaveBeenCalled();
+      });
+
+      it('keeps refusing the primary owner removal with its own message', async () => {
+        mockTargetAndActor('owner-1', true, false);
+
+        await expect(
+          service.remove('admin-1', 'owner-1', 'org-1', ordinaryAdmin),
+        ).rejects.toThrow(
+          'Cannot remove the primary owner. Transfer ownership first.',
+        );
+        expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
+      });
+
+      it('refuses removing a leftover OWNER with the admin message', async () => {
+        mockTargetAndActor('legacy-1', false, false, 'OWNER');
+
+        await expect(
+          service.remove('admin-1', 'legacy-1', 'org-1', ordinaryAdmin),
+        ).rejects.toThrow(
+          'Only the primary owner of the organization or a SUPER_ADMIN can remove an ADMIN',
+        );
+        expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
+      });
+
+      it('lets the primary owner remove another ADMIN', async () => {
+        mockTargetAndActor('admin-2', false, true);
+        prismaMock.organizationUser.count.mockImplementation(
+          async ({ where }: { where: { role?: string } }) =>
+            where.role === 'ADMIN' ? 2 : 1,
+        );
+        prismaMock.organizationUser.delete.mockResolvedValue({
+          id: 'ou-admin-2',
+        });
+
+        await service.remove('admin-1', 'admin-2', 'org-1', ordinaryAdmin);
+
+        expect(prismaMock.organizationUser.delete).toHaveBeenCalledWith({
+          where: { id: 'ou-admin-2' },
+        });
+      });
+
+      it('still lets an ordinary ADMIN remove a cashier', async () => {
+        mockTargetAndActor('cashier-2', false, false, 'CASHIER');
+        prismaMock.organizationUser.delete.mockResolvedValue({
+          id: 'ou-cashier-2',
+        });
+
+        await service.remove('admin-1', 'cashier-2', 'org-1', ordinaryAdmin);
+
+        expect(prismaMock.organizationUser.delete).toHaveBeenCalledWith({
+          where: { id: 'ou-cashier-2' },
+        });
+      });
+
+      it('still lets an ordinary ADMIN edit their own name', async () => {
+        mockTargetAndActor('admin-1', false, false);
+
+        await service.update(
+          'admin-1',
+          'admin-1',
+          { name: 'Me' },
+          'org-1',
+          ordinaryAdmin,
+        );
+
+        expect(prismaMock.user.update).toHaveBeenCalledTimes(1);
+      });
+
+      it('still lets an ordinary ADMIN edit and deactivate a cashier', async () => {
+        mockTargetAndActor('cashier-2', false, false, 'CASHIER');
+
+        await service.update(
+          'admin-1',
+          'cashier-2',
+          { name: 'Caja' },
+          'org-1',
+          ordinaryAdmin,
+        );
+        await service.toggleActive(
+          'admin-1',
+          'cashier-2',
+          'org-1',
+          ordinaryAdmin,
+        );
+
+        expect(prismaMock.user.update).toHaveBeenCalledTimes(2);
       });
     });
   });

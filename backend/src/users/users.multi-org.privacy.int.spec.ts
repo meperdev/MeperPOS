@@ -126,7 +126,7 @@ describe('UsersService multi-org privacy — Integration (real DB)', () => {
           fixture.userAId,
           target.id,
           { name: 'Mutated By Org A', email: `mutated-${target.id}@example.com` },
-          fixture.orgAId,
+          fixture.orgAId, undefined,
         ),
       );
 
@@ -168,7 +168,7 @@ describe('UsersService multi-org privacy — Integration (real DB)', () => {
           fixture.userAId,
           target.id,
           { newPassword: 'NewPass456!' },
-          fixture.orgAId,
+          fixture.orgAId, undefined,
         ),
       );
 
@@ -195,7 +195,7 @@ describe('UsersService multi-org privacy — Integration (real DB)', () => {
       );
 
       const outcome = await outcomeOf(() =>
-        usersService.toggleActive(fixture.userAId, target.id, fixture.orgAId),
+        usersService.toggleActive(fixture.userAId, target.id, fixture.orgAId, undefined),
       );
 
       const after = await prisma.user.findUnique({ where: { id: target.id } });
@@ -221,7 +221,7 @@ describe('UsersService multi-org privacy — Integration (real DB)', () => {
         fixture.userAId,
         target.id,
         { name: 'Renamed By Org A' },
-        fixture.orgAId,
+        fixture.orgAId, undefined,
       );
 
       const after = await prisma.user.findUnique({ where: { id: target.id } });
@@ -234,7 +234,7 @@ describe('UsersService multi-org privacy — Integration (real DB)', () => {
     it('allows org A admin to toggle a single-org user', async () => {
       const target = await createTargetUser([fixture.orgAId], 'SoloPass123');
 
-      await usersService.toggleActive(fixture.userAId, target.id, fixture.orgAId);
+      await usersService.toggleActive(fixture.userAId, target.id, fixture.orgAId, undefined);
 
       const after = await prisma.user.findUnique({ where: { id: target.id } });
       expect(after?.active).toBe(false);
@@ -248,7 +248,7 @@ describe('UsersService multi-org privacy — Integration (real DB)', () => {
         fixture.userAId,
         target.id,
         { newPassword: 'NewPass456!' },
-        fixture.orgAId,
+        fixture.orgAId, undefined,
       );
 
       const after = await prisma.user.findUnique({ where: { id: target.id } });

@@ -146,10 +146,16 @@ export class UsersService {
     adminUserId: string,
     userId: string,
     updateUserDto: UpdateUserDto,
-    organizationId?: string,
+    organizationId: string | undefined,
+    actor: ActorContext | undefined,
   ) {
     const previousUser = await this.findUserOrThrow(userId, organizationId);
     await this.assertSingleOrgTarget(userId);
+    await this.assertMayManageAdminAccount(actor, userId, organizationId, {
+      primaryOwner: 'Only the primary owner can edit the primary owner account',
+      admin:
+        'Only the primary owner of the organization or a SUPER_ADMIN can edit an ADMIN account',
+    });
 
     if (updateUserDto.email) {
       await this.ensureEmailAvailable(updateUserDto.email, userId);
@@ -208,7 +214,8 @@ export class UsersService {
   async toggleActive(
     adminUserId: string,
     userId: string,
-    organizationId?: string,
+    organizationId: string | undefined,
+    actor: ActorContext | undefined,
   ) {
     if (adminUserId === userId) {
       throw new BadRequestException(
@@ -218,6 +225,12 @@ export class UsersService {
 
     const user = await this.findUserOrThrow(userId, organizationId);
     await this.assertSingleOrgTarget(userId);
+    await this.assertMayManageAdminAccount(actor, userId, organizationId, {
+      primaryOwner:
+        'Only a SUPER_ADMIN can deactivate or reactivate the primary owner',
+      admin:
+        'Only the primary owner of the organization or a SUPER_ADMIN can deactivate or reactivate an ADMIN',
+    });
 
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
@@ -243,41 +256,17 @@ export class UsersService {
     userId: string,
     dto: ResetUserPasswordDto,
     organizationId: string,
-    actor?: ActorContext,
+    actor: ActorContext | undefined,
   ) {
     const targetUser = await this.findUserOrThrow(userId, organizationId);
     await this.assertSingleOrgTarget(userId);
 
-    // SEC-001, restated for phase 2 (S8 c): the account to protect is the
-    // primary owner's (isPrimaryOwner), not a role, because nobody is OWNER any
-    // more. Only the primary owner or a SUPER_ADMIN may reset that password,
-    // which keeps the migration from opening the owner's account to every ADMIN.
-    // An admin-rank account (ADMIN, or a leftover OWNER) is the top
-    // organization role: taking one over is the same escalation as minting
-    // one, so it also needs the primary owner. That covers former OWNER
-    // memberships the migration turned into unflagged ADMINs.
-    if (!(await this.isPrimaryOwnerActor(actor, organizationId))) {
-      const targetOrgUser = await this.prisma.organizationUser.findFirst({
-        where: { userId, organizationId },
-        select: { isPrimaryOwner: true, role: true },
-      });
-      if (targetOrgUser?.isPrimaryOwner === true) {
-        throw new ForbiddenException(
-          'Only the primary owner can reset the primary owner password. Ask the primary owner (or support) to do it.',
-        );
-      }
-      // Resetting one's own password takes over nothing.
-      const isSelf = actor?.userId === userId;
-      if (
-        !isSelf &&
-        targetOrgUser &&
-        hasEffectiveRole(targetOrgUser.role, OrgRole.ADMIN)
-      ) {
-        throw new ForbiddenException(
-          'Only the primary owner of the organization or a SUPER_ADMIN can reset an ADMIN password',
-        );
-      }
-    }
+    await this.assertMayManageAdminAccount(actor, userId, organizationId, {
+      primaryOwner:
+        'Only the primary owner can reset the primary owner password. Ask the primary owner (or support) to do it.',
+      admin:
+        'Only the primary owner of the organization or a SUPER_ADMIN can reset an ADMIN password',
+    });
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
 
@@ -309,7 +298,12 @@ export class UsersService {
     );
   }
 
-  async remove(adminUserId: string, userId: string, organizationId?: string) {
+  async remove(
+    adminUserId: string,
+    userId: string,
+    organizationId: string | undefined,
+    actor: ActorContext | undefined,
+  ) {
     if (adminUserId === userId) {
       throw new BadRequestException('Admins cannot delete their own account');
     }
@@ -334,6 +328,12 @@ export class UsersService {
           'Cannot remove the primary owner. Transfer ownership first.',
         );
       }
+
+      await this.assertMayManageAdminAccount(actor, userId, organizationId, {
+        primaryOwner: 'Only the primary owner can remove the primary owner',
+        admin:
+          'Only the primary owner of the organization or a SUPER_ADMIN can remove an ADMIN',
+      });
 
       if (orgUser.role === OrgRole.ADMIN) {
         const adminCount = await this.prisma.organizationUser.count({
@@ -394,6 +394,42 @@ export class UsersService {
         },
       },
     );
+  }
+
+  /**
+   * SEC-001, restated for phase 2: the primary owner's account, and any other
+   * admin-rank account (ADMIN, or a leftover OWNER), is managed only by the
+   * primary owner or a SUPER_ADMIN. Taking one over (password, email, name or
+   * deactivation) is the same escalation as minting one. Acting on one's own
+   * account takes over nothing, except that the primary owner's account still
+   * needs the primary owner. A missing actor is never allowed through.
+   */
+  private async assertMayManageAdminAccount(
+    actor: ActorContext | undefined,
+    userId: string,
+    organizationId: string | undefined,
+    messages: { primaryOwner: string; admin: string },
+  ): Promise<void> {
+    if (await this.isPrimaryOwnerActor(actor, organizationId)) {
+      return;
+    }
+
+    const targetOrgUser = await this.prisma.organizationUser.findFirst({
+      where: { userId, organizationId },
+      select: { isPrimaryOwner: true, role: true },
+    });
+    if (targetOrgUser?.isPrimaryOwner === true) {
+      throw new ForbiddenException(messages.primaryOwner);
+    }
+
+    const isSelf = actor?.userId === userId;
+    if (
+      !isSelf &&
+      targetOrgUser &&
+      hasEffectiveRole(targetOrgUser.role, OrgRole.ADMIN)
+    ) {
+      throw new ForbiddenException(messages.admin);
+    }
   }
 
   /**

@@ -64,6 +64,7 @@ describe('UsersService.resetPassword — Integration (audit parity)', () => {
       targetUserId,
       dto,
       orgId,
+      undefined,
     );
 
     const next: CallHandler = { handle: () => of(serviceResult) };
@@ -110,10 +111,7 @@ describe('UsersService.resetPassword — Integration (audit parity)', () => {
       planLimitServiceStub as never,
       authServiceStub as never,
     );
-    auditInterceptor = new AuditInterceptor(
-      prisma as never,
-      new Reflector(),
-    );
+    auditInterceptor = new AuditInterceptor(prisma as never, new Reflector());
 
     const suffix = Date.now();
     const org = await prisma.organization.create({
