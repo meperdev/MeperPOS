@@ -48,7 +48,7 @@ El badge muestra **Enviada** para una orden `PENDING` con `sentAt`, y suma
 | `POST /api/purchase-orders/:id/duplicate` | "Repetir pedido": crea un borrador. Acepta `{ "supplierId" }` opcional. |
 | `GET /api/purchase-orders?status=OVERDUE` | Lista las órdenes atrasadas. |
 
-Todas usan los roles de las demás rutas de órdenes (`ADMIN`, `MEMBER`) y están
+Todas usan los roles de las demás rutas de órdenes (`ADMIN`) y están
 filtradas por organización.
 
 ## 3. El documento y su copia fija

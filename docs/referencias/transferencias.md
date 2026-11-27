@@ -54,8 +54,8 @@ puede vender ni reservar unidades que están en un camión.
 ## 3. API
 
 Todas las rutas llevan `JwtAuthGuard`, `OrganizationRequiredGuard` y `@Roles`.
-Despachar y cancelar son trabajo administrativo (`ADMIN`, `MEMBER`; `OWNER` hereda
-de `ADMIN`). El cajero de la sede de destino recibe la mercancía, así que leer y
+Despachar y cancelar son trabajo administrativo (`ADMIN`; ningún otro rol lo
+alcanza). El cajero de la sede de destino recibe la mercancía, así que leer y
 recibir admiten además `CASHIER`. Toda lectura y toda escritura se filtra por la
 organización del token.
 
@@ -111,8 +111,8 @@ serialización de PostgreSQL se informa como el mismo 409, nunca se reintenta so
 y acepta `status` (`IN_TRANSIT`, `RECEIVED`, `CANCELLED`), `siteId` (solo
 transferencias que salen o llegan a esa sede), `page` y `limit` (10 por defecto).
 
-`OWNER` y `ADMIN` ven todas las transferencias de la organización. Un miembro o un
-cajero con sedes asignadas solo ve las que tocan alguna de sus sedes; sin ninguna
+`ADMIN` ve todas las transferencias de la organización. Un cajero con sedes
+asignadas solo ve las que tocan alguna de sus sedes; sin ninguna
 asignación no ve ninguna. Un identificador de otra organización responde 404.
 
 ## 4. Errores

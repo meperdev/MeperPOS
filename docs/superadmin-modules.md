@@ -5,7 +5,7 @@ Modules are platform capabilities that one organization can use and another can 
 ## Who can administer
 
 - **SUPER_ADMIN only.** Every administrative module route is guarded on the backend by `JwtAuthGuard` + `RolesGuard` with `@Roles('SUPER_ADMIN')`. A hidden menu or a redirect is presentation, not a permission.
-- An organization's `OWNER` or `ADMIN` works inside the capability the platform enabled; they cannot enable or disable a module for their tenant.
+- An organization's `ADMIN` works inside the capability the platform enabled; they cannot enable or disable a module for their tenant.
 - Plans, roles and modules are separate decisions. Changing an organization's plan does not activate a module, and no organization role grants module activation.
 - The organization detail page shows module state but has no activation control: activation happens in one place only.
 
