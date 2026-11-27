@@ -78,8 +78,8 @@ describe("Purchase orders list page — create action is gated by the role hiera
     cleanup();
   });
 
-  it("shows Nueva orden for OWNER", () => {
-    authState.role = "OWNER";
+  it("shows Nueva orden for ADMIN", () => {
+    authState.role = "ADMIN";
 
     render(<PurchaseOrdersPage />);
 
@@ -92,14 +92,6 @@ describe("Purchase orders list page — create action is gated by the role hiera
     render(<PurchaseOrdersPage />);
 
     expect(screen.getByRole("link", { name: /nueva orden/i })).toBeTruthy();
-  });
-
-  it("hides Nueva orden for MEMBER", () => {
-    authState.role = "MEMBER";
-
-    render(<PurchaseOrdersPage />);
-
-    expect(screen.queryByRole("link", { name: /nueva orden/i })).toBeNull();
   });
 
   it("hides Nueva orden for CASHIER", () => {

@@ -8,21 +8,20 @@ se reparte el stock entre sedes. El detalle operativo del corte de stock está e
 ## 1. Organización y rol
 
 - Un `User` puede pertenecer a varias organizaciones a través de
-  `OrganizationUser`, y ese vínculo lleva el rol. Los roles asignables hoy son
-  `ADMIN`, `CASHIER` e `INVENTORY_USER`; `OWNER` y `MEMBER` están retirados
-  (siguen en el enum hasta la fase 4 de la redefinición).
-- `OWNER` está retirado: la migración `20261127130000_collapse_owner_into_admin`
-  pasó a `ADMIN` toda membresía que lo tenía y conservó `isPrimaryOwner`. El
-  dueño principal es un `ADMIN` con `isPrimaryOwner = true`; solo él (o un
-  `SUPER_ADMIN`) puede crear otros administradores, y nadie puede asignar
-  `OWNER` por la API (`POST /api/users`, alta de miembro y cambio de rol del
-  panel lo rechazan). La propiedad se transfiere solo desde el panel de
-  plataforma (`POST /api/admin/organizations/:id/transfer-owner`).
-- `MEMBER` está retirado: la migración `20261127120000_retire_member_role` pasó
-  a `CASHIER` toda membresía que lo tenía, el rol por defecto de una membresía
-  nueva es `CASHIER` y la pantalla de equipo ya no lo ofrece. El valor sigue en
-  el enum (y en los `@Roles` que lo nombran) hasta que se rehaga la tabla de
-  permisos; ninguna membresía debería tenerlo.
+  `OrganizationUser`, y ese vínculo lleva el rol. El enum `OrgRole` tiene
+  exactamente tres roles asignables: `ADMIN` (Propietario/Admin), `CASHIER` y
+  `INVENTORY_USER` (Bodega). `OWNER` y `MEMBER` ya no existen en el tipo, así
+  que `@IsEnum(OrgRole)` los rechaza en cualquier API.
+- El dueño principal es una membresía `ADMIN` con `isPrimaryOwner = true`: la
+  migración `20261127130000_collapse_owner_into_admin` pasó a `ADMIN` toda
+  membresía que era `OWNER` y conservó la marca. Solo el dueño principal (o un
+  `SUPER_ADMIN`) puede crear otros administradores, y la propiedad se transfiere
+  solo desde el panel de plataforma
+  (`POST /api/admin/organizations/:id/transfer-owner`).
+- Las migraciones `20261127120000_retire_member_role` (MEMBER → CASHIER) y
+  `20261127200000_drop_owner_member_roles` (recrea el tipo sin `OWNER` ni
+  `MEMBER`) cerraron el retiro. El rol por defecto de una membresía nueva es
+  `CASHIER` y ninguna pantalla ofrece los roles retirados.
 - La sesión arrastra la organización activa. `JwtStrategy` vuelve a leer el rol
   del vínculo en cada request, así que un token viejo nunca conserva un rol que
   ya se cambió.
@@ -66,8 +65,8 @@ La regla es explícita y no se hereda sola:
   asignó (`MembershipLocation`), una por una. Cero asignaciones significa cero
   sedes visibles, nunca todas.
 - **Una membresía operativa nueva arranca en la sede principal.** Al crear un
-  `CASHIER`, `MEMBER` o `INVENTORY_USER`, la base le asigna la sede principal de
-  su organización (y lo mismo si un `ADMIN` sin ninguna asignación baja a uno de
+  `CASHIER` o `INVENTORY_USER`, la base le asigna la sede principal de su
+  organización (y lo mismo si un `ADMIN` sin ninguna asignación baja a uno de
   esos roles). Es la línea base que S3 promete: el acceso a la sede principal se
   conserva y cada sede adicional la asigna un administrador.
 - **Crear una sede no amplía el acceso de nadie.** La sede nueva nace sin

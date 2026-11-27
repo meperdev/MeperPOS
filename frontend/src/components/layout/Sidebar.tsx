@@ -49,7 +49,6 @@ import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react
 export const SIDEBAR_SCROLL_KEY = "meper_sidebar_scroll_top";
 
 const roleLabels: Record<string, string> = {
-  OWNER: "Propietario",
   ADMIN: "Administrador",
   CASHIER: "Cajero",
   INVENTORY_USER: "Inventario",

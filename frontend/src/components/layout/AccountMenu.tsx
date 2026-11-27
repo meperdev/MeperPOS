@@ -15,9 +15,7 @@ import { visibleAccountMenuSections } from "@/components/layout/nav-routes";
 import { cn } from "@/lib/utils";
 
 const roleLabels: Record<string, string> = {
-  OWNER: "Propietario",
   ADMIN: "Administrador",
-  MEMBER: "Miembro",
   CASHIER: "Cajero",
   INVENTORY_USER: "Inventario",
   SUPER_ADMIN: "Super administrador",

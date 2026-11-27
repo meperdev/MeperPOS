@@ -38,11 +38,7 @@ export type SalePricingProduct = Pick<
 export function canOverrideSalePrice(user: RequestUser | undefined): boolean {
   if (!user) return false;
   if (user.isSuperAdmin || user.role === 'SUPER_ADMIN') return true;
-  return (
-    user.role === OrgRole.ADMIN ||
-    user.role === OrgRole.OWNER ||
-    user.role === OrgRole.CASHIER
-  );
+  return user.role === OrgRole.ADMIN || user.role === OrgRole.CASHIER;
 }
 
 /** Server-resolved POS pricing; override permission stays with the caller. */
@@ -72,7 +68,7 @@ export function resolveSaleItemPricing(
     Math.abs(requestedUnitPrice - serverUnitPrice) > 0.01;
   if (isOverride && !canOverride) {
     throw new ForbiddenException(
-      `Only an ADMIN, OWNER, SUPER_ADMIN or CASHIER may override the unit price of ${product.name}`,
+      `Only an ADMIN, SUPER_ADMIN or CASHIER may override the unit price of ${product.name}`,
     );
   }
   const unitPrice = isOverride ? requestedUnitPrice : serverUnitPrice;

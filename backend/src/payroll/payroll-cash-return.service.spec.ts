@@ -12,7 +12,7 @@ import { PayrollCashReturnService } from './payroll-cash-return.service';
 const actor = {
   userId: 'u',
   organizationId: 'org',
-  role: 'OWNER',
+  role: 'ADMIN',
 } as RequestUser;
 const input = {
   employeeId: 'emp',
@@ -171,7 +171,7 @@ describe('PayrollCashReturnService (mock transactions only)', () => {
     });
   });
 
-  it.each(['OWNER', 'ADMIN'])(
+  it.each(['ADMIN'])(
     'appends one full return for the %s of the tenant, locking employee then obligation then outflow',
     async (role) => {
       const { service, tx, transaction } = setup();
@@ -244,7 +244,7 @@ describe('PayrollCashReturnService (mock transactions only)', () => {
     ).toBeGreaterThan(tx.$queryRaw.mock.invocationCallOrder[2]);
   });
 
-  it.each(['MEMBER', 'CASHIER', 'INVENTORY_USER', 'SUPER_ADMIN'])(
+  it.each(['CASHIER', 'INVENTORY_USER', 'SUPER_ADMIN'])(
     'rejects role %s before any work',
     async (role) => {
       const { service, transaction } = setup();

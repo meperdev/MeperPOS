@@ -498,7 +498,7 @@ describe('T9 independent public capability interactions S1-S6', () => {
     }
   });
 
-  it.each(['OWNER', 'ADMIN', 'MEMBER', 'CASHIER', 'INVENTORY_USER'])(
+  it.each(['ADMIN', 'CASHIER', 'INVENTORY_USER'])(
     'S3 denies %s with unchanged public state',
     async (role) => {
       const hash = snapshot();

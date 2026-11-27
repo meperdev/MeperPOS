@@ -5,7 +5,7 @@ import { OrganizationSelectModal } from "./OrganizationSelectModal";
 describe("OrganizationSelectModal", () => {
   const organizations = [
     { id: "org-1", name: "Org One", role: "ADMIN", plan: "BASIC" },
-    { id: "org-2", name: "Org Two", role: "MEMBER", plan: "PRO" },
+    { id: "org-2", name: "Org Two", role: "CASHIER", plan: "PRO" },
   ];
 
   it("renders list of organizations", () => {

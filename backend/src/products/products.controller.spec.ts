@@ -44,7 +44,7 @@ describe('ProductsController — promotion write authorization', () => {
     jest.clearAllMocks();
   });
 
-  it('restricts product writes (create/update) to ADMIN and MEMBER', () => {
+  it('restricts product writes (create/update) to ADMIN', () => {
     const controller = new ProductsController(
       serviceMock as never,
       locationsMock as never,
@@ -52,11 +52,9 @@ describe('ProductsController — promotion write authorization', () => {
 
     expect(Reflect.getMetadata(ROLES_KEY, controller.create)).toEqual([
       OrgRole.ADMIN,
-      OrgRole.MEMBER,
     ]);
     expect(Reflect.getMetadata(ROLES_KEY, controller.update)).toEqual([
       OrgRole.ADMIN,
-      OrgRole.MEMBER,
     ]);
   });
 
@@ -73,7 +71,7 @@ describe('ProductsController — promotion write authorization', () => {
     expect(serviceMock.update).not.toHaveBeenCalled();
   });
 
-  it('allows MEMBER through RolesGuard on product update', () => {
+  it('allows ADMIN through RolesGuard on product update', () => {
     const controller = new ProductsController(
       serviceMock as never,
       locationsMock as never,
@@ -81,7 +79,7 @@ describe('ProductsController — promotion write authorization', () => {
     const guard = new RolesGuard(new Reflector());
 
     expect(
-      guard.canActivate(createContext(controller.update, OrgRole.MEMBER)),
+      guard.canActivate(createContext(controller.update, OrgRole.ADMIN)),
     ).toBe(true);
   });
 });
@@ -329,7 +327,7 @@ describe('ProductsController — CASHIER search access (registered contract)', (
     jest.clearAllMocks();
   });
 
-  it('marks search with roles [ADMIN, MEMBER, CASHIER] on the registered controller', () => {
+  it('marks search with roles [ADMIN, CASHIER] on the registered controller', () => {
     const controller = new ProductsController(
       serviceMock as never,
       locationsMock as never,
@@ -337,12 +335,11 @@ describe('ProductsController — CASHIER search access (registered contract)', (
 
     expect(Reflect.getMetadata(ROLES_KEY, controller.search)).toEqual([
       OrgRole.ADMIN,
-      OrgRole.MEMBER,
       OrgRole.CASHIER,
     ]);
   });
 
-  it('marks quick-search with roles [ADMIN, MEMBER, CASHIER] on the registered controller', () => {
+  it('marks quick-search with roles [ADMIN, CASHIER] on the registered controller', () => {
     const controller = new ProductsController(
       serviceMock as never,
       locationsMock as never,
@@ -350,7 +347,6 @@ describe('ProductsController — CASHIER search access (registered contract)', (
 
     expect(Reflect.getMetadata(ROLES_KEY, controller.quickSearch)).toEqual([
       OrgRole.ADMIN,
-      OrgRole.MEMBER,
       OrgRole.CASHIER,
     ]);
   });

@@ -280,7 +280,7 @@ describe('Purchase order documents — Integration', () => {
       organizationId,
       userId,
       email: 'receipt@example.test',
-      role: 'MEMBER' as const,
+      role: 'CASHIER' as const,
       tokenVersion: 0,
       isSuperAdmin: false,
     };

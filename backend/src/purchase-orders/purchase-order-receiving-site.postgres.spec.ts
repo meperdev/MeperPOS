@@ -215,7 +215,7 @@ function settle<T>(work: Promise<T>) {
         data: {
           organizationId: tenant.organizationId,
           userId: user.id,
-          role: 'MEMBER',
+          role: 'CASHIER',
         },
       });
       await prisma.membershipLocation.deleteMany({
@@ -232,7 +232,7 @@ function settle<T>(work: Promise<T>) {
         userId: user.id,
         email: user.email,
         organizationId: tenant.organizationId,
-        role: 'MEMBER' as const,
+        role: 'CASHIER' as const,
         tokenVersion: 0,
         isSuperAdmin: false,
       };

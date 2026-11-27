@@ -63,7 +63,7 @@ function buildService(interpret: jest.Mock) {
       }),
     },
     organizationUser: {
-      findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }),
+      findFirst: jest.fn().mockResolvedValue({ role: 'ADMIN' }),
     },
     // A live account and a live organization, which the gate also requires.
     user: { findFirst: jest.fn().mockResolvedValue({ id: USER_ID }) },

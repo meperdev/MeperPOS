@@ -48,7 +48,7 @@ describe('RolesGuard', () => {
   it('should deny access when user role does not match', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([OrgRole.ADMIN]);
 
-    const context = createMockContext({ role: OrgRole.MEMBER });
+    const context = createMockContext({ role: OrgRole.CASHIER });
     expect(() => guard.canActivate(context)).toThrow(
       new ForbiddenException('Access denied. Required roles: ADMIN'),
     );
@@ -66,18 +66,18 @@ describe('RolesGuard', () => {
   it('should allow access when user has one of multiple required roles', () => {
     jest
       .spyOn(reflector, 'getAllAndOverride')
-      .mockReturnValue([OrgRole.ADMIN, OrgRole.OWNER]);
+      .mockReturnValue([OrgRole.ADMIN, OrgRole.CASHIER]);
 
-    const context = createMockContext({ role: OrgRole.OWNER });
+    const context = createMockContext({ role: OrgRole.CASHIER });
     expect(guard.canActivate(context)).toBe(true);
   });
 
   it('should deny access when user role is not in required roles list', () => {
     jest
       .spyOn(reflector, 'getAllAndOverride')
-      .mockReturnValue([OrgRole.ADMIN, OrgRole.OWNER]);
+      .mockReturnValue([OrgRole.ADMIN, OrgRole.CASHIER]);
 
-    const context = createMockContext({ role: OrgRole.MEMBER });
+    const context = createMockContext({ role: OrgRole.INVENTORY_USER });
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 
@@ -95,7 +95,7 @@ describe('RolesGuard', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([OrgRole.ADMIN]);
 
     const context = createMockContext({
-      role: OrgRole.MEMBER,
+      role: OrgRole.CASHIER,
       isSuperAdmin: true,
     });
     expect(guard.canActivate(context)).toBe(true);
@@ -104,7 +104,7 @@ describe('RolesGuard', () => {
   it('should allow CASHIER when CASHIER is explicitly required', () => {
     jest
       .spyOn(reflector, 'getAllAndOverride')
-      .mockReturnValue([OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER]);
+      .mockReturnValue([OrgRole.ADMIN, OrgRole.CASHIER]);
 
     const context = createMockContext({ role: OrgRole.CASHIER });
     expect(guard.canActivate(context)).toBe(true);

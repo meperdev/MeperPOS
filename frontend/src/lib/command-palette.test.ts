@@ -108,7 +108,7 @@ describe("recent entities", () => {
 
 describe("create actions", () => {
   it("offers only destinations that already open the creation flow", () => {
-    const hrefs = visibleCommandCreateActions("OWNER").map(
+    const hrefs = visibleCommandCreateActions("ADMIN").map(
       (action) => action.href,
     );
 
@@ -168,14 +168,13 @@ describe("role scoping of the API-backed groups", () => {
     expect(canSearchSales("INVENTORY_USER")).toBe(false);
     expect(canSearchCustomers("INVENTORY_USER")).toBe(false);
     expect(canSearchSales("CASHIER")).toBe(true);
-    expect(canSearchCustomers("OWNER")).toBe(true);
+    expect(canSearchCustomers("ADMIN")).toBe(true);
   });
 
   it("sends the inventory role to the endpoint its token can read", () => {
     // /products/search excludes INVENTORY_USER; GET /products does not.
     expect(productSearchSource("INVENTORY_USER")).toBe("list");
     expect(productSearchSource("CASHIER")).toBe("search");
-    expect(productSearchSource("OWNER")).toBe("search");
     expect(productSearchSource("ADMIN")).toBe("search");
     expect(productSearchSource(undefined)).toBeNull();
   });

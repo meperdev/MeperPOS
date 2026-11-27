@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma, OrgRole, SupplierAccountType, CustomerSegment } from '@prisma/client';
+import { PrismaClient, Prisma, SupplierAccountType, CustomerSegment } from '@prisma/client';
 import { faker } from '@faker-js/faker';
 import { applySiteStockDelta, resolveDefaultSiteWithin } from '../src/inventory/site-stock';
 
@@ -134,9 +134,7 @@ async function resolveOrganizationId(): Promise<string> {
   });
 
   const membership =
-    memberships.find((m) => m.isPrimaryOwner) ??
-    memberships.find((m) => m.role === OrgRole.OWNER) ??
-    memberships[0];
+    memberships.find((m) => m.isPrimaryOwner) ?? memberships[0];
 
   if (!membership) {
     throw new Error(

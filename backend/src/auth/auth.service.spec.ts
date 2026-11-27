@@ -167,7 +167,7 @@ describe('AuthService', () => {
           id: 'ou-2',
           userId: 'user-1',
           organizationId: 'org-2',
-          role: OrgRole.MEMBER,
+          role: OrgRole.CASHIER,
           joinedAt: new Date(),
           organization: {
             id: 'org-2',
@@ -194,7 +194,7 @@ describe('AuthService', () => {
           {
             id: 'org-2',
             name: 'Org Two',
-            role: OrgRole.MEMBER,
+            role: OrgRole.CASHIER,
             plan: PlanType.PRO,
           },
         ],
@@ -461,7 +461,7 @@ describe('AuthService', () => {
           id: 'ou-2',
           userId: 'user-1',
           organizationId: 'org-2',
-          role: OrgRole.MEMBER,
+          role: OrgRole.CASHIER,
           joinedAt: new Date(),
           organization: {
             id: 'org-2',
@@ -486,7 +486,7 @@ describe('AuthService', () => {
           {
             id: 'org-2',
             name: 'Org Two',
-            role: OrgRole.MEMBER,
+            role: OrgRole.CASHIER,
             plan: PlanType.PRO,
             status: OrgStatus.TRIAL,
           },
@@ -793,20 +793,20 @@ describe('AuthService', () => {
     it('re-issues the membership role from the database, never from the claim', async () => {
       mockPrisma.organizationUser.findFirst.mockResolvedValue({
         organizationId: 'org-1',
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
       });
 
       await service.changePassword('user-1', dto, {
         organizationId: 'org-1',
         // A tampered/stale claim claiming ADMIN must not reach the new token.
-        role: OrgRole.OWNER,
+        role: OrgRole.ADMIN,
       });
 
       expect(mockPrisma.organizationUser.findFirst).toHaveBeenCalledWith({
         where: { userId: 'user-1', organizationId: 'org-1' },
       });
       expect(mockJwtService.sign).toHaveBeenCalledWith(
-        expect.objectContaining({ role: OrgRole.MEMBER }),
+        expect.objectContaining({ role: OrgRole.CASHIER }),
         expect.anything(),
       );
     });

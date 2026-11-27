@@ -115,42 +115,6 @@ describe('UsersService', () => {
     expect(invocation.data.password).toMatch(/^\$2[aby]\$12\$/);
   });
 
-  it('creates a MEMBER membership from the team screen role list', async () => {
-    // S6: the team screen offers Miembro next to Administrador, Cajero and
-    // Inventario. MEMBER is a real OrgRole, so the create boundary stores it
-    // like any other role and never trips the OWNER guard.
-    prismaMock.user.findFirst.mockResolvedValue(null);
-    prismaMock.user.create.mockResolvedValue({
-      id: 'user-member',
-      email: 'member@example.com',
-      name: 'Member One',
-      active: true,
-      createdAt: new Date('2026-03-24T00:00:00.000Z'),
-      updatedAt: new Date('2026-03-24T00:00:00.000Z'),
-    });
-
-    await service.create(
-      {
-        email: 'member@example.com',
-        password: 'S3cure-Passphrase-42',
-        name: 'Member One',
-        role: OrgRole.MEMBER,
-      },
-      'org-1',
-      { userId: 'admin-1', role: OrgRole.ADMIN, isSuperAdmin: false },
-    );
-
-    expect(prismaMock.user.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          organizationUsers: {
-            create: { organizationId: 'org-1', role: OrgRole.MEMBER },
-          },
-        }),
-      }),
-    );
-  });
-
   it('rejects duplicate emails on update', async () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'user-2',
@@ -516,9 +480,8 @@ describe('UsersService', () => {
   });
 
   it('lets an ordinary admin go while the primary owner, now an ADMIN, remains', async () => {
-    // OWNER is retired: the primary owner is an ADMIN membership, so it counts
-    // toward "an organization keeps an admin". The old OWNER + one ADMIN case
-    // refused this removal only because the OWNER was not counted.
+    // The primary owner is an ADMIN membership, so it counts toward "an
+    // organization keeps an admin" and an ordinary ADMIN cannot remove it.
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'user-2',
       email: 'user2@example.com',
@@ -565,7 +528,7 @@ describe('UsersService', () => {
       id: 'ou-1',
       userId: 'user-2',
       organizationId: 'org-1',
-      role: 'MEMBER',
+      role: 'CASHIER',
       isPrimaryOwner: false,
     });
     prismaMock.organizationUser.delete.mockResolvedValue({ id: 'ou-1' });
@@ -669,19 +632,6 @@ describe('UsersService', () => {
       createdAt: new Date('2026-03-24T00:00:00.000Z'),
       updatedAt: new Date('2026-03-24T00:00:00.000Z'),
     };
-
-    it('refuses the retired OWNER role even for a SUPER_ADMIN', async () => {
-      await expect(
-        service.create({ ...createDto, role: OrgRole.OWNER }, 'org-1', {
-          userId: 'super-1',
-          role: 'SUPER_ADMIN',
-          isSuperAdmin: true,
-        }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-
-      expect(prismaMock.organizationUser.findFirst).not.toHaveBeenCalled();
-      expect(prismaMock.user.create).not.toHaveBeenCalled();
-    });
 
     it('refuses an ADMIN who is not the primary owner creating an ADMIN', async () => {
       prismaMock.organizationUser.findFirst.mockResolvedValue({
@@ -831,7 +781,7 @@ describe('UsersService', () => {
     it('refuses an ordinary ADMIN resetting another ADMIN password', async () => {
       // An admin account is the top organization role: taking one over is the
       // same escalation as minting one, so only the primary owner (or a
-      // SUPER_ADMIN) may reset it. This also covers former OWNER memberships
+      // SUPER_ADMIN) may reset it, including the primary owner's account.
       // that the migration turned into unflagged ADMINs.
       mockTargetAndActor('admin-2', false, false);
 
@@ -990,30 +940,6 @@ describe('UsersService', () => {
         expect(prismaMock.user.update).toHaveBeenCalledTimes(1);
       });
 
-      it.each([
-        ['a missing actor', undefined],
-        ['an ordinary ADMIN', ordinaryAdmin],
-      ] as const)(
-        'protects a leftover OWNER without the flag from %s',
-        async (_label, actor) => {
-          mockTargetAndActor('legacy-1', false, false, 'OWNER');
-
-          await expect(
-            service.update(
-              'admin-1',
-              'legacy-1',
-              { name: 'Edited' },
-              'org-1',
-              actor,
-            ),
-          ).rejects.toBeInstanceOf(ForbiddenException);
-          await expect(
-            service.toggleActive('admin-1', 'legacy-1', 'org-1', actor),
-          ).rejects.toBeInstanceOf(ForbiddenException);
-          expect(prismaMock.user.update).not.toHaveBeenCalled();
-        },
-      );
-
       it('refuses an ordinary ADMIN removing another ADMIN from the organization', async () => {
         mockTargetAndActor('admin-2', false, false);
         prismaMock.organizationUser.count.mockResolvedValue(2);
@@ -1032,17 +958,6 @@ describe('UsersService', () => {
           service.remove('admin-1', 'owner-1', 'org-1', ordinaryAdmin),
         ).rejects.toThrow(
           'Cannot remove the primary owner. Transfer ownership first.',
-        );
-        expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
-      });
-
-      it('refuses removing a leftover OWNER with the admin message', async () => {
-        mockTargetAndActor('legacy-1', false, false, 'OWNER');
-
-        await expect(
-          service.remove('admin-1', 'legacy-1', 'org-1', ordinaryAdmin),
-        ).rejects.toThrow(
-          'Only the primary owner of the organization or a SUPER_ADMIN can remove an ADMIN',
         );
         expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
       });

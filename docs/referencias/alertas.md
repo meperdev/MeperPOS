@@ -26,10 +26,10 @@ La campanita ya no calcula nada. El backend arma la lista y la entrega completa:
 - **`revision`** es la huella de los hechos detrás de la alerta. Cambia cuando
   cambia el conjunto de productos bajos, los contadores del plan, los préstamos
   vencidos o la fecha de la prueba.
-- **Visibilidad**: la decide el servidor. `ADMIN` (y `OWNER` por herencia) ve
+- **Visibilidad**: la decide el servidor. `ADMIN` ve
   facturación, límites, stock, préstamos y tareas; `INVENTORY_USER` ve stock,
-  préstamos y tareas; `CASHIER` ve préstamos y tareas; `MEMBER` ve préstamos y
-  tareas. Un rol sin permiso no recibe la categoría, aunque la pida.
+  préstamos y tareas; `CASHIER` ve préstamos y tareas. Un rol sin permiso no
+  recibe la categoría, aunque la pida.
 - **Degradación por fuente**: si una consulta falla (por ejemplo, un timeout en
   préstamos), se pierde solo esa categoría; las demás se siguen sirviendo. Cada
   fallo queda en el log como `alerts_signal_failed` con el nombre de la fuente y
@@ -71,7 +71,7 @@ repetirlo no duplica episodios ni mensajes.
 ### A quién le llega
 
 Al **primer teléfono verificado** (`WhatsAppIdentity` en estado `VERIFIED`) cuyo
-usuario sea `OWNER` o `ADMIN` de esa misma organización, ordenado por fecha de
+usuario sea `ADMIN` de esa misma organización, ordenado por fecha de
 verificación. Es la misma política que usa el reporte diario: el stock de una
 organización nunca viaja al administrador de otra.
 
@@ -141,7 +141,7 @@ reciente primero:
 }
 ```
 
-- Roles: `ADMIN` (OWNER hereda) e `INVENTORY_USER`, los mismos que ya ven alertas
+- Roles: `ADMIN` e `INVENTORY_USER`, los mismos que ya ven alertas
   de stock. El tenant sale del token.
 - `limit` se acota a 100 y `page` a un mínimo de 1; un `kind` fuera del conjunto
   cerrado responde 400.

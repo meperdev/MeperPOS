@@ -14,14 +14,14 @@ import { JwtAuthGuard } from '../src/auth/jwt.strategy';
  * E2E — CASHIER-accessible product quick-search on the registered contract
  *
  * Registered-app proof that `GET /products/quick-search` serves CASHIER
- * (and ADMIN/MEMBER) through the module-registered `ProductsController` +
+ * (and ADMIN) through the module-registered `ProductsController` +
  * `ProductsService`, with Prisma mocked at the provider level. Mirrors the
  * `tax-precedence.e2e-spec.ts` composition convention plus the
  * `PlanLimitService` provider that `ProductsService` now requires.
  *
- * Role matrix: CASHIER/ADMIN/MEMBER → 200 flat product (no success/data
- * envelope) with promotion parity keys; INVENTORY_USER → 403; unauthenticated
- * → 401; no match → 200 with a null body.
+ * Role matrix: CASHIER/ADMIN → 200 flat product (no success/data envelope) with
+ * promotion parity keys; INVENTORY_USER → 403; unauthenticated → 401; no match
+ * → 200 with a null body.
  */
 describe('CASHIER quick-search on the registered products contract (e2e)', () => {
   let app: INestApplication<App>;
@@ -196,20 +196,6 @@ describe('CASHIER quick-search on the registered products contract (e2e)', () =>
       }).expect(200);
 
       expect(res.body.effectiveSalePrice).toBe(16915);
-      expect(res.body.success).toBeUndefined();
-      expect(res.body.data).toBeUndefined();
-    });
-
-    it('lets a MEMBER retrieve the flat product (200)', async () => {
-      prismaMock.product.findFirst.mockResolvedValue(promoProduct);
-
-      const res = await requestAs({
-        sub: 'member-1',
-        organizationId: 'org-1',
-        role: 'MEMBER',
-      }).expect(200);
-
-      expect(res.body.id).toBe('prod-1');
       expect(res.body.success).toBeUndefined();
       expect(res.body.data).toBeUndefined();
     });

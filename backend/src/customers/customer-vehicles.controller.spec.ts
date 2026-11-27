@@ -35,12 +35,10 @@ describe('CustomerVehiclesController', () => {
   it('requires customer access roles', () => {
     expect(Reflect.getMetadata(ROLES_KEY, controller.list)).toEqual([
       'ADMIN',
-      'MEMBER',
       'CASHIER',
     ]);
     expect(Reflect.getMetadata(ROLES_KEY, controller.create)).toEqual([
       'ADMIN',
-      'MEMBER',
       'CASHIER',
     ]);
   });

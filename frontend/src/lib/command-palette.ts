@@ -161,24 +161,24 @@ export type CommandProductSource = "search" | "list";
  * Which products endpoint the role may call.
  *
  * `GET /products/search` is the dedicated name/SKU/barcode search but is limited
- * to ADMIN, MEMBER and CASHIER; the inventory role reads the same three fields
+ * to ADMIN and CASHIER; the inventory role reads the same three fields
  * through `GET /products?search=`, which carries no role restriction. Returning
  * `null` hides the group instead of firing a request the token cannot read.
  */
 export function productSearchSource(
   role: AppRole | string | undefined,
 ): CommandProductSource | null {
-  if (hasAnyRole(role, ["ADMIN", "MEMBER", "CASHIER"])) return "search";
+  if (hasAnyRole(role, ["ADMIN", "CASHIER"])) return "search";
   if (hasAnyRole(role, ["INVENTORY_USER"])) return "list";
   return null;
 }
 
 export function canSearchCustomers(role: AppRole | string | undefined): boolean {
-  return hasAnyRole(role, ["ADMIN", "MEMBER", "CASHIER"]);
+  return hasAnyRole(role, ["ADMIN", "CASHIER"]);
 }
 
 export function canSearchSales(role: AppRole | string | undefined): boolean {
-  return hasAnyRole(role, ["ADMIN", "MEMBER", "CASHIER"]);
+  return hasAnyRole(role, ["ADMIN", "CASHIER"]);
 }
 
 /**

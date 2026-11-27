@@ -2447,8 +2447,8 @@ describe("POS price override permission (explicit roles)", () => {
     expect(screen.getByLabelText("Nuevo precio unitario")).toBeTruthy();
   });
 
-  it("hides the final-price mode from a MEMBER", async () => {
-    authState.role = "MEMBER";
+  it("hides the final-price mode from an INVENTORY_USER", async () => {
+    authState.role = "INVENTORY_USER";
     await expectNoPriceControl("Producto Miembro");
   });
 
@@ -2469,9 +2469,9 @@ describe("POS price override permission (explicit roles)", () => {
     expect(screen.getByRole("button", { name: "Aplicar precio" })).toBeTruthy();
   });
 
-  it("offers the final-price mode to an OWNER (inherits ADMIN)", async () => {
-    // Mirrors RolesGuard.getInheritedRoles, where OWNER inherits ADMIN.
-    authState.role = "OWNER";
+  it("offers the final-price mode to an ADMIN", async () => {
+    // Mirrors RolesGuard.getInheritedRoles, where ADMIN is the top org role.
+    authState.role = "ADMIN";
     renderWithSingleProduct("Producto Owner", 50000);
     await userEvent.click(screen.getByRole("button", { name: "Producto Owner" }));
     await openDiscountModal();

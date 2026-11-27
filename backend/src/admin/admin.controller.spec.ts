@@ -63,15 +63,9 @@ describe('AdminController', () => {
     const controller = new AdminController(adminServiceMock as never);
     const guard = new RolesGuard(new Reflector());
 
-    // Every persisted role, including OWNER, is refused: activation is not an
-    // organization privilege (spec S9).
-    for (const role of [
-      'OWNER',
-      'ADMIN',
-      'MEMBER',
-      'CASHIER',
-      'INVENTORY_USER',
-    ]) {
+    // Every persisted role is refused: activation is not an organization
+    // privilege (spec S9 of the roles redesign).
+    for (const role of ['ADMIN', 'CASHIER', 'INVENTORY_USER']) {
       expect(() =>
         guard.canActivate(
           createContext(controller.updateElectronicInvoicing, role),

@@ -66,16 +66,10 @@ export class UsersService {
   ) {
     const { email, password, name, role } = createUserDto;
 
-    // SEC-001, restated for phase 2 (S8 b): OWNER is retired. ADMIN is the top
-    // organization role, so minting one is reserved for the organization's
-    // primary owner (isPrimaryOwner) or a SUPER_ADMIN — otherwise any ADMIN
-    // could fabricate an equal account and control its password.
-    if (role === OrgRole.OWNER) {
-      throw new ForbiddenException(
-        'The OWNER role is retired. Assign ADMIN instead.',
-      );
-    }
-
+    // SEC-001, restated for phase 2 (S8 b): ADMIN is the top organization
+    // role, so minting one is reserved for the organization's primary owner
+    // (isPrimaryOwner) or a SUPER_ADMIN — otherwise any ADMIN could fabricate
+    // an equal account and control its password.
     if (
       role === OrgRole.ADMIN &&
       !(await this.isPrimaryOwnerActor(actor, organizationId))

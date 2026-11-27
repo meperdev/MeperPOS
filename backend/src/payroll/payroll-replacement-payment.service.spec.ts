@@ -22,7 +22,7 @@ function owner(overrides: Partial<RequestUser> = {}): RequestUser {
   return {
     userId: 'user-a',
     email: 'a@example.com',
-    role: 'OWNER',
+    role: 'ADMIN',
     isSuperAdmin: false,
     tokenVersion: 0,
     orgStatus: 'ACTIVE',
@@ -233,7 +233,7 @@ describe('PayrollReplacementPaymentService authorization and input', () => {
       ['', owner()],
       [organizationId, undefined],
       ['org-b', owner()],
-      [organizationId, owner({ role: 'MEMBER' })],
+      [organizationId, owner({ role: 'CASHIER' })],
       [organizationId, owner({ role: 'CASHIER' })],
       [organizationId, owner({ role: 'SUPER_ADMIN' as never })],
     ] as const) {

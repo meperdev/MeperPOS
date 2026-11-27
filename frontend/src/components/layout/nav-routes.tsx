@@ -37,11 +37,11 @@ export interface NavItem {
 }
 
 /**
- * Owners and administrators only, matched by identity rather than by role list.
- * Site management joins them: S3 keeps every other role on the sites an
- * administrator assigned it.
+ * Administrators only, matched by identity rather than by role list. Site
+ * management joins them: every other role stays on the sites an administrator
+ * assigned it.
  */
-export const OWNER_ADMIN_ONLY_ROUTES = ["/employees", "/payroll", "/locations"];
+export const ADMIN_ONLY_ROUTES = ["/employees", "/payroll", "/locations"];
 
 export const navItems: NavItem[] = [
   {
@@ -102,12 +102,12 @@ export const navItems: NavItem[] = [
   },
   {
     // The one inventory section a store cashier opens: dispatch and
-    // cancellation stay with ADMIN and MEMBER, and a cashier only receives at
-    // the sites an administrator assigned it.
+    // cancellation stay with ADMIN, and a cashier only receives at the sites an
+    // administrator assigned it.
     label: "Transferencias",
     href: "/transfers",
     icon: <ArrowLeftRight className="w-4 h-4" />,
-    roles: ["ADMIN", "MEMBER", "CASHIER"],
+    roles: ["ADMIN", "CASHIER"],
     group: "Inventario",
   },
   {
@@ -221,8 +221,8 @@ export function canOpenNavItem(
   userRole: AppRole | string | undefined,
   item: NavItem,
 ): boolean {
-  if (OWNER_ADMIN_ONLY_ROUTES.includes(item.href)) {
-    return userRole === "OWNER" || userRole === "ADMIN";
+  if (ADMIN_ONLY_ROUTES.includes(item.href)) {
+    return userRole === "ADMIN";
   }
   return !item.roles || hasAnyRole(userRole, item.roles);
 }

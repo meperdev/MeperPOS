@@ -31,7 +31,6 @@ describe('AlertsController', () => {
     expect(roles).toEqual(
       expect.arrayContaining([
         OrgRole.ADMIN,
-        OrgRole.MEMBER,
         OrgRole.CASHIER,
         OrgRole.INVENTORY_USER,
       ]),

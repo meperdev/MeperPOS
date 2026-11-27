@@ -97,11 +97,11 @@ describe('administrative WhatsApp identity boundary', () => {
     }
   });
 
-  it('rejects MEMBER and CASHIER on every identity route', async () => {
+  it('rejects CASHIER and INVENTORY_USER on every identity route', async () => {
     const { app, identities } = await build();
     const server = app.getHttpServer();
     try {
-      for (const role of ['MEMBER', 'CASHIER', 'INVENTORY_USER']) {
+      for (const role of ['CASHIER', 'INVENTORY_USER']) {
         const challenge = await request(server)
           .post(CHALLENGE)
           .set(auth(role, 'org-a'));
@@ -125,13 +125,13 @@ describe('administrative WhatsApp identity boundary', () => {
     }
   });
 
-  it('admits OWNER because it inherits ADMIN', async () => {
+  it('denies the retired OWNER role, which is no longer an OrgRole', async () => {
     const { app } = await build();
     try {
       const response = await request(app.getHttpServer())
         .post(CHALLENGE)
         .set(auth('OWNER', 'org-a'));
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(403);
     } finally {
       await app.close();
     }

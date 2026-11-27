@@ -161,7 +161,7 @@ describe("ExpenseTaxonomyModal", () => {
   });
 
   it("renders nothing for non-admin roles", () => {
-    useAuthMock.mockReturnValue({ user: { role: "MEMBER" } });
+    useAuthMock.mockReturnValue({ user: { role: "CASHIER" } });
     const { container } = render(<ExpenseTaxonomyModal isOpen onClose={vi.fn()} />);
     expect(container.firstChild).toBeNull();
   });

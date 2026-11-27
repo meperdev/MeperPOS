@@ -579,7 +579,7 @@ it("offers no correction while the payment has no installment to fix", async () 
   expect(screen.getByRole("menuitem", { name: "Registrar abono" })).toBeInTheDocument();
 });
 
-it("does not expose payroll to roles other than OWNER and ADMIN", () => {
+it("does not expose payroll to roles other than ADMIN", () => {
   state.role = "CASHIER";
   state.obligations.data = [periodObligation];
   render(<PayrollPage />);

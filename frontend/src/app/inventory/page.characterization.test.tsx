@@ -425,8 +425,8 @@ describe("Inventory page — characterization (current behavior)", () => {
 });
 
 describe("Inventory page — create action is gated by the role hierarchy", () => {
-  it("shows Nuevo producto for OWNER", () => {
-    authState.role = "OWNER";
+  it("shows Nuevo producto for ADMIN", () => {
+    authState.role = "ADMIN";
 
     render(<InventoryPage />);
 
@@ -449,11 +449,4 @@ describe("Inventory page — create action is gated by the role hierarchy", () =
     expect(screen.queryByRole("button", { name: /nuevo producto/i })).not.toBeInTheDocument();
   });
 
-  it("hides Nuevo producto for MEMBER", () => {
-    authState.role = "MEMBER";
-
-    render(<InventoryPage />);
-
-    expect(screen.queryByRole("button", { name: /nuevo producto/i })).not.toBeInTheDocument();
-  });
 });

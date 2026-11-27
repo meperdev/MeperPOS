@@ -124,10 +124,10 @@ describe('employee controller boundary', () => {
           getClass: () => EmployeesController,
           switchToHttp: () => ({ getRequest: () => ({ user: { role } }) }),
         }) as unknown as ExecutionContext;
-      expect(guard.canActivate(context(OrgRole.OWNER))).toBe(true);
+      expect(guard.canActivate(context(OrgRole.ADMIN))).toBe(true);
       expect(guard.canActivate(context(OrgRole.ADMIN))).toBe(true);
       for (const role of [
-        OrgRole.MEMBER,
+        OrgRole.CASHIER,
         OrgRole.CASHIER,
         OrgRole.INVENTORY_USER,
       ])

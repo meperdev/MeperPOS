@@ -57,14 +57,14 @@ const url = process.env.MULTI_VERIFY_URL;
           email: `${tag}@example.test`,
           password: 'not-a-credential',
           organizationUsers: {
-            create: { organizationId, role: OrgRole.MEMBER },
+            create: { organizationId, role: OrgRole.CASHIER },
           },
         },
       });
       const actor = {
         userId: user.id,
         email: user.email,
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
         organizationId,
         tokenVersion: user.tokenVersion,
         isSuperAdmin: false,

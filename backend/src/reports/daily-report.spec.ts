@@ -409,7 +409,7 @@ describe('daily report authorization boundary', () => {
     'requires administrator permission for %s',
     (role) => {
       for (const method of ['get', 'pdf'] as const) {
-        if (role === OrgRole.OWNER || role === OrgRole.ADMIN)
+        if (role === OrgRole.ADMIN)
           expect(guard.canActivate(context(method, role))).toBe(true);
         else
           expect(() => guard.canActivate(context(method, role))).toThrow(

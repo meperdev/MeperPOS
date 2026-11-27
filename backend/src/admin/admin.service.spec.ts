@@ -1164,19 +1164,19 @@ describe('AdminService', () => {
         id: 'ou-1',
         userId: 'existing-user',
         organizationId: 'org-1',
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
         isPrimaryOwner: false,
         joinedAt: new Date(),
       });
 
       const result = await service.addOrganizationMember('org-1', {
         email: 'existing@example.com',
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
       });
 
       expect(prismaMock.user.create).not.toHaveBeenCalled();
       expect(result.tempPassword).toBeUndefined();
-      expect(result.organizationUser.role).toBe(OrgRole.MEMBER);
+      expect(result.organizationUser.role).toBe(OrgRole.CASHIER);
     });
 
     it('throws NotFoundException if organization does not exist', async () => {
@@ -1185,7 +1185,7 @@ describe('AdminService', () => {
       await expect(
         service.addOrganizationMember('non-existent', {
           email: 'test@example.com',
-          role: OrgRole.MEMBER,
+          role: OrgRole.CASHIER,
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
@@ -1204,7 +1204,7 @@ describe('AdminService', () => {
         id: 'ou-1',
         userId: 'existing-user',
         organizationId: 'org-1',
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
       });
 
       await expect(
@@ -1213,18 +1213,6 @@ describe('AdminService', () => {
           role: OrgRole.CASHIER,
         }),
       ).rejects.toBeInstanceOf(ConflictException);
-    });
-
-    it('refuses to assign the retired OWNER role (S8 b)', async () => {
-      await expect(
-        service.addOrganizationMember('org-1', {
-          email: 'retired-owner@example.com',
-          role: OrgRole.OWNER,
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-
-      expect(prismaMock.user.create).not.toHaveBeenCalled();
-      expect(prismaMock.organizationUser.create).not.toHaveBeenCalled();
     });
 
     it('still assigns ADMIN from the platform panel', async () => {
@@ -1266,7 +1254,7 @@ describe('AdminService', () => {
         id: 'ou-1',
         userId: 'user-1',
         organizationId: 'org-1',
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
         isPrimaryOwner: false,
       });
       prismaMock.organizationUser.update.mockResolvedValue({
@@ -1298,22 +1286,6 @@ describe('AdminService', () => {
       await expect(
         service.updateMemberRole('org-1', 'user-99', OrgRole.ADMIN),
       ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    it('refuses to move a member into the retired OWNER role (S8 b)', async () => {
-      prismaMock.organizationUser.findFirst.mockResolvedValue({
-        id: 'ou-1',
-        userId: 'user-1',
-        organizationId: 'org-1',
-        role: OrgRole.CASHIER,
-        isPrimaryOwner: false,
-      });
-
-      await expect(
-        service.updateMemberRole('org-1', 'user-1', OrgRole.OWNER),
-      ).rejects.toBeInstanceOf(BadRequestException);
-
-      expect(prismaMock.organizationUser.update).not.toHaveBeenCalled();
     });
   });
 

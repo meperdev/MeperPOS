@@ -104,9 +104,7 @@ export default function ProfilePage() {
 
   const roleLabel: Record<string, string> = {
     SUPER_ADMIN: "Super Admin",
-    OWNER: "Propietario",
     ADMIN: "Administrador",
-    MEMBER: "Miembro",
     CASHIER: "Cajero",
     INVENTORY_USER: "Inventario",
   };

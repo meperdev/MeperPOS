@@ -723,7 +723,7 @@ describe('WhatsAppDeliveryService', () => {
       const { service, sender } = setup({
         identities: [identity({ phone: PHONE })],
         memberships: [
-          membership({ organizationId: OTHER_ORGANIZATION_ID, role: 'OWNER' }),
+          membership({ organizationId: OTHER_ORGANIZATION_ID, role: 'ADMIN' }),
         ],
       });
 

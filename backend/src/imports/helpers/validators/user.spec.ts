@@ -3,13 +3,8 @@ import { validatePasswordPolicy } from '../../../common/validators/password.poli
 import { PASSWORD_MIN_LENGTH } from '../../../common/validators/password.policy';
 
 describe('USER_ROLES', () => {
-  it('defines the assignable organization role set, without the retired OWNER', () => {
-    expect(USER_ROLES).toEqual([
-      'ADMIN',
-      'MEMBER',
-      'CASHIER',
-      'INVENTORY_USER',
-    ]);
+  it('defines the assignable organization role set (S1: the three roles)', () => {
+    expect(USER_ROLES).toEqual(['ADMIN', 'CASHIER', 'INVENTORY_USER']);
   });
 
   it('defaults the role to CASHIER', () => {
@@ -44,6 +39,16 @@ describe('validateUserRow', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.role).toBe('ADMIN');
+    }
+  });
+
+  it.each(['OWNER', 'MEMBER'])('rejects the retired %s role', (role) => {
+    const result = validateUserRow({ ...baseRow, role });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.errorCode).toBe('INVALID_ROLE');
+      expect(result.error.field).toBe('role');
     }
   });
 

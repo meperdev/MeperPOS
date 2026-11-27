@@ -9,9 +9,9 @@ const prisma = new PrismaClient();
 /**
  * SEC-001 regression (security audit, FASE 7), restated for phase 2 (S8 b, c).
  *
- * The OWNER role is retired: nobody can assign it, and ADMIN — the top role —
+ * Exactly three roles remain: nobody can assign a retired role, and ADMIN — the top role —
  * can only be created by the organization's primary owner (`isPrimaryOwner`)
- * or a SUPER_ADMIN. The old OWNER-target protections now protect the primary
+ * or a SUPER_ADMIN. The admin-rank protections cover the primary
  * owner's account: an ADMIN who is not the primary owner can neither mint an
  * ADMIN nor reset the primary owner's password. The service-level checks below
  * must hold regardless of the controller guards, which is why they are proven
@@ -142,27 +142,6 @@ describe('UsersService — privilege escalation guardrails (SEC-001, S8 b/c)', (
 
     expect(
       await prisma.user.findUnique({ where: { email: mintedEmail } }),
-    ).toBeNull();
-  });
-
-  it('rejects assigning the retired OWNER role with 403 and persists nothing', async () => {
-    const ownerEmail = `sec001-minted-owner-${stamp}@example.com`;
-
-    await expect(
-      usersService.create(
-        {
-          email: ownerEmail,
-          password: 'Sec001-MintedPass-123!',
-          name: 'Minted Owner',
-          role: OrgRole.OWNER,
-        },
-        orgId,
-        actorOf(primaryOwnerId, OrgRole.ADMIN),
-      ),
-    ).rejects.toMatchObject({ status: 403 });
-
-    expect(
-      await prisma.user.findUnique({ where: { email: ownerEmail } }),
     ).toBeNull();
   });
 

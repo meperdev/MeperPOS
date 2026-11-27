@@ -65,15 +65,6 @@ describe('ExpensesController', () => {
     }
   });
 
-  it('allows OWNER through RolesGuard because OWNER inherits ADMIN', () => {
-    const controller = new ExpensesController(serviceMock as never);
-    const guard = new RolesGuard(new Reflector());
-
-    expect(
-      guard.canActivate(createContext(controller.findAll, OrgRole.OWNER)),
-    ).toBe(true);
-  });
-
   it('denies CASHIER access through RolesGuard', () => {
     const controller = new ExpensesController(serviceMock as never);
     const guard = new RolesGuard(new Reflector());

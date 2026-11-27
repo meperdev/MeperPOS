@@ -111,13 +111,7 @@ describe('AdminModuleCatalogController', () => {
     const { app } = await build();
     const server = app.getHttpServer();
     try {
-      for (const role of [
-        'OWNER',
-        'ADMIN',
-        'MEMBER',
-        'CASHIER',
-        'INVENTORY_USER',
-      ]) {
+      for (const role of ['ADMIN', 'CASHIER', 'INVENTORY_USER']) {
         const response = await request(server)
           .get(CATALOG_ROUTE)
           .set(auth(role, { 'x-test-org': 'org-a' }));

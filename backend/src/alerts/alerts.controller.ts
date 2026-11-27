@@ -31,7 +31,7 @@ export class AlertsController {
   constructor(private readonly alerts: AlertsService) {}
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER, OrgRole.INVENTORY_USER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER, OrgRole.INVENTORY_USER)
   @ApiOperation({ summary: 'Get the organization alert feed' })
   list(@CurrentUser() user: RequestUser): Promise<OrgAlert[]> {
     return this.alerts.list(user);

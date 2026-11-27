@@ -40,9 +40,7 @@ describe('GET /api/products/low-stock role contract', () => {
     );
   });
 
-  it('keeps the roles it already admitted', () => {
+  it('keeps admitting ADMIN', () => {
     expect(guard.canActivate(context(OrgRole.ADMIN))).toBe(true);
-    expect(guard.canActivate(context(OrgRole.MEMBER))).toBe(true);
-    expect(guard.canActivate(context(OrgRole.OWNER))).toBe(true);
   });
 });

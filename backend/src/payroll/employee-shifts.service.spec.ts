@@ -11,7 +11,7 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 
 const owner = {
   userId: 'user',
-  role: 'OWNER',
+  role: 'ADMIN',
   organizationId: 'org',
   isSuperAdmin: false,
 } as RequestUser;
@@ -134,7 +134,7 @@ describe('EmployeeShiftsService', () => {
     undefined,
     { ...owner, userId: '' },
     { ...owner, organizationId: 'other' },
-    ...['MEMBER', 'CASHIER', 'INVENTORY_USER', 'SUPER_ADMIN'].map((role) => ({
+    ...['CASHIER', 'INVENTORY_USER', 'SUPER_ADMIN'].map((role) => ({
       ...owner,
       role,
     })),

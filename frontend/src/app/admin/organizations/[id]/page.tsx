@@ -45,11 +45,11 @@ import {
   Users,
 } from "lucide-react";
 
-// OWNER is retired: the primary owner is an ADMIN membership flagged
-// isPrimaryOwner (the "Propietario" column), and the API refuses OWNER.
+// The enum holds exactly S1's three roles: the primary owner is an ADMIN
+// membership flagged isPrimaryOwner (the "Propietario" column). OWNER and
+// MEMBER are no longer values the API accepts.
 const roleOptions = [
   { value: "ADMIN", label: "Administrador" },
-  { value: "MEMBER", label: "Miembro" },
   { value: "CASHIER", label: "Cajero" },
   { value: "INVENTORY_USER", label: "Inventario" },
 ];

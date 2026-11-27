@@ -138,7 +138,7 @@ class ReplaceMembershipLocationsDto {
 @ApiTags('Locations')
 @ApiBearerAuth()
 @Controller()
-@Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER, OrgRole.INVENTORY_USER)
+@Roles(OrgRole.ADMIN, OrgRole.CASHIER, OrgRole.INVENTORY_USER)
 @UseGuards(JwtAuthGuard, RolesGuard, OrganizationRequiredGuard)
 @UseInterceptors(AdminOrganizationInterceptor)
 export class LocationsController {

@@ -203,7 +203,7 @@ function EmployeeCard({
 
 export default function EmployeesPage() {
   const { user } = useAuth();
-  const allowed = user?.role === "OWNER" || user?.role === "ADMIN";
+  const allowed = user?.role === "ADMIN";
   const employees = useEmployees(allowed);
   const setActive = useSetEmployeeActive();
   const toast = useToast();

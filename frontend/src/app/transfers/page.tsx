@@ -78,7 +78,7 @@ const STATUS_FILTERS: Array<{ value: "" | StockTransferStatus; label: string }> 
 export default function TransfersPage() {
   const { user } = useAuth();
   const canDispatch =
-    hasAnyRole(user?.role, ["ADMIN", "MEMBER"]) || user?.isSuperAdmin === true;
+    hasAnyRole(user?.role, ["ADMIN"]) || user?.isSuperAdmin === true;
 
   const [status, setStatus] = useState<"" | StockTransferStatus>("");
   const [siteId, setSiteId] = useState("");

@@ -250,10 +250,11 @@ readonly PRODUCT_CHECKSUM_SQL=$(cat <<'SQL'
 SELECT md5(string_agg(concat_ws(':', "id", "stock"::text, "reservedStock"::text), ',' ORDER BY "id")) FROM "Product"
 SQL
 )
-# 20261127120000_retire_member_role rewrites MEMBER to CASHIER and
-# 20261127130000_collapse_owner_into_admin rewrites OWNER to ADMIN, both on
-# purpose, so the checksum reads those roles as their replacement on both sides:
-# any other change still fails.
+# 20261127120000_retire_member_role rewrites MEMBER to CASHIER,
+# 20261127130000_collapse_owner_into_admin rewrites OWNER to ADMIN and
+# 20261127200000_drop_owner_member_roles does both again before recreating the
+# type, all on purpose, so the checksum reads those roles as their replacement
+# on both sides: any other change still fails.
 readonly MEMBERSHIP_CHECKSUM_SQL=$(cat <<'SQL'
 SELECT md5(string_agg(concat_ws(':', "id", "userId", "organizationId", CASE "role"::text WHEN 'MEMBER' THEN 'CASHIER' WHEN 'OWNER' THEN 'ADMIN' ELSE "role"::text END), ',' ORDER BY "id")) FROM "OrganizationUser"
 SQL
@@ -315,9 +316,12 @@ else
   FAILED=1
 fi
 check "OrganizationUser rows unchanged (MEMBER read as CASHIER, OWNER as ADMIN)" "${MEMBERSHIP_CHECKSUM_BEFORE}" "${MEMBERSHIP_CHECKSUM_AFTER}"
-check "no MEMBER membership left" "0" "$(q 'SELECT count(*) FROM "OrganizationUser" WHERE "role" = '"'"'MEMBER'"'"'')"
-check "no OWNER membership left" "0" "$(q 'SELECT count(*) FROM "OrganizationUser" WHERE "role" = '"'"'OWNER'"'"'')"
+check "no MEMBER membership left" "0" "$(q 'SELECT count(*) FROM "OrganizationUser" WHERE "role"::text = '"'"'MEMBER'"'"'')"
+check "no OWNER membership left" "0" "$(q 'SELECT count(*) FROM "OrganizationUser" WHERE "role"::text = '"'"'OWNER'"'"'')"
 check "primary owner flags unchanged" "${PRIMARY_OWNER_COUNT_BEFORE}" "$(q "${PRIMARY_OWNER_COUNT_SQL}")"
+check "OrgRole holds exactly the three current roles" "{ADMIN,CASHIER,INVENTORY_USER}" "$(q 'SELECT enum_range(NULL::"OrgRole")::text')"
+check "the retired OrgRole type did not survive" "t" "$(q 'SELECT to_regtype('"'"'"OrgRole_old"'"'"') IS NULL')"
+check "memberships still default to CASHIER" "'CASHIER'::\"OrgRole\"" "$(q "SELECT column_default FROM information_schema.columns WHERE table_name = 'OrganizationUser' AND column_name = 'role'")"
 
 readonly DEFAULT_BALANCE_MISMATCH_SQL=$(cat <<'SQL'
 SELECT count(*)
@@ -359,7 +363,7 @@ SELECT count(*) FROM (
             JOIN "Location" l ON l."id" = g."locationId" AND l."isDefault"
            WHERE g."userId" = m."userId" AND g."organizationId" = m."organizationId") AS principal_grants
   FROM "OrganizationUser" m
-  WHERE m."role" IN ('CASHIER', 'MEMBER', 'INVENTORY_USER')
+  WHERE m."role"::text IN ('CASHIER', 'MEMBER', 'INVENTORY_USER')
 ) operational
 WHERE grants <> 1 OR principal_grants <> 1
 SQL
@@ -367,7 +371,7 @@ SQL
 readonly ORG_WIDE_GRANTS_SQL=$(cat <<'SQL'
 SELECT count(*)
 FROM "OrganizationUser" m
-WHERE m."role" IN ('OWNER', 'ADMIN')
+WHERE m."role"::text IN ('OWNER', 'ADMIN')
   AND EXISTS (
     SELECT 1 FROM "MembershipLocation" g
     WHERE g."userId" = m."userId" AND g."organizationId" = m."organizationId"

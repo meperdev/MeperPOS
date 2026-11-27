@@ -216,10 +216,10 @@ interface SiteFixture {
       const [adminUser, ownerUser, both, originOnly, bare, cashierUser] =
         await Promise.all([
           member('admin', OrgRole.ADMIN),
-          member('owner', OrgRole.OWNER),
-          member('member-both', OrgRole.MEMBER),
-          member('member-origin', OrgRole.MEMBER),
-          member('member-bare', OrgRole.MEMBER),
+          member('owner', OrgRole.ADMIN),
+          member('member-both', OrgRole.CASHIER),
+          member('member-origin', OrgRole.CASHIER),
+          member('member-bare', OrgRole.CASHIER),
           member('cashier', OrgRole.CASHIER),
         ]);
       await prisma.membershipLocation.createMany({
@@ -279,10 +279,10 @@ interface SiteFixture {
           role,
         })}`;
       admin = sign(adminUser, orgId, OrgRole.ADMIN);
-      owner = sign(ownerUser, orgId, OrgRole.OWNER);
-      memberBothSites = sign(both, orgId, OrgRole.MEMBER);
-      memberOriginOnly = sign(originOnly, orgId, OrgRole.MEMBER);
-      memberNoSites = sign(bare, orgId, OrgRole.MEMBER);
+      owner = sign(ownerUser, orgId, OrgRole.ADMIN);
+      memberBothSites = sign(both, orgId, OrgRole.CASHIER);
+      memberOriginOnly = sign(originOnly, orgId, OrgRole.CASHIER);
+      memberNoSites = sign(bare, orgId, OrgRole.CASHIER);
       cashier = sign(cashierUser, orgId, OrgRole.CASHIER);
       destinationCashier = sign(receivingCashier, orgId, OrgRole.CASHIER);
       foreignAdmin = sign(foreign, otherOrgId, OrgRole.ADMIN);

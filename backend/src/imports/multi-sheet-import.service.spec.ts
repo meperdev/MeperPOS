@@ -589,8 +589,8 @@ describe('MultiSheetImportService', () => {
           'attacker@example.com',
           'correct-horse-battery-staple',
           'Attacker',
-          // The highest assignable role: OWNER is retired and the row
-          // validator refuses it before the sheet gate is even reached.
+          // The highest assignable role; the row validator refuses any
+          // value outside the current OrgRole before the sheet gate.
           'ADMIN',
         ],
       ],
@@ -626,7 +626,7 @@ describe('MultiSheetImportService', () => {
       return status.sheets.find((sheet) => sheet.sheetId === sheetId);
     }
 
-    it.each([OrgRole.CASHIER, OrgRole.MEMBER, OrgRole.INVENTORY_USER])(
+    it.each([OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
       'rejects the usuarios sheet for a %s caller instead of creating the user',
       async (role) => {
         const status = await importAs(role);
@@ -659,7 +659,7 @@ describe('MultiSheetImportService', () => {
       });
     });
 
-    it.each([OrgRole.ADMIN, OrgRole.OWNER, 'SUPER_ADMIN' as const])(
+    it.each([OrgRole.ADMIN, 'SUPER_ADMIN' as const])(
       'still imports the usuarios sheet for a %s caller',
       async (role) => {
         const status = await importAs(role);

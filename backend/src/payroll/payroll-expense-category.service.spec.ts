@@ -101,7 +101,7 @@ describe('PayrollExpenseCategoryService', () => {
       'an actor without an organization',
       { ...admin, organizationId: undefined },
     ],
-    ['a MEMBER actor', { ...admin, role: 'MEMBER' }],
+    ['a cashier actor', { ...admin, role: 'CASHIER' }],
     ['a CASHIER actor', { ...admin, role: 'CASHIER' }],
     ['an INVENTORY_USER actor', { ...admin, role: 'INVENTORY_USER' }],
   ])('rejects %s before opening a transaction', async (_case, actor) => {
@@ -120,7 +120,7 @@ describe('PayrollExpenseCategoryService', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it.each(['OWNER', 'ADMIN'] as const)(
+  it.each(['ADMIN'] as const)(
     'lets %s resolve and locks the organization row before the association',
     async (role) => {
       const { service, tx } = setup({
@@ -435,7 +435,7 @@ describe('transaction-scoped category resolution', () => {
       'an actor from another organization',
       { ...admin, organizationId: 'org-2' },
     ],
-    ['a MEMBER actor', { ...admin, role: 'MEMBER' }],
+    ['a cashier actor', { ...admin, role: 'CASHIER' }],
     ['a CASHIER actor', { ...admin, role: 'CASHIER' }],
     ['an INVENTORY_USER actor', { ...admin, role: 'INVENTORY_USER' }],
   ])(

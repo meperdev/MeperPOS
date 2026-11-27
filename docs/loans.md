@@ -13,14 +13,14 @@ All routes are under `/api/loans` and require an organization scope.
 
 | Method and path | Permission | Result |
 | --- | --- | --- |
-| `POST /api/loans` | OWNER, ADMIN | Create a standalone MONEY or SERVICE obligation |
-| `GET /api/loans` | OWNER, ADMIN, MEMBER, CASHIER | Paginated loans |
-| `GET /api/loans/:id` | OWNER, ADMIN, MEMBER, CASHIER | One scoped loan |
-| `GET /api/loans/:id/history` | OWNER, ADMIN, MEMBER, CASHIER | Paginated history of all transitions |
-| `POST /api/loans/:id/collections` | OWNER, ADMIN, MEMBER, CASHIER | Partial/full abono |
-| `POST /api/loans/:id/collections/:paymentId/reverse` | OWNER, ADMIN | Reverse one collection, with a reason |
-| `POST /api/loans/:id/close` | OWNER, ADMIN | Confirm closure only when balance is zero |
-| `POST /api/loans/:id/cancel` | OWNER, ADMIN | Cancel only when net collections are zero |
+| `POST /api/loans` | ADMIN | Create a standalone MONEY or SERVICE obligation |
+| `GET /api/loans` | CASHIER (ADMIN inherits) | Paginated loans |
+| `GET /api/loans/:id` | CASHIER (ADMIN inherits) | One scoped loan |
+| `GET /api/loans/:id/history` | CASHIER (ADMIN inherits) | Paginated history of all transitions |
+| `POST /api/loans/:id/collections` | CASHIER (ADMIN inherits) | Partial/full abono |
+| `POST /api/loans/:id/collections/:paymentId/reverse` | ADMIN | Reverse one collection, with a reason |
+| `POST /api/loans/:id/close` | ADMIN | Confirm closure only when balance is zero |
+| `POST /api/loans/:id/cancel` | ADMIN | Cancel only when net collections are zero |
 
 INVENTORY_USER cannot use these routes. Permissions come from the existing
 backend role hierarchy, not a frontend check. SUPER_ADMIN retains the existing
@@ -107,7 +107,7 @@ endpoints.
 1. Send a collection body such as
    `{ "requestKey": "abono-1", "amount": 40.25, "method": "CASH" }`.
 2. Read the server's balance; repeat collections until it is `"0.00"`.
-3. OWNER/ADMIN sends `{ "requestKey": "close-1" }` to `/close`.
+3. An ADMIN sends `{ "requestKey": "close-1" }` to `/close`.
 
 Collection amounts use the same strict JSON-number and two-decimal bounds as
 creation. Methods reuse `CASH`, `CARD`, `TRANSFER`; they do not create a sale
@@ -446,11 +446,11 @@ this section adds the unwired writer, not an inventory-loan HTTP API.
 | `items` | 1–100 nested items, each with registered product UUID and raw positive integer quantity up to 2,147,483,647 |
 | Duplicate products | Reject rather than merge; item order is nonsemantic and normalized by product ID |
 | Unknown fields | Reject at header and item level, including prices, tax, cost, stock, reservations, version, actor and tenant; no due-date or notes persistence is claimed |
-| Actor | Authenticated RequestUser, separate from the DTO; OWNER/ADMIN and an active administrative same-tenant membership required |
-| SUPER_ADMIN | No global bypass: also requires an active OWNER/ADMIN OrganizationUser membership in the selected tenant |
+| Actor | Authenticated RequestUser, separate from the DTO; ADMIN and an active administrative same-tenant membership required |
+| SUPER_ADMIN | No global bypass: also requires an active ADMIN OrganizationUser membership in the selected tenant |
 
 Service-side validation also protects direct callers that bypass a future HTTP
-validation pipe. Missing organization fails closed. MEMBER, CASHIER and
+validation pipe. Missing organization fails closed. CASHIER and
 INVENTORY_USER cannot create these obligations. This is service authorization,
 **not implemented HTTP role metadata**; future controllers must enforce their
 own guards and organization selection.
@@ -590,7 +590,7 @@ Nested whitelist validation rejects unknown fields through a ValidationPipe and
 also at the service boundary without HTTP. Tenant, actor, product IDs, prices,
 notes and stock controls are not request fields.
 
-OWNER/ADMIN authorization requires an actual same-organization administrative
+ADMIN authorization requires an actual same-organization administrative
 OrganizationUser membership and active User. SUPER_ADMIN needs that membership
 too; cashier collection permissions are not borrowed. The lifecycle actor may
 be different from the loan's original `createdById`.
@@ -697,7 +697,7 @@ product-conversion guard, module, controller or query allowlist at that time.
 Both methods accept only `{ requestKey }`: a raw string trimmed to 1–100
 characters. Runtime validation and the terminal DTO reject unknown fields,
 coercible non-string keys and blank loan identities. Neither reason nor item
-quantities are request fields. Actual same-tenant OWNER/ADMIN membership with
+quantities are request fields. Actual same-tenant ADMIN membership with
 an active User is required before replay, including SUPER_ADMIN. The actor may
 be different from the original creator; CASHIER has no inherited permission.
 

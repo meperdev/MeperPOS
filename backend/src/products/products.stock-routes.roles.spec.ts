@@ -41,15 +41,9 @@ describe('Product site stock routes role contract', () => {
 
   it('admits only the roles that edit product stock to the adjustment', () => {
     expect(Reflect.getMetadata(ROLES_KEY, adjust)).toEqual(
-      expect.arrayContaining([OrgRole.ADMIN, OrgRole.MEMBER]),
+      expect.arrayContaining([OrgRole.ADMIN]),
     );
-    for (const role of [
-      OrgRole.ADMIN,
-      OrgRole.MEMBER,
-      OrgRole.OWNER,
-    ] as const) {
-      expect(guard.canActivate(context(adjust, role))).toBe(true);
-    }
+    expect(guard.canActivate(context(adjust, OrgRole.ADMIN))).toBe(true);
     for (const role of [OrgRole.CASHIER, OrgRole.INVENTORY_USER] as const) {
       expect(() => guard.canActivate(context(adjust, role))).toThrow(
         /Access denied/,

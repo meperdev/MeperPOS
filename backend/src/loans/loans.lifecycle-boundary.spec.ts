@@ -123,7 +123,7 @@ describe('Money lifecycle actual controller guards', () => {
         const allowed =
           method === 'collect'
             ? role !== OrgRole.INVENTORY_USER
-            : role === OrgRole.OWNER || role === OrgRole.ADMIN;
+            : role === OrgRole.ADMIN;
         if (allowed)
           expect(guard.canActivate(context(method, role))).toBe(true);
         else

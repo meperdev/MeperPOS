@@ -93,7 +93,7 @@ describe('daily report HTTP boundary', () => {
               ? {
                   organizationId: 'org-a',
                   role:
-                    where.userId === 'member' ? OrgRole.MEMBER : OrgRole.ADMIN,
+                    where.userId === 'member' ? OrgRole.CASHIER : OrgRole.ADMIN,
                 }
               : null,
           ),
@@ -144,7 +144,7 @@ describe('daily report HTTP boundary', () => {
         .expect(401);
       await request(app.getHttpServer())
         .get(url)
-        .set('Authorization', `Bearer ${token('member', 'org-a', 'MEMBER')}`)
+        .set('Authorization', `Bearer ${token('member', 'org-a', 'CASHIER')}`)
         .expect(403);
       await request(app.getHttpServer())
         .get(url)

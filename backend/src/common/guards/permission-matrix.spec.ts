@@ -23,15 +23,13 @@ import { RolesGuard } from './roles.guard';
  * (`npx jest src/common/guards/permission-matrix.spec.ts -u`) and the diff is
  * the change a reviewer reads.
  *
- * Columns: O OWNER, A ADMIN, M MEMBER, C CASHIER, I INVENTORY_USER. SUPER_ADMIN
- * passes every route `RolesGuard` checks, so it has no column. Flags:
+ * Columns: A ADMIN, C CASHIER, I INVENTORY_USER — the three roles of S1.
+ * SUPER_ADMIN passes every route `RolesGuard` checks, so it has no column. Flags:
  *   open        no @Roles: every authenticated role passes RolesGuard
  *   no-guard    no RolesGuard on the route: @Roles there is not enforced
  */
 const ORG_ROLES: readonly [string, OrgRole][] = [
-  ['O', OrgRole.OWNER],
   ['A', OrgRole.ADMIN],
-  ['M', OrgRole.MEMBER],
   ['C', OrgRole.CASHIER],
   ['I', OrgRole.INVENTORY_USER],
 ];
@@ -166,12 +164,12 @@ describe('permission matrix (who passes RolesGuard on each route)', () => {
     const cellsOf = (verb: string, path: string) =>
       matrix
         .find((row) => row.startsWith(`${verb.padEnd(6)} ${path.padEnd(58)} `))
-        ?.slice(66, 71);
+        ?.slice(66, 69);
 
-    expect(cellsOf('GET', '/api/sales')).toBe('OAMC-');
-    expect(cellsOf('POST', '/api/products')).toBe('OAM--');
-    expect(cellsOf('GET', '/api/admin/metrics')).toBe('-----');
-    expect(cellsOf('GET', '/api/products')).toBe('OAMCI');
+    expect(cellsOf('GET', '/api/sales')).toBe('AC-');
+    expect(cellsOf('POST', '/api/products')).toBe('A--');
+    expect(cellsOf('GET', '/api/admin/metrics')).toBe('---');
+    expect(cellsOf('GET', '/api/products')).toBe('ACI');
   });
 
   it('matches the reviewed matrix', () => {

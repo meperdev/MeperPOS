@@ -13,7 +13,7 @@ One WAHA container runs **two independent sessions**. They are separate WhatsApp
 
 Número A and Número C are different numbers and must never be paired into the same session. If a message appears to come from the wrong channel, the sessions were paired with the wrong phone: stop and re-link, do not patch it downstream.
 
-The commercial channel belongs to exactly one organization and is managed by that organization's `ADMIN` (`OWNER` inherits). The intelligence channel is a single central channel modelled with a null `organizationId` from the start, so it can later serve several organizations with logical isolation; it is managed only by a platform `SUPER_ADMIN` and is reachable through no organization scope at all. Cross-tenant access is therefore impossible by construction, not by filtering.
+The commercial channel belongs to exactly one organization and is managed by that organization's `ADMIN`. The intelligence channel is a single central channel modelled with a null `organizationId` from the start, so it can later serve several organizations with logical isolation; it is managed only by a platform `SUPER_ADMIN` and is reachable through no organization scope at all. Cross-tenant access is therefore impossible by construction, not by filtering.
 
 ## Administrative surface
 
@@ -21,7 +21,7 @@ Sessions are driven through the backend, never through WAHA's dashboard (which s
 
 | Route | Method | Required |
 |---|---|---|
-| `/api/whatsapp/commercial/session` | `POST` | JWT + `RolesGuard` `ADMIN` (`OWNER` inherits) + `OrganizationRequiredGuard`; creates the caller's session if missing, starts it, returns `{ status }` |
+| `/api/whatsapp/commercial/session` | `POST` | JWT + `RolesGuard` `ADMIN` + `OrganizationRequiredGuard`; creates the caller's session if missing, starts it, returns `{ status }` |
 | `/api/whatsapp/commercial/session` | `GET` | same guards; returns the observed `{ status }` |
 | `/api/whatsapp/commercial/session/qr` | `GET` | same guards; returns `{ data }`, a base64 PNG |
 | `/api/whatsapp/commercial/session/stop` | `POST` | same guards; `204` |
@@ -99,9 +99,9 @@ The gate runs before the allowlist and the reply:
 1. Only literal `fromMe: false` permits an inbound text to link or reach authorization. A phone JID (`@c.us`, `@s.whatsapp.net`, or a bare number) is parsed as a phone; an opaque `@lid` must first resolve through WAHA as described below.
 2. Only then are the phone digits matched against the identity table. A linking challenge must match an unconsumed challenge issued to an authenticated user.
 3. The identity must be `VERIFIED` and carry an organization.
-4. The role is read from `OrganizationUser` for that user in that organization; only `OWNER` and `ADMIN` are authorized. The user and organization must have `active: true`; all organization statuses retain read access, but `SUSPENDED` blocks PDF delivery.
+4. The role is read from `OrganizationUser` for that user in that organization; only `ADMIN` is authorized. The user and organization must have `active: true`; all organization statuses retain read access, but `SUSPENDED` blocks PDF delivery.
 
-An `unlinked`, `PENDING`, `REVOKED`, organization-less, `MEMBER`, `CASHIER` or `INVENTORY_USER` sender gets **silence**, not a refusal message: any reply would confirm that this number is in service and could be used to enumerate registered phones. The same silence applies to group chats, messages without literal `fromMe: false`, and every duplicate provider event. The reply goes only to the sender's own verified number, derived from that identity; no phone, chat id or organization from the message body is ever used as a destination.
+An `unlinked`, `PENDING`, `REVOKED`, organization-less, `CASHIER` or `INVENTORY_USER` sender gets **silence**, not a refusal message: any reply would confirm that this number is in service and could be used to enumerate registered phones. The same silence applies to group chats, messages without literal `fromMe: false`, and every duplicate provider event. The reply goes only to the sender's own verified number, derived from that identity; no phone, chat id or organization from the message body is ever used as a destination.
 
 ### Opaque senders are not telephone numbers
 
@@ -145,7 +145,7 @@ QR responses are `private, no-store` and are capped at 2 MiB before parsing (1 M
 ### Linking Número A (commercial)
 
 1. Have the phone that holds Número A in hand, unlocked, with the WhatsApp application already installed and signed in.
-2. As an `ADMIN`/`OWNER` of the organization, call `POST /api/whatsapp/commercial/session`. This creates the session with its derived webhook key and starts it.
+2. As an `ADMIN` of the organization, call `POST /api/whatsapp/commercial/session`. This creates the session with its derived webhook key and starts it.
 3. Call `GET /api/whatsapp/commercial/session` until the status is `SCAN_QR_CODE`. Other states are normal at this point; see the status table.
 4. Call `GET /api/whatsapp/commercial/session/qr` and display the returned image to whoever holds the phone.
 5. On the phone: WhatsApp → Settings → Linked devices → Link a device, then scan.

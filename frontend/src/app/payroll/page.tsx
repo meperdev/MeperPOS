@@ -75,7 +75,7 @@ export default function PayrollPage() {
   const { user } = useAuth();
   // S5: payroll belongs to owners and administrators only. The route map and the
   // sidebar hide it from every other role; the API enforces the same rule.
-  const allowed = user?.role === "OWNER" || user?.role === "ADMIN";
+  const allowed = user?.role === "ADMIN";
   const obligations = usePayrollObligations(allowed);
   const employees = useEmployees(allowed);
   const [search, setSearch] = useState("");

@@ -89,7 +89,7 @@ const organizations = [
   {
     id: "org-b",
     name: "Org B",
-    role: "MEMBER",
+    role: "CASHIER",
     plan: "PRO",
     status: "ACTIVE",
   },
@@ -217,8 +217,8 @@ describe("Sidebar", () => {
   });
 
   it.each([
-    ["OWNER", true], ["ADMIN", true], ["CASHIER", false],
-    ["MEMBER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
+    ["ADMIN", true], ["CASHIER", false],
+    ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
   ])("shows the employee link for %s only when permitted", async (role, permitted) => {
     useAuthMock.mockReturnValue({
       user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
@@ -233,8 +233,8 @@ describe("Sidebar", () => {
   });
 
   it.each([
-    ["OWNER", true], ["ADMIN", true], ["CASHIER", false],
-    ["MEMBER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
+    ["ADMIN", true], ["CASHIER", false],
+    ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
   ])("shows the payroll link for %s only when permitted", async (role, permitted) => {
     useAuthMock.mockReturnValue({
       user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
@@ -249,8 +249,8 @@ describe("Sidebar", () => {
   });
 
   it.each([
-    ["OWNER", true], ["ADMIN", true], ["CASHIER", false],
-    ["MEMBER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
+    ["ADMIN", true], ["CASHIER", false],
+    ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
   ])("shows the sites link for %s only when permitted", async (role, permitted) => {
     useAuthMock.mockReturnValue({
       user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
@@ -265,7 +265,7 @@ describe("Sidebar", () => {
   });
 
   it.each([
-    ["OWNER", true], ["ADMIN", true], ["MEMBER", true], ["CASHIER", true],
+    ["ADMIN", true], ["CASHIER", true],
     ["INVENTORY_USER", false], ["SUPER_ADMIN", true],
   ])("shows the transfers link for %s only when permitted", async (role, permitted) => {
     useAuthMock.mockReturnValue({
@@ -1179,8 +1179,8 @@ describe("drawer offers only what the tab bar does not", () => {
     return render(<Sidebar />, { wrapper });
   }
 
-  it("drops every section an owner already has as a tab", () => {
-    renderAs("OWNER");
+  it("drops every section an administrator already has as a tab", () => {
+    renderAs("ADMIN");
 
     for (const name of ["Panel", "POS", "Ventas", "Inventario"]) {
       const row = screen.getByRole("link", { name });
@@ -1403,7 +1403,7 @@ describe("the mobile drawer is the phone's whole screen", () => {
 // S11: the alerts history is one more destination of the account menu the user
 // already opens for Mi perfil and Configuración, so it reaches the phone too —
 // the drawer renders the same footer. The audience is the /alerts route gate:
-// ADMIN and INVENTORY_USER, with OWNER and SUPER_ADMIN inheriting ADMIN.
+// ADMIN and INVENTORY_USER, with SUPER_ADMIN above both.
 describe("alerts history in the account menu", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1431,12 +1431,10 @@ describe("alerts history in the account menu", () => {
   }
 
   it.each([
-    ["OWNER", true],
     ["ADMIN", true],
     ["INVENTORY_USER", true],
     ["SUPER_ADMIN", true],
     ["CASHIER", false],
-    ["MEMBER", false],
   ])(
     "shows the alerts history to %s only when the role may open /alerts",
     async (role, permitted) => {

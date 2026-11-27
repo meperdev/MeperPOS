@@ -608,7 +608,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: "ADMIN" | "MEMBER" | "OWNER" | "CASHIER" | "INVENTORY_USER";
+  role: "ADMIN" | "CASHIER" | "INVENTORY_USER";
   active: boolean;
   createdAt: string;
   updatedAt: string;

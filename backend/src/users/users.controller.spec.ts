@@ -192,8 +192,11 @@ describe('UsersController', () => {
       );
     };
 
-    it('rejects the retired OWNER role before the service runs', async () => {
-      expect(await roleConstraints('OWNER')).toContain('isNotIn');
+    it('rejects the retired OWNER and MEMBER roles before the service runs', async () => {
+      // S9: both values are outside @IsEnum(OrgRole) now, so the body is
+      // refused at the boundary like any other unknown role.
+      expect(await roleConstraints('OWNER')).toContain('isEnum');
+      expect(await roleConstraints('MEMBER')).toContain('isEnum');
     });
 
     it('keeps accepting the roles the team screen offers', async () => {
