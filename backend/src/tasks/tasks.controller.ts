@@ -29,13 +29,7 @@ import { TasksService } from './tasks.service';
 @Controller('tasks')
 @UseGuards(JwtAuthGuard, RolesGuard, OrganizationRequiredGuard)
 @UseInterceptors(AdminOrganizationInterceptor)
-@Roles(
-  OrgRole.ADMIN,
-  OrgRole.OWNER,
-  OrgRole.MEMBER,
-  OrgRole.CASHIER,
-  OrgRole.INVENTORY_USER,
-)
+@Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER, OrgRole.INVENTORY_USER)
 @ApiBearerAuth()
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}

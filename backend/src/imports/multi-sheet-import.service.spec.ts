@@ -589,7 +589,9 @@ describe('MultiSheetImportService', () => {
           'attacker@example.com',
           'correct-horse-battery-staple',
           'Attacker',
-          'OWNER',
+          // The highest assignable role: OWNER is retired and the row
+          // validator refuses it before the sheet gate is even reached.
+          'ADMIN',
         ],
       ],
     };

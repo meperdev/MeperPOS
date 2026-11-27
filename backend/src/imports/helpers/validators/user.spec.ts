@@ -3,9 +3,8 @@ import { validatePasswordPolicy } from '../../../common/validators/password.poli
 import { PASSWORD_MIN_LENGTH } from '../../../common/validators/password.policy';
 
 describe('USER_ROLES', () => {
-  it('defines the organization role set', () => {
+  it('defines the assignable organization role set, without the retired OWNER', () => {
     expect(USER_ROLES).toEqual([
-      'OWNER',
       'ADMIN',
       'MEMBER',
       'CASHIER',

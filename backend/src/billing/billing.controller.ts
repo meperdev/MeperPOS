@@ -24,7 +24,7 @@ export class BillingController {
   ) {}
 
   @Get('payments')
-  @Roles(OrgRole.ADMIN, OrgRole.OWNER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Get payment history for current organization' })
   async getPayments(@CurrentUser() user: RequestUser) {
     return this.paymentRecordsService.findAllByOrg(user.organizationId);

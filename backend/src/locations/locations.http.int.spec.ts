@@ -220,7 +220,6 @@ describe('Location access (HTTP integration)', () => {
   it('declares the matrix read roles and preserves the assignment role override', () => {
     const controller = LocationsController;
     const readRoles = [
-      OrgRole.OWNER,
       OrgRole.ADMIN,
       OrgRole.MEMBER,
       OrgRole.CASHIER,

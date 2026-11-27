@@ -296,6 +296,7 @@ export class MultiSheetImportService implements OnModuleDestroy {
     const ctx: SheetRowContext = {
       organizationId: job.organizationId,
       userId: job.userId,
+      actorRole: job.callerRole,
       prisma: this.prisma,
       planLimits: this.planLimits,
       existingKeys,
@@ -510,6 +511,7 @@ export class MultiSheetImportService implements OnModuleDestroy {
     const ctx: SheetRowContext = {
       organizationId: job.organizationId,
       userId: job.userId,
+      actorRole: job.callerRole,
       prisma: this.prisma,
       planLimits: this.planLimits,
       existingKeys,

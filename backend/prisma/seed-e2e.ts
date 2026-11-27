@@ -127,7 +127,7 @@ async function seed(prisma: PrismaClient): Promise<void> {
       data: {
         organizationId: organization.id,
         userId: owner.id,
-        role: OrgRole.OWNER,
+        role: OrgRole.ADMIN,
         isPrimaryOwner: true,
       },
     });

@@ -8,8 +8,16 @@ se reparte el stock entre sedes. El detalle operativo del corte de stock está e
 ## 1. Organización y rol
 
 - Un `User` puede pertenecer a varias organizaciones a través de
-  `OrganizationUser`, y ese vínculo lleva el rol: `OWNER`, `ADMIN`, `MEMBER`,
-  `CASHIER` o `INVENTORY_USER`.
+  `OrganizationUser`, y ese vínculo lleva el rol. Los roles asignables hoy son
+  `ADMIN`, `CASHIER` e `INVENTORY_USER`; `OWNER` y `MEMBER` están retirados
+  (siguen en el enum hasta la fase 4 de la redefinición).
+- `OWNER` está retirado: la migración `20261127130000_collapse_owner_into_admin`
+  pasó a `ADMIN` toda membresía que lo tenía y conservó `isPrimaryOwner`. El
+  dueño principal es un `ADMIN` con `isPrimaryOwner = true`; solo él (o un
+  `SUPER_ADMIN`) puede crear otros administradores, y nadie puede asignar
+  `OWNER` por la API (`POST /api/users`, alta de miembro y cambio de rol del
+  panel lo rechazan). La propiedad se transfiere solo desde el panel de
+  plataforma (`POST /api/admin/organizations/:id/transfer-owner`).
 - `MEMBER` está retirado: la migración `20261127120000_retire_member_role` pasó
   a `CASHIER` toda membresía que lo tenía, el rol por defecto de una membresía
   nueva es `CASHIER` y la pantalla de equipo ya no lo ofrece. El valor sigue en
@@ -51,17 +59,17 @@ Una sede es una sucursal o una bodega de la organización (`Location`):
 
 La regla es explícita y no se hereda sola:
 
-- **Dueños y administradores** acceden a todas las sedes de su organización,
-  incluidas las que se creen después. El acceso viene de su rol, no de filas de
-  asignación.
+- **Administradores** (incluido el dueño principal) acceden a todas las sedes de
+  su organización, incluidas las que se creen después. El acceso viene de su rol,
+  no de filas de asignación.
 - **El resto de los roles** accede solo a las sedes que un administrador le
   asignó (`MembershipLocation`), una por una. Cero asignaciones significa cero
   sedes visibles, nunca todas.
 - **Una membresía operativa nueva arranca en la sede principal.** Al crear un
   `CASHIER`, `MEMBER` o `INVENTORY_USER`, la base le asigna la sede principal de
-  su organización (y lo mismo si un `OWNER`/`ADMIN` sin ninguna asignación baja a
-  uno de esos roles). Es la línea base que S3 promete: el acceso a la sede
-  principal se conserva y cada sede adicional la asigna un administrador.
+  su organización (y lo mismo si un `ADMIN` sin ninguna asignación baja a uno de
+  esos roles). Es la línea base que S3 promete: el acceso a la sede principal se
+  conserva y cada sede adicional la asigna un administrador.
 - **Crear una sede no amplía el acceso de nadie.** La sede nueva nace sin
   asignaciones y un administrador tiene que habilitarla por persona.
 
@@ -72,10 +80,10 @@ La regla es explícita y no se hereda sola:
 | `/api/locations`                      | `GET`  | todos          | Sedes accesibles en la organización activa        |
 | `/api/locations/pos-context`          | `GET`  | todos          | Sucursales del POS y la sede sugerida para cobrar |
 | `/api/locations/:id`                  | `GET`  | todos          | Una sede, solo si es accesible                    |
-| `/api/locations`                      | `POST` | `OWNER`/`ADMIN`| Crear una sucursal o bodega                       |
-| `/api/locations/:id`                  | `PATCH`| `OWNER`/`ADMIN`| Renombrar o cambiar el tipo de una sede           |
-| `/api/users/:id/locations`            | `GET`  | `OWNER`/`ADMIN`| Asignaciones explícitas de un vínculo             |
-| `/api/users/:id/locations`            | `PUT`  | `OWNER`/`ADMIN`| Reemplazar el conjunto exacto de asignaciones     |
+| `/api/locations`                      | `POST` | `ADMIN`        | Crear una sucursal o bodega                       |
+| `/api/locations/:id`                  | `PATCH`| `ADMIN`        | Renombrar o cambiar el tipo de una sede           |
+| `/api/users/:id/locations`            | `GET`  | `ADMIN`        | Asignaciones explícitas de un vínculo             |
+| `/api/users/:id/locations`            | `PUT`  | `ADMIN`        | Reemplazar el conjunto exacto de asignaciones     |
 
 `GET /api/locations/pos-context` devuelve `{ locations, checkoutLocationId }` con
 **solo las sucursales** accesibles (una bodega nunca se ofrece al punto de venta)
@@ -95,7 +103,7 @@ de sede incluye `address` y `phone` como `null` cuando no se cargaron.
 `PUT /api/users/:id/locations` recibe `{ "locationIds": string[] }` y reemplaza
 el conjunto completo. Responde `404` si el vínculo o alguna sede no pertenecen a
 la organización activa, y `409` si el objetivo ya tiene acceso por rol
-(propietario o administrador). `GET /api/users/:id/locations` devuelve
+(administrador, incluido el dueño principal). `GET /api/users/:id/locations` devuelve
 `{ "locationIds": string[], "orgWideAccess": boolean }`: las asignaciones
 explícitas y si el rol del vínculo ya alcanza todas las sedes, porque
 `GET /api/users` no informa roles y la pantalla necesita ese dato para no ofrecer
@@ -116,19 +124,20 @@ venta tiene origen guardado; sin origen no agrega ninguna línea.
 
 ## 5. Pantallas
 
-- **Sedes** (`/locations`, solo propietarios y administradores): lista de sedes
-  con su tipo, la marca de principal, la dirección y el teléfono, alta y edición.
-  Al crear una sede el aviso recuerda que el acceso se asigna por persona.
+- **Sedes** (`/locations`, solo administradores, incluido el dueño principal):
+  lista de sedes con su tipo, la marca de principal, la dirección y el teléfono,
+  alta y edición. Al crear una sede el aviso recuerda que el acceso se asigna
+  por persona.
 - **Ventas** (`/sales`): la tabla muestra la sede de cada venta y, cuando la
   organización tiene más de una sede visible, un filtro por sede; el detalle de
   la venta también nombra la sede (o avisa que no tiene una registrada).
 - **Usuarios** (`/settings/team`): la acción de sedes de cada miembro abre las
-  casillas con las sedes de la organización; para propietarios y administradores
-  se muestra que acceden a todas.
+  casillas con las sedes de la organización; para administradores se muestra que
+  acceden a todas.
 
 La navegación y los chequeos de pantalla son solo presentación: el límite real
-es el backend, que responde `403` a cualquier rol que no sea propietario o
-administrador en las rutas de gestión.
+es el backend, que responde `403` a cualquier rol que no sea administrador en las
+rutas de gestión.
 
 ## 6. Stock por sede
 

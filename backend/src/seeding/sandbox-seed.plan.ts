@@ -11,7 +11,7 @@
  * the same rows, so a dry run describes exactly what an `--apply` would write.
  */
 
-export type PlanRole = 'OWNER' | 'ADMIN' | 'CASHIER' | 'INVENTORY_USER';
+export type PlanRole = 'ADMIN' | 'CASHIER' | 'INVENTORY_USER';
 
 export type PlanPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER';
 export type PlanProductType = 'PRODUCT' | 'SERVICE';
@@ -907,10 +907,12 @@ function buildUsers(input: SandboxSeedInput): SandboxUserPlan[] {
   const domain = input.staffEmailDomain;
   return [
     {
+      // The owner is identified by isPrimaryOwner, not by a role: OWNER was
+      // retired and collapsed into ADMIN (migration 20261127130000).
       key: 'owner',
       email: input.ownerEmail,
       name: input.ownerName,
-      role: 'OWNER',
+      role: 'ADMIN',
       isPrimaryOwner: true,
     },
     {

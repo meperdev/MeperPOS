@@ -198,12 +198,31 @@ describe("OrganizationDetailPage", () => {
       expect(within(rows[0]).getByText("Propietario")).toBeInTheDocument();
     });
 
+    it("does not offer the retired OWNER role when adding a member", async () => {
+      // OWNER is retired: the primary owner is an ADMIN membership with
+      // isPrimaryOwner, and the API answers 400 to OWNER.
+      await userEvent.click(screen.getByRole("button", { name: /Añadir miembro/ }));
+      const dialog = screen.getByRole("dialog");
+      await userEvent.click(within(dialog).getByLabelText("Rol"));
+      const labels = (await screen.findAllByRole("option")).map((o) => o.textContent);
+      expect(labels).toContain("Administrador");
+      expect(labels).not.toContain("Propietario");
+    });
+
     it("renders member roles in the table", () => {
       // Role selects use Spanish labels from roleOptions
       const adminOccurrences = screen.getAllByText("Administrador");
       expect(adminOccurrences.length).toBeGreaterThanOrEqual(1);
       const cashierOccurrences = screen.getAllByText("Cajero");
       expect(cashierOccurrences.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("does not offer the retired OWNER role in a member row's role select", async () => {
+      const table = screen.getByRole("table");
+      await userEvent.click(within(table).getAllByRole("button", { name: /Cajero/ })[0]);
+      const labels = (await screen.findAllByRole("option")).map((o) => o.textContent);
+      expect(labels).toContain("Administrador");
+      expect(labels).not.toContain("Propietario");
     });
 
     it("renders primary owner indicator", () => {

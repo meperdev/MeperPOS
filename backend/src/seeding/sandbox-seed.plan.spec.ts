@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   assertSandboxPlan,
   buildSandboxSeedPlan,
@@ -260,6 +262,31 @@ describe('sandbox seed plan', () => {
         employee.email.endsWith('@otra-sandbox.demo'),
       ),
     ).toBe(true);
+  });
+
+  it('plans the primary owner as ADMIN, never OWNER (S8 d)', () => {
+    const plan = buildPlan();
+    const owner = plan.users.find((user) => user.key === 'owner');
+
+    expect(owner).toMatchObject({ role: 'ADMIN', isPrimaryOwner: true });
+    expect(plan.users.map((user) => user.role)).not.toContain('OWNER');
+    expect(
+      plan.users.filter((user) => user.isPrimaryOwner).map((user) => user.key),
+    ).toEqual(['owner']);
+  });
+
+  it('writes the primary owner as ADMIN in the demo and e2e seeds (S8 d)', () => {
+    for (const seedFile of ['seed.ts', 'seed-e2e.ts']) {
+      const source = readFileSync(
+        resolve(__dirname, '../../prisma', seedFile),
+        'utf8',
+      );
+
+      expect(source).toMatch(
+        /role:\s*OrgRole\.ADMIN,\s*\n\s*isPrimaryOwner:\s*true,/,
+      );
+      expect(source).not.toContain('OrgRole.OWNER');
+    }
   });
 
   it('pins the exact dataset contract', () => {

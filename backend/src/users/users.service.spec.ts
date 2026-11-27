@@ -129,7 +129,7 @@ describe('UsersService', () => {
         role: OrgRole.MEMBER,
       },
       'org-1',
-      { role: OrgRole.ADMIN, isSuperAdmin: false },
+      { userId: 'admin-1', role: OrgRole.ADMIN, isSuperAdmin: false },
     );
 
     expect(prismaMock.user.create).toHaveBeenCalledWith(
@@ -425,6 +425,40 @@ describe('UsersService', () => {
     expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
   });
 
+  it('lets an ordinary admin go while the primary owner, now an ADMIN, remains', async () => {
+    // OWNER is retired: the primary owner is an ADMIN membership, so it counts
+    // toward "an organization keeps an admin". The old OWNER + one ADMIN case
+    // refused this removal only because the OWNER was not counted.
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'user-2',
+      email: 'user2@example.com',
+      name: 'User Two',
+      active: true,
+    });
+    prismaMock.organizationUser.findFirst.mockResolvedValue({
+      id: 'ou-2',
+      userId: 'user-2',
+      organizationId: 'org-1',
+      role: 'ADMIN',
+      isPrimaryOwner: false,
+    });
+    prismaMock.organizationUser.delete.mockResolvedValue({ id: 'ou-2' });
+    prismaMock.organizationUser.count.mockImplementation(
+      async ({ where }: { where: { role?: string } }) =>
+        where.role === 'ADMIN' ? 2 : 1,
+    );
+
+    const result = await service.remove('owner-1', 'user-2', 'org-1');
+
+    expect(prismaMock.organizationUser.count).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', role: 'ADMIN' },
+    });
+    expect(prismaMock.organizationUser.delete).toHaveBeenCalledWith({
+      where: { id: 'ou-2' },
+    });
+    expect(result).toEqual({ message: 'User removed from organization' });
+  });
+
   it('removes only the membership when the user belongs to another organization', async () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'user-2',
@@ -508,6 +542,267 @@ describe('UsersService', () => {
     expect(result).toEqual({ message: 'User deleted successfully' });
     expect(prismaMock.user.delete).toHaveBeenCalledWith({
       where: { id: 'user-2' },
+    });
+  });
+
+  describe('role assignment at creation (S8 b)', () => {
+    const createDto = {
+      email: 'new@example.com',
+      password: 'S3cure-Passphrase-42',
+      name: 'New User',
+    };
+    const createdUser = {
+      id: 'user-new',
+      email: 'new@example.com',
+      name: 'New User',
+      active: true,
+      createdAt: new Date('2026-03-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T00:00:00.000Z'),
+    };
+
+    it('refuses the retired OWNER role even for a SUPER_ADMIN', async () => {
+      await expect(
+        service.create({ ...createDto, role: OrgRole.OWNER }, 'org-1', {
+          userId: 'super-1',
+          role: 'SUPER_ADMIN',
+          isSuperAdmin: true,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaMock.organizationUser.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses an ADMIN who is not the primary owner creating an ADMIN', async () => {
+      prismaMock.organizationUser.findFirst.mockResolvedValue({
+        isPrimaryOwner: false,
+      });
+
+      await expect(
+        service.create({ ...createDto, role: OrgRole.ADMIN }, 'org-1', {
+          userId: 'admin-1',
+          role: OrgRole.ADMIN,
+          isSuperAdmin: false,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaMock.organizationUser.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'admin-1', organizationId: 'org-1' },
+        select: { isPrimaryOwner: true },
+      });
+      // Refused before any account work: no email check, no insert.
+      expect(prismaMock.user.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+    });
+
+    it('lets the organization primary owner create an ADMIN', async () => {
+      prismaMock.organizationUser.findFirst.mockResolvedValue({
+        isPrimaryOwner: true,
+      });
+      prismaMock.user.findFirst.mockResolvedValue(null);
+      prismaMock.user.create.mockResolvedValue(createdUser);
+
+      await service.create({ ...createDto, role: OrgRole.ADMIN }, 'org-1', {
+        userId: 'owner-1',
+        role: OrgRole.ADMIN,
+        isSuperAdmin: false,
+      });
+
+      expect(prismaMock.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            organizationUsers: {
+              create: { organizationId: 'org-1', role: OrgRole.ADMIN },
+            },
+          }),
+        }),
+      );
+    });
+
+    it('still lets a non-primary ADMIN create a CASHIER', async () => {
+      prismaMock.user.findFirst.mockResolvedValue(null);
+      prismaMock.user.create.mockResolvedValue(createdUser);
+
+      await service.create({ ...createDto, role: OrgRole.CASHIER }, 'org-1', {
+        userId: 'admin-1',
+        role: OrgRole.ADMIN,
+        isSuperAdmin: false,
+      });
+
+      expect(prismaMock.organizationUser.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            organizationUsers: {
+              create: { organizationId: 'org-1', role: OrgRole.CASHIER },
+            },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('primary owner password protection (S8 c)', () => {
+    const membership = (
+      userId: string,
+      isPrimaryOwner: boolean,
+      role: string = 'ADMIN',
+    ) => ({
+      id: `ou-${userId}`,
+      userId,
+      organizationId: 'org-1',
+      role,
+      isPrimaryOwner,
+    });
+
+    function mockTargetAndActor(
+      targetUserId: string,
+      targetIsPrimaryOwner: boolean,
+      actorIsPrimaryOwner: boolean,
+      targetRole: string = 'ADMIN',
+    ) {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: targetUserId,
+        email: 'target@example.com',
+        name: 'Target User',
+        active: true,
+      });
+      prismaMock.organizationUser.count.mockResolvedValue(1);
+      prismaMock.user.update.mockResolvedValue({ id: targetUserId });
+      prismaMock.organizationUser.findFirst.mockImplementation(
+        (args: unknown) => {
+          const { where } = args as { where: { userId: string } };
+          return Promise.resolve(
+            where.userId === 'admin-1'
+              ? membership('admin-1', actorIsPrimaryOwner)
+              : membership(targetUserId, targetIsPrimaryOwner, targetRole),
+          );
+        },
+      );
+    }
+
+    it('refuses an ADMIN resetting the password of the primary owner', async () => {
+      mockTargetAndActor('owner-1', true, false);
+
+      await expect(
+        service.resetPassword(
+          'admin-1',
+          'owner-1',
+          { newPassword: 'NuevaClaveSegura123' },
+          'org-1',
+          { userId: 'admin-1', role: OrgRole.ADMIN, isSuperAdmin: false },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+      expect(authServiceMock.revokeUserTokens).not.toHaveBeenCalled();
+    });
+
+    it('lets the primary owner reset the primary owner password', async () => {
+      mockTargetAndActor('owner-1', true, true);
+
+      const result = await service.resetPassword(
+        'owner-1',
+        'owner-1',
+        { newPassword: 'NuevaClaveSegura123' },
+        'org-1',
+        { userId: 'owner-1', role: OrgRole.ADMIN, isSuperAdmin: false },
+      );
+
+      expect(result).toEqual({
+        message: 'Contraseña restablecida exitosamente',
+      });
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 'owner-1' },
+        data: { password: expect.any(String) },
+      });
+    });
+
+    it('refuses an ordinary ADMIN resetting another ADMIN password', async () => {
+      // An admin account is the top organization role: taking one over is the
+      // same escalation as minting one, so only the primary owner (or a
+      // SUPER_ADMIN) may reset it. This also covers former OWNER memberships
+      // that the migration turned into unflagged ADMINs.
+      mockTargetAndActor('admin-2', false, false);
+
+      await expect(
+        service.resetPassword(
+          'admin-1',
+          'admin-2',
+          { newPassword: 'NuevaClaveSegura123' },
+          'org-1',
+          { userId: 'admin-1', role: OrgRole.ADMIN, isSuperAdmin: false },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+
+    it('lets the primary owner reset another ADMIN password', async () => {
+      mockTargetAndActor('admin-2', false, true);
+
+      await service.resetPassword(
+        'admin-1',
+        'admin-2',
+        { newPassword: 'NuevaClaveSegura123' },
+        'org-1',
+        { userId: 'admin-1', role: OrgRole.ADMIN, isSuperAdmin: false },
+      );
+
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 'admin-2' },
+        data: { password: expect.any(String) },
+      });
+    });
+
+    it('still lets an ordinary ADMIN reset their own password', async () => {
+      mockTargetAndActor('admin-1', false, false);
+
+      await service.resetPassword(
+        'admin-1',
+        'admin-1',
+        { newPassword: 'NuevaClaveSegura123' },
+        'org-1',
+        { userId: 'admin-1', role: OrgRole.ADMIN, isSuperAdmin: false },
+      );
+
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 'admin-1' },
+        data: { password: expect.any(String) },
+      });
+    });
+
+    it('still lets an ordinary ADMIN reset a cashier password', async () => {
+      mockTargetAndActor('cashier-2', false, false, 'CASHIER');
+
+      await service.resetPassword(
+        'admin-1',
+        'cashier-2',
+        { newPassword: 'NuevaClaveSegura123' },
+        'org-1',
+        { userId: 'admin-1', role: OrgRole.ADMIN, isSuperAdmin: false },
+      );
+
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 'cashier-2' },
+        data: { password: expect.any(String) },
+      });
+    });
+
+    it('still lets a SUPER_ADMIN reset the primary owner password', async () => {
+      mockTargetAndActor('owner-1', true, false);
+
+      await service.resetPassword(
+        'super-1',
+        'owner-1',
+        { newPassword: 'NuevaClaveSegura123' },
+        'org-1',
+        { userId: 'super-1', role: 'SUPER_ADMIN', isSuperAdmin: true },
+      );
+
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 'owner-1' },
+        data: { password: expect.any(String) },
+      });
     });
   });
 });

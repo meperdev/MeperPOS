@@ -116,7 +116,7 @@ describe('employee controller boundary', () => {
           handler,
           EmployeesController,
         ]),
-      ).toEqual([OrgRole.OWNER, OrgRole.ADMIN]);
+      ).toEqual([OrgRole.ADMIN]);
       const guard = new RolesGuard(new Reflector());
       const context = (role: OrgRole) =>
         ({

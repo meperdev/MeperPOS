@@ -31,6 +31,8 @@ export interface User {
   role: AppRole;
   active: boolean;
   isSuperAdmin?: boolean;
+  /** The organization's primary owner: the only role that may create admins. */
+  isPrimaryOwner?: boolean;
   organizationId?: string | null;
   organization?: Organization | null;
 }

@@ -1,3 +1,4 @@
+import type { OrgRole } from '@prisma/client';
 import type { SheetColumnDetectionResult } from '../helpers/column-detector';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { PlanLimitService } from '../../plan-limits/plan-limits.service';
@@ -67,6 +68,8 @@ export interface ImportSheetStatus {
 export interface SheetRowContext {
   organizationId: string;
   userId: string;
+  /** Role of the importing user; the users sheet passes it to UsersService. */
+  actorRole?: OrgRole | 'SUPER_ADMIN';
   prisma: PrismaService;
   planLimits: PlanLimitService;
   existingKeys: Set<string>;

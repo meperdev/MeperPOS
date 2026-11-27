@@ -134,6 +134,7 @@ export class AuthService {
         {
           organizationId: orgUser.organizationId,
           role: orgUser.role,
+          isPrimaryOwner: orgUser.isPrimaryOwner,
         },
         ipAddress,
         userAgent,
@@ -222,6 +223,8 @@ export class AuthService {
     orgUser: {
       organizationId: string | null;
       role: OrgRole | 'SUPER_ADMIN';
+      /** The membership's flag; absent (SUPER_ADMIN, no membership) is false. */
+      isPrimaryOwner?: boolean;
     },
     ipAddress?: string,
     userAgent?: string,
@@ -284,6 +287,7 @@ export class AuthService {
         name: user.name,
         organizationId: orgUser.organizationId,
         role: orgUser.role,
+        isPrimaryOwner: orgUser.isPrimaryOwner === true,
         organization,
       },
     };
@@ -470,6 +474,7 @@ export class AuthService {
         ...result,
         role: 'SUPER_ADMIN',
         isSuperAdmin: true,
+        isPrimaryOwner: false,
       };
     }
 
@@ -505,6 +510,8 @@ export class AuthService {
       organizationId: orgUser.organizationId,
       organization: orgUser.organization,
       isSuperAdmin: false,
+      // Only the primary owner may create admins; the team screen reads this.
+      isPrimaryOwner: orgUser.isPrimaryOwner,
     };
   }
 
@@ -630,7 +637,11 @@ export class AuthService {
       if (orgUser) {
         const orgPair = await this.generateTokenPair(
           updatedUser,
-          { organizationId: orgUser.organizationId, role: orgUser.role },
+          {
+            organizationId: orgUser.organizationId,
+            role: orgUser.role,
+            isPrimaryOwner: orgUser.isPrimaryOwner,
+          },
           ipAddress,
           userAgent,
         );
