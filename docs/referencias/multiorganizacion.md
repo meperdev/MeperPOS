@@ -10,6 +10,11 @@ se reparte el stock entre sedes. El detalle operativo del corte de stock está e
 - Un `User` puede pertenecer a varias organizaciones a través de
   `OrganizationUser`, y ese vínculo lleva el rol: `OWNER`, `ADMIN`, `MEMBER`,
   `CASHIER` o `INVENTORY_USER`.
+- `MEMBER` está retirado: la migración `20261127120000_retire_member_role` pasó
+  a `CASHIER` toda membresía que lo tenía, el rol por defecto de una membresía
+  nueva es `CASHIER` y la pantalla de equipo ya no lo ofrece. El valor sigue en
+  el enum (y en los `@Roles` que lo nombran) hasta que se rehaga la tabla de
+  permisos; ninguna membresía debería tenerlo.
 - La sesión arrastra la organización activa. `JwtStrategy` vuelve a leer el rol
   del vínculo en cada request, así que un token viejo nunca conserva un rol que
   ya se cambió.

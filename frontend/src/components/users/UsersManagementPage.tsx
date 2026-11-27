@@ -26,7 +26,9 @@ import { getApiErrorMessage } from "@/lib/api";
 import { Building2, KeyRound, Plus, Shield, SquarePen, Trash2, Users as UsersIcon } from "lucide-react";
 import type { User } from "@/types";
 
-type SelectableRole = "ADMIN" | "MEMBER" | "CASHIER" | "INVENTORY_USER";
+// MEMBER is retired (architecture/roles-redesign): existing members were
+// migrated to CASHIER, so it is no longer offered here.
+type SelectableRole = "ADMIN" | "CASHIER" | "INVENTORY_USER";
 
 const DEFAULT_ROLE: SelectableRole = "CASHIER";
 
@@ -319,7 +321,6 @@ export default function UsersPage() {
             onChange={(value) => setFormData({ ...formData, role: value as SelectableRole })}
             options={[
               { value: "CASHIER", label: "Cajero" },
-              { value: "MEMBER", label: "Miembro" },
               { value: "INVENTORY_USER", label: "Inventario" },
               { value: "ADMIN", label: "Administrador" },
             ]}

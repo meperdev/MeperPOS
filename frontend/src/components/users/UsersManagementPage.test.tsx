@@ -172,19 +172,19 @@ describe("Users list responsive layout", () => {
     expect(password).toHaveAttribute("type", "text");
   });
 
-  it("offers Miembro when creating a user and sends the chosen role", async () => {
-    // S6: Miembro is the role the team screen could not offer before, even
-    // though the create boundary accepts every OrgRole.
+  it("offers only Cajero, Inventario and Administrador when creating a user", async () => {
+    // MEMBER is retired (architecture/roles-redesign): existing members were
+    // migrated to CASHIER, so the team screen must not mint new ones.
     const user = userEvent.setup();
     render(<UsersPage />);
 
     await user.click(screen.getByRole("button", { name: /Nuevo usuario/ }));
     const dialog = screen.getByRole("dialog");
 
-    await user.type(within(dialog).getByLabelText(/^Nombre/), "Miembro Uno");
+    await user.type(within(dialog).getByLabelText(/^Nombre/), "Cajero Uno");
     await user.type(
       within(dialog).getByLabelText(/^Correo/),
-      "miembro@example.com",
+      "cajero@example.com",
     );
     await user.type(
       within(dialog).getByLabelText(/^Contraseña/),
@@ -192,15 +192,23 @@ describe("Users list responsive layout", () => {
     );
 
     await user.click(within(dialog).getByLabelText("Rol"));
-    await user.click(await screen.findByRole("option", { name: "Miembro" }));
+    const options = await screen.findAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Cajero",
+      "Inventario",
+      "Administrador",
+    ]);
+    expect(screen.queryByRole("option", { name: "Miembro" })).toBeNull();
+
+    await user.click(screen.getByRole("option", { name: "Inventario" }));
     await user.click(within(dialog).getByRole("button", { name: "Crear" }));
 
     await waitFor(() =>
       expect(createUserMock).toHaveBeenCalledWith({
-        name: "Miembro Uno",
-        email: "miembro@example.com",
+        name: "Cajero Uno",
+        email: "cajero@example.com",
         password: "ClaveSegura123",
-        role: "MEMBER",
+        role: "INVENTORY_USER",
       }),
     );
   });
