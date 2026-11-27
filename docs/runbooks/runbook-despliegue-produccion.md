@@ -347,6 +347,7 @@ npm run build
 
 `20261127120000_retire_member_role` (MEMBER pasa a CASHIER) y `20261127130000_collapse_owner_into_admin` (OWNER pasa a ADMIN y el dueño principal queda marcado con `isPrimaryOwner`) reescriben datos y no tienen vuelta atrás.
 
+- **Orden de despliegue de OWNER: primero el codigo, despues la migracion.** El codigo que protege al dueño por `isPrimaryOwner` (y trata un OWNER que quede como admin) sale en una release; `20261127130000_collapse_owner_into_admin` sale recien en la release siguiente, cuando ya no queda ninguna instancia con el codigo viejo. Si salieran juntas, una instancia vieja que siga atendiendo durante el deploy dejaria a cualquier ADMIN resetear la contraseña del dueño desde el COMMIT de la migracion hasta que la reemplacen.
 - **No volver la app a una release anterior despues de aplicarlas.** El codigo previo protege la cuenta del dueño comparando `role === OWNER`. Tras la migracion no queda ningun OWNER, asi que esa proteccion queda inerte y cualquier ADMIN podria resetear la contraseña del dueño. Ante un problema, corregir hacia adelante con una release nueva.
 - **Si `prisma migrate deploy` aborta por `lock_timeout`** (5 s esperando la tabla `OrganizationUser`), la transaccion se revierte entera y no queda nada aplicado. Marcar la migracion y reintentar con menos trafico:
 

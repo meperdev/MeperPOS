@@ -16,8 +16,7 @@
 #   5. Asserts: Product unchanged; exactly one default-site ProductStock row per
 #      product, equal to Product; operational memberships hold exactly the
 #      principal grant and OWNER/ADMIN hold none; every Location is a STORE;
-#      every migration finished; every retired role (MEMBER, OWNER) is gone and
-#      the primary owner flags survived.
+#      every migration finished.
 #
 # Usage:
 #   backend/test/migrations/multisedes-upgrade.rehearse.sh \
@@ -186,15 +185,15 @@ VALUES
   ('release-user-b-cashier',   'release-b-cashier@example.test',   'not-a-credential', 'B cashier',   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT ("id") DO NOTHING;
 
-INSERT INTO "OrganizationUser" ("id", "userId", "organizationId", "role", "joinedAt", "isPrimaryOwner")
+INSERT INTO "OrganizationUser" ("id", "userId", "organizationId", "role", "joinedAt")
 VALUES
-  ('release-m-a-owner',     'release-user-a-owner',     'release-org-a', 'OWNER',          CURRENT_TIMESTAMP, true),
-  ('release-m-a-admin',     'release-user-a-admin',     'release-org-a', 'ADMIN',          CURRENT_TIMESTAMP, false),
-  ('release-m-a-member',    'release-user-a-member',    'release-org-a', 'MEMBER',         CURRENT_TIMESTAMP, false),
-  ('release-m-a-cashier',   'release-user-a-cashier',   'release-org-a', 'CASHIER',        CURRENT_TIMESTAMP, false),
-  ('release-m-a-inventory', 'release-user-a-inventory', 'release-org-a', 'INVENTORY_USER', CURRENT_TIMESTAMP, false),
-  ('release-m-b-owner',     'release-user-b-owner',     'release-org-b', 'OWNER',          CURRENT_TIMESTAMP, true),
-  ('release-m-b-cashier',   'release-user-b-cashier',   'release-org-b', 'CASHIER',        CURRENT_TIMESTAMP, false)
+  ('release-m-a-owner',     'release-user-a-owner',     'release-org-a', 'OWNER',          CURRENT_TIMESTAMP),
+  ('release-m-a-admin',     'release-user-a-admin',     'release-org-a', 'ADMIN',          CURRENT_TIMESTAMP),
+  ('release-m-a-member',    'release-user-a-member',    'release-org-a', 'MEMBER',         CURRENT_TIMESTAMP),
+  ('release-m-a-cashier',   'release-user-a-cashier',   'release-org-a', 'CASHIER',        CURRENT_TIMESTAMP),
+  ('release-m-a-inventory', 'release-user-a-inventory', 'release-org-a', 'INVENTORY_USER', CURRENT_TIMESTAMP),
+  ('release-m-b-owner',     'release-user-b-owner',     'release-org-b', 'OWNER',          CURRENT_TIMESTAMP),
+  ('release-m-b-cashier',   'release-user-b-cashier',   'release-org-b', 'CASHIER',        CURRENT_TIMESTAMP)
 ON CONFLICT ("userId", "organizationId") DO NOTHING;
 
 INSERT INTO "Category" ("id", "name", "organizationId", "createdAt", "updatedAt")
@@ -250,30 +249,22 @@ readonly PRODUCT_CHECKSUM_SQL=$(cat <<'SQL'
 SELECT md5(string_agg(concat_ws(':', "id", "stock"::text, "reservedStock"::text), ',' ORDER BY "id")) FROM "Product"
 SQL
 )
-# 20261127120000_retire_member_role rewrites MEMBER to CASHIER and
-# 20261127130000_collapse_owner_into_admin rewrites OWNER to ADMIN, both on
-# purpose, so the checksum reads those roles as their replacement on both sides:
-# any other change still fails.
+# 20261127120000_retire_member_role rewrites MEMBER to CASHIER on purpose, so the
+# checksum reads MEMBER as CASHIER on both sides: any other change still fails.
 readonly MEMBERSHIP_CHECKSUM_SQL=$(cat <<'SQL'
-SELECT md5(string_agg(concat_ws(':', "id", "userId", "organizationId", CASE "role"::text WHEN 'MEMBER' THEN 'CASHIER' WHEN 'OWNER' THEN 'ADMIN' ELSE "role"::text END), ',' ORDER BY "id")) FROM "OrganizationUser"
+SELECT md5(string_agg(concat_ws(':', "id", "userId", "organizationId", CASE WHEN "role"::text = 'MEMBER' THEN 'CASHIER' ELSE "role"::text END), ',' ORDER BY "id")) FROM "OrganizationUser"
 SQL
 )
 readonly PRODUCT_SNAPSHOT_SQL=$(cat <<'SQL'
 SELECT "id", "stock", "reservedStock" FROM "Product" ORDER BY "id"
 SQL
 )
-readonly PRIMARY_OWNER_COUNT_SQL=$(cat <<'SQL'
-SELECT count(*) FROM "OrganizationUser" WHERE "isPrimaryOwner"
-SQL
-)
 readonly PRODUCT_CHECKSUM_BEFORE="$(q "${PRODUCT_CHECKSUM_SQL}")"
 readonly MEMBERSHIP_CHECKSUM_BEFORE="$(q "${MEMBERSHIP_CHECKSUM_SQL}")"
-readonly PRIMARY_OWNER_COUNT_BEFORE="$(q "${PRIMARY_OWNER_COUNT_SQL}")"
 psql "${PSQL_URL}" -v ON_ERROR_STOP=1 -At -F '|' -c "${PRODUCT_SNAPSHOT_SQL}" \
   > "${WORK}/product-before.tsv" || fail "could not snapshot Product"
 echo "  product    ${PRODUCT_CHECKSUM_BEFORE}"
 echo "  membership ${MEMBERSHIP_CHECKSUM_BEFORE}"
-echo "  primary    ${PRIMARY_OWNER_COUNT_BEFORE} owner flag(s)"
 
 # ---------------------------------------------------------------------------
 # 4. HEAD chain.
@@ -314,10 +305,8 @@ else
   diff -u "${WORK}/product-before.tsv" "${WORK}/product-after.tsv" >&2 || true
   FAILED=1
 fi
-check "OrganizationUser rows unchanged (MEMBER read as CASHIER, OWNER as ADMIN)" "${MEMBERSHIP_CHECKSUM_BEFORE}" "${MEMBERSHIP_CHECKSUM_AFTER}"
+check "OrganizationUser rows unchanged (MEMBER read as CASHIER)" "${MEMBERSHIP_CHECKSUM_BEFORE}" "${MEMBERSHIP_CHECKSUM_AFTER}"
 check "no MEMBER membership left" "0" "$(q 'SELECT count(*) FROM "OrganizationUser" WHERE "role" = '"'"'MEMBER'"'"'')"
-check "no OWNER membership left" "0" "$(q 'SELECT count(*) FROM "OrganizationUser" WHERE "role" = '"'"'OWNER'"'"'')"
-check "primary owner flags unchanged" "${PRIMARY_OWNER_COUNT_BEFORE}" "$(q "${PRIMARY_OWNER_COUNT_SQL}")"
 
 readonly DEFAULT_BALANCE_MISMATCH_SQL=$(cat <<'SQL'
 SELECT count(*)
