@@ -23,6 +23,14 @@
 #     'postgresql://postgres@127.0.0.1:55440/meperpos_stock_rehearsal_release_upgrade?schema=public'
 #
 #   BASELINE_REF=origin/master   optional, the pre-feature commit to start from
+#   PRODUCTION_LINEAGE=1         optional, start from the state production holds:
+#                                after the baseline, replay the abandoned
+#                                location lineage (test/migrations/fixtures/
+#                                abandoned-location-lineage) and the two
+#                                rolled-back attempts of the multi-site chain,
+#                                so the rehearsal proves
+#                                20261118115900_retire_abandoned_location_lineage
+#                                clears them. Use BASELINE_REF=257218d with it.
 #
 # The target must be an explicitly named `meperpos_stock_rehearsal_release*`
 # database on a port other than 5432. The script never drops, truncates or
@@ -78,6 +86,8 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 readonly PRISMA_BIN="${ROOT}/backend/node_modules/.bin/prisma"
 readonly BASELINE_REF="${BASELINE_REF:-origin/master}"
+readonly PRODUCTION_LINEAGE="${PRODUCTION_LINEAGE:-0}"
+readonly LINEAGE_FIXTURES="${SCRIPT_DIR}/fixtures/abandoned-location-lineage"
 readonly WORK="$(mktemp -d "${TMPDIR:-/tmp}/meperpos-upgrade-rehearsal.XXXXXX")"
 
 if [[ ! -x "${PRISMA_BIN}" ]]; then
@@ -90,6 +100,7 @@ done
 echo "Multisedes upgrade rehearsal"
 echo "  repository : ${ROOT}"
 echo "  baseline   : ${BASELINE_REF}"
+echo "  production lineage replay: ${PRODUCTION_LINEAGE}"
 echo "  target     : ${DB_NAME} @ ${DB_HOST}:${DB_PORT}"
 echo "  extraction : ${WORK}"
 echo
@@ -133,6 +144,22 @@ fi
 # schema and migrations.
 deploy "${BASELINE_SCHEMA}" "${WORK}"
 echo "  ✓ baseline applied: $(q 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL') migrations"
+
+if [[ "${PRODUCTION_LINEAGE}" == "1" ]]; then
+  # Production also carries the abandoned location lineage (applied by a local
+  # deploy on 2026-11-22) and two rolled-back attempts of the multi-site chain
+  # (the 2026-11-27 incident). Replay both, recorded exactly like there.
+  [[ -d "${LINEAGE_FIXTURES}" ]] || fail "lineage fixtures missing at ${LINEAGE_FIXTURES}"
+  cp -R "${LINEAGE_FIXTURES}/"2026* "${WORK}/backend/prisma/migrations/" ||
+    fail "could not stage the abandoned lineage"
+  deploy "${BASELINE_SCHEMA}" "${WORK}"
+  q "INSERT INTO \"_prisma_migrations\" (id, checksum, migration_name, started_at, finished_at, rolled_back_at, applied_steps_count)
+     VALUES
+       (gen_random_uuid()::text, '43c60885bedc886824752aa4f3d1db6db82370be3b891ef0abe7af0ec1fdfa78', '20261118120000_initial_organization_location', now() - interval '2 minutes', NULL, now() - interval '1 minute', 0),
+       (gen_random_uuid()::text, '43c60885bedc886824752aa4f3d1db6db82370be3b891ef0abe7af0ec1fdfa78', '20261118120000_initial_organization_location', now() - interval '1 minute', NULL, now(), 0)" >/dev/null ||
+    fail "could not record the rolled-back attempts"
+  echo "  ✓ abandoned lineage replayed: Location=$(q "SELECT to_regclass('public.\"Location\"') IS NOT NULL"), LocationAssignment=$(q "SELECT to_regclass('public.\"LocationAssignment\"') IS NOT NULL"), rolled-back attempts=$(q "SELECT count(*) FROM \"_prisma_migrations\" WHERE rolled_back_at IS NOT NULL")"
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Legacy data, by SQL, exactly as a pre-feature installation holds it.
@@ -333,11 +360,17 @@ WHERE m."role" IN ('OWNER', 'ADMIN')
   )
 SQL
 )
-readonly UNFINISHED_SQL=$(cat <<'SQL'
+readonly UNRESOLVED_FAILURES_SQL=$(cat <<'SQL'
 SELECT count(*) FROM "_prisma_migrations"
-WHERE "finished_at" IS NULL OR "rolled_back_at" IS NOT NULL
+WHERE "finished_at" IS NULL AND "rolled_back_at" IS NULL
 SQL
 )
+# Every migration of the worktree's chain must have a finished row.
+LOCAL_MIGRATIONS="$(find "${ROOT}/backend/prisma/migrations" -mindepth 1 -maxdepth 1 -type d -printf "'%f'," | sed 's/,$//')"
+readonly LOCAL_MIGRATIONS
+readonly MISSING_LOCAL_SQL="SELECT count(*) FROM unnest(ARRAY[${LOCAL_MIGRATIONS}]::text[]) AS m(name)
+WHERE NOT EXISTS (SELECT 1 FROM \"_prisma_migrations\" p
+                  WHERE p.migration_name = m.name AND p.finished_at IS NOT NULL AND p.rolled_back_at IS NULL)"
 
 # Exactly one default-site row per product, equal to the aggregate.
 check "every product has exactly one matching default-site balance" "0" "$(q "${DEFAULT_BALANCE_MISMATCH_SQL}")"
@@ -353,8 +386,17 @@ check "each organization has exactly one principal site" "0" "$(q "${PRINCIPAL_S
 check "operational memberships hold exactly the principal grant" "0" "$(q "${OPERATIONAL_GRANTS_SQL}")"
 check "owners and administrators hold no site grant" "0" "$(q "${ORG_WIDE_GRANTS_SQL}")"
 
-# The whole chain finished: nothing pending and nothing rolled back.
-check "no migration is unfinished or rolled back" "0" "$(q "${UNFINISHED_SQL}")"
+# The whole chain finished: no unresolved failure and every local migration applied.
+check "no migration is left failed" "0" "$(q "${UNRESOLVED_FAILURES_SQL}")"
+check "every migration of the chain finished" "0" "$(q "${MISSING_LOCAL_SQL}")"
+
+if [[ "${PRODUCTION_LINEAGE}" == "1" ]]; then
+  check "the abandoned LocationAssignment table is gone" "" "$(q "SELECT to_regclass('public.\"LocationAssignment\"')")"
+  check "the abandoned triggers are gone" "0" "$(q "SELECT count(*) FROM pg_trigger WHERE tgname IN ('Organization_default_location', 'OrganizationUser_principal_location_assignment')")"
+  check "the abandoned functions are gone" "0" "$(q "SELECT count(*) FROM pg_proc WHERE proname IN ('create_default_organization_location', 'create_principal_location_assignment')")"
+  check "the abandoned OrganizationUser index is gone" "" "$(q "SELECT to_regclass('public.\"OrganizationUser_id_organizationId_key\"')")"
+  check "Location has the multi-site shape (address column)" "1" "$(q "SELECT count(*) FROM information_schema.columns WHERE table_name = 'Location' AND column_name = 'address'")"
+fi
 
 if [[ "${FAILED}" -ne 0 ]]; then
   cat >&2 <<EOF
