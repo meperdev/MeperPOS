@@ -601,6 +601,14 @@ export class AdminService {
       password?: string;
     },
   ) {
+    // S8 (b): OWNER is retired, so the platform panel cannot assign it either.
+    // ADMIN stays available here because this path is SUPER_ADMIN-only.
+    if (dto.role === OrgRole.OWNER) {
+      throw new BadRequestException(
+        'The OWNER role is retired. Assign ADMIN instead.',
+      );
+    }
+
     const organization = await this.prisma.organization.findUnique({
       where: { id: organizationId },
     });
@@ -662,6 +670,13 @@ export class AdminService {
     userId: string,
     role: OrgRole,
   ) {
+    // S8 (b): a role change must not re-create the role the migration retired.
+    if (role === OrgRole.OWNER) {
+      throw new BadRequestException(
+        'The OWNER role is retired. Assign ADMIN instead.',
+      );
+    }
+
     const membership = await this.prisma.organizationUser.findFirst({
       where: { organizationId, userId },
     });

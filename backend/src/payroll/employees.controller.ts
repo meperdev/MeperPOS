@@ -53,7 +53,7 @@ class SetEmployeeActiveDto {
   RolesGuard,
   OrganizationRequiredGuard,
 )
-@Roles(OrgRole.OWNER, OrgRole.ADMIN)
+@Roles(OrgRole.ADMIN)
 export class EmployeesController {
   constructor(
     private readonly employees: EmployeesService,

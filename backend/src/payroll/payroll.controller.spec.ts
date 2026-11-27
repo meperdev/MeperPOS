@@ -412,7 +412,6 @@ describe('payroll HTTP boundary', () => {
       );
     }
     expect(Reflect.getMetadata(ROLES_KEY, Controller!)).toEqual([
-      OrgRole.OWNER,
       OrgRole.ADMIN,
     ]);
   });

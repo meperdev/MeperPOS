@@ -336,11 +336,17 @@ describe('Prepared inventory loan metadata', () => {
       Reflect.getMetadata('__interceptors__', InventoryLoansController),
     ).toEqual([AdminOrganizationInterceptor]);
   });
-  it.each(methods)('restricts %s metadata to OWNER and ADMIN', (method) => {
-    expect(
-      Reflect.getMetadata('roles', InventoryLoansController.prototype[method]),
-    ).toEqual([OrgRole.OWNER, OrgRole.ADMIN]);
-  });
+  it.each(methods)(
+    'restricts %s metadata to ADMIN (OWNER inherits it until phase 4)',
+    (method) => {
+      expect(
+        Reflect.getMetadata(
+          'roles',
+          InventoryLoansController.prototype[method],
+        ),
+      ).toEqual([OrgRole.ADMIN]);
+    },
+  );
   it.each([
     'deliver',
     'returnItems',

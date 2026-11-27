@@ -2,9 +2,11 @@ import type { RowError } from '../../engine/import-sheet-handler.interface';
 import { normalizeText } from '../row-validator';
 import { validatePasswordPolicy } from '../../../common/validators/password.policy';
 
-/** Recognized organization roles (mirrors the `OrgRole` Prisma enum). */
+/**
+ * Assignable organization roles. OWNER is retired (the primary owner is an
+ * ADMIN membership with isPrimaryOwner), so a row cannot ask for it.
+ */
 export const USER_ROLES = [
-  'OWNER',
   'ADMIN',
   'MEMBER',
   'CASHIER',

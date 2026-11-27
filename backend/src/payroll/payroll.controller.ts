@@ -76,7 +76,7 @@ class QueryPayrollObligationsHttpDto {
   RolesGuard,
   OrganizationRequiredGuard,
 )
-@Roles(OrgRole.OWNER, OrgRole.ADMIN)
+@Roles(OrgRole.ADMIN)
 export class PayrollController {
   constructor(
     private readonly periods: PayrollPeriodsService,

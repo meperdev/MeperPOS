@@ -1,7 +1,10 @@
 import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { CreateUserDto } from './dto/create-user.dto';
 import { UsersController } from './users.controller';
 
 describe('UsersController', () => {
@@ -125,5 +128,30 @@ describe('UsersController', () => {
 
     await controller.findAll(user);
     expect(usersServiceMock.findAll).toHaveBeenCalledWith('org-1');
+  });
+
+  describe('create-user body (S8 b)', () => {
+    const body = (role: string) => ({
+      email: 'new@example.com',
+      password: 'S3cure-Passphrase-42',
+      name: 'New User',
+      role,
+    });
+    const roleConstraints = async (role: string) => {
+      const errors = await validate(plainToInstance(CreateUserDto, body(role)));
+      return Object.keys(
+        errors.find((error) => error.property === 'role')?.constraints ?? {},
+      );
+    };
+
+    it('rejects the retired OWNER role before the service runs', async () => {
+      expect(await roleConstraints('OWNER')).toContain('isNotIn');
+    });
+
+    it('keeps accepting the roles the team screen offers', async () => {
+      for (const role of ['ADMIN', 'CASHIER', 'INVENTORY_USER']) {
+        expect(await roleConstraints(role)).toEqual([]);
+      }
+    });
   });
 });

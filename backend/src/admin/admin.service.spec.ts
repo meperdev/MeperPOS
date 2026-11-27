@@ -1214,6 +1214,50 @@ describe('AdminService', () => {
         }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
+
+    it('refuses to assign the retired OWNER role (S8 b)', async () => {
+      await expect(
+        service.addOrganizationMember('org-1', {
+          email: 'retired-owner@example.com',
+          role: OrgRole.OWNER,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+      expect(prismaMock.organizationUser.create).not.toHaveBeenCalled();
+    });
+
+    it('still assigns ADMIN from the platform panel', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: 'Org One',
+      });
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'existing-user',
+        email: 'existing@example.com',
+        name: 'Existing User',
+      });
+      prismaMock.organizationUser.findFirst.mockResolvedValue(null);
+      prismaMock.organizationUser.create.mockResolvedValue({
+        id: 'ou-admin',
+        userId: 'existing-user',
+        organizationId: 'org-1',
+        role: OrgRole.ADMIN,
+        isPrimaryOwner: false,
+      });
+
+      const result = await service.addOrganizationMember('org-1', {
+        email: 'existing@example.com',
+        role: OrgRole.ADMIN,
+      });
+
+      expect(result.organizationUser.role).toBe(OrgRole.ADMIN);
+      expect(prismaMock.organizationUser.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ role: OrgRole.ADMIN }),
+        }),
+      );
+    });
   });
 
   describe('updateMemberRole', () => {
@@ -1254,6 +1298,22 @@ describe('AdminService', () => {
       await expect(
         service.updateMemberRole('org-1', 'user-99', OrgRole.ADMIN),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('refuses to move a member into the retired OWNER role (S8 b)', async () => {
+      prismaMock.organizationUser.findFirst.mockResolvedValue({
+        id: 'ou-1',
+        userId: 'user-1',
+        organizationId: 'org-1',
+        role: OrgRole.CASHIER,
+        isPrimaryOwner: false,
+      });
+
+      await expect(
+        service.updateMemberRole('org-1', 'user-1', OrgRole.OWNER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaMock.organizationUser.update).not.toHaveBeenCalled();
     });
   });
 

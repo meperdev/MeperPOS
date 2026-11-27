@@ -122,6 +122,34 @@ describe('UserHandler', () => {
       });
       expect(organizationId).toBe('org-1');
     });
+
+    it('passes the importing actor so the primary-owner rule for ADMIN rows applies', async () => {
+      const ctx = { ...makeCtx(), actorRole: 'ADMIN' as const };
+
+      await handler.createRow(
+        { email: 'a@example.com', password: 'correct-horse-battery-staple', name: 'A', role: 'ADMIN' },
+        ctx,
+      );
+
+      const [, , actor] = usersService.create.mock.calls[0];
+      expect(actor).toEqual({
+        userId: ctx.userId,
+        role: 'ADMIN',
+        isSuperAdmin: false,
+      });
+    });
+
+    it('marks a SUPER_ADMIN importer as such', async () => {
+      const ctx = { ...makeCtx(), actorRole: 'SUPER_ADMIN' as const };
+
+      await handler.createRow(
+        { email: 'b@example.com', password: 'correct-horse-battery-staple', name: 'B', role: 'ADMIN' },
+        ctx,
+      );
+
+      const [, , actor] = usersService.create.mock.calls[0];
+      expect(actor).toMatchObject({ role: 'SUPER_ADMIN', isSuperAdmin: true });
+    });
   });
 
   describe('contract metadata', () => {

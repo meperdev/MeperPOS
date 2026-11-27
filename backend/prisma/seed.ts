@@ -109,12 +109,12 @@ async function createDemoOrg(
     },
   });
 
-  // 3. OrganizationUser (OWNER)
+  // 3. OrganizationUser (ADMIN + primary owner; OWNER is retired)
   await prisma.organizationUser.create({
     data: {
       organizationId: org.id,
       userId: adminUser.id,
-      role: OrgRole.OWNER,
+      role: OrgRole.ADMIN,
       isPrimaryOwner: true,
     },
   });

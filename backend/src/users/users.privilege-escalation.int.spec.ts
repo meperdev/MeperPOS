@@ -1,5 +1,4 @@
 import 'reflect-metadata';
-import { ForbiddenException } from '@nestjs/common';
 import { PrismaClient, OrgRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from './users.service';
@@ -8,22 +7,33 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 const prisma = new PrismaClient();
 
 /**
- * SEC-001 regression (security audit, FASE 7):
- * an ADMIN must not be able to mint OWNER accounts nor reset the password of
- * an OWNER. Both were reproducible PoCs: POST /api/users {role:OWNER} as ADMIN
- * returned 201, and ADMIN_PASSWORD_RESET against an OWNER took over the
- * account. The service-level checks below must hold regardless of the
- * controller guards.
+ * SEC-001 regression (security audit, FASE 7), restated for phase 2 (S8 b, c).
+ *
+ * The OWNER role is retired: nobody can assign it, and ADMIN — the top role —
+ * can only be created by the organization's primary owner (`isPrimaryOwner`)
+ * or a SUPER_ADMIN. The old OWNER-target protections now protect the primary
+ * owner's account: an ADMIN who is not the primary owner can neither mint an
+ * ADMIN nor reset the primary owner's password. The service-level checks below
+ * must hold regardless of the controller guards, which is why they are proven
+ * against a real database instead of mocks.
  */
-describe('UsersService — privilege escalation guardrails (SEC-001)', () => {
+describe('UsersService — privilege escalation guardrails (SEC-001, S8 b/c)', () => {
   let usersService: UsersService;
   let orgId: string;
   let adminId: string;
-  let ownerEmail: string;
+  let primaryOwnerId: string;
+  let memberId: string;
+  let primaryOwnerEmail: string;
+  const stamp = Date.now();
+  const mintedEmail = `sec001-minted-admin-${stamp}@example.com`;
 
-  const adminActor = (role: OrgRole | 'SUPER_ADMIN', isSuperAdmin = false) =>
+  const actorOf = (
+    userId: string,
+    role: OrgRole | 'SUPER_ADMIN',
+    isSuperAdmin = false,
+  ) =>
     ({
-      userId: 'actor-not-persisted',
+      userId,
       email: 'actor@example.com',
       organizationId: orgId,
       role,
@@ -42,7 +52,6 @@ describe('UsersService — privilege escalation guardrails (SEC-001)', () => {
       authServiceStub as never,
     );
 
-    const stamp = Date.now();
     orgId = `sec001-org-${stamp}`;
     await prisma.organization.create({
       data: { id: orgId, name: 'SEC001 Org', slug: `sec001-${stamp}` },
@@ -55,13 +64,17 @@ describe('UsersService — privilege escalation guardrails (SEC-001)', () => {
         name: 'SEC001 Admin',
         tokenVersion: 0,
         organizationUsers: {
-          create: { organizationId: orgId, role: OrgRole.ADMIN },
+          create: {
+            organizationId: orgId,
+            role: OrgRole.ADMIN,
+            isPrimaryOwner: false,
+          },
         },
       },
     });
     adminId = admin.id;
 
-    // A real OWNER account the ADMIN must never be able to take over.
+    // The primary owner is an ADMIN now; ownership rides the flag.
     const owner = await prisma.user.create({
       data: {
         email: `sec001-owner-${stamp}@example.com`,
@@ -69,23 +82,34 @@ describe('UsersService — privilege escalation guardrails (SEC-001)', () => {
         name: 'SEC001 Owner',
         tokenVersion: 0,
         organizationUsers: {
-          create: { organizationId: orgId, role: OrgRole.OWNER },
+          create: {
+            organizationId: orgId,
+            role: OrgRole.ADMIN,
+            isPrimaryOwner: true,
+          },
         },
       },
     });
-    ownerEmail = owner.email;
+    primaryOwnerId = owner.id;
+    primaryOwnerEmail = owner.email;
+
+    const member = await prisma.user.create({
+      data: {
+        email: `sec001-member-${stamp}@example.com`,
+        password: await bcrypt.hash('Sec001-MemberPass-123!', 4),
+        name: 'SEC001 Member',
+        tokenVersion: 0,
+        organizationUsers: {
+          create: { organizationId: orgId, role: OrgRole.CASHIER },
+        },
+      },
+    });
+    memberId = member.id;
   }, 30000);
 
   afterAll(async () => {
     const users = await prisma.user.findMany({
-      where: {
-        OR: [
-          { email: { startsWith: 'sec001-admin-' } },
-          { email: { startsWith: 'sec001-owner-' } },
-          { email: { startsWith: 'sec001-minted-' } },
-          { email: { startsWith: 'sec001-cashier-' } },
-        ],
-      },
+      where: { email: { startsWith: 'sec001-' } },
       select: { id: true },
     });
     await prisma.refreshToken.deleteMany({
@@ -98,58 +122,129 @@ describe('UsersService — privilege escalation guardrails (SEC-001)', () => {
     await prisma.$disconnect();
   }, 30000);
 
-  it('rejects an ADMIN creating an OWNER account with 403 and persists nothing', async () => {
+  it('rejects an ADMIN creating an ADMIN with 403 and persists nothing', async () => {
     await expect(
       usersService.create(
         {
-          email: 'sec001-minted-owner@example.com',
+          email: mintedEmail,
+          password: 'Sec001-MintedPass-123!',
+          name: 'Minted Admin',
+          role: OrgRole.ADMIN,
+        },
+        orgId,
+        actorOf(adminId, OrgRole.ADMIN),
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+
+    expect(
+      await prisma.user.findUnique({ where: { email: mintedEmail } }),
+    ).toBeNull();
+  });
+
+  it('rejects assigning the retired OWNER role with 403 and persists nothing', async () => {
+    const ownerEmail = `sec001-minted-owner-${stamp}@example.com`;
+
+    await expect(
+      usersService.create(
+        {
+          email: ownerEmail,
           password: 'Sec001-MintedPass-123!',
           name: 'Minted Owner',
           role: OrgRole.OWNER,
         },
         orgId,
-        adminActor(OrgRole.ADMIN),
+        actorOf(primaryOwnerId, OrgRole.ADMIN),
       ),
     ).rejects.toMatchObject({ status: 403 });
 
-    const minted = await prisma.user.findUnique({
-      where: { email: 'sec001-minted-owner@example.com' },
-    });
-    expect(minted).toBeNull();
+    expect(
+      await prisma.user.findUnique({ where: { email: ownerEmail } }),
+    ).toBeNull();
   });
 
-  it('rejects an ADMIN resetting the password of an OWNER with 403 and leaves the hash untouched', async () => {
+  it('rejects an ADMIN resetting the primary owner password with 403 and leaves the hash untouched', async () => {
     const owner = await prisma.user.findUniqueOrThrow({
-      where: { email: ownerEmail },
+      where: { id: primaryOwnerId },
     });
 
     await expect(
       usersService.resetPassword(
         adminId,
-        owner.id,
+        primaryOwnerId,
         { newPassword: 'Hacked-Owner-Pw-999999' },
         orgId,
-        adminActor(OrgRole.ADMIN),
+        actorOf(adminId, OrgRole.ADMIN),
       ),
     ).rejects.toMatchObject({ status: 403 });
 
     const after = await prisma.user.findUniqueOrThrow({
-      where: { email: ownerEmail },
+      where: { email: primaryOwnerEmail },
     });
     expect(after.password).toBe(owner.password);
   });
 
-  it('still allows an ADMIN to create non-OWNER roles (positive control)', async () => {
+  it('lets the primary owner create an ADMIN', async () => {
     const created = await usersService.create(
       {
-        email: 'sec001-cashier-1@example.com',
+        email: mintedEmail,
+        password: 'Sec001-MintedPass-123!',
+        name: 'Minted Admin',
+        role: OrgRole.ADMIN,
+      },
+      orgId,
+      actorOf(primaryOwnerId, OrgRole.ADMIN),
+    );
+
+    expect(created.email).toBe(mintedEmail);
+    const membership = await prisma.organizationUser.findFirstOrThrow({
+      where: { userId: created.id, organizationId: orgId },
+      select: { role: true, isPrimaryOwner: true },
+    });
+    expect(membership).toEqual({
+      role: OrgRole.ADMIN,
+      isPrimaryOwner: false,
+    });
+  });
+
+  it('still allows an ADMIN to create non-ADMIN roles (positive control)', async () => {
+    const created = await usersService.create(
+      {
+        email: `sec001-cashier-${stamp}@example.com`,
         password: 'Sec001-CashierPass-123!',
         name: 'Legit Cashier',
         role: OrgRole.CASHIER,
       },
       orgId,
-      adminActor(OrgRole.ADMIN),
+      actorOf(adminId, OrgRole.ADMIN),
     );
-    expect(created.email).toBe('sec001-cashier-1@example.com');
+    expect(created.email).toBe(`sec001-cashier-${stamp}@example.com`);
+  });
+
+  it('still allows an ADMIN to reset a member password', async () => {
+    await expect(
+      usersService.resetPassword(
+        adminId,
+        memberId,
+        { newPassword: 'Member-New-Pw-123456' },
+        orgId,
+        actorOf(adminId, OrgRole.ADMIN),
+      ),
+    ).resolves.toMatchObject({
+      message: 'Contraseña restablecida exitosamente',
+    });
+  });
+
+  it('lets the primary owner reset the primary owner password', async () => {
+    await expect(
+      usersService.resetPassword(
+        primaryOwnerId,
+        primaryOwnerId,
+        { newPassword: 'Owner-New-Pw-123456' },
+        orgId,
+        actorOf(primaryOwnerId, OrgRole.ADMIN),
+      ),
+    ).resolves.toMatchObject({
+      message: 'Contraseña restablecida exitosamente',
+    });
   });
 });

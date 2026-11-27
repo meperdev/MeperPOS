@@ -45,8 +45,9 @@ import {
   Users,
 } from "lucide-react";
 
+// OWNER is retired: the primary owner is an ADMIN membership flagged
+// isPrimaryOwner (the "Propietario" column), and the API refuses OWNER.
 const roleOptions = [
-  { value: "OWNER", label: "Propietario" },
   { value: "ADMIN", label: "Administrador" },
   { value: "MEMBER", label: "Miembro" },
   { value: "CASHIER", label: "Cajero" },

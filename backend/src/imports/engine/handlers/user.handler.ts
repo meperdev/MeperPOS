@@ -69,6 +69,15 @@ export class UserHandler implements ImportSheetHandler {
     data: Record<string, unknown>,
     ctx: SheetRowContext,
   ): Promise<void> {
-    await this.usersService.create(data as never, ctx.organizationId);
+    // The importer is the actor: an ADMIN row needs the primary owner or a
+    // SUPER_ADMIN, exactly as POST /api/users does. No role fails closed.
+    const actor = ctx.actorRole
+      ? {
+          userId: ctx.userId,
+          role: ctx.actorRole,
+          isSuperAdmin: ctx.actorRole === 'SUPER_ADMIN',
+        }
+      : undefined;
+    await this.usersService.create(data as never, ctx.organizationId, actor);
   }
 }

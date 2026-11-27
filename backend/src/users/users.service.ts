@@ -15,6 +15,12 @@ import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { AuthService } from '../auth/auth.service';
 
+type ActorContext = {
+  userId: string;
+  role: OrgRole | 'SUPER_ADMIN';
+  isSuperAdmin: boolean;
+};
+
 type AuditContext = {
   resource?: string;
   resourceId?: string | null;
@@ -55,18 +61,26 @@ export class UsersService {
   async create(
     createUserDto: CreateUserDto,
     organizationId?: string,
-    actor?: { role: OrgRole | 'SUPER_ADMIN'; isSuperAdmin: boolean },
+    actor?: ActorContext,
   ) {
     const { email, password, name, role } = createUserDto;
 
-    // SEC-001 guardrail: only an OWNER (or SUPER_ADMIN) may mint OWNER
-    // accounts. ADMIN is the route minimum, so without this check any ADMIN
-    // could fabricate an OWNER and control its password.
-    const actorIsOwner =
-      actor?.isSuperAdmin === true || actor?.role === OrgRole.OWNER;
-    if (role === OrgRole.OWNER && !actorIsOwner) {
+    // SEC-001, restated for phase 2 (S8 b): OWNER is retired. ADMIN is the top
+    // organization role, so minting one is reserved for the organization's
+    // primary owner (isPrimaryOwner) or a SUPER_ADMIN — otherwise any ADMIN
+    // could fabricate an equal account and control its password.
+    if (role === OrgRole.OWNER) {
       throw new ForbiddenException(
-        'Only an OWNER or SUPER_ADMIN can create OWNER users',
+        'The OWNER role is retired. Assign ADMIN instead.',
+      );
+    }
+
+    if (
+      role === OrgRole.ADMIN &&
+      !(await this.isPrimaryOwnerActor(actor, organizationId))
+    ) {
+      throw new ForbiddenException(
+        'Only the primary owner of the organization or a SUPER_ADMIN can create ADMIN users',
       );
     }
 
@@ -228,24 +242,23 @@ export class UsersService {
     userId: string,
     dto: ResetUserPasswordDto,
     organizationId: string,
-    actor?: { role: OrgRole | 'SUPER_ADMIN'; isSuperAdmin: boolean },
+    actor?: ActorContext,
   ) {
     const targetUser = await this.findUserOrThrow(userId, organizationId);
     await this.assertSingleOrgTarget(userId);
 
-    // SEC-001 guardrail: an ADMIN must not be able to take over an OWNER
-    // account by resetting its password. OWNER (and SUPER_ADMIN) keep full
-    // control; the target's role is resolved within the caller organization.
-    const actorIsOwner =
-      actor?.isSuperAdmin === true || actor?.role === OrgRole.OWNER;
-    if (!actorIsOwner) {
+    // SEC-001, restated for phase 2 (S8 c): the account to protect is the
+    // primary owner's (isPrimaryOwner), not a role, because nobody is OWNER any
+    // more. Only the primary owner or a SUPER_ADMIN may reset that password,
+    // which keeps the migration from opening the owner's account to every ADMIN.
+    if (!(await this.isPrimaryOwnerActor(actor, organizationId))) {
       const targetOrgUser = await this.prisma.organizationUser.findFirst({
         where: { userId, organizationId },
-        select: { role: true },
+        select: { isPrimaryOwner: true },
       });
-      if (targetOrgUser?.role === OrgRole.OWNER) {
+      if (targetOrgUser?.isPrimaryOwner === true) {
         throw new ForbiddenException(
-          'An ADMIN cannot reset the password of an OWNER. Ask the organization OWNER (or support) to do it.',
+          'Only the primary owner can reset the primary owner password. Ask the primary owner (or support) to do it.',
         );
       }
     }
@@ -365,6 +378,33 @@ export class UsersService {
         },
       },
     );
+  }
+
+  /**
+   * Whether the actor is the organization's primary owner (or a SUPER_ADMIN).
+   *
+   * `RequestUser` carries no isPrimaryOwner, so the membership is read here and
+   * a missing actor, organization or membership is never the primary owner:
+   * a caller that cannot be identified cannot reach the owner's account.
+   */
+  private async isPrimaryOwnerActor(
+    actor: ActorContext | undefined,
+    organizationId: string | undefined,
+  ): Promise<boolean> {
+    if (actor?.isSuperAdmin === true) {
+      return true;
+    }
+
+    if (!actor?.userId || !organizationId) {
+      return false;
+    }
+
+    const membership = await this.prisma.organizationUser.findFirst({
+      where: { userId: actor.userId, organizationId },
+      select: { isPrimaryOwner: true },
+    });
+
+    return membership?.isPrimaryOwner === true;
   }
 
   /**

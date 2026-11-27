@@ -40,7 +40,7 @@ export class InventoryLoansController {
   constructor(private readonly inventoryLoansService: InventoryLoansService) {}
 
   @Post()
-  @Roles(OrgRole.OWNER, OrgRole.ADMIN)
+  @Roles(OrgRole.ADMIN)
   async create(
     @Body() dto: CreateInventoryLoanDto,
     @CurrentUser() user: RequestUser,
@@ -49,7 +49,7 @@ export class InventoryLoansController {
   }
 
   @Post(':id/deliver')
-  @Roles(OrgRole.OWNER, OrgRole.ADMIN)
+  @Roles(OrgRole.ADMIN)
   async deliver(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: InventoryLoanOperationDto,
@@ -59,7 +59,7 @@ export class InventoryLoansController {
   }
 
   @Post(':id/return')
-  @Roles(OrgRole.OWNER, OrgRole.ADMIN)
+  @Roles(OrgRole.ADMIN)
   async returnItems(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: InventoryLoanOperationDto,
@@ -69,7 +69,7 @@ export class InventoryLoansController {
   }
 
   @Post(':id/cancel')
-  @Roles(OrgRole.OWNER, OrgRole.ADMIN)
+  @Roles(OrgRole.ADMIN)
   async cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: InventoryLoanTerminalDto,
@@ -79,7 +79,7 @@ export class InventoryLoansController {
   }
 
   @Post(':id/close')
-  @Roles(OrgRole.OWNER, OrgRole.ADMIN)
+  @Roles(OrgRole.ADMIN)
   async close(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: InventoryLoanTerminalDto,
@@ -89,7 +89,7 @@ export class InventoryLoansController {
   }
 
   @Get()
-  @Roles(OrgRole.OWNER, OrgRole.ADMIN)
+  @Roles(OrgRole.ADMIN)
   async findAll(
     @Query() query: QueryInventoryLoansDto,
     @CurrentUser() user: RequestUser,
@@ -99,7 +99,7 @@ export class InventoryLoansController {
   }
 
   @Get(':id')
-  @Roles(OrgRole.OWNER, OrgRole.ADMIN)
+  @Roles(OrgRole.ADMIN)
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: RequestUser,
@@ -109,7 +109,7 @@ export class InventoryLoansController {
   }
 
   @Get(':id/history')
-  @Roles(OrgRole.OWNER, OrgRole.ADMIN)
+  @Roles(OrgRole.ADMIN)
   async getHistory(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: InventoryLoanHistoryQueryDto,

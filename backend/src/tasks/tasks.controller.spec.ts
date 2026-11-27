@@ -30,7 +30,6 @@ describe('TasksController', () => {
 
     expect(requiredRoles).toEqual([
       OrgRole.ADMIN,
-      OrgRole.OWNER,
       OrgRole.MEMBER,
       OrgRole.CASHIER,
       OrgRole.INVENTORY_USER,
