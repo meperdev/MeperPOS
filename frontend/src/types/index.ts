@@ -612,6 +612,8 @@ export interface User {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  /** The organization's primary owner (team list); shown as "Propietario". */
+  isPrimaryOwner?: boolean;
 }
 
 export interface SaleFilters {

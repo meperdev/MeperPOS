@@ -48,6 +48,11 @@ export default function UsersPage() {
     currentUser?.isPrimaryOwner === true ||
     currentUser?.isSuperAdmin === true ||
     currentUser?.role === "SUPER_ADMIN";
+  // The same people manage admin-rank accounts (edit, deactivate, reset,
+  // remove); anyone else gets 403, so those actions are hidden from them.
+  const mayManage = (target: User) =>
+    canCreateAdmin ||
+    !(target.isPrimaryOwner === true || target.role === "ADMIN" || target.role === "OWNER");
   const toast = useToast();
   const { data: users = [], isLoading } = useUsers();
   const createUser = useCreateUser();
@@ -222,37 +227,41 @@ export default function UsersPage() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 @2xl:shrink-0 @2xl:justify-end">
-                        {/* GET /users currently omits `role`; an icon-only badge would read as broken. */}
+                        {/* An older API may omit `role`; an icon-only badge would read as broken. */}
                         {user.role && (
                           <Badge variant="default">
                             <Shield className="mr-1 h-3 w-3 text-muted-foreground" />
-                            {roleLabel[user.role] || user.role}
+                            {user.isPrimaryOwner ? "Propietario" : roleLabel[user.role] || user.role}
                           </Badge>
                         )}
                         <Badge variant={user.active ? "success" : "danger"} dot>
                           {user.active ? "Activo" : "Inactivo"}
                         </Badge>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          aria-label={`${user.active ? "Desactivar" : "Activar"} usuario ${user.name}`}
-                          onClick={() => handleToggleActive(user.id)}
-                          disabled={
-                            user.id === currentUser?.id || toggleUserActive.isPending
-                          }
-                        >
-                          {user.active ? "Desactivar" : "Activar"}
-                        </Button>
+                        {(user.id === currentUser?.id || mayManage(user)) && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            aria-label={`${user.active ? "Desactivar" : "Activar"} usuario ${user.name}`}
+                            onClick={() => handleToggleActive(user.id)}
+                            disabled={
+                              user.id === currentUser?.id || toggleUserActive.isPending
+                            }
+                          >
+                            {user.active ? "Desactivar" : "Activar"}
+                          </Button>
+                        )}
                         {user.id !== currentUser?.id && (
                           <>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              aria-label={`Editar usuario ${user.name}`}
-                              onClick={() => openEditModal(user)}
-                            >
-                              <SquarePen className="h-3.5 w-3.5" /> Editar
-                            </Button>
+                            {mayManage(user) && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                aria-label={`Editar usuario ${user.name}`}
+                                onClick={() => openEditModal(user)}
+                              >
+                                <SquarePen className="h-3.5 w-3.5" /> Editar
+                              </Button>
+                            )}
                             {/* The dialog asks the server whether this person
                                 already reaches every site; the list carries no role. */}
                             <Button
@@ -263,31 +272,35 @@ export default function UsersPage() {
                             >
                               <Building2 className="h-3.5 w-3.5" /> Sedes
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-9 w-9 px-0"
-                              aria-label={`Restablecer contraseña de ${user.name}`}
-                              onClick={() => {
-                                setUserToReset(user);
-                                setShowResetModal(true);
-                                setNewPassword("");
-                              }}
-                            >
-                              <KeyRound className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              className="h-9 w-9 px-0"
-                              aria-label={`Eliminar usuario ${user.name}`}
-                              onClick={() => {
-                                setUserToDelete(user.id);
-                                setShowDeleteModal(true);
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {mayManage(user) && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="h-9 w-9 px-0"
+                                aria-label={`Restablecer contraseña de ${user.name}`}
+                                onClick={() => {
+                                  setUserToReset(user);
+                                  setShowResetModal(true);
+                                  setNewPassword("");
+                                }}
+                              >
+                                <KeyRound className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {mayManage(user) && (
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                className="h-9 w-9 px-0"
+                                aria-label={`Eliminar usuario ${user.name}`}
+                                onClick={() => {
+                                  setUserToDelete(user.id);
+                                  setShowDeleteModal(true);
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>

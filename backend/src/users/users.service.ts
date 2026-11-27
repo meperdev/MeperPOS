@@ -131,15 +131,29 @@ export class UsersService {
       return [];
     }
 
-    return this.prisma.user.findMany({
+    // Each member carries its role and primary-owner flag in this organization,
+    // so the team screen can label it and hide what the caller may not do.
+    const users = await this.prisma.user.findMany({
       where: {
         organizationUsers: {
           some: { organizationId },
         },
       },
       orderBy: { createdAt: 'desc' },
-      select: userAdminSelect,
+      select: {
+        ...userAdminSelect,
+        organizationUsers: {
+          where: { organizationId },
+          select: { role: true, isPrimaryOwner: true },
+        },
+      },
     });
+
+    return users.map(({ organizationUsers, ...user }) => ({
+      ...user,
+      role: organizationUsers[0]?.role ?? null,
+      isPrimaryOwner: organizationUsers[0]?.isPrimaryOwner === true,
+    }));
   }
 
   async update(

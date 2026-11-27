@@ -324,6 +324,57 @@ describe('UsersService', () => {
     );
   });
 
+  it('returns each member with its role and primary-owner flag in that organization', async () => {
+    prismaMock.user.findMany.mockResolvedValue([
+      {
+        id: 'owner-1',
+        email: 'owner@example.com',
+        name: 'Owner',
+        active: true,
+        organizationUsers: [{ role: 'ADMIN', isPrimaryOwner: true }],
+      },
+      {
+        id: 'cashier-1',
+        email: 'cashier@example.com',
+        name: 'Cashier',
+        active: true,
+        organizationUsers: [{ role: 'CASHIER', isPrimaryOwner: false }],
+      },
+    ]);
+
+    const users = await service.findAll('org-1');
+
+    // Only the membership of the caller's organization is read.
+    expect(prismaMock.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          organizationUsers: {
+            where: { organizationId: 'org-1' },
+            select: { role: true, isPrimaryOwner: true },
+          },
+        }),
+      }),
+    );
+    expect(users).toEqual([
+      {
+        id: 'owner-1',
+        email: 'owner@example.com',
+        name: 'Owner',
+        active: true,
+        role: 'ADMIN',
+        isPrimaryOwner: true,
+      },
+      {
+        id: 'cashier-1',
+        email: 'cashier@example.com',
+        name: 'Cashier',
+        active: true,
+        role: 'CASHIER',
+        isPrimaryOwner: false,
+      },
+    ]);
+  });
+
   it('throws ForbiddenException when updating a user outside the organization', async () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'user-2',
