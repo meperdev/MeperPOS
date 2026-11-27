@@ -3,6 +3,8 @@
 import { Moon, Search, Sun } from "lucide-react";
 import { AlertCenter } from "@/components/layout/AlertCenter";
 import { AccountMenu } from "@/components/layout/AccountMenu";
+import { formatSidebarClock } from "@/components/layout/sidebar-clock";
+import { useClockNow } from "@/components/layout/use-clock-now";
 import { useTheme } from "@/contexts/ThemeContext";
 import { openCommandPalette } from "@/lib/command-palette";
 import { APP_NAME } from "@/lib/constants";
@@ -10,8 +12,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * The desktop header: one bar above the content column, holding the few things
- * that are not a destination — search, the light/dark mode, notifications and
- * the account.
+ * that are not a destination — search, the current time, the light/dark mode,
+ * notifications and the account.
  *
  * It sits right of the rail and follows its collapsed width, so the rail keeps
  * the left edge at every size. Below `lg` the phone keeps `MobileTopBar`, which
@@ -20,6 +22,7 @@ import { cn } from "@/lib/utils";
 export function AppHeader({ isCollapsed }: { isCollapsed: boolean }) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
+  const now = useClockNow();
 
   return (
     <header
@@ -65,6 +68,18 @@ export function AppHeader({ isCollapsed }: { isCollapsed: boolean }) {
           data-app-header-actions=""
           className="flex shrink-0 items-center gap-1"
         >
+          {/* The time leads the actions as quiet text. Nothing renders before
+              mount (the server has no viewer clock), and the row is right
+              aligned, so its arrival only grows the row leftwards. */}
+          {now && (
+            <time
+              data-testid="app-header-clock"
+              dateTime={now.toISOString()}
+              className="mr-2 whitespace-nowrap text-[13px] text-muted-foreground"
+            >
+              {formatSidebarClock(now)}
+            </time>
+          )}
           {/* The mode lives here, next to the inbox and the identity: the three
               controls that change how the surface reads, not where it takes
               you. It stacks in reading order, so the toggle is the first

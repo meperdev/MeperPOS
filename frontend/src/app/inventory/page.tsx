@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
@@ -27,6 +28,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import { Select } from "@/components/ui/Select";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { Stepper } from "@/components/ui/Stepper";
 import { Pagination } from "@/components/ui/Pagination";
 import { CollectionSkeleton } from "@/components/ui/CollectionSkeleton";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -87,6 +89,9 @@ function InventoryContent() {
   const toast = useToast();
   const { user } = useAuth();
   const canManageInventory = hasAnyRole(user?.role, ["ADMIN", "INVENTORY_USER"]);
+  // A role that cannot edit still opens a product, read-only, to see what the
+  // card cannot fit. The server's role guards remain the boundary.
+  const isReadOnlyView = !canManageInventory;
   const [search, setSearch] = useState(() => urlSearch);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<
@@ -295,8 +300,10 @@ function InventoryContent() {
     setPromotionValueInput("");
   };
 
+  // Opens the product: as an editor for a role that manages inventory, read-only
+  // for any other role (`isReadOnlyView`).
   const handleEdit = (product: Product) => {
-    if (!canManageInventory || saveInProgressRef.current) return;
+    if (saveInProgressRef.current) return;
     // The backend serializes Prisma `Decimal` columns as JSON strings, so every
     // Decimal-backed field arrives as "15000.00". Normalize them HERE, the single
     // seed point, so the form never holds a string: a string price both fails the
@@ -408,7 +415,7 @@ function InventoryContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (saveInProgressRef.current) return;
+    if (isReadOnlyView || saveInProgressRef.current) return;
     const normalizedCategoryId =
       formData.categoryId?.toString().trim() || undefined;
     if (!formData.name?.trim() || !formData.sku?.trim() || !normalizedCategoryId) {
@@ -744,9 +751,7 @@ function InventoryContent() {
                     key={product.id}
                     mode="inventory"
                     product={product}
-                    onClick={
-                      canManageInventory ? () => handleEdit(product) : undefined
-                    }
+                    onClick={() => handleEdit(product)}
                     onDelete={
                       canManageInventory && product.active
                         ? () => handleDeactivate(product.id)
@@ -814,32 +819,24 @@ function InventoryContent() {
                         return (
                           <TableRow
                             key={product.id}
-                            onClick={
-                              canManageInventory ? () => handleEdit(product) : undefined
-                            }
+                            onClick={() => handleEdit(product)}
                             className={cn(
-                              canManageInventory && "cursor-pointer active:bg-muted/40",
+                              "cursor-pointer active:bg-muted/40",
                               product.active === false && "opacity-60",
                             )}
                           >
                             <TableCell className="text-sm">
-                              {canManageInventory ? (
-                                <button
-                                  type="button"
-                                  aria-label={`Editar ${product.name}`}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleEdit(product);
-                                  }}
-                                  className="text-left font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
-                                >
-                                  {product.name}
-                                </button>
-                              ) : (
-                                <span className="font-medium text-foreground">
-                                  {product.name}
-                                </span>
-                              )}
+                              <button
+                                type="button"
+                                aria-label={`${isReadOnlyView ? "Ver" : "Editar"} ${product.name}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleEdit(product);
+                                }}
+                                className="text-left font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background rounded-sm"
+                              >
+                                {product.name}
+                              </button>
                             </TableCell>
                             <TableCell className="id-text text-xs text-muted-foreground">
                               {product.sku}
@@ -959,20 +956,36 @@ function InventoryContent() {
       </div>
 
       <Modal
-        isOpen={canManageInventory && showModal}
+        // Creating is gated in `handleCreate`; viewing needs only a product.
+        isOpen={showModal && (canManageInventory || editingProduct !== null)}
         onClose={closeEditor}
-        title={editingProduct ? "Editar producto" : "Nuevo producto"}
+        title={
+          isReadOnlyView
+            ? "Detalle del producto"
+            : editingProduct
+              ? "Editar producto"
+              : "Nuevo producto"
+        }
         size="lg"
       >
         <form
           onSubmit={handleSubmit}
           onChangeCapture={(event) => {
-            if (saveInProgressRef.current) event.stopPropagation();
+            if (isReadOnlyView || saveInProgressRef.current) event.stopPropagation();
           }}
           aria-busy={isSaving}
           className="mx-auto w-full max-w-4xl"
         >
-          <fieldset disabled={isSaving} className="m-0 w-full min-w-0 space-y-5 border-0 p-0">
+          <fieldset
+            disabled={isSaving || isReadOnlyView}
+            className={cn(
+              "m-0 w-full min-w-0 space-y-5 border-0 p-0",
+              // Read-only is for reading: the disabled fields keep full contrast
+              // instead of the faded look that means "not available yet".
+              isReadOnlyView &&
+                "[&_:is(input,textarea):disabled]:cursor-default [&_:is(input,textarea):disabled]:opacity-100",
+            )}
+          >
           <div role="group" aria-label="Identidad" className="min-w-0 space-y-3">
             <h3 className="text-[13px] font-semibold text-foreground">Datos del producto</h3>
             <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-[minmax(0,19.5rem)_minmax(0,1fr)]">
@@ -980,14 +993,34 @@ function InventoryContent() {
                 <p className="mb-1.5 text-[13px] font-medium text-muted-foreground">
                   Imagen del producto
                 </p>
-                <ImageUpload
-                  variant="hero"
-                  value={formData.imageUrl || ""}
-                  file={pendingImageFile}
-                  onFileChange={setPendingImageFile}
-                  onChange={(url) => setFormData((previous) => ({ ...previous, imageUrl: url }))}
-                  disabled={isSaving || uploadProductImage.isPending || createProduct.isPending || updateProduct.isPending}
-                />
+                {isReadOnlyView ? (
+                  // Same frame as the hero upload, without its change/remove controls.
+                  <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl border border-border bg-muted md:aspect-square">
+                    {formData.imageUrl ? (
+                      <Image
+                        src={formData.imageUrl}
+                        alt={formData.name || "Producto"}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 320px"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <span className="flex flex-col items-center gap-2 text-[13px] text-muted-foreground">
+                        <Package className="h-6 w-6 stroke-[1.5]" aria-hidden="true" />
+                        Sin imagen
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <ImageUpload
+                    variant="hero"
+                    value={formData.imageUrl || ""}
+                    file={pendingImageFile}
+                    onFileChange={setPendingImageFile}
+                    onChange={(url) => setFormData((previous) => ({ ...previous, imageUrl: url }))}
+                    disabled={isSaving || uploadProductImage.isPending || createProduct.isPending || updateProduct.isPending}
+                  />
+                )}
               </div>
               <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
@@ -1104,6 +1137,7 @@ function InventoryContent() {
                             />
                           )}
                         </div>
+                        {!isReadOnlyView && (
                         <Button
                           type="button"
                           variant="secondary"
@@ -1117,6 +1151,7 @@ function InventoryContent() {
                         >
                           <X className="w-4 h-4" />
                         </Button>
+                        )}
                       </>
                     )}
                   </div>
@@ -1195,36 +1230,26 @@ function InventoryContent() {
               </div>
               {formData.tracksStock !== false && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3">
-                  <Input
+                  {/* Counts are whole units: the shared stepper cannot hold a
+                      fraction or a negative, so neither reaches the API. */}
+                  <Stepper
                     label="Stock"
-                    type="number"
                     min={0}
-                    step={1}
                     value={formData.stock || 0}
-                    onChange={(e) =>
-                      setFormData({ ...formData, stock: Number(e.target.value) })
-                    }
-                    required
+                    onChange={(stock) => setFormData({ ...formData, stock })}
                   />
-                  <Input
+                  <Stepper
                     label="Stock mín."
-                    type="number"
                     min={0}
-                    step={1}
                     value={formData.minStock ?? 0}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        minStock: Number(e.target.value),
-                      })
-                    }
-                    required
+                    onChange={(minStock) => setFormData({ ...formData, minStock })}
                   />
                 </div>
               )}
             </div>
           )}
 
+          {!isReadOnlyView && (
           <div className="flex flex-col sm:flex-row gap-2 justify-end pt-4 border-t border-border/60">
             {editingProduct?.active && (
               <Button
@@ -1267,7 +1292,22 @@ function InventoryContent() {
                   : "Crear"}
             </Button>
           </div>
+          )}
           </fieldset>
+          {/* Outside the disabled fieldset, so closing stays available. */}
+          {isReadOnlyView && (
+            <div className="mt-5 flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[13px] text-muted-foreground">Solo lectura</p>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={closeEditor}
+                className="w-full sm:w-auto sm:min-w-[132px] px-6"
+              >
+                Cerrar
+              </Button>
+            </div>
+          )}
         </form>
       </Modal>
 
