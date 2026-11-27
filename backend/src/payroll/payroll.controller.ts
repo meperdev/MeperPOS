@@ -41,6 +41,7 @@ import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-inst
 import { PayrollPeriodInstallmentsService } from './payroll-period-installments.service';
 import { PayrollPeriodsService } from './payroll-periods.service';
 import { PayrollReplacementPaymentService } from './payroll-replacement-payment.service';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 // Custom parameters bypass the global pipe's implicit conversion. The local
 // pipe validates the original JSON with the same whitelist policy instead, so a
@@ -97,7 +98,7 @@ export class PayrollController {
     if (
       !user?.userId ||
       !user.organizationId ||
-      !['OWNER', 'ADMIN'].includes(user.role)
+      !hasEffectiveRole(user.role, OrgRole.ADMIN)
     )
       throw new ForbiddenException('No tiene permiso para gestionar nómina');
     return user.organizationId;

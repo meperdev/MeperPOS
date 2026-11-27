@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   ConflictException,
   ForbiddenException,
@@ -7,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 /** Fixed payroll expense category created automatically for each business. */
 export const PAYROLL_EXPENSE_CATEGORY_NAME = 'Nómina';
@@ -45,7 +47,7 @@ function authorizePayrollExpenseCategory(
     !organizationId ||
     !actor?.userId ||
     actor.organizationId !== organizationId ||
-    !['OWNER', 'ADMIN'].includes(actor.role)
+    !hasEffectiveRole(actor.role, OrgRole.ADMIN)
   )
     throw new ForbiddenException(
       'No tiene permiso para gestionar gastos de nómina',

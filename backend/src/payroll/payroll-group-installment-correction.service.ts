@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   BadRequestException,
   ConflictException,
@@ -24,6 +25,7 @@ import type { PayrollObligationCompletionFacts } from './payroll-obligation-comp
 import { planPayrollObligationCompletion } from './payroll-obligation-completion';
 import { CorrectPayrollGroupInstallmentDto } from './dto/correct-payroll-group-installment.dto';
 import { throwPayrollTransactionError } from './payroll-transaction-error';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 type ObligationScope = {
   id: string;
@@ -76,7 +78,7 @@ export class PayrollGroupInstallmentCorrectionService {
       !organizationId ||
       !actor?.userId ||
       actor.organizationId !== organizationId ||
-      !['OWNER', 'ADMIN'].includes(actor.role)
+      !hasEffectiveRole(actor.role, OrgRole.ADMIN)
     )
       throw new ForbiddenException('No tiene permiso para gestionar nómina');
     if (!input || typeof input !== 'object' || Array.isArray(input))
