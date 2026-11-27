@@ -182,7 +182,7 @@ describe('Loan backend role boundary', () => {
   it.each(Object.values(OrgRole))(
     'enforces creation and reads for %s using real guard metadata',
     (role) => {
-      if (role === OrgRole.OWNER || role === OrgRole.ADMIN) {
+      if (role === OrgRole.ADMIN) {
         expect(guard.canActivate(context('create', role))).toBe(true);
       } else {
         expect(() => guard.canActivate(context('create', role))).toThrow(

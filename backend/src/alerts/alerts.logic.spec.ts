@@ -22,14 +22,7 @@ const signals = (over: Partial<AlertSignals> = {}): AlertSignals => ({
 
 describe('alerts.logic — role hierarchy', () => {
   it('mirrors the route guard inheritance and never grants INVENTORY_USER', () => {
-    expect(effectiveRoles('OWNER')).toEqual([
-      'OWNER',
-      'ADMIN',
-      'MEMBER',
-      'CASHIER',
-    ]);
-    expect(effectiveRoles('ADMIN')).toEqual(['ADMIN', 'MEMBER', 'CASHIER']);
-    expect(effectiveRoles('MEMBER')).toEqual(['MEMBER', 'CASHIER']);
+    expect(effectiveRoles('ADMIN')).toEqual(['ADMIN', 'CASHIER']);
     expect(effectiveRoles('CASHIER')).toEqual(['CASHIER']);
     expect(effectiveRoles('INVENTORY_USER')).toEqual(['INVENTORY_USER']);
     expect(effectiveRoles('SUPER_ADMIN')).toEqual(['SUPER_ADMIN']);
@@ -39,16 +32,6 @@ describe('alerts.logic — role hierarchy', () => {
     expect(alertVisibility('ADMIN')).toEqual({
       billing: true,
       stock: true,
-      operations: true,
-    });
-    expect(alertVisibility('OWNER')).toEqual({
-      billing: true,
-      stock: true,
-      operations: true,
-    });
-    expect(alertVisibility('MEMBER')).toEqual({
-      billing: false,
-      stock: false,
       operations: true,
     });
     expect(alertVisibility('CASHIER')).toEqual({
@@ -120,7 +103,7 @@ describe('alerts.logic — stock', () => {
   it('hides stock from a role without the inventory capability', () => {
     const alerts = buildAlerts(
       signals({
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
         lowStock: [{ id: 'p1', stock: 3, minStock: 5 }],
       }),
     );
@@ -327,10 +310,10 @@ describe('alerts.logic — billing and limits', () => {
     ]);
   });
 
-  it('does not show billing to a member', () => {
+  it('does not show billing to a cashier', () => {
     const alerts = buildAlerts(
       signals({
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
         organization: { status: 'SUSPENDED', trialEndsAt: null },
         limits: [
           {

@@ -477,8 +477,8 @@ function POSWorkspace({
     locationId: activeSiteId,
   });
 
-  // SalesService explicitly permits CASHIER as well as managers. Keep this
-  // exception local: checking inherited CASHIER would also admit MEMBER.
+  // SalesService permits CASHIER as well as managers. Keep this exception
+  // local and name both roles explicitly instead of leaning on the hierarchy.
   const canOverridePrice =
     user?.role === "CASHIER" || hasAnyRole(user?.role, ["ADMIN"]);
 

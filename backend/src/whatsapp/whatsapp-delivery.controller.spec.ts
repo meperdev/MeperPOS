@@ -502,7 +502,7 @@ describe('WhatsApp delivery boundary', () => {
     }
   });
 
-  it('admits OWNER because it inherits ADMIN', async () => {
+  it('denies the retired OWNER role, which is no longer an OrgRole', async () => {
     const { app } = await build(
       fakePrisma(),
       fakeIdentities([VERIFIED_ADMIN]),
@@ -513,13 +513,13 @@ describe('WhatsApp delivery boundary', () => {
         .post('/whatsapp/deliveries/report')
         .set(auth('OWNER', 'org-a'));
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(403);
     } finally {
       await app.close();
     }
   });
 
-  it('rejects MEMBER, CASHIER and INVENTORY_USER on every delivery route', async () => {
+  it('rejects CASHIER and INVENTORY_USER on every delivery route', async () => {
     const prisma = fakePrisma();
     const identities = fakeIdentities([VERIFIED_ADMIN]);
     const deliveries = fakeDeliveries();
@@ -527,7 +527,7 @@ describe('WhatsApp delivery boundary', () => {
     const server = app.getHttpServer();
     try {
       for (const route of ROUTES) {
-        for (const role of ['MEMBER', 'CASHIER', 'INVENTORY_USER']) {
+        for (const role of ['CASHIER', 'INVENTORY_USER']) {
           const response = await request(server)
             [route.method](route.path)
             .set(auth(role, 'org-a'));

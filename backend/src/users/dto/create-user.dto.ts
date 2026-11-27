@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsEnum,
-  IsNotIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -35,12 +34,9 @@ export class CreateUserDto {
     example: OrgRole.CASHIER,
     enum: OrgRole,
     description:
-      'Organization role. OWNER is retired and no longer assignable; ADMIN is reserved for the primary owner or a SUPER_ADMIN.',
+      'Organization role. ADMIN is reserved for the primary owner or a SUPER_ADMIN.',
   })
   @IsOptional()
   @IsEnum(OrgRole)
-  @IsNotIn([OrgRole.OWNER], {
-    message: 'The OWNER role is retired. Assign ADMIN instead.',
-  })
   role?: OrgRole;
 }

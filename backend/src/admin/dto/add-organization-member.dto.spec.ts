@@ -6,9 +6,9 @@ import { AddOrganizationMemberDto } from './add-organization-member.dto';
 import { UpdateMemberRoleDto } from './update-member-role.dto';
 
 /**
- * S8 (b): OWNER is retired, so the platform panel must not be able to assign
- * it either. The DTOs make the value unrepresentable at the boundary (the
- * services refuse it again for callers that bypass HTTP).
+ * S9: OWNER and MEMBER are no longer OrgRole values, so the platform panel
+ * cannot assign them at all — `@IsEnum(OrgRole)` refuses the retired literals
+ * at the boundary, exactly like any other unknown role.
  */
 function parse<T extends object>(
   type: new () => T,
@@ -22,22 +22,24 @@ function constraintOf(errors: ValidationError[], property: string): string[] {
   return Object.keys(found?.constraints ?? {});
 }
 
-describe('admin member DTOs (S8 b)', () => {
-  it('rejects OWNER when adding a member', async () => {
-    const errors = await validate(
-      parse(AddOrganizationMemberDto, {
-        email: 'retired@example.com',
-        role: OrgRole.OWNER,
-      }),
-    );
+describe('admin member DTOs (S9)', () => {
+  it.each(['OWNER', 'MEMBER'])(
+    'rejects the retired %s role when adding a member',
+    async (role) => {
+      const errors = await validate(
+        parse(AddOrganizationMemberDto, {
+          email: 'retired@example.com',
+          role,
+        }),
+      );
 
-    expect(constraintOf(errors, 'role')).toContain('isNotIn');
-  });
+      expect(constraintOf(errors, 'role')).toContain('isEnum');
+    },
+  );
 
-  it('keeps accepting every other role when adding a member', async () => {
+  it('keeps accepting every current role when adding a member', async () => {
     for (const role of [
       OrgRole.ADMIN,
-      OrgRole.MEMBER,
       OrgRole.CASHIER,
       OrgRole.INVENTORY_USER,
     ]) {
@@ -51,13 +53,14 @@ describe('admin member DTOs (S8 b)', () => {
     }
   });
 
-  it('rejects OWNER when changing a member role', async () => {
-    const errors = await validate(
-      parse(UpdateMemberRoleDto, { role: OrgRole.OWNER }),
-    );
+  it.each(['OWNER', 'MEMBER'])(
+    'rejects the retired %s role when changing a member role',
+    async (role) => {
+      const errors = await validate(parse(UpdateMemberRoleDto, { role }));
 
-    expect(constraintOf(errors, 'role')).toContain('isNotIn');
-  });
+      expect(constraintOf(errors, 'role')).toContain('isEnum');
+    },
+  );
 
   it('keeps accepting ADMIN when changing a member role', async () => {
     const errors = await validate(

@@ -5,12 +5,10 @@ import { api } from "@/lib/api";
 import type { User } from "@/types";
 
 /**
- * The roles the team screen can hand out. Every value is a real `OrgRole`; the
- * server's `CreateUserDto` validates it with `@IsEnum(OrgRole)`, so MEMBER rides
- * the payload exactly like the others. OWNER is absent on purpose: it is minted
- * only by another OWNER or a SUPER_ADMIN.
+ * The roles the team screen can hand out: exactly the current OrgRole values,
+ * which the server's `CreateUserDto` validates with `@IsEnum(OrgRole)`.
  */
-type TeamScreenRole = "ADMIN" | "MEMBER" | "CASHIER" | "INVENTORY_USER";
+type TeamScreenRole = "ADMIN" | "CASHIER" | "INVENTORY_USER";
 
 type CreateUserPayload = {
   email: string;

@@ -12,13 +12,6 @@ const schema = readFileSync(
   resolve(__dirname, '../../prisma/schema.prisma'),
   'utf8',
 );
-const hierarchy = JSON.parse(
-  readFileSync(
-    resolve(__dirname, '../common/guards/role-hierarchy.table.json'),
-    'utf8',
-  ),
-) as Record<string, string[]>;
-
 describe('collapse OWNER into ADMIN declarations (not executed SQL)', () => {
   it('rewrites every existing OWNER membership to ADMIN', () => {
     expect(sql).toContain(
@@ -34,14 +27,14 @@ describe('collapse OWNER into ADMIN declarations (not executed SQL)', () => {
     expect(sql).not.toMatch(/\bINSERT\b/);
   });
 
-  it('keeps the OWNER enum value until phase 4', () => {
-    expect(schema).toMatch(/enum OrgRole \{\s+OWNER\s+ADMIN/);
+  it('left the enum label in place for the later drop migration', () => {
+    // This migration only rewrote rows; 20261127200000 recreated the type and
+    // the schema now declares S1's three roles.
     expect(sql).not.toMatch(/\bTYPE\b/);
     expect(sql).not.toMatch(/\bDROP\b/);
-  });
-
-  it('keeps the OWNER hierarchy row so a stray OWNER still reads as ADMIN', () => {
-    expect(hierarchy.OWNER).toEqual(expect.arrayContaining(['OWNER', 'ADMIN']));
+    expect(schema).toMatch(
+      /enum OrgRole \{\s+ADMIN\s+CASHIER\s+INVENTORY_USER\s+\}/,
+    );
   });
 
   it('holds membership writers out before rewriting the rows', () => {

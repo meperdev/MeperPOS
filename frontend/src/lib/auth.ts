@@ -1,7 +1,5 @@
 export type AppRole =
-  | "OWNER"
   | "ADMIN"
-  | "MEMBER"
   | "CASHIER"
   | "INVENTORY_USER"
   | "SUPER_ADMIN";
@@ -9,8 +7,8 @@ export type AppRole =
 import hierarchyTable from "./role-hierarchy.table.json";
 
 /**
- * The role hierarchy RolesGuard applies: OWNER ⊃ ADMIN ⊃ MEMBER ⊃ CASHIER, and
- * INVENTORY_USER inherits nothing. The table is a copy of the backend's
+ * The role hierarchy RolesGuard applies: ADMIN ⊃ CASHIER, and INVENTORY_USER
+ * inherits nothing. The table is a copy of the backend's
  * `role-hierarchy.table.json`, kept identical by `role-hierarchy.test.ts`.
  */
 const HIERARCHY: Record<string, readonly string[]> = hierarchyTable;

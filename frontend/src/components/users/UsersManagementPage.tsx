@@ -26,8 +26,8 @@ import { getApiErrorMessage } from "@/lib/api";
 import { Building2, KeyRound, Plus, Shield, SquarePen, Trash2, Users as UsersIcon } from "lucide-react";
 import type { User } from "@/types";
 
-// MEMBER is retired (architecture/roles-redesign): existing members were
-// migrated to CASHIER, so it is no longer offered here.
+// Only the current OrgRole values are offered (S1: ADMIN, CASHIER,
+// INVENTORY_USER).
 type SelectableRole = "ADMIN" | "CASHIER" | "INVENTORY_USER";
 
 const DEFAULT_ROLE: SelectableRole = "CASHIER";
@@ -36,8 +36,6 @@ const roleLabel: Record<User["role"], string> = {
   ADMIN: "Administrador",
   CASHIER: "Cajero",
   INVENTORY_USER: "Inventario",
-  MEMBER: "Miembro",
-  OWNER: "Propietario",
 };
 
 export default function UsersPage() {
@@ -52,7 +50,7 @@ export default function UsersPage() {
   // remove); anyone else gets 403, so those actions are hidden from them.
   const mayManage = (target: User) =>
     canCreateAdmin ||
-    !(target.isPrimaryOwner === true || target.role === "ADMIN" || target.role === "OWNER");
+    !(target.isPrimaryOwner === true || target.role === "ADMIN");
   const toast = useToast();
   const { data: users = [], isLoading } = useUsers();
   const createUser = useCreateUser();

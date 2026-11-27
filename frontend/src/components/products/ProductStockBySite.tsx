@@ -37,7 +37,7 @@ const TYPE_LABEL = { STORE: "Sucursal", WAREHOUSE: "Bodega" } as const;
  */
 export function ProductStockBySite({ productId, productName, className }: Props) {
   const { user } = useAuth();
-  const canAdjust = hasAnyRole(user?.role, ["ADMIN", "MEMBER"]);
+  const canAdjust = hasAnyRole(user?.role, ["ADMIN"]);
   const { data, isLoading, isError, refetch } = useProductStockBySite(productId);
   const [isAdjusting, setIsAdjusting] = useState(false);
   const sites = data ?? [];

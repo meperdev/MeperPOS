@@ -197,24 +197,24 @@ describe('commercial WhatsApp session boundary', () => {
     }
   });
 
-  it('admits OWNER because it inherits ADMIN', async () => {
+  it('denies the retired OWNER role, which is no longer an OrgRole', async () => {
     const { app } = await build(MASTER);
     try {
       const response = await request(app.getHttpServer())
         .get('/whatsapp/commercial/session')
         .set(auth('OWNER', 'org-a'));
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(403);
     } finally {
       await app.close();
     }
   });
 
-  it('rejects MEMBER and CASHIER on every commercial route', async () => {
+  it('rejects CASHIER and INVENTORY_USER on every commercial route', async () => {
     const { app, provider, connections } = await build(MASTER);
     const server = app.getHttpServer();
     try {
       for (const route of ROUTES) {
-        for (const role of ['MEMBER', 'CASHIER', 'INVENTORY_USER']) {
+        for (const role of ['CASHIER', 'INVENTORY_USER']) {
           const response = await request(server)
             [route.method](route.path)
             .set(auth(role, 'org-a'));

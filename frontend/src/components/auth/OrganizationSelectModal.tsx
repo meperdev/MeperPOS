@@ -22,9 +22,7 @@ const planLabels: Record<string, string> = {
 };
 
 const roleLabels: Record<string, string> = {
-  OWNER: "Propietario",
   ADMIN: "Administrador",
-  MEMBER: "Miembro",
   CASHIER: "Cajero",
   INVENTORY_USER: "Inventario",
 };

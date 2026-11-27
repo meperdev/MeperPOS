@@ -30,7 +30,7 @@ const routeRoleMap: Array<{ prefix: string; roles: UserRole[] }> = [
   { prefix: "/inventory", roles: ["ADMIN", "CASHIER", "INVENTORY_USER"] },
   { prefix: "/suppliers", roles: ["ADMIN", "INVENTORY_USER"] },
   { prefix: "/purchase-orders", roles: ["ADMIN", "INVENTORY_USER"] },
-  { prefix: "/transfers", roles: ["ADMIN", "MEMBER", "CASHIER"] },
+  { prefix: "/transfers", roles: ["ADMIN", "CASHIER"] },
   { prefix: "/sales", roles: ["ADMIN", "CASHIER"] },
   { prefix: "/expenses", roles: ["ADMIN"] },
   { prefix: "/customers", roles: ["ADMIN", "CASHIER"] },
@@ -70,7 +70,7 @@ export const DashboardLayout = memo(function DashboardLayout({
     if (loading || !isAuthenticated || !userRole) return;
 
     if (ownerAdminOnlyPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
-      if (userRole !== "OWNER" && userRole !== "ADMIN") {
+      if (userRole !== "ADMIN") {
         router.replace(userRole === "CASHIER" ? "/pos" : "/dashboard");
       }
       return;

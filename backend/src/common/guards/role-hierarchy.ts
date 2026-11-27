@@ -3,8 +3,8 @@ import type { RoleType } from '../decorators/roles.decorator';
 import hierarchyTable from './role-hierarchy.table.json';
 
 /**
- * The organization role hierarchy, in one place: OWNER ⊃ ADMIN ⊃ MEMBER ⊃
- * CASHIER, and INVENTORY_USER inherits nothing. `RolesGuard` and the alert feed
+ * The organization role hierarchy, in one place: ADMIN ⊃ CASHIER, and
+ * INVENTORY_USER inherits nothing. `RolesGuard` and the alert feed
  * both read it, so a route and the feed cannot disagree about who is an admin.
  * The table lives in `role-hierarchy.table.json`; the frontend keeps an identical
  * copy (`frontend/src/lib/role-hierarchy.table.json`) pinned by a contract test.
