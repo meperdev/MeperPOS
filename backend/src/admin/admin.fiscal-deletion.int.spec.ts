@@ -116,7 +116,7 @@ describe('admin organization deletion and fiscal documents (PostgreSQL)', () => 
   }
 
   const adminService = () =>
-    new AdminService(prisma as never, {} as never, {} as never, undefined);
+    new AdminService(prisma as never, {} as never, {} as never);
 
   it('lets the admin path delete an organization that holds only sales', async () => {
     const { organization, sale } =
@@ -175,7 +175,6 @@ describe('admin organization deletion and fiscal documents (PostgreSQL)', () => 
       staleCountPrisma as never,
       {} as never,
       {} as never,
-      undefined,
     );
 
     const refusal: unknown = await service

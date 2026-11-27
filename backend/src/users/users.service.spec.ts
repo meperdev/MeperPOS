@@ -974,6 +974,28 @@ describe('UsersService', () => {
         expect(prismaMock.user.delete).not.toHaveBeenCalled();
       });
 
+      it('keeps refusing the primary owner removal with its own message', async () => {
+        mockTargetAndActor('owner-1', true, false);
+
+        await expect(
+          service.remove('admin-1', 'owner-1', 'org-1', ordinaryAdmin),
+        ).rejects.toThrow(
+          'Cannot remove the primary owner. Transfer ownership first.',
+        );
+        expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
+      });
+
+      it('refuses removing a leftover OWNER with the admin message', async () => {
+        mockTargetAndActor('legacy-1', false, false, 'OWNER');
+
+        await expect(
+          service.remove('admin-1', 'legacy-1', 'org-1', ordinaryAdmin),
+        ).rejects.toThrow(
+          'Only the primary owner of the organization or a SUPER_ADMIN can remove an ADMIN',
+        );
+        expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
+      });
+
       it('lets the primary owner remove another ADMIN', async () => {
         mockTargetAndActor('admin-2', false, true);
         prismaMock.organizationUser.count.mockImplementation(
