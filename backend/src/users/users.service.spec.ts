@@ -425,6 +425,40 @@ describe('UsersService', () => {
     expect(prismaMock.organizationUser.delete).not.toHaveBeenCalled();
   });
 
+  it('lets an ordinary admin go while the primary owner, now an ADMIN, remains', async () => {
+    // OWNER is retired: the primary owner is an ADMIN membership, so it counts
+    // toward "an organization keeps an admin". The old OWNER + one ADMIN case
+    // refused this removal only because the OWNER was not counted.
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'user-2',
+      email: 'user2@example.com',
+      name: 'User Two',
+      active: true,
+    });
+    prismaMock.organizationUser.findFirst.mockResolvedValue({
+      id: 'ou-2',
+      userId: 'user-2',
+      organizationId: 'org-1',
+      role: 'ADMIN',
+      isPrimaryOwner: false,
+    });
+    prismaMock.organizationUser.delete.mockResolvedValue({ id: 'ou-2' });
+    prismaMock.organizationUser.count.mockImplementation(
+      async ({ where }: { where: { role?: string } }) =>
+        where.role === 'ADMIN' ? 2 : 1,
+    );
+
+    const result = await service.remove('owner-1', 'user-2', 'org-1');
+
+    expect(prismaMock.organizationUser.count).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', role: 'ADMIN' },
+    });
+    expect(prismaMock.organizationUser.delete).toHaveBeenCalledWith({
+      where: { id: 'ou-2' },
+    });
+    expect(result).toEqual({ message: 'User removed from organization' });
+  });
+
   it('removes only the membership when the user belongs to another organization', async () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'user-2',
