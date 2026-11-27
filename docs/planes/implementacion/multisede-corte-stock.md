@@ -177,6 +177,38 @@ backend/test/migrations/multisedes-upgrade.rehearse.sh \
 
 El script se niega a correr contra cualquier base cuyo nombre no empiece con `meperpos_stock_rehearsal_release` o que escuche en el puerto 5432, exige `?schema=public` y pide una base vacía: cada corrida necesita una base nueva. Termina con código distinto de cero y con el diff de los productos afectados si un saldo o una asignación cambió; el directorio temporal con la cadena base extraída queda como evidencia. Si falla, no desplegar.
 
+**El ensayo tiene que partir del estado real de producción, no de `master`.** El primer despliegue (27-nov) se cayó justamente por eso: el ensayo partía de `origin/master`, y producción tenía además una línea de sedes abandonada que `master` no conoce (ver la sección siguiente). Para producción hoy, correrlo así:
+
+```bash
+createdb -h 127.0.0.1 -p 55440 -U postgres meperpos_stock_rehearsal_release_prod
+BASELINE_REF=257218d PRODUCTION_LINEAGE=1 backend/test/migrations/multisedes-upgrade.rehearse.sh \
+  'postgresql://postgres@127.0.0.1:55440/meperpos_stock_rehearsal_release_prod?schema=public'
+```
+
+`PRODUCTION_LINEAGE=1` reproduce, sobre la cadena de `257218d` (la versión que corre en producción), las dos migraciones abandonadas tal como quedaron aplicadas allá (`backend/test/migrations/fixtures/abandoned-location-lineage/`, mismos checksums) y los dos intentos revertidos del 27-nov, y además verifica que la limpieza retiró todos sus objetos.
+
+## Producción con la línea de sedes abandonada (incidente 2026-11-27)
+
+**Qué hay en producción.** El 22-nov se aplicaron a producción, con un `prisma migrate deploy` local, dos migraciones de una rama que nunca se mergeó: `20261120120000_add_location_foundation` y `20261120130000_add_location_assignments`. Crearon `Location`, `LocationType`, `LocationAssignment`, los triggers `Organization_default_location` y `OrganizationUser_principal_location_assignment`, sus dos funciones y los índices `Location_id_organizationId_key` y `OrganizationUser_id_organizationId_key`. Ningún código liberado los usó: su contenido lo generaron solo sus triggers. El 27-nov, el deploy de #402 intentó crear `Location` otra vez, falló (`applied_steps 0`, sin cambios de datos), el contenedor no arrancó y se volvió a la versión de #404 marcando los dos intentos con `prisma migrate resolve --rolled-back`.
+
+**Qué lo resuelve.** `20261118115900_retire_abandoned_location_lineage` corre antes de la cadena de sedes. Solo actúa si la línea abandonada está aplicada y la cadena de sedes no; en cualquier otra base (nueva, CI, desarrollo, ya migrada) no hace nada. Antes de borrar verifica que solo haya lo que generaron los triggers viejos (una «Sede principal» tipo sucursal por organización y asignaciones a esa sede, sin claves foráneas de otras tablas); si encuentra otra cosa, aborta con un mensaje explícito y no borra nada.
+
+**Despliegue en producción, en este orden:**
+
+1. Pausar el auto-deploy de `master` en Railway (servicio `meperpos-api` → Settings → Source), si no está pausado.
+2. Precheck de solo lectura, desde `backend/` con el servicio de producción enlazado (`railway link`):
+   ```bash
+   railway run bash -lc 'psql "${DATABASE_URL%%\?*}" -X -v ON_ERROR_STOP=1 -f test/migrations/multisedes-prod-precheck.sql'
+   ```
+   Cada bloque dice el valor esperado: 0 migraciones fallidas sin resolver, línea abandonada aplicada y cadena de sedes no, 0 sedes o asignaciones inesperadas, 0 claves foráneas extra, 0 productos que el corte rechazaría. Anotar el checksum de productos del bloque 7. Si algo no coincide, no desplegar.
+3. Ventana sin ventas: POS pausado y nadie operando inventario.
+4. Mergear el PR de la limpieza a `master` y, en Railway, desplegar a mano el último commit de `master`. En los logs del deploy tienen que aparecer 13 migraciones aplicadas (la limpieza y las 12 de sedes) y después el arranque de Nest.
+5. Comprobar: `railway run npx prisma migrate status` sin pendientes ni fallidas (puede seguir avisando de las dos migraciones abandonadas registradas en la base: es esperado); `curl https://meperpos-api.up.railway.app/api/health`; volver a correr el bloque 7 del precheck y comparar el checksum de productos, que tiene que ser idéntico; y las comprobaciones de «Corte final».
+6. En Vercel, promover a producción el deploy del último commit de `master` (tras el rollback del 27-nov, Vercel no promueve solo).
+7. Reactivar el auto-deploy de `master` en Railway.
+
+**Si el deploy falla.** Leer el error en los logs: cada migración es atómica, así que la que falla no deja cambios. Si falló la limpieza o cualquier migración **anterior** a `20261125150000_product_stock_guard`, marcarla con `prisma migrate resolve --rolled-back <nombre>` y volver a la versión de #404 en Railway y Vercel: esa versión sigue funcionando con las migraciones previas aplicadas. Si falló una migración **posterior** al cerrojo, no volver atrás (la versión de #404 escribe `Product.stock` directo y el cerrojo lo rechazaría): corregir la migración y desplegar hacia adelante.
+
 ## Corte final: estado, despliegue y vuelta atrás
 
 **Estado final.** `ProductStock` es la fuente de verdad y `Product.stock`/`reservedStock` son su agregado de organización, mantenido por disparadores y protegido por el cerrojo. Ya no existe ninguna compuerta de "única sede principal": una venta o una financiación se acepta en cualquier sucursal autorizada, una recepción o una transferencia en cualquier sede autorizada, y `checkoutLocationId` solo sugiere una sucursal. Los reportes, exportaciones y alertas siguen leyendo `Product`, es decir el total de la organización; el detalle por sede en reportes no forma parte de esta entrega.
