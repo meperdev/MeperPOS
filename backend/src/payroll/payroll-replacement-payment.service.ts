@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   BadRequestException,
   ConflictException,
@@ -21,6 +22,7 @@ import {
   summarizePayrollObligation,
 } from './payroll-obligations.service';
 import { throwPayrollTransactionError } from './payroll-transaction-error';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 const INVALID_INPUT = 'Datos de pago de reemplazo inválidos';
 const INCONSISTENT_HISTORY = 'Historial del pago de origen inconsistente';
@@ -79,7 +81,7 @@ export class PayrollReplacementPaymentService {
       !organizationId ||
       !actor?.userId ||
       actor.organizationId !== organizationId ||
-      !['OWNER', 'ADMIN'].includes(actor.role)
+      !hasEffectiveRole(actor.role, OrgRole.ADMIN)
     )
       throw new ForbiddenException('No tiene permiso para gestionar nómina');
     if (!input || typeof input !== 'object' || Array.isArray(input))

@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   BadRequestException,
   ConflictException,
@@ -11,6 +12,7 @@ import { validateSync } from 'class-validator';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { CorrectPayrollShiftDateDto } from './dto/correct-payroll-shift-date.dto';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 // Internal foundation only: historical snapshots and database concurrency proof are pending.
 @Injectable()
@@ -27,7 +29,7 @@ export class PayrollShiftDateCorrectionService {
       !organizationId ||
       !actor?.userId ||
       actor.organizationId !== organizationId ||
-      !['OWNER', 'ADMIN'].includes(actor.role)
+      !hasEffectiveRole(actor.role, OrgRole.ADMIN)
     )
       throw new ForbiddenException('No tiene permiso para gestionar turnos');
     if (

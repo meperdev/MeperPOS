@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   BadRequestException,
   ConflictException,
@@ -11,6 +12,7 @@ import { validateSync } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateEmployeeShiftDto } from './dto/employee-shift.dto';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 function authorize(
   organizationId: string | undefined,
@@ -20,7 +22,7 @@ function authorize(
     !organizationId ||
     !actor?.userId ||
     actor.organizationId !== organizationId ||
-    !['OWNER', 'ADMIN'].includes(actor.role)
+    !hasEffectiveRole(actor.role, OrgRole.ADMIN)
   ) {
     throw new ForbiddenException('No tiene permiso para gestionar turnos');
   }

@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   BadRequestException,
   ConflictException,
@@ -28,6 +29,7 @@ import {
 } from './payroll-obligations.service';
 import { CreatePayrollPeriodInstallmentDto } from './dto/create-payroll-period-installment.dto';
 import { throwPayrollTransactionError } from './payroll-transaction-error';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 @Injectable()
 export class PayrollPeriodInstallmentsService {
@@ -42,7 +44,7 @@ export class PayrollPeriodInstallmentsService {
       !organizationId ||
       !actor?.userId ||
       actor.organizationId !== organizationId ||
-      !['OWNER', 'ADMIN'].includes(actor.role)
+      !hasEffectiveRole(actor.role, OrgRole.ADMIN)
     )
       throw new ForbiddenException('No tiene permiso para gestionar nómina');
     if (!input || typeof input !== 'object' || Array.isArray(input))

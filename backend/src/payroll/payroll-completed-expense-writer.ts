@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   BadRequestException,
   ConflictException,
@@ -10,6 +11,7 @@ import {
   planPayrollObligationCompletion,
   type PayrollObligationCompletionFacts,
 } from './payroll-obligation-completion';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 /**
  * Transaction-client-level writer of the optional completion expense of an
@@ -522,7 +524,7 @@ export async function writePayrollCompletionExpense(
   if (
     !actor?.userId ||
     actor.organizationId !== organizationId ||
-    !['OWNER', 'ADMIN'].includes(actor.role)
+    !hasEffectiveRole(actor.role, OrgRole.ADMIN)
   )
     throw new ForbiddenException(
       'No tiene permiso para gestionar gastos de nómina',

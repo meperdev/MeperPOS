@@ -32,6 +32,7 @@ import {
   planInventoryLoanClose,
   transitionInventoryLoanItem,
 } from './inventory-loan.invariants';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 /** PostgreSQL codes that mean another transaction won the same race. */
 const SERIALIZATION_PG_CODES = ['40001', '40P01'];
@@ -662,7 +663,10 @@ export class InventoryLoansService {
     const orgId = organization(actor?.organizationId);
     if (
       !actor.userId ||
-      ![OrgRole.OWNER, OrgRole.ADMIN, 'SUPER_ADMIN'].includes(actor.role)
+      !(
+        actor.role === 'SUPER_ADMIN' ||
+        hasEffectiveRole(actor.role, OrgRole.ADMIN)
+      )
     ) {
       throw new ForbiddenException('No tiene permisos para crear préstamos');
     }
@@ -899,7 +903,10 @@ export class InventoryLoansService {
     if (
       typeof actor.userId !== 'string' ||
       !actor.userId.trim() ||
-      ![OrgRole.OWNER, OrgRole.ADMIN, 'SUPER_ADMIN'].includes(actor.role)
+      !(
+        actor.role === 'SUPER_ADMIN' ||
+        hasEffectiveRole(actor.role, OrgRole.ADMIN)
+      )
     )
       throw new ForbiddenException('Administrador activo requerido');
     if (typeof id !== 'string' || !id.trim())
@@ -1167,7 +1174,10 @@ export class InventoryLoansService {
     const orgId = organization(actor?.organizationId);
     if (
       !actor.userId ||
-      ![OrgRole.OWNER, OrgRole.ADMIN, 'SUPER_ADMIN'].includes(actor.role)
+      !(
+        actor.role === 'SUPER_ADMIN' ||
+        hasEffectiveRole(actor.role, OrgRole.ADMIN)
+      )
     ) {
       throw new ForbiddenException('Administrador activo requerido');
     }

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { OrgRole } from '@prisma/client';
+import { effectiveRoles } from '../common/guards/role-hierarchy';
 import { formatDateInBogota } from '../common/utils/bogota-date';
 import {
   bogotaToday,
@@ -14,25 +15,10 @@ import type {
 } from './alerts.types';
 
 /**
- * The role hierarchy the route guard applies (`RolesGuard.getInheritedRoles`),
- * restated here because the feed composes several categories in one response and
- * therefore cannot lean on a single `@Roles(...)` clause. `INVENTORY_USER`
- * inherits nothing and grants nothing else, exactly as it does in the guard.
+ * The hierarchy `RolesGuard` applies, re-exported: the feed composes several
+ * categories in one response and cannot lean on a single `@Roles(...)` clause.
  */
-export function effectiveRoles(role: OrgRole | 'SUPER_ADMIN'): string[] {
-  switch (role) {
-    case 'SUPER_ADMIN':
-      return ['SUPER_ADMIN'];
-    case 'OWNER':
-      return ['OWNER', 'ADMIN', 'MEMBER', 'CASHIER'];
-    case 'ADMIN':
-      return ['ADMIN', 'MEMBER', 'CASHIER'];
-    case 'MEMBER':
-      return ['MEMBER', 'CASHIER'];
-    default:
-      return [role];
-  }
-}
+export { effectiveRoles };
 
 /**
  * Who sees what. Billing and plan limits are administrative; stock follows the

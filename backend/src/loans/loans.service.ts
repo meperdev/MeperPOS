@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   BadRequestException,
   ForbiddenException,
@@ -47,6 +48,7 @@ import {
   resolveDefaultSiteWithin,
 } from '../inventory/site-stock';
 import { isElectronicInvoicingActive } from '../settings/schema';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 /** The catalog tribute codes a stored quote row may carry. */
 const DIAN_TAX_CODES: readonly string[] = Object.values(DianTaxCode);
@@ -174,7 +176,7 @@ export class LoansService {
       (!actor.isSuperAdmin &&
         actor.role !== 'SUPER_ADMIN' &&
         (actor.organizationId !== orgId ||
-          !['OWNER', 'ADMIN', 'CASHIER', 'MEMBER'].includes(actor.role)))
+          !hasEffectiveRole(actor.role, OrgRole.CASHIER)))
     ) {
       throw new ForbiddenException('No tiene permiso para completar ventas');
     }
@@ -683,7 +685,7 @@ export class LoansService {
       (!actor.isSuperAdmin &&
         actor.role !== 'SUPER_ADMIN' &&
         (actor.organizationId !== orgId ||
-          !['OWNER', 'ADMIN', 'CASHIER', 'MEMBER'].includes(actor.role)))
+          !hasEffectiveRole(actor.role, OrgRole.CASHIER)))
     ) {
       throw new ForbiddenException('No tiene permiso para financiar ventas');
     }

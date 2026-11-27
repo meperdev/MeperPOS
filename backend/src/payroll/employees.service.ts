@@ -1,3 +1,4 @@
+import { OrgRole } from '@prisma/client';
 import {
   BadRequestException,
   ForbiddenException,
@@ -13,6 +14,7 @@ import {
   QueryEmployeesDto,
   UpdateEmployeeDto,
 } from './dto/employee.dto';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 type EmployeeChanges = Partial<Omit<CreateEmployeeDto, 'startDate'>> & {
   startDate?: Date | null;
@@ -27,7 +29,7 @@ function authorize(
     !organizationId ||
     !actor?.userId ||
     actor.organizationId !== organizationId ||
-    !['OWNER', 'ADMIN'].includes(actor.role)
+    !hasEffectiveRole(actor.role, OrgRole.ADMIN)
   ) {
     throw new ForbiddenException('No tiene permiso para gestionar empleados');
   }
