@@ -28,19 +28,7 @@ import type { User } from "@/types";
 
 type SelectableRole = "ADMIN" | "MEMBER" | "CASHIER" | "INVENTORY_USER";
 
-const SELECTABLE_ROLES: SelectableRole[] = [
-  "ADMIN",
-  "MEMBER",
-  "CASHIER",
-  "INVENTORY_USER",
-];
 const DEFAULT_ROLE: SelectableRole = "CASHIER";
-
-function toSelectableRole(role: User["role"]): SelectableRole {
-  return SELECTABLE_ROLES.includes(role as SelectableRole)
-    ? (role as SelectableRole)
-    : DEFAULT_ROLE;
-}
 
 const roleLabel: Record<User["role"], string> = {
   ADMIN: "Administrador",
@@ -78,7 +66,6 @@ export default function UsersPage() {
   const [editFormData, setEditFormData] = useState({
     name: "",
     email: "",
-    role: DEFAULT_ROLE,
   });
 
   const handleCreate = async (event: React.FormEvent) => {
@@ -159,7 +146,6 @@ export default function UsersPage() {
     setEditFormData({
       name: user.name,
       email: user.email,
-      role: toSelectableRole(user.role),
     });
     setShowEditModal(true);
   };
@@ -311,20 +297,8 @@ export default function UsersPage() {
           <form onSubmit={handleEdit} className="space-y-4">
             <Input label="Nombre" value={editFormData.name} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} required />
             <Input label="Correo" type="email" value={editFormData.email} onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })} required />
-            {/* Known gap, out of this unit: `PUT /users/:id` carries no `role`, so
-                the server keeps the membership's current role whatever is chosen
-                here. The list is shown for parity with the create dialog. */}
-            <Select
-              label="Rol"
-              value={editFormData.role}
-              onChange={(value) => setEditFormData({ ...editFormData, role: value as SelectableRole })}
-              options={[
-                { value: "CASHIER", label: "Cajero" },
-                { value: "MEMBER", label: "Miembro" },
-                { value: "INVENTORY_USER", label: "Inventario" },
-                { value: "ADMIN", label: "Administrador" },
-              ]}
-            />
+            {/* No role here: `PUT /users/:id` accepts only name and email and
+                rejects any other property, and no endpoint changes a role yet. */}
             <div className="flex justify-end gap-3 border-t border-border/60 pt-4">
               <Button type="button" variant="secondary" onClick={() => setShowEditModal(false)}>Cancelar</Button>
               <Button type="submit" loading={updateUser.isPending}>Guardar cambios</Button>

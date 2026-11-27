@@ -119,9 +119,7 @@ describe("Users page centralized admin behavior (#27)", () => {
     await user.type(nameInput, "Caja Central");
     await user.clear(emailInput);
     await user.type(emailInput, "central@example.com");
-    // Select renders the role as a trigger <button> named by its "Rol" label; open it and pick the option.
-    await user.click(screen.getByRole("button", { name: /Rol/i }));
-    await user.click(screen.getByText("Inventario"));
+    // PUT /users/:id accepts only name and email; the edit carries no role.
     await user.click(screen.getByRole("button", { name: /Guardar cambios/i }));
 
     expect(updateUserMutateAsyncMock).toHaveBeenCalledWith({
@@ -129,7 +127,6 @@ describe("Users page centralized admin behavior (#27)", () => {
       data: {
         name: "Caja Central",
         email: "central@example.com",
-        role: "INVENTORY_USER",
       },
     });
     expect(toastSuccessMock).toHaveBeenCalledWith("Usuario actualizado correctamente");

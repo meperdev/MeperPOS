@@ -19,10 +19,11 @@ type CreateUserPayload = {
   role: TeamScreenRole;
 };
 
+// `PUT /users/:id` accepts only name and email, and the global ValidationPipe
+// rejects any other property (400), so a role cannot be part of an edit.
 type UpdateUserPayload = {
   name?: string;
   email?: string;
-  role?: TeamScreenRole;
 };
 
 async function getUsersRequest() {
