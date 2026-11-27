@@ -52,6 +52,11 @@ describe("hasAnyRole", () => {
     expect(hasAnyRole("MEMBER", ["ADMIN"])).toBe(false);
   });
 
+  it("keeps an empty requirement closed for every role, SUPER_ADMIN included", () => {
+    expect(hasAnyRole("SUPER_ADMIN", [])).toBe(false);
+    expect(hasAnyRole("OWNER", [])).toBe(false);
+  });
+
   it("returns false for an undefined role", () => {
     expect(hasAnyRole(undefined, ["ADMIN"])).toBe(false);
   });

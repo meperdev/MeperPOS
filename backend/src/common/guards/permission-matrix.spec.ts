@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
-import { RequestMethod } from '@nestjs/common';
+import { ExecutionContext, RequestMethod } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import {
   GUARDS_METADATA,
   METHOD_METADATA,
@@ -8,12 +9,12 @@ import {
 } from '@nestjs/common/constants';
 import { OrgRole } from '@prisma/client';
 import { ROLES_KEY, type RoleType } from '../decorators/roles.decorator';
-import { effectiveRoles } from './role-hierarchy';
 import { RolesGuard } from './roles.guard';
 
 /**
  * The permission matrix: every HTTP route of every controller and the
- * organization roles that get past `RolesGuard` on it. The snapshot is the
+ * organization roles that get past `RolesGuard` on it, asked of the real guard
+ * (a route without the guard lets every role through). The snapshot is the
  * reviewed state of who can do what; changing a permission means updating it
  * (`npx jest src/common/guards/permission-matrix.spec.ts -u`) and the diff is
  * the change a reviewer reads.
@@ -30,6 +31,26 @@ const ORG_ROLES: readonly [string, OrgRole][] = [
   ['C', OrgRole.CASHIER],
   ['I', OrgRole.INVENTORY_USER],
 ];
+
+const guard = new RolesGuard(new Reflector());
+
+/** Asks the real RolesGuard, the same way Nest does for this handler. */
+function guardAllows(
+  controller: new (...args: never[]) => unknown,
+  handler: (...args: unknown[]) => unknown,
+  role: OrgRole,
+): boolean {
+  const context = {
+    getHandler: () => handler,
+    getClass: () => controller,
+    switchToHttp: () => ({ getRequest: () => ({ user: { role } }) }),
+  } as unknown as ExecutionContext;
+  try {
+    return guard.canActivate(context);
+  } catch {
+    return false;
+  }
+}
 
 function listControllers(dir: string): string[] {
   const out: string[] = [];
@@ -89,7 +110,12 @@ function buildMatrix(srcRoot: string): string[] {
         const guarded = classGuarded || guardsOf(handler).includes(RolesGuard);
         const open = !roles || roles.length === 0;
         const cells = ORG_ROLES.map(([letter, role]) =>
-          open || roles.some((r) => effectiveRoles(role).includes(r))
+          !guarded ||
+          guardAllows(
+            controller,
+            handler as (...args: unknown[]) => unknown,
+            role,
+          )
             ? letter
             : '-',
         ).join('');
@@ -120,7 +146,9 @@ describe('permission matrix (who passes RolesGuard on each route)', () => {
   const matrix = buildMatrix(srcRoot);
 
   it('finds every controller route', () => {
-    expect(matrix.length).toBeGreaterThan(200);
+    // 220 routes when this was pinned; the snapshot lists each one, and a
+    // controller that stops loading drops far more than a handful.
+    expect(matrix.length).toBeGreaterThanOrEqual(215);
   });
 
   it('matches the reviewed matrix', () => {

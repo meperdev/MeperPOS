@@ -40,6 +40,12 @@ describe('role hierarchy (single source for RolesGuard and alerts)', () => {
     ).toThrow('unknown roles: MANAGER');
   });
 
+  it('refuses a row that does not include its own role', () => {
+    expect(() =>
+      parseHierarchy({ ...table, ADMIN: ['MEMBER', 'CASHIER'] }),
+    ).toThrow('ADMIN does not include itself');
+  });
+
   it.each(['constructor', 'toString', '__proto__', 'SOMETHING_ELSE'])(
     'maps unknown role %s to itself, as master did',
     (role) => {

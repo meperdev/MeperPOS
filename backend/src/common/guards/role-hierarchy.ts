@@ -29,6 +29,11 @@ export function parseHierarchy(
     }
   }
   for (const [role, inherited] of Object.entries(table)) {
+    if (!inherited.includes(role)) {
+      throw new Error(
+        `role-hierarchy.table.json: ${role} does not include itself`,
+      );
+    }
     const unknown = [role, ...inherited].filter((value) => !known.has(value));
     if (unknown.length > 0) {
       throw new Error(

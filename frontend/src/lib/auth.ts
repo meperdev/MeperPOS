@@ -31,7 +31,7 @@ export function hasAnyRole(
   userRole: AppRole | string | undefined,
   requiredRoles: string[]
 ): boolean {
-  if (!userRole) return false;
+  if (!userRole || requiredRoles.length === 0) return false;
   if (userRole === "SUPER_ADMIN") return true;
   const effective = getEffectiveRoles(userRole);
   return requiredRoles.some((role) => effective.includes(role as AppRole));
