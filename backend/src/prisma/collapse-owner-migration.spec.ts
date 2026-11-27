@@ -1,13 +1,13 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const migrationPath = resolve(
   __dirname,
   '../../prisma/migrations/20261127130000_collapse_owner_into_admin/migration.sql',
 );
-const sql = existsSync(migrationPath)
-  ? readFileSync(migrationPath, 'utf8')
-  : '';
+// No fallback: a missing or renamed migration must fail here, not let the
+// negative assertions below pass against an empty string.
+const sql = readFileSync(migrationPath, 'utf8');
 const schema = readFileSync(
   resolve(__dirname, '../../prisma/schema.prisma'),
   'utf8',

@@ -14,6 +14,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { PlanLimitService } from '../plan-limits/plan-limits.service';
 import { AuthService } from '../auth/auth.service';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 type ActorContext = {
   userId: string;
@@ -251,14 +252,26 @@ export class UsersService {
     // primary owner's (isPrimaryOwner), not a role, because nobody is OWNER any
     // more. Only the primary owner or a SUPER_ADMIN may reset that password,
     // which keeps the migration from opening the owner's account to every ADMIN.
+    // An admin-rank account (ADMIN, or a leftover OWNER) is the top
+    // organization role: taking one over is the same escalation as minting
+    // one, so it also needs the primary owner. That covers former OWNER
+    // memberships the migration turned into unflagged ADMINs.
     if (!(await this.isPrimaryOwnerActor(actor, organizationId))) {
       const targetOrgUser = await this.prisma.organizationUser.findFirst({
         where: { userId, organizationId },
-        select: { isPrimaryOwner: true },
+        select: { isPrimaryOwner: true, role: true },
       });
       if (targetOrgUser?.isPrimaryOwner === true) {
         throw new ForbiddenException(
           'Only the primary owner can reset the primary owner password. Ask the primary owner (or support) to do it.',
+        );
+      }
+      if (
+        targetOrgUser &&
+        hasEffectiveRole(targetOrgUser.role, OrgRole.ADMIN)
+      ) {
+        throw new ForbiddenException(
+          'Only the primary owner of the organization or a SUPER_ADMIN can reset an ADMIN password',
         );
       }
     }

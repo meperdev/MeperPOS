@@ -343,6 +343,21 @@ npm run build
 - Si el cambio impacta queries Prisma, DTOs o respuestas API, revisar endpoints criticos y contratos resultantes.
 - Si la migracion transforma datos, documentar mitigacion y estrategia de forward-fix antes del PR.
 
+##### Migraciones de roles: MEMBER y OWNER
+
+`20261127120000_retire_member_role` (MEMBER pasa a CASHIER) y `20261127130000_collapse_owner_into_admin` (OWNER pasa a ADMIN y el dueño principal queda marcado con `isPrimaryOwner`) reescriben datos y no tienen vuelta atrás.
+
+- **No volver la app a una release anterior despues de aplicarlas.** El codigo previo protege la cuenta del dueño comparando `role === OWNER`. Tras la migracion no queda ningun OWNER, asi que esa proteccion queda inerte y cualquier ADMIN podria resetear la contraseña del dueño. Ante un problema, corregir hacia adelante con una release nueva.
+- **Si `prisma migrate deploy` aborta por `lock_timeout`** (5 s esperando la tabla `OrganizationUser`), la transaccion se revierte entera y no queda nada aplicado. Marcar la migracion y reintentar con menos trafico:
+
+```bash
+cd backend
+npx prisma migrate resolve --rolled-back 20261127130000_collapse_owner_into_admin
+npx prisma migrate deploy
+```
+
+- **Comprobacion posterior**: `select role, count(*) from "OrganizationUser" group by 1;` no debe mostrar OWNER ni MEMBER.
+
 #### Caso C - Si tocaste solo frontend
 
 Preparar antes del push:
