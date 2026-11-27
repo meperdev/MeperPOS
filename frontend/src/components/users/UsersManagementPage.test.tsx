@@ -200,6 +200,27 @@ describe("Users list responsive layout", () => {
     }
   });
 
+  it("still offers Administrador to a SUPER_ADMIN, who holds no membership flag", async () => {
+    const previous = currentUserMock.value;
+    currentUserMock.value = {
+      ...previous,
+      role: "SUPER_ADMIN",
+      isPrimaryOwner: false,
+    };
+    try {
+      const user = userEvent.setup();
+      render(<UsersPage />);
+
+      await user.click(screen.getByRole("button", { name: /Nuevo usuario/ }));
+      const dialog = screen.getByRole("dialog");
+      await user.click(within(dialog).getByLabelText("Rol"));
+      const options = await screen.findAllByRole("option");
+      expect(options.map((option) => option.textContent)).toContain("Administrador");
+    } finally {
+      currentUserMock.value = previous;
+    }
+  });
+
   it("offers only Cajero, Inventario and Administrador when creating a user", async () => {
     // MEMBER is retired (architecture/roles-redesign): existing members were
     // migrated to CASHIER, so the team screen must not mint new ones.
