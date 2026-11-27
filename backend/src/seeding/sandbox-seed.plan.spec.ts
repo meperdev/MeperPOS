@@ -251,6 +251,11 @@ describe('sandbox seed plan', () => {
       ]),
     );
     expect(
+      plan.users.find((user) => user.email === 'miembro@otra-sandbox.demo')
+        ?.role,
+    ).toBe('CASHIER');
+    expect(plan.users.map((user) => user.role)).not.toContain('MEMBER');
+    expect(
       plan.employees.every((employee) =>
         employee.email.endsWith('@otra-sandbox.demo'),
       ),

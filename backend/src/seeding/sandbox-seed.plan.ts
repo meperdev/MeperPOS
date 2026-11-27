@@ -11,12 +11,7 @@
  * the same rows, so a dry run describes exactly what an `--apply` would write.
  */
 
-export type PlanRole =
-  | 'OWNER'
-  | 'ADMIN'
-  | 'MEMBER'
-  | 'CASHIER'
-  | 'INVENTORY_USER';
+export type PlanRole = 'OWNER' | 'ADMIN' | 'CASHIER' | 'INVENTORY_USER';
 
 export type PlanPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER';
 export type PlanProductType = 'PRODUCT' | 'SERVICE';
@@ -51,7 +46,7 @@ export type SandboxUserKey =
   | 'admin'
   | 'cashier'
   | 'inventory'
-  | 'member';
+  | 'secondCashier';
 
 export interface SandboxSeedInput {
   organizationName: string;
@@ -940,10 +935,13 @@ function buildUsers(input: SandboxSeedInput): SandboxUserPlan[] {
       isPrimaryOwner: false,
     },
     {
-      key: 'member',
+      // Was the MEMBER demo user until that role was retired. The email stays so
+      // re-seeding an existing sandbox (which never updates rows) does not add a
+      // second copy of this person beside the migrated membership.
+      key: 'secondCashier',
       email: `miembro@${domain}`,
       name: 'Andrés Felipe Mora',
-      role: 'MEMBER',
+      role: 'CASHIER',
       isPrimaryOwner: false,
     },
   ];
@@ -1157,7 +1155,7 @@ function buildSales(
   const sales: SandboxSalePlan[] = [];
   const sellerKeys = users
     .filter((user) =>
-      ['owner', 'admin', 'cashier', 'member'].includes(user.key),
+      ['owner', 'admin', 'cashier', 'secondCashier'].includes(user.key),
     )
     .map((user) => user.key);
   let saleNumber = 1;

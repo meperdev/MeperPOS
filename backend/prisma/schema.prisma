@@ -452,7 +452,7 @@ model OrganizationUser {
   id             String       @id @default(uuid())
   userId         String
   organizationId String
-  role           OrgRole      @default(MEMBER)
+  role           OrgRole      @default(CASHIER)
   joinedAt       DateTime     @default(now())
   invitedById    String?
   isPrimaryOwner Boolean      @default(false)

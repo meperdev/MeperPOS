@@ -249,8 +249,10 @@ readonly PRODUCT_CHECKSUM_SQL=$(cat <<'SQL'
 SELECT md5(string_agg(concat_ws(':', "id", "stock"::text, "reservedStock"::text), ',' ORDER BY "id")) FROM "Product"
 SQL
 )
+# 20261127120000_retire_member_role rewrites MEMBER to CASHIER on purpose, so the
+# checksum reads MEMBER as CASHIER on both sides: any other change still fails.
 readonly MEMBERSHIP_CHECKSUM_SQL=$(cat <<'SQL'
-SELECT md5(string_agg(concat_ws(':', "id", "userId", "organizationId", "role"::text), ',' ORDER BY "id")) FROM "OrganizationUser"
+SELECT md5(string_agg(concat_ws(':', "id", "userId", "organizationId", CASE WHEN "role"::text = 'MEMBER' THEN 'CASHIER' ELSE "role"::text END), ',' ORDER BY "id")) FROM "OrganizationUser"
 SQL
 )
 readonly PRODUCT_SNAPSHOT_SQL=$(cat <<'SQL'
@@ -303,7 +305,8 @@ else
   diff -u "${WORK}/product-before.tsv" "${WORK}/product-after.tsv" >&2 || true
   FAILED=1
 fi
-check "OrganizationUser rows unchanged" "${MEMBERSHIP_CHECKSUM_BEFORE}" "${MEMBERSHIP_CHECKSUM_AFTER}"
+check "OrganizationUser rows unchanged (MEMBER read as CASHIER)" "${MEMBERSHIP_CHECKSUM_BEFORE}" "${MEMBERSHIP_CHECKSUM_AFTER}"
+check "no MEMBER membership left" "0" "$(q 'SELECT count(*) FROM "OrganizationUser" WHERE "role" = '"'"'MEMBER'"'"'')"
 
 readonly DEFAULT_BALANCE_MISMATCH_SQL=$(cat <<'SQL'
 SELECT count(*)
