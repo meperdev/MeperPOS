@@ -73,6 +73,7 @@ export class UsersController {
       id,
       updateUserDto,
       user.organizationId ?? undefined,
+      user,
     );
   }
 
@@ -85,6 +86,7 @@ export class UsersController {
       user.userId,
       id,
       user.organizationId ?? undefined,
+      user,
     );
   }
 

@@ -187,6 +187,36 @@ describe('UsersService — privilege escalation guardrails (SEC-001, S8 b/c)', (
     expect(after.password).toBe(owner.password);
   });
 
+  it('rejects an ADMIN editing or deactivating the primary owner with 403 and leaves the row untouched', async () => {
+    const before = await prisma.user.findUniqueOrThrow({
+      where: { id: primaryOwnerId },
+    });
+
+    await expect(
+      usersService.update(
+        adminId,
+        primaryOwnerId,
+        { email: `sec001-hijacked-${Date.now()}@example.com` },
+        orgId,
+        actorOf(adminId, OrgRole.ADMIN),
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      usersService.toggleActive(
+        adminId,
+        primaryOwnerId,
+        orgId,
+        actorOf(adminId, OrgRole.ADMIN),
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+
+    const after = await prisma.user.findUniqueOrThrow({
+      where: { id: primaryOwnerId },
+    });
+    expect(after.email).toBe(before.email);
+    expect(after.active).toBe(true);
+  });
+
   it('lets the primary owner create an ADMIN', async () => {
     const created = await usersService.create(
       {

@@ -53,7 +53,7 @@ describe('UsersController', () => {
     ).toBe(true);
   });
 
-  it('delegates update with the acting admin id and organizationId', async () => {
+  it('delegates update with the acting admin id, organizationId and the actor', async () => {
     const controller = new UsersController(usersServiceMock as never);
     const dto = { name: 'Ana Admin' };
     const user = {
@@ -76,11 +76,13 @@ describe('UsersController', () => {
     await expect(controller.update('user-2', dto, user)).resolves.toEqual(
       expected,
     );
+    // The actor decides whether an admin-rank account may be edited.
     expect(usersServiceMock.update).toHaveBeenCalledWith(
       'admin-1',
       'user-2',
       dto,
       'org-1',
+      user,
     );
   });
 

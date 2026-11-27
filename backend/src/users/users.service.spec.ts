@@ -804,5 +804,139 @@ describe('UsersService', () => {
         data: { password: expect.any(String) },
       });
     });
+
+    describe('editing and deactivating admin-rank accounts', () => {
+      const ordinaryAdmin = {
+        userId: 'admin-1',
+        role: OrgRole.ADMIN,
+        isSuperAdmin: false,
+      };
+
+      it.each([
+        ['the primary owner', 'owner-1', true],
+        ['another ADMIN', 'admin-2', false],
+      ] as const)(
+        'refuses an ordinary ADMIN editing %s',
+        async (_label, target, targetIsPrimaryOwner) => {
+          mockTargetAndActor(target, targetIsPrimaryOwner, false);
+
+          await expect(
+            service.update(
+              'admin-1',
+              target,
+              { name: 'Renamed' },
+              'org-1',
+              ordinaryAdmin,
+            ),
+          ).rejects.toBeInstanceOf(ForbiddenException);
+          expect(prismaMock.user.update).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([
+        ['the primary owner', 'owner-1', true],
+        ['another ADMIN', 'admin-2', false],
+      ] as const)(
+        'refuses an ordinary ADMIN deactivating %s',
+        async (_label, target, targetIsPrimaryOwner) => {
+          mockTargetAndActor(target, targetIsPrimaryOwner, false);
+
+          await expect(
+            service.toggleActive('admin-1', target, 'org-1', ordinaryAdmin),
+          ).rejects.toBeInstanceOf(ForbiddenException);
+          expect(prismaMock.user.update).not.toHaveBeenCalled();
+        },
+      );
+
+      it('lets the primary owner edit and deactivate another ADMIN', async () => {
+        mockTargetAndActor('admin-2', false, true);
+
+        await service.update(
+          'admin-1',
+          'admin-2',
+          { name: 'Renamed' },
+          'org-1',
+          ordinaryAdmin,
+        );
+        await service.toggleActive(
+          'admin-1',
+          'admin-2',
+          'org-1',
+          ordinaryAdmin,
+        );
+
+        expect(prismaMock.user.update).toHaveBeenCalledTimes(2);
+      });
+
+      it('lets a SUPER_ADMIN deactivate the primary owner', async () => {
+        mockTargetAndActor('owner-1', true, false);
+
+        await service.toggleActive('super-1', 'owner-1', 'org-1', {
+          userId: 'super-1',
+          role: 'SUPER_ADMIN',
+          isSuperAdmin: true,
+        });
+
+        expect(prismaMock.user.update).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ['a missing actor', undefined],
+        ['an ordinary ADMIN', ordinaryAdmin],
+      ] as const)(
+        'protects a leftover OWNER without the flag from %s',
+        async (_label, actor) => {
+          mockTargetAndActor('legacy-1', false, false, 'OWNER');
+
+          await expect(
+            service.update(
+              'admin-1',
+              'legacy-1',
+              { name: 'Edited' },
+              'org-1',
+              actor,
+            ),
+          ).rejects.toBeInstanceOf(ForbiddenException);
+          await expect(
+            service.toggleActive('admin-1', 'legacy-1', 'org-1', actor),
+          ).rejects.toBeInstanceOf(ForbiddenException);
+          expect(prismaMock.user.update).not.toHaveBeenCalled();
+        },
+      );
+
+      it('still lets an ordinary ADMIN edit their own name', async () => {
+        mockTargetAndActor('admin-1', false, false);
+
+        await service.update(
+          'admin-1',
+          'admin-1',
+          { name: 'Me' },
+          'org-1',
+          ordinaryAdmin,
+        );
+
+        expect(prismaMock.user.update).toHaveBeenCalledTimes(1);
+      });
+
+      it('still lets an ordinary ADMIN edit and deactivate a cashier', async () => {
+        mockTargetAndActor('cashier-2', false, false, 'CASHIER');
+
+        await service.update(
+          'admin-1',
+          'cashier-2',
+          { name: 'Caja' },
+          'org-1',
+          ordinaryAdmin,
+        );
+        await service.toggleActive(
+          'admin-1',
+          'cashier-2',
+          'org-1',
+          ordinaryAdmin,
+        );
+
+        expect(prismaMock.user.update).toHaveBeenCalledTimes(2);
+      });
+    });
   });
 });
