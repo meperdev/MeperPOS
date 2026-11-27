@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Check, ClipboardList, Plus, Search, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { Stepper } from "@/components/ui/Stepper";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, TableHeader, TableRow, TableCell } from "@/components/ui/Table";
 import { useProducts } from "@/hooks/useProducts";
@@ -230,17 +231,15 @@ export function PurchaseOrderItemEditor({
   };
 
   const qtyInput = (row: PurchaseOrderItemRow, layout: "table" | "list") => (
-    <Input
-      type="number"
+    <Stepper
+      label={`Cantidad de ${row.productName}`}
+      hideLabel
+      size="sm"
       min={1}
-      aria-label={`Cantidad de ${row.productName}`}
       value={row.qtyOrdered}
-      onChange={(event) =>
-        updateRow(row.tempId, { qtyOrdered: Number(event.target.value) || 0 })
-      }
-      className="px-2.5 text-right"
-      data-qty-layout={layout}
-      data-qty-row={row.tempId}
+      onChange={(qtyOrdered) => updateRow(row.tempId, { qtyOrdered })}
+      // The new-row focus finds the field by these attributes.
+      inputProps={{ "data-qty-layout": layout, "data-qty-row": row.tempId }}
     />
   );
 

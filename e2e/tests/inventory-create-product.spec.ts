@@ -21,8 +21,8 @@ test.describe("inventory", () => {
     await page.getByRole("option", { name: SEED.category }).click();
     await form.getByLabel("Precio de costo").fill("1000");
     await form.getByLabel("Precio de venta").fill("2500");
-    // Required labels carry an asterisk ("Stock*"); anchor so "Stock mín." does not match.
-    await form.getByRole("spinbutton", { name: /^Stock\*?$/ }).fill("12");
+    // Stock is the shared counter (a numeric textbox); exact, so "Stock mín." does not match.
+    await form.getByRole("textbox", { name: "Stock", exact: true }).fill("12");
     await form.getByRole("button", { name: "Crear" }).click();
 
     await expect(page.getByText("Producto creado correctamente")).toBeVisible();

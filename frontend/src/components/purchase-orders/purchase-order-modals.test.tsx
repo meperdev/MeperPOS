@@ -222,7 +222,9 @@ describe("Purchase order modals", () => {
       />,
     );
 
-    const input = within(screen.getByRole("table")).getByRole("spinbutton") as HTMLInputElement;
+    const input = within(screen.getByRole("table")).getByLabelText(
+      "Cantidad a recibir de Producto Uno",
+    ) as HTMLInputElement;
     expect(input.value).toBe("3");
 
     await user.clear(input);
@@ -399,7 +401,50 @@ describe("Purchase order modals", () => {
     expect(qtyCell.className).not.toContain("2xl:px-5");
     expect(taxCell.className).toContain("2xl:px-2");
     expect(taxCell.className).not.toContain("2xl:px-5");
-    expect(table.getByLabelText("Cantidad de Producto Uno").className).toContain("pr-9");
     expect(table.getByLabelText("IVA de Producto Uno").className).toContain("pr-9");
+  });
+
+  it("counts ordered units with the shared stepper", async () => {
+    const user = userEvent.setup();
+    render(<EditDraftModal order={makeOrder()} isOpen onClose={vi.fn()} />);
+
+    const table = within(screen.getByRole("table"));
+    const qty = table.getByLabelText("Cantidad de Producto Uno");
+    expect(qty).toHaveAttribute("type", "text");
+    expect(qty).toHaveAttribute("inputMode", "numeric");
+    await user.click(table.getByRole("button", { name: "Aumentar Cantidad de Producto Uno" }));
+    expect(qty).toHaveValue("6");
+
+    await user.click(screen.getByRole("button", { name: /Guardar cambios/i }));
+    expect(updateMutateAsyncMock).toHaveBeenCalledWith({
+      id: "po-1",
+      data: expect.objectContaining({
+        items: [{ productId: "prod-1", qtyOrdered: 6, unitCost: 100, taxRate: 19 }],
+      }),
+    });
+  });
+
+  it("counts received units with the shared stepper, capped at the pending quantity", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReceiveItemsModal
+        order={makeOrder({ status: "PARTIAL_RECEIVED" })}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    );
+
+    const table = within(screen.getByRole("table"));
+    const input = table.getByLabelText("Cantidad a recibir de Producto Uno");
+    expect(input).toHaveAttribute("type", "text");
+    // Starts at the pending quantity, which is also the ceiling.
+    expect(input).toHaveValue("3");
+    expect(
+      table.getByRole("button", { name: "Aumentar Cantidad a recibir de Producto Uno" }),
+    ).toBeDisabled();
+    await user.click(
+      table.getByRole("button", { name: "Disminuir Cantidad a recibir de Producto Uno" }),
+    );
+    expect(input).toHaveValue("2");
   });
 });

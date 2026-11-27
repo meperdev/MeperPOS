@@ -2989,3 +2989,51 @@ describe("POS search autofocus follows the pointer", () => {
     expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).not.toHaveFocus();
   });
 });
+
+describe("cart quantity after clearing the field (Stepper)", () => {
+  const product = makeProduct("probe", "Probe product", { salePrice: 1000, taxRate: 0, stock: 10 });
+  beforeEach(() => {
+    vi.clearAllMocks(); resetDynamicChunks();
+    createSaleMutateMock.mockResolvedValue(makeSale());
+    useProductsMock.mockReturnValue({data: {data: [product], meta: {total: 1, totalPages: 1}}, isLoading: false, isFetching: false});
+  });
+  afterEach(cleanup);
+  async function setup() {
+    render(<POSPage />);
+    const tile = screen.getByRole("button", {name: product.name});
+    await userEvent.click(tile); await userEvent.click(tile); await userEvent.click(tile);
+    const qty = screen.getByRole<HTMLInputElement>("textbox", {name: "Cantidad"});
+    expect(qty).toHaveValue("3");
+    return qty;
+  }
+  it.each([true, false])("charges one unit after clear; button moves focus: %s", async (movesFocus) => {
+    const qty = await setup();
+    await userEvent.click(screen.getByRole("button", {name: "Tarjeta"}));
+    await userEvent.clear(qty);
+    expect(qty).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.queryByRole("button", {name: "Confirmar pago"})).toBeNull();
+    const pay = screen.getByRole("button", {name: "Finalizar venta"});
+    if (movesFocus) await userEvent.click(pay);
+    else fireEvent.click(pay);
+    await userEvent.click(await screen.findByRole("button", {name: "Confirmar pago"}));
+    expect(createSaleMutateMock.mock.calls.map(([request]) => request.items[0].quantity)).toEqual([1]);
+  });
+  it("retains the result of a scan started before opening the quantity editor", async () => {
+    const qty = await setup();
+    let finish!: (p: Product) => void;
+    quickSearchMutateMock.mockImplementationOnce(() => new Promise<Product>((resolve) => { finish = resolve; }));
+    await userEvent.type(screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código..."), "7701234567890{enter}");
+    expect(quickSearchMutateMock).toHaveBeenCalledWith("7701234567890");
+    await userEvent.clear(qty);
+    await act(async () => finish(product));
+    await waitFor(() => expect(qty).toHaveValue("2"));
+  });
+  it.each(["Aumentar", "Disminuir"])("%s has the same result after clear", async (verb) => {
+    const qty = await setup();
+    await userEvent.clear(qty);
+    const button = screen.getByRole("button", {name: `${verb} cantidad`});
+    await userEvent.click(button);
+    expect(qty).toHaveValue(verb === "Aumentar" ? "2" : "1");
+  });
+});

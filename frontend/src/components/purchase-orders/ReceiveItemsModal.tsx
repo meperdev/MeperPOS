@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Stepper } from "@/components/ui/Stepper";
 import { useReceivePurchaseOrder } from "@/hooks/usePurchaseOrders";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -73,24 +73,16 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
 
   // Rendered by both the table (wide) and the stacked list (narrow). Only one
   // view is visible at a time, and both read the same `values` state.
+  // The shared counter clamps to 0..pending and holds whole units only.
   const renderReceiveInput = (it: (typeof pendingItems)[number]) => (
-    <Input
-      type="number"
-      aria-label={`Cantidad a recibir de ${it.product?.name ?? "producto"}`}
+    <Stepper
+      label={`Cantidad a recibir de ${it.product?.name ?? "producto"}`}
+      hideLabel
+      size="sm"
       min={0}
       max={it.pending}
-      step={1}
       value={values[it.id] ?? 0}
-      onChange={(e) =>
-        setValues((prev) => ({
-          ...prev,
-          [it.id]: Math.max(
-            0,
-            Math.min(it.pending, Math.floor(Number(e.target.value) || 0)),
-          ),
-        }))
-      }
-      className="px-2.5 text-right"
+      onChange={(qty) => setValues((prev) => ({ ...prev, [it.id]: qty }))}
     />
   );
 
