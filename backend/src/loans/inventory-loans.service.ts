@@ -686,7 +686,7 @@ export class InventoryLoansService {
             where: {
               organizationId: orgId,
               userId: actor.userId,
-              role: { in: [OrgRole.OWNER, OrgRole.ADMIN] },
+              role: OrgRole.ADMIN,
               user: { active: true },
             },
             select: { userId: true },
@@ -882,7 +882,7 @@ export class InventoryLoansService {
       where: {
         organizationId: orgId,
         userId: actorId,
-        role: { in: [OrgRole.OWNER, OrgRole.ADMIN] },
+        role: OrgRole.ADMIN,
         user: { active: true },
       },
       select: { userId: true },
@@ -1215,7 +1215,7 @@ export class InventoryLoansService {
             where: {
               organizationId: orgId,
               userId: actor.userId,
-              role: { in: [OrgRole.OWNER, OrgRole.ADMIN] },
+              role: OrgRole.ADMIN,
               user: { active: true },
             },
             select: { userId: true },

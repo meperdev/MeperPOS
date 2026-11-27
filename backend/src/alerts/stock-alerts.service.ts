@@ -426,7 +426,7 @@ export class StockAlertsService {
       where: {
         organizationId,
         userId: { in: [...new Set(identities.map((row) => row.userId))] },
-        role: { in: ['OWNER', 'ADMIN'] },
+        role: 'ADMIN',
       },
       select: { userId: true },
     });

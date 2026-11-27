@@ -28,7 +28,7 @@ import {
  * purpose: this service is injected *into* that one, so importing back would make
  * the two modules circular. The set is the same, and both are closed lists.
  */
-const ADMINISTRATIVE_ROLES: readonly OrgRole[] = ['OWNER', 'ADMIN'];
+const ADMINISTRATIVE_ROLES: readonly OrgRole[] = ['ADMIN'];
 
 /**
  * The only failure codes a delivery row may carry. The column is free text in the
