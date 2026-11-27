@@ -110,6 +110,28 @@ describe('UsersController', () => {
     );
   });
 
+  it('delegates remove with the acting admin id, organizationId and the actor', async () => {
+    const controller = new UsersController(usersServiceMock as never);
+    const user = {
+      userId: 'admin-1',
+      organizationId: 'org-1',
+      role: 'ADMIN' as const,
+      email: 'a@a.com',
+      tokenVersion: 1,
+      isSuperAdmin: false,
+    };
+    usersServiceMock.remove.mockResolvedValue({ message: 'ok' });
+
+    await controller.remove('user-2', user);
+
+    expect(usersServiceMock.remove).toHaveBeenCalledWith(
+      'admin-1',
+      'user-2',
+      'org-1',
+      user,
+    );
+  });
+
   it('delegates password resets to the users service with organizationId', async () => {
     const controller = new UsersController(usersServiceMock as never);
     const dto = { newPassword: 'NuevaClaveSegura123' };

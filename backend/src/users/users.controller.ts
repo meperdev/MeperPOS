@@ -117,6 +117,7 @@ export class UsersController {
       user.userId,
       id,
       user.organizationId ?? undefined,
+      user,
     );
   }
 }

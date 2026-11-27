@@ -298,7 +298,12 @@ export class UsersService {
     );
   }
 
-  async remove(adminUserId: string, userId: string, organizationId?: string) {
+  async remove(
+    adminUserId: string,
+    userId: string,
+    organizationId: string | undefined,
+    actor: ActorContext | undefined,
+  ) {
     if (adminUserId === userId) {
       throw new BadRequestException('Admins cannot delete their own account');
     }
@@ -323,6 +328,12 @@ export class UsersService {
           'Cannot remove the primary owner. Transfer ownership first.',
         );
       }
+
+      await this.assertMayManageAdminAccount(actor, userId, organizationId, {
+        primaryOwner: 'Only the primary owner can remove the primary owner',
+        admin:
+          'Only the primary owner of the organization or a SUPER_ADMIN can remove an ADMIN',
+      });
 
       if (orgUser.role === OrgRole.ADMIN) {
         const adminCount = await this.prisma.organizationUser.count({
