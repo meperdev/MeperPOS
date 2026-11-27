@@ -20,7 +20,8 @@ npm run test            # Unit tests (Jest)
 npm run test:e2e        # End-to-end tests
 npm run test -- --testPathPattern=<file>  # Run single test file
 npm run lint            # ESLint with auto-fix
-npm run seed            # Seed database with faker data
+npm run seed            # Dry-run of the two test orgs (Prueba PRO, Prueba BASIC); seed:apply writes, seed:verify counts
+npm run cleanup:orgs    # Delete whole organizations by id (dry-run; --apply + CLEANUP_CONFIRM)
 npx prisma migrate dev  # Run migrations
 npx prisma studio       # Open Prisma Studio GUI
 ```
@@ -92,4 +93,4 @@ Next.js App Router under `frontend/src/`:
 - `getApiErrorMessage(error, fallback)` for extracting user-facing error messages from Axios errors
 - Backend DTOs use `class-validator` decorators; global `ValidationPipe` is applied in `main.ts`
 - All API endpoints are prefixed with `/api` (set in `main.ts` via `app.setGlobalPrefix('api')`)
-- Prisma migrations live in `backend/prisma/migrations/`; seed script is `backend/prisma/seed.ts`
+- Prisma migrations live in `backend/prisma/migrations/`; the only seed is `backend/prisma/seed-test-orgs.ts` (two test organizations, «Prueba PRO» on PlanType.PRO and «Prueba BASIC» on PlanType.BASIC, one ADMIN each, identical locally and in production; never add another seed — extend its plan in `src/seeding/test-orgs-seed.plan.ts`)

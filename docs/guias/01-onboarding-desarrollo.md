@@ -56,8 +56,9 @@ cd MeperPOS
    # Ejecutar migraciones para sincronizar el esquema
    npx prisma migrate dev
    
-   # Popular la base de datos con datos semilla (Faker)
-   npm run seed
+   # Crear las dos organizaciones de prueba (Prueba PRO y Prueba BASIC) y la SuperAdmin local
+   # Requiere SEED_TEST_ORG_PASSWORD (>=12) y SUPER_ADMIN_PASSWORD (>=10)
+   npm run seed:apply
    ```
 
 4. **Levantar el servicio:**
