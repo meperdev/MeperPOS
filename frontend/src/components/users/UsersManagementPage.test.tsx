@@ -28,7 +28,7 @@ const usersData = vi.hoisted(
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
       },
-    ] satisfies User[],
+    ] as User[],
 );
 
 vi.mock("@/components/layout/DashboardLayout", () => ({
@@ -179,6 +179,69 @@ describe("Users list responsive layout", () => {
     );
 
     expect(password).toHaveAttribute("type", "text");
+  });
+
+  it("labels the primary owner and hides admin-account actions from an admin who cannot use them", () => {
+    // Only the primary owner (or a SUPER_ADMIN) may edit, deactivate, reset or
+    // remove an admin-rank account; the API answers 403 to anyone else.
+    const previous = currentUserMock.value;
+    currentUserMock.value = { ...previous, isPrimaryOwner: false };
+    usersData.push(
+      {
+        ...usersData[0]!,
+        id: "owner-1",
+        name: "Dueña Principal",
+        email: "owner@example.com",
+        role: "ADMIN",
+        isPrimaryOwner: true,
+      },
+      {
+        ...usersData[0]!,
+        id: "admin-2",
+        name: "Otra Admin",
+        email: "admin2@example.com",
+        role: "ADMIN",
+        isPrimaryOwner: false,
+      },
+    );
+    try {
+      render(<UsersPage />);
+
+      expect(screen.getByText("Propietario")).toBeInTheDocument();
+      for (const name of ["Dueña Principal", "Otra Admin"]) {
+        expect(screen.queryByRole("button", { name: `Editar usuario ${name}` })).toBeNull();
+        expect(screen.queryByRole("button", { name: `Desactivar usuario ${name}` })).toBeNull();
+        expect(screen.queryByRole("button", { name: `Restablecer contraseña de ${name}` })).toBeNull();
+        expect(screen.queryByRole("button", { name: `Eliminar usuario ${name}` })).toBeNull();
+        expect(screen.getByRole("button", { name: `Sedes de ${name}` })).toBeInTheDocument();
+      }
+      // A cashier stays fully manageable by any admin.
+      expect(screen.getByRole("button", { name: "Editar usuario Caja Uno" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Desactivar usuario Caja Uno" })).toBeInTheDocument();
+    } finally {
+      usersData.splice(2, 2);
+      currentUserMock.value = previous;
+    }
+  });
+
+  it("lets the primary owner manage another admin", () => {
+    usersData.push({
+      ...usersData[0]!,
+      id: "admin-2",
+      name: "Otra Admin",
+      email: "admin2@example.com",
+      role: "ADMIN",
+      isPrimaryOwner: false,
+    });
+    try {
+      render(<UsersPage />);
+
+      expect(screen.getByRole("button", { name: "Editar usuario Otra Admin" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Desactivar usuario Otra Admin" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar usuario Otra Admin" })).toBeInTheDocument();
+    } finally {
+      usersData.splice(2, 1);
+    }
   });
 
   it("does not offer Administrador to an admin who is not the primary owner", async () => {
