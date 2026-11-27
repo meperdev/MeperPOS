@@ -3,6 +3,27 @@ import { Prisma, ProductType } from '@prisma/client';
 import { UpdateProductDto } from './dto/product.dto';
 import { ProductsService } from './products.service';
 
+// The per-site ledger has its own PostgreSQL suite
+// (`products.site-stock.postgres.spec.ts`); these cases assert the delta the
+// write path asks for, against one site holding the whole product balance.
+jest.mock('../inventory/site-stock', () => {
+  const actual = jest.requireActual('../inventory/site-stock');
+  return {
+    ...actual,
+    resolveDefaultSiteWithin: (tx: { __defaultSite(): string }) =>
+      Promise.resolve(tx.__defaultSite()),
+    applySiteStockDelta: (
+      tx: {
+        __applySiteDelta(delta: {
+          stockDelta: number;
+          reservedDelta: number;
+        }): unknown;
+      },
+      delta: { stockDelta: number; reservedDelta: number },
+    ) => Promise.resolve(tx.__applySiteDelta(delta)),
+  };
+});
+
 /**
  * A service is not merchandise. It carries no stock, writes no kárdex movement, is
  * never reported as low on stock, and is excluded from the low-stock surfaces.
@@ -19,6 +40,7 @@ describe('ProductsService — product versus service', () => {
 
   const prismaMock = {
     category: { findFirst: jest.fn() },
+    location: { count: jest.fn() },
     product: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -30,6 +52,8 @@ describe('ProductsService — product versus service', () => {
       delete: jest.fn(),
       fields: { minStock: MIN_STOCK_FIELD_REF },
     },
+    __defaultSite: jest.fn(),
+    __applySiteDelta: jest.fn(),
     inventoryMovement: { create: jest.fn() },
     $queryRaw: jest.fn(),
     inventoryLoanItem: {
@@ -99,8 +123,16 @@ describe('ProductsService — product versus service', () => {
     );
     prismaMock.category.findFirst.mockResolvedValue(categoryRow());
     prismaMock.product.findUnique.mockResolvedValue(null);
+    // One site holds the whole balance: an absolute stock edit is still the
+    // delta at that site.
+    prismaMock.location.count.mockResolvedValue(1);
     prismaMock.inventoryMovement.create.mockResolvedValue({});
     prismaMock.inventoryLoanItem.findFirst.mockResolvedValue(null);
+    prismaMock.__defaultSite.mockReturnValue('site-1');
+    prismaMock.__applySiteDelta.mockResolvedValue({
+      applied: true,
+      created: false,
+    });
     prismaMock.$transaction.mockImplementation(
       (callback: (tx: typeof prismaMock) => Promise<unknown>) =>
         callback(prismaMock),
@@ -308,11 +340,14 @@ describe('ProductsService — product versus service', () => {
 
       await service.update('serv-1', { stock: 500 }, USER_ID, ORG_ID);
 
+      // The normalized stock equals the stored zero, so there is no delta to
+      // apply and the aggregate is never written directly.
       expect(prismaMock.product.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ stock: 0 }),
+          data: expect.not.objectContaining({ stock: expect.anything() }),
         }),
       );
+      expect(prismaMock.__applySiteDelta).not.toHaveBeenCalled();
       expect(prismaMock.inventoryMovement.create).not.toHaveBeenCalled();
     });
 
@@ -338,10 +373,15 @@ describe('ProductsService — product versus service', () => {
 
       expect(prismaMock.product.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            type: ProductType.SERVICE,
-            stock: 0,
-          }),
+          data: expect.objectContaining({ type: ProductType.SERVICE }),
+        }),
+      );
+      expect(prismaMock.__applySiteDelta).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productId: 'prod-1',
+          locationId: 'site-1',
+          stockDelta: -9990,
+          reservedDelta: 0,
         }),
       );
       expect(prismaMock.inventoryMovement.create).toHaveBeenCalledTimes(1);
@@ -422,11 +462,11 @@ describe('ProductsService — product versus service', () => {
 
       expect(prismaMock.product.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            tracksStock: false,
-            stock: 0,
-          }),
+          data: expect.objectContaining({ tracksStock: false }),
         }),
+      );
+      expect(prismaMock.__applySiteDelta).toHaveBeenCalledWith(
+        expect.objectContaining({ stockDelta: -40, reservedDelta: 0 }),
       );
       // Turning tracking off drops the stock to zero, so the kárdex has to say where those units
       // went. This is the counterpart of converting a product into a service, which records the
@@ -476,11 +516,11 @@ describe('ProductsService — product versus service', () => {
 
       expect(prismaMock.product.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            tracksStock: true,
-            stock: 10,
-          }),
+          data: expect.objectContaining({ tracksStock: true }),
         }),
+      );
+      expect(prismaMock.__applySiteDelta).toHaveBeenCalledWith(
+        expect.objectContaining({ stockDelta: 10, reservedDelta: 0 }),
       );
       expect(prismaMock.inventoryMovement.create).toHaveBeenCalledTimes(1);
       expect(prismaMock.inventoryMovement.create).toHaveBeenCalledWith(
@@ -524,12 +564,10 @@ describe('ProductsService — product versus service', () => {
 
       expect(prismaMock.product.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            tracksStock: false,
-            stock: 0,
-          }),
+          data: expect.objectContaining({ tracksStock: false }),
         }),
       );
+      expect(prismaMock.__applySiteDelta).not.toHaveBeenCalled();
       expect(prismaMock.inventoryMovement.create).not.toHaveBeenCalled();
     });
   });
@@ -685,6 +723,8 @@ describe('ProductsService conversion eligibility', () => {
   let failMovement: boolean;
   let events: string[];
   const tx = {
+    __defaultSite: jest.fn(() => 'site-1'),
+    __applySiteDelta: jest.fn(),
     inventoryLoanItem: {
       fields: { returnedQuantity: returnedField },
       findFirst: jest.fn<Promise<Item | null>, [Query]>(),
@@ -698,6 +738,7 @@ describe('ProductsService conversion eligibility', () => {
     },
   };
   const prisma = {
+    location: { count: jest.fn<Promise<number>, []>() },
     product: {
       findFirst: jest.fn<Promise<Row>, [unknown]>(),
       updateMany: jest.fn<Promise<{ count: number }>, [Write]>(),
@@ -728,6 +769,9 @@ describe('ProductsService conversion eligibility', () => {
     state = { product: initialProduct(), items: [], movements: [] };
     loseCas = failMovement = false;
     events = [];
+    // One site holds the whole balance: the absolute edit stays the delta at
+    // that site.
+    prisma.location.count.mockResolvedValue(1);
     prisma.product.findFirst.mockImplementation(() =>
       Promise.resolve({ ...state.product }),
     );
@@ -770,6 +814,27 @@ describe('ProductsService conversion eligibility', () => {
         };
         return Promise.resolve({ count: 1 });
       });
+      tx.__defaultSite.mockReturnValue('site-1');
+      tx.__applySiteDelta.mockImplementation(
+        ({
+          stockDelta,
+          reservedDelta,
+        }: {
+          stockDelta: number;
+          reservedDelta: number;
+        }) => {
+          events.push('site');
+          const reserved = pending.product.reservedStock + reservedDelta;
+          if (reserved < 0 || pending.product.stock + stockDelta - reserved < 0)
+            return { applied: false, reason: 'insufficient-stock' };
+          pending.product = {
+            ...pending.product,
+            stock: pending.product.stock + stockDelta,
+            reservedStock: reserved,
+          };
+          return { applied: true, created: false };
+        },
+      );
       tx.product.findFirst.mockImplementation(() => {
         events.push('read');
         return Promise.resolve({ ...pending.product });
@@ -838,7 +903,7 @@ describe('ProductsService conversion eligibility', () => {
     expect(result.stock).toBe(0);
     expect(result.availableStock).toBeNull();
     expect(state.product.version).toBe(3);
-    expect(events).toEqual(['query', 'cas', 'read', 'movement']);
+    expect(events).toEqual(['query', 'site', 'cas', 'read', 'movement']);
     expect(tx.inventoryLoanItem.findFirst).toHaveBeenCalledWith({
       where: {
         organizationId: 'org-1',
@@ -875,6 +940,7 @@ describe('ProductsService conversion eligibility', () => {
           userId: 'user-1',
           organizationId: 'org-1',
           saleId: undefined,
+          locationId: 'site-1',
         },
       },
     ]);
@@ -925,7 +991,7 @@ describe('ProductsService conversion eligibility', () => {
       stock: 5,
     });
     expect(result.stock).toBe(5);
-    expect(events).toEqual(['query', 'cas', 'read', 'movement']);
+    expect(events).toEqual(['query', 'site', 'cas', 'read', 'movement']);
     expect(state.movements[0].data).toMatchObject({
       type: 'ADJUSTMENT_IN',
       quantity: 5,
@@ -947,7 +1013,7 @@ describe('ProductsService conversion eligibility', () => {
       const before = structuredClone(state);
       await expect(update()).rejects.toBeInstanceOf(ConflictException);
       expect(state).toEqual(before);
-      expect(events).toEqual(['query', 'cas']);
+      expect(events).toEqual(['query', 'site', 'cas']);
       expect(tx.product.findFirst).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
       expect(prisma.product.updateMany).not.toHaveBeenCalled();
@@ -959,7 +1025,7 @@ describe('ProductsService conversion eligibility', () => {
     failMovement = true;
     const before = structuredClone(state);
     await expect(update()).rejects.toThrow('late movement failure');
-    expect(events).toEqual(['query', 'cas', 'read', 'movement']);
+    expect(events).toEqual(['query', 'site', 'cas', 'read', 'movement']);
     expect(state).toEqual(before);
     expect(prisma.product.updateMany).not.toHaveBeenCalled();
     expect(prisma.inventoryMovement.create).not.toHaveBeenCalled();

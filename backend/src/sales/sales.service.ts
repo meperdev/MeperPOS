@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { Prisma, ProductType } from '@prisma/client';
+import { OrgRole, Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateSaleDto,
@@ -38,6 +38,11 @@ import { ReceiptsService } from '../receipts/receipts.service';
 import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emission';
 import { voidSaleFiscalDocument } from '../electronic-invoicing/fiscal-document.service';
 import { isElectronicInvoicingActive } from '../settings/schema';
+import { resolveWritableSiteWithin } from '../locations/authorized-site';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../inventory/site-stock';
 
 /**
  * A POS-financed sale carries no cash/card rows, so the derived flag travels
@@ -49,6 +54,31 @@ function withFinancedFlag<
 >(sale: T): Omit<T, 'posLoanSaleIntent'> & { financed: boolean } {
   const { posLoanSaleIntent, ...rest } = sale;
   return { ...rest, financed: Boolean(posLoanSaleIntent) };
+}
+
+/** The stored origin selection shared by the sale list and detail reads. */
+const originSiteSelect = {
+  originSite: {
+    select: { location: { select: { id: true, name: true } } },
+  },
+} as const;
+
+/**
+ * Flattens the stored attribution to `{ id, name } | null`.
+ *
+ * A sale registered before site attribution — or one made without naming a
+ * site — has no stored origin, so the history never guesses the default site
+ * for it. The sale's own row is the only evidence.
+ */
+function withOriginSite<
+  T extends { originSite?: { location: { id: string; name: string } } | null },
+>(
+  sale: T,
+): Omit<T, 'originSite'> & {
+  originSite: { id: string; name: string } | null;
+} {
+  const { originSite, ...rest } = sale;
+  return { ...rest, originSite: originSite?.location ?? null };
 }
 
 /**
@@ -159,11 +189,26 @@ export class SalesService {
    * - CASHIER → own sales only (sale.userId = user.userId)
    * - Default (INVENTORY_USER / unknown) → own sales only (deny-by-default)
    */
+  /**
+   * The one rule for who reads every sale of the organization: OWNER inherits
+   * ADMIN and a super admin is above both. Every list, detail, receipt and
+   * cancellation check goes through here, so they cannot disagree again (the
+   * list once showed an owner a sale its detail then refused).
+   */
+  private readsEverySale(user: RequestUser): boolean {
+    return (
+      user.isSuperAdmin === true ||
+      user.role === 'SUPER_ADMIN' ||
+      user.role === OrgRole.OWNER ||
+      user.role === OrgRole.ADMIN
+    );
+  }
+
   private buildScopeFilter(user: RequestUser): Record<string, unknown> {
-    if (user.role === 'ADMIN') {
+    if (this.readsEverySale(user)) {
       return {};
     }
-    // Deny-by-default: any non-ADMIN role sees only own sales
+    // Deny-by-default: every other role sees only its own sales.
     return { userId: user.userId };
   }
 
@@ -241,6 +286,7 @@ export class SalesService {
       items,
       discountAmount = 0,
       payments: requestedPayments,
+      locationId,
     } = createSaleDto;
 
     if (items.length === 0) {
@@ -274,6 +320,7 @@ export class SalesService {
       const replayId = await this.findSaleIdByRequestKey(
         organizationId,
         requestKeyHash,
+        locationId,
       );
       if (replayId) {
         return this.findOne(replayId, organizationId);
@@ -454,12 +501,28 @@ export class SalesService {
     const runSaleTransaction = () =>
       this.prisma.$transaction(
         async (tx) => {
+          // T3g: the site that fulfils the sale, authorized inside this
+          // transaction whether the request names it or the organization
+          // default is implied. S3 applies the same grant to both: omitting the
+          // field does not widen anyone's access.
+          const origin = await this.resolveSaleLocation(
+            tx,
+            user,
+            userId,
+            organizationId,
+            locationId,
+          );
           const { number: saleNumber } = await this.sequenceService.nextNumber(
             tx,
             organizationId,
             'SALE',
             year,
           );
+
+          // T3b: the balance the sale takes from. The explicit authorized
+          // origin when the request names one, else the authorized
+          // organization default site.
+          const saleSiteId = origin.locationId;
 
           const createdSale = await tx.sale.create({
             data: {
@@ -479,6 +542,14 @@ export class SalesService {
               requestKeyHash,
             },
           });
+
+          // Only an explicit site is recorded as the sale's origin. A legacy
+          // request that omitted it keeps its stored shape: no origin row.
+          if (locationId !== undefined) {
+            await tx.saleOriginSite.create({
+              data: { saleId: createdSale.id, ...origin },
+            });
+          }
 
           for (const saleItem of saleItems) {
             await tx.saleItem.create({
@@ -510,41 +581,18 @@ export class SalesService {
                 tracksStock: saleItem.productTracksStock,
               })
             ) {
-              // Read inside the transaction, including repeated lines for the
-              // same product: each decrement advances its version.
-              const observed = await tx.product.findFirst({
-                where: { id: saleItem.productId, organizationId },
-                select: { stock: true, reservedStock: true, version: true },
+              // T3b: the sold units leave the site row of the site that
+              // fulfils the sale, and that row is what refuses an over-draw.
+              // The database trigger keeps `Product.stock` as the
+              // organization-wide aggregate every report still reads.
+              const applied = await applySiteStockDelta(tx, {
+                organizationId,
+                productId: saleItem.productId,
+                locationId: saleSiteId,
+                stockDelta: -saleItem.quantity,
+                reservedDelta: 0,
               });
-              if (
-                !observed ||
-                !Number.isInteger(observed.version) ||
-                !Number.isInteger(observed.reservedStock) ||
-                observed.reservedStock < 0 ||
-                observed.stock - observed.reservedStock < saleItem.quantity
-              ) {
-                throw new ConflictException(
-                  `Insufficient stock for product ${saleItem.productId}`,
-                );
-              }
-              const updatedProduct = await tx.product.updateMany({
-                where: {
-                  id: saleItem.productId,
-                  organizationId,
-                  active: true,
-                  type: ProductType.PRODUCT,
-                  tracksStock: true,
-                  version: observed.version,
-                  reservedStock: observed.reservedStock,
-                  stock: { gte: observed.reservedStock + saleItem.quantity },
-                },
-                data: {
-                  stock: { decrement: saleItem.quantity },
-                  version: { increment: 1 },
-                },
-              });
-
-              if (updatedProduct.count === 0) {
+              if (!applied.applied) {
                 throw new ConflictException(
                   `Insufficient stock for product ${saleItem.productId}`,
                 );
@@ -558,6 +606,28 @@ export class SalesService {
               if (!productAfterUpdate) {
                 throw new NotFoundException(
                   `Product with ID ${saleItem.productId} not found`,
+                );
+              }
+
+              // The product's optimistic-concurrency version still advances
+              // with every stock change, so the existing product edits keep
+              // their contract; the balance itself now belongs to the site.
+              // The bump also re-pins what the old stock CAS pinned: a product
+              // deactivated or turned into an untracked line after pricing is
+              // refused exactly as before.
+              const bumped = await tx.product.updateMany({
+                where: {
+                  id: saleItem.productId,
+                  organizationId,
+                  active: true,
+                  type: ProductType.PRODUCT,
+                  tracksStock: true,
+                },
+                data: { version: { increment: 1 } },
+              });
+              if (bumped.count === 0) {
+                throw new ConflictException(
+                  `Insufficient stock for product ${saleItem.productId}`,
                 );
               }
 
@@ -575,6 +645,7 @@ export class SalesService {
                   userId,
                   saleId: createdSale.id,
                   organizationId,
+                  locationId: saleSiteId,
                 },
               });
             }
@@ -692,6 +763,7 @@ export class SalesService {
           const replayId = await this.findSaleIdByRequestKey(
             organizationId,
             requestKeyHash,
+            locationId,
           );
           if (replayId) {
             return this.findOne(replayId, organizationId);
@@ -716,15 +788,60 @@ export class SalesService {
     }
   }
 
-  /** The sale registered for an idempotency digest, if it exists (SEC-014). */
+  private async resolveSaleLocation(
+    tx: Prisma.TransactionClient,
+    user: RequestUser | undefined,
+    userId: string,
+    organizationId: string,
+    locationId?: string,
+  ) {
+    // The explicit site, else the organization default: both are the site the
+    // sale writes to, so both take the same authorization. Omitting the field
+    // never widens access (S3).
+    const siteId =
+      locationId ?? (await resolveDefaultSiteWithin(tx, organizationId));
+    if (!user) {
+      // Legacy in-process callers (seeds, imports, older tests) do not carry an
+      // authenticated actor. The HTTP route always does, and only an actor can
+      // be authorized for an explicit site.
+      if (locationId !== undefined) {
+        throw new ForbiddenException('Organization scope required');
+      }
+      return { organizationId, locationId: siteId };
+    }
+    if (user.userId !== userId || user.organizationId !== organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    // T3g: any store the actor is authorized to write is a valid POS origin;
+    // a warehouse is not a till.
+    return resolveWritableSiteWithin(tx, user, siteId, {
+      requireStore: true,
+    });
+  }
+
+  /** Replay legacy digests unchanged, but never switch an explicit origin. */
   private async findSaleIdByRequestKey(
     organizationId: string,
     requestKeyHash: string,
+    locationId: string | undefined,
   ): Promise<string | null> {
+    const where = { organizationId, requestKeyHash };
+    if (locationId === undefined) {
+      const sale = await this.prisma.sale.findFirst({
+        where,
+        select: { id: true },
+      });
+      return sale?.id ?? null;
+    }
     const sale = await this.prisma.sale.findFirst({
-      where: { organizationId, requestKeyHash },
-      select: { id: true },
+      where,
+      select: { id: true, originSite: { select: { locationId: true } } },
     });
+    if (sale && sale.originSite?.locationId !== locationId) {
+      throw new ConflictException(
+        'La solicitud ya corresponde a una venta con otra atribución de sede',
+      );
+    }
     return sale?.id ?? null;
   }
 
@@ -738,6 +855,7 @@ export class SalesService {
     search?: string,
     customerId?: string,
     user?: RequestUser,
+    locationId?: string,
   ) {
     const { skip, take } = computeSkipTake(page, limit);
 
@@ -752,6 +870,14 @@ export class SalesService {
 
     if (customerId) {
       where.customerId = customerId;
+    }
+
+    // Only sales whose *stored* origin is that site. A sale without an origin
+    // row (made at the default site or before attribution) is never matched,
+    // so the filter never guesses where it happened. The controller has
+    // already authorized the site through the one site-access rule.
+    if (locationId) {
+      where.originSite = { locationId };
     }
 
     if (startDate || endDate) {
@@ -806,6 +932,7 @@ export class SalesService {
           payments: true,
           ...this.financingInclude,
           ...this.sellerInclude,
+          ...originSiteSelect,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -813,7 +940,7 @@ export class SalesService {
     ]);
 
     return {
-      data: sales.map(withFinancedFlag),
+      data: sales.map((sale) => withFinancedFlag(withOriginSite(sale))),
       meta: {
         total,
         page,
@@ -838,6 +965,7 @@ export class SalesService {
         payments: true,
         ...this.financingInclude,
         ...this.sellerInclude,
+        ...originSiteSelect,
       },
     });
 
@@ -846,11 +974,11 @@ export class SalesService {
     }
 
     // Deny-by-default: if user context is provided, enforce scope
-    if (user && user.role !== 'ADMIN' && sale.userId !== user.userId) {
+    if (user && !this.readsEverySale(user) && sale.userId !== user.userId) {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
-    return withFinancedFlag(sale);
+    return withFinancedFlag(withOriginSite(sale));
   }
 
   async findBySaleNumber(saleNumber: number, user?: RequestUser) {
@@ -880,7 +1008,7 @@ export class SalesService {
     }
 
     // Deny-by-default: if user context is provided, enforce scope
-    if (user && user.role !== 'ADMIN' && sale.userId !== user.userId) {
+    if (user && !this.readsEverySale(user) && sale.userId !== user.userId) {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
@@ -901,7 +1029,12 @@ export class SalesService {
     }
     const existingSale = await this.prisma.sale.findFirst({
       where: { id, organizationId },
-      include: { items: true },
+      include: {
+        items: true,
+        ...(updateSaleDto.status === 'CANCELLED'
+          ? { originSite: { select: { locationId: true } } }
+          : {}),
+      },
     });
 
     if (!existingSale) {
@@ -909,7 +1042,11 @@ export class SalesService {
     }
 
     // Deny-by-default: non-ADMIN users can only update own sales
-    if (user && user.role !== 'ADMIN' && existingSale.userId !== user.userId) {
+    if (
+      user &&
+      !this.readsEverySale(user) &&
+      existingSale.userId !== user.userId
+    ) {
       throw new ForbiddenException('You do not have access to this sale');
     }
 
@@ -930,7 +1067,17 @@ export class SalesService {
     }
 
     if (updateSaleDto.status === 'CANCELLED') {
+      const locationId = existingSale.originSite?.locationId;
       await this.prisma.$transaction(async (tx) => {
+        if (locationId !== undefined) {
+          await this.resolveSaleLocation(
+            tx,
+            user,
+            userId,
+            organizationId,
+            locationId,
+          );
+        }
         // Sale has no version column. Claim its expected state before effects;
         // a concurrent loser cannot restore inventory a second time.
         const claimed = await tx.sale.updateMany({
@@ -976,6 +1123,11 @@ export class SalesService {
           );
         }
 
+        // T3b: the restore lands on the site the sale was fulfilled from. A
+        // sale with a stored origin already authorized it above; one without
+        // (legacy and no-site sales) took its units from the organization
+        // default site, which is where they come back.
+        let restoreSiteId = locationId;
         for (const [productId, signedQuantity] of soldByProduct) {
           const restoreQuantity = -signedQuantity;
           if (restoreQuantity <= 0) continue;
@@ -985,39 +1137,38 @@ export class SalesService {
               id: productId,
               organizationId: existingSale.organizationId,
             },
+            select: { stock: true },
           });
 
           if (product) {
-            if (
-              !Number.isInteger(product.version) ||
-              !Number.isInteger(product.reservedStock) ||
-              product.reservedStock < 0 ||
-              product.reservedStock > product.stock
-            ) {
+            restoreSiteId ??= await resolveDefaultSiteWithin(
+              tx,
+              existingSale.organizationId,
+            );
+            const previousStock = product.stock;
+
+            const restored = await applySiteStockDelta(tx, {
+              organizationId: existingSale.organizationId,
+              productId,
+              locationId: restoreSiteId,
+              stockDelta: restoreQuantity,
+              reservedDelta: 0,
+            });
+            if (!restored.applied) {
               throw new ConflictException(
                 `Stock changed for product ${productId}`,
               );
             }
-            const previousStock = product.stock;
-            const newStock = previousStock + restoreQuantity;
 
-            const restored = await tx.product.updateMany({
+            // Same version bump the sale made: the product's optimistic
+            // concurrency stays observable to product edits.
+            await tx.product.updateMany({
               where: {
                 id: productId,
-                organizationId,
-                version: product.version,
-                reservedStock: product.reservedStock,
+                organizationId: existingSale.organizationId,
               },
-              data: {
-                stock: { increment: restoreQuantity },
-                version: { increment: 1 },
-              },
+              data: { version: { increment: 1 } },
             });
-            if (restored.count === 0) {
-              throw new ConflictException(
-                `Stock changed for product ${productId}`,
-              );
-            }
 
             await tx.inventoryMovement.create({
               data: {
@@ -1025,11 +1176,12 @@ export class SalesService {
                 type: 'RETURN' as const,
                 quantity: restoreQuantity,
                 previousStock,
-                newStock,
+                newStock: previousStock + restoreQuantity,
                 reason: `Sale #${existingSale.saleNumber} cancelled`,
                 userId,
                 saleId: existingSale.id,
                 organizationId: existingSale.organizationId,
+                locationId: restoreSiteId,
               },
             });
           }
@@ -1107,8 +1259,21 @@ export class SalesService {
   async generateReceipt(id: string, response: Response, user?: RequestUser) {
     const sale = await this.findOne(id, user?.organizationId, user);
     const settings = await this.settingsService.find(user?.organizationId);
+    // The receipt prints where the sale happened. The origin is immutable
+    // history the caller already reached through `findOne`, so the contact
+    // details are read inside the sale's own tenant — a cashier does not need
+    // an assignment to the site to read the receipt of their own sale.
+    const originSite = sale.originSite
+      ? await this.prisma.location.findFirst({
+          where: {
+            id: sale.originSite.id,
+            organizationId: sale.organizationId,
+          },
+          select: { name: true, address: true, phone: true },
+        })
+      : null;
     const pdf = await this.receiptsService.generateSaleReceiptPdf(
-      sale,
+      { ...sale, originSite },
       settings,
     );
     response.setHeader('Content-Type', 'application/pdf');

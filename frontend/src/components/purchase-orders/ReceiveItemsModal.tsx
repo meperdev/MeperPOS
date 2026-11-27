@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { Select, type SelectOption } from "@/components/ui/Select";
 import { Stepper } from "@/components/ui/Stepper";
+import { useLocations } from "@/hooks/useLocations";
 import { useReceivePurchaseOrder } from "@/hooks/usePurchaseOrders";
 import { useToast } from "@/contexts/ToastContext";
 import { getApiErrorMessage } from "@/lib/api";
@@ -29,6 +31,26 @@ function buildInitialValues(
 export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props) {
   const toast = useToast();
   const receive = useReceivePurchaseOrder();
+  // Every site the caller may use; the principal one is the server's default and
+  // the one the form starts on. `null` means "not chosen yet", so the principal
+  // arrives with the directory instead of being copied into state.
+  const sites = useLocations().data ?? [];
+  const defaultSiteId = sites.find((site) => site.isDefault)?.id ?? "";
+  const [pickedSiteId, setPickedSiteId] = useState<string | null>(null);
+  // A destination must be a site of the loaded directory: while it loads, when
+  // it is empty, or when the principal is not reachable and nothing was picked,
+  // there is no destination and the receipt cannot be sent.
+  const locationId = sites.some((site) => site.id === pickedSiteId)
+    ? (pickedSiteId as string)
+    : defaultSiteId;
+
+  const siteOptions: SelectOption[] = sites.map((site) => ({
+    value: site.id,
+    label: site.name,
+  }));
+  // Only a different destination is worth sending; the principal is the default.
+  const chosenSiteId =
+    locationId && locationId !== defaultSiteId ? locationId : undefined;
 
   const pendingItems = useMemo(() => {
     return (order.items ?? [])
@@ -46,6 +68,7 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
   const totalPlanned = Object.values(values).reduce((a, b) => a + b, 0);
 
   const canSubmit =
+    locationId !== "" &&
     totalPlanned > 0 &&
     pendingItems.every((it) => {
       const v = values[it.id] ?? 0;
@@ -58,12 +81,18 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
       const items = pendingItems
         .map((it) => ({ itemId: it.id, qtyReceivedNow: values[it.id] ?? 0 }))
         .filter((p) => p.qtyReceivedNow > 0);
-      const updated = await receive.mutateAsync({ id: order.id, items });
+      const updated = await receive.mutateAsync({
+        id: order.id,
+        ...(chosenSiteId ? { locationId: chosenSiteId } : {}),
+        items,
+      });
       const statusLabel =
         updated.status === "RECEIVED"
           ? "Orden recibida completamente"
           : "Recepción parcial registrada";
       toast.success(statusLabel);
+      // The next receipt starts on the principal site again.
+      setPickedSiteId(null);
       onReceived?.(updated);
       onClose();
     } catch (error) {
@@ -98,6 +127,27 @@ export function ReceiveItemsModal({ order, isOpen, onClose, onReceived }: Props)
             Ingresa la cantidad recibida ahora por cada producto. Los valores no
             pueden superar la cantidad pendiente.
           </p>
+
+          {siteOptions.length > 0 && (
+            <div className="space-y-1.5">
+              <Select
+                label="Sede de destino"
+                options={siteOptions}
+                value={locationId}
+                placeholder="Selecciona una sede"
+                onChange={setPickedSiteId}
+              />
+              <p className="text-[13px] text-muted-foreground">
+                La mercancía entra al inventario de esta sede. La sede principal
+                es la de por defecto.
+              </p>
+            </div>
+          )}
+          {siteOptions.length === 0 && (
+            <p role="status" className="text-[13px] text-muted-foreground">
+              Necesitas una sede asignada para registrar la recepción.
+            </p>
+          )}
 
           <div className="@container rounded-xl border border-border/70 bg-card overflow-hidden">
           <div className="hidden @2xl:block overflow-x-auto">

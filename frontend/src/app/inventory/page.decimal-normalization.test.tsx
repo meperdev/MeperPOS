@@ -56,6 +56,23 @@ vi.mock("@/components/ui/Select", () => ({
   ),
 }));
 
+// T22: the page reads the caller's sites and, in the editor, the per-site
+// breakdown. These suites pin the aggregate list, so both answer empty.
+vi.mock("@/hooks/useLocations", () => ({
+  useLocations: () => ({ data: [], isLoading: false }),
+}));
+
+vi.mock("@/hooks/useProductStock", () => ({
+  productStockQueryKey: (productId: string) => ["product-stock", productId],
+  useProductStockBySite: () => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useAdjustProductStock: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 import InventoryPage from "./page";
 
 const INVALID_PRICES_TOAST = "Revisa los precios y las cantidades antes de guardar";

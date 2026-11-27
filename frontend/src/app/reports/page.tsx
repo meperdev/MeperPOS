@@ -13,7 +13,9 @@ import { PeriodFilter } from "@/components/reports/PeriodFilter";
 import { ProductProfitBlock } from "@/components/reports/ProductProfitBlock";
 import { SellerPerformanceBlock } from "@/components/reports/SellerPerformanceBlock";
 import { TopProductsBlock } from "@/components/reports/TopProductsBlock";
+import { SiteFilter } from "@/components/reports/SiteFilter";
 import { useDailyReport } from "@/hooks/useDailyReport";
+import { useLocations } from "@/hooks/useLocations";
 import {
   useCashFlow,
   useCustomerStatistics,
@@ -58,17 +60,28 @@ export default function ReportsPage() {
   });
   const [showExporting, setShowExporting] = useState(false);
   const [isDownloadingDailyReport, setIsDownloadingDailyReport] = useState(false);
+  // The site every sales figure is read for; empty means the whole
+  // organization. The directory already applies the access rule.
+  const [siteId, setSiteId] = useState("");
   const { startDate, endDate } = range;
+  const sites = useLocations();
+  const siteOptions = sites.data ?? [];
+  // "Todas las sedes" is the empty value of the selector; the queries take the
+  // absence of a site, never an empty id.
+  const selectedSiteId = siteId || undefined;
+  // Expenses and cash carry no site, so those blocks keep the organization's
+  // answers and say so; only the sales figures follow the selector.
+  const organizationScope = siteId !== "";
 
   const dailyReport = useDailyReport();
   const economic = useEconomicOverview(startDate, endDate);
   const cash = useCashFlow(startDate, endDate);
-  const inventory = useInventorySnapshot(startDate, endDate);
-  const paymentMethods = useSalesByPaymentMethod(startDate, endDate);
-  const categories = useSalesByCategory(startDate, endDate);
-  const topProducts = useTopSellingProducts(startDate, endDate, 5);
-  const customers = useCustomerStatistics(startDate, endDate);
-  const sellers = useUserPerformance(startDate, endDate);
+  const inventory = useInventorySnapshot(startDate, endDate, selectedSiteId);
+  const paymentMethods = useSalesByPaymentMethod(startDate, endDate, selectedSiteId);
+  const categories = useSalesByCategory(startDate, endDate, selectedSiteId);
+  const topProducts = useTopSellingProducts(startDate, endDate, 5, selectedSiteId);
+  const customers = useCustomerStatistics(startDate, endDate, selectedSiteId);
+  const sellers = useUserPerformance(startDate, endDate, selectedSiteId);
   const current = economic.data?.current;
   const appliedLabel = rangeLabel(economic.data?.appliedRange);
   // A customer ranking of one row is a sentence, so it cannot share a row with
@@ -158,6 +171,9 @@ export default function ReportsPage() {
           endDate={endDate}
           appliedLabel={appliedLabel}
           onChange={setRange}
+          siteFilter={
+            <SiteFilter sites={siteOptions} value={siteId} onChange={setSiteId} />
+          }
         />
 
         <div className="space-y-4 lg:space-y-5">
@@ -165,10 +181,14 @@ export default function ReportsPage() {
             Análisis del período
           </h2>
 
-          <EconomySection query={economic} />
+          <EconomySection query={economic} organizationScope={organizationScope} />
 
           {/* Money first, one card wide: cash and how it was paid. */}
-          <CashPaymentsBlock cash={cash} payments={paymentMethods} />
+          <CashPaymentsBlock
+            cash={cash}
+            payments={paymentMethods}
+            cashOrganizationScope={organizationScope}
+          />
 
           {/* Stock is the same kind of answer: four figures on one strip. */}
           <InventoryBlock query={inventory} />

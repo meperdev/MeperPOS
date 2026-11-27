@@ -1,4 +1,5 @@
-import { FiscalDocumentStatus, Prisma } from '@prisma/client';
+import { FiscalDocumentStatus, OrgRole, Prisma } from '@prisma/client';
+import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { SequenceService } from '../common/sequences/sequence.service';
@@ -14,6 +15,10 @@ import {
 const cloudinaryServiceMock = {
   uploadImage: jest.fn(),
 };
+
+/** T3g: a warehouse cannot be the origin of a sale or a POS financing. */
+const WAREHOUSE_ORIGIN =
+  'La sede seleccionada es una bodega: solo una sucursal puede ser el origen de una venta o una financiación';
 
 describe('SalesService — Integration (Numbering + Isolation)', () => {
   let prisma: TwoOrgFixture['prisma'];
@@ -675,5 +680,438 @@ describe('SalesService — Integration (Numbering + Isolation)', () => {
       select: { stock: true },
     });
     expect(stock.stock).toBe(0);
+  });
+
+  describe('direct POS origin before the stock cutover', () => {
+    // T3a: creating the fixture products already opened their default-site rows,
+    // so each tenant's sole principal site is the one that exists.
+    let principal: string;
+    const warehouse = 'sales-int-origin-warehouse';
+    let outside: string;
+    let actor: RequestUser;
+
+    beforeAll(async () => {
+      actor = {
+        ...fixture.actAs('A'),
+        email: 'sales-origin@example.test',
+        role: OrgRole.ADMIN,
+        tokenVersion: 0,
+        isSuperAdmin: false,
+      };
+      await prisma.organizationUser.create({
+        data: {
+          userId: actor.userId,
+          organizationId: actor.organizationId!,
+          role: actor.role as OrgRole,
+        },
+      });
+      const [principalSite, outsideSite] = await Promise.all([
+        prisma.location.findFirstOrThrow({
+          where: { organizationId: fixture.orgAId, isDefault: true },
+          select: { id: true },
+        }),
+        prisma.location.findFirstOrThrow({
+          where: { organizationId: fixture.orgBId, isDefault: true },
+          select: { id: true },
+        }),
+      ]);
+      principal = principalSite.id;
+      outside = outsideSite.id;
+    });
+
+    const create = (locationId: string | undefined, requestKey: string) => {
+      const dto = {
+        ...buildSaleDto(productId, customerId),
+        locationId,
+        requestKey,
+      };
+      return salesService.create(
+        dto,
+        actor.userId,
+        actor.organizationId,
+        actor,
+      );
+    };
+    const snapshot = async () => {
+      const where = { organizationId: fixture.orgAId };
+      return {
+        sales: await prisma.sale.count({ where }),
+        origins: await prisma.saleOriginSite.count({ where }),
+        movements: await prisma.inventoryMovement.count({ where }),
+        siteBalances: await prisma.productStock.count({ where }),
+        siteLedger: await prisma.productStock.findMany({
+          where: { productId, organizationId: fixture.orgAId },
+          select: {
+            productId: true,
+            locationId: true,
+            organizationId: true,
+            stock: true,
+            reservedStock: true,
+          },
+        }),
+        product: await prisma.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { stock: true, reservedStock: true, version: true },
+        }),
+        counter: await prisma.organizationSequence.findFirstOrThrow({
+          where: { ...where, type: 'SALE' },
+          select: { currentNumber: true },
+        }),
+      };
+    };
+
+    it('preserves legacy replay without storing an origin site or accepting retroactive attribution', async () => {
+      const legacy = await create(undefined, 'origin-legacy');
+      const after = await snapshot();
+      expect(after.origins).toBe(0);
+      // T3b: no origin is stored, but the units still left the default site
+      // that fulfilled the sale.
+      expect(
+        await prisma.inventoryMovement.findFirstOrThrow({
+          where: { saleId: legacy.id },
+          select: { locationId: true },
+        }),
+      ).toEqual({ locationId: principal });
+      await expect(create(undefined, 'origin-legacy')).resolves.toMatchObject({
+        id: legacy.id,
+      });
+      await expect(create(principal, 'origin-legacy')).rejects.toMatchObject({
+        status: 409,
+        message:
+          'La solicitud ya corresponde a una venta con otra atribución de sede',
+      });
+      expect(await snapshot()).toEqual(after);
+    });
+
+    it('persists the authorized principal and moves its site balance on sale and reversal', async () => {
+      const before = await snapshot();
+      await expect(create(outside, 'origin-foreign')).rejects.toMatchObject({
+        status: 404,
+        message: 'Location not found',
+      });
+      expect(await snapshot()).toEqual(before);
+
+      const sale = await create(principal, 'origin-new-sale');
+      // The created sale answers with its detail, which now carries the stored
+      // origin; the row below is what proves nothing but that origin was written.
+      expect(sale.originSite).toEqual({
+        id: principal,
+        name: expect.any(String) as unknown as string,
+      });
+      expect(
+        await prisma.saleOriginSite.findFirstOrThrow({
+          where: { saleId: sale.id },
+        }),
+      ).toEqual({
+        saleId: sale.id,
+        organizationId: fixture.orgAId,
+        locationId: principal,
+      });
+      expect(await snapshot()).toEqual({
+        ...before,
+        sales: before.sales + 1,
+        origins: before.origins + 1,
+        movements: before.movements + 1,
+        // T3b: the sale left the site that fulfilled it, and `Product` still
+        // reports the organization aggregate the trigger derives from it.
+        siteLedger: before.siteLedger.map((row) => ({
+          ...row,
+          stock: row.stock - 1,
+        })),
+        product: {
+          ...before.product,
+          stock: before.product.stock - 1,
+          version: before.product.version + 1,
+        },
+        counter: { currentNumber: before.counter.currentNumber + 1 },
+      });
+      const after = await snapshot();
+      await expect(create(principal, 'origin-new-sale')).resolves.toMatchObject(
+        { id: sale.id },
+      );
+      await expect(create(undefined, 'origin-new-sale')).resolves.toMatchObject(
+        { id: sale.id },
+      );
+      await prisma.location.create({
+        data: {
+          id: warehouse,
+          organizationId: fixture.orgAId,
+          name: 'Warehouse',
+          type: 'WAREHOUSE',
+        },
+      });
+      // T3g: a warehouse is never a POS origin. A fresh request is refused with
+      // a client error before anything is written; a replay still answers its
+      // stored sale's mismatch, read-only.
+      await expect(create(warehouse, 'origin-new-sale')).rejects.toMatchObject({
+        status: 409,
+        message:
+          'La solicitud ya corresponde a una venta con otra atribución de sede',
+      });
+      await expect(create(warehouse, 'origin-warehouse')).rejects.toMatchObject(
+        { status: 400, message: WAREHOUSE_ORIGIN },
+      );
+      expect(await snapshot()).toEqual(after);
+
+      await prisma.organizationUser.updateMany({
+        where: { userId: actor.userId, organizationId: actor.organizationId },
+        data: { role: OrgRole.CASHIER },
+      });
+      const cancel = () =>
+        salesService.update(
+          sale.id,
+          { status: 'CANCELLED' },
+          actor.userId,
+          actor.organizationId,
+          actor,
+        );
+      try {
+        await expect(cancel()).rejects.toMatchObject({
+          status: 403,
+          message: 'Location authorization changed',
+        });
+        expect(await snapshot()).toEqual(after);
+        expect(
+          await prisma.sale.findUniqueOrThrow({
+            where: { id: sale.id },
+            select: { status: true },
+          }),
+        ).toEqual({ status: 'COMPLETED' });
+      } finally {
+        await prisma.organizationUser.updateMany({
+          where: { userId: actor.userId, organizationId: actor.organizationId },
+          data: { role: OrgRole.ADMIN },
+        });
+      }
+      await expect(cancel()).resolves.toMatchObject({ status: 'CANCELLED' });
+      expect(
+        await prisma.inventoryMovement.findMany({
+          where: { saleId: sale.id },
+          orderBy: { type: 'asc' },
+          select: { type: true, quantity: true, locationId: true },
+        }),
+      ).toEqual([
+        { type: 'SALE', quantity: -1, locationId: principal },
+        { type: 'RETURN', quantity: 1, locationId: principal },
+      ]);
+      expect(await snapshot()).toEqual({
+        ...after,
+        movements: after.movements + 1,
+        // The reversal put the unit back on the site it left.
+        siteLedger: before.siteLedger,
+        product: {
+          ...after.product,
+          stock: before.product.stock,
+          version: after.product.version + 1,
+        },
+      });
+      // T3b: the sale and its reversal both move the same site row, so the
+      // product ends with the row it was opened with, back at its balance.
+      const ledger = (await snapshot()).siteLedger;
+      expect(ledger).toEqual(before.siteLedger);
+      expect(ledger).toEqual([
+        expect.objectContaining({
+          productId,
+          locationId: principal,
+          organizationId: fixture.orgAId,
+        }),
+      ]);
+    });
+
+    it('sells from any authorized store of a multi-site organization', async () => {
+      const unique = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const [store, otherStore] = await Promise.all([
+        prisma.location.create({
+          data: { organizationId: fixture.orgAId, name: `Sucursal ${unique}` },
+        }),
+        prisma.location.create({
+          data: {
+            organizationId: fixture.orgAId,
+            name: `Sucursal B ${unique}`,
+          },
+        }),
+      ]);
+      const category = await prisma.category.findFirstOrThrow({
+        where: { organizationId: fixture.orgAId },
+        select: { id: true },
+      });
+      const secondProduct = await prisma.product.create({
+        data: {
+          name: `Sales INT site product ${unique}`,
+          sku: `SALES-SITE-${unique}`,
+          salePrice: new Prisma.Decimal(1000),
+          costPrice: new Prisma.Decimal(500),
+          taxRate: new Prisma.Decimal(19),
+          stock: 1,
+          minStock: 1,
+          active: true,
+          categoryId: category.id,
+          organizationId: fixture.orgAId,
+        },
+      });
+      // Stock that belongs to this branch only: the principal-site row keeps
+      // the other unit, so a sale at the second store has to come from its own.
+      await prisma.productStock.create({
+        data: {
+          productId: secondProduct.id,
+          locationId: store.id,
+          organizationId: fixture.orgAId,
+          stock: 2,
+          reservedStock: 0,
+        },
+      });
+      const sell = (locationId: string, requestKey: string) =>
+        salesService.create(
+          {
+            ...buildSaleDto(secondProduct.id, customerId),
+            locationId,
+            requestKey,
+          },
+          actor.userId,
+          actor.organizationId,
+          actor,
+        );
+      const ledgerOf = () =>
+        prisma.productStock.findMany({
+          where: { productId: secondProduct.id },
+          orderBy: { locationId: 'asc' },
+          select: { locationId: true, stock: true, reservedStock: true },
+        });
+
+      const sale = await sell(store.id, `origin-multi-store-${unique}`);
+
+      expect(
+        await prisma.saleOriginSite.findFirstOrThrow({
+          where: { saleId: sale.id },
+        }),
+      ).toEqual({
+        saleId: sale.id,
+        organizationId: fixture.orgAId,
+        locationId: store.id,
+      });
+      expect(await ledgerOf()).toEqual(
+        [
+          { locationId: store.id, stock: 1, reservedStock: 0 },
+          { locationId: principal, stock: 1, reservedStock: 0 },
+        ].sort((a, b) => (a.locationId < b.locationId ? -1 : 1)),
+      );
+      expect(
+        await prisma.product.findUniqueOrThrow({
+          where: { id: secondProduct.id },
+          select: { stock: true },
+        }),
+      ).toEqual({ stock: 2 });
+
+      // Replaying the same key at another store is still a conflict, and it
+      // writes nothing.
+      const before = await ledgerOf();
+      await expect(
+        sell(otherStore.id, `origin-multi-store-${unique}`),
+      ).rejects.toMatchObject({
+        status: 409,
+        message:
+          'La solicitud ya corresponde a una venta con otra atribución de sede',
+      });
+      expect(await ledgerOf()).toEqual(before);
+    });
+
+    it('exposes the stored origin site and filters the list by it, leaving legacy sales unattributed', async () => {
+      const unique = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const site = await prisma.location.create({
+        data: {
+          organizationId: fixture.orgAId,
+          name: `Sucursal lectura ${unique}`,
+        },
+      });
+      const category = await prisma.category.findFirstOrThrow({
+        where: { organizationId: fixture.orgAId },
+        select: { id: true },
+      });
+      // Its own product and units: these read cases must not depend on what the
+      // earlier write cases already sold.
+      const product = await prisma.product.create({
+        data: {
+          name: `Sales INT read product ${unique}`,
+          sku: `SALES-READ-${unique}`,
+          salePrice: new Prisma.Decimal(1000),
+          costPrice: new Prisma.Decimal(500),
+          taxRate: new Prisma.Decimal(19),
+          stock: 5,
+          minStock: 1,
+          active: true,
+          categoryId: category.id,
+          organizationId: fixture.orgAId,
+        },
+      });
+      const sell = () =>
+        salesService.create(
+          buildSaleDto(product.id, customerId),
+          actor.userId,
+          actor.organizationId,
+        );
+      const withOrigin = await sell();
+      const legacy = await sell();
+      // The read path is what this case pins: one sale whose stored origin is
+      // the new site, and one with no origin row at all.
+      await prisma.saleOriginSite.create({
+        data: {
+          saleId: withOrigin.id,
+          organizationId: fixture.orgAId,
+          locationId: site.id,
+        },
+      });
+
+      const detail = await salesService.findOne(withOrigin.id, fixture.orgAId);
+      expect(detail.originSite).toEqual({ id: site.id, name: site.name });
+      const legacyDetail = await salesService.findOne(
+        legacy.id,
+        fixture.orgAId,
+      );
+      expect(legacyDetail.originSite).toBeNull();
+
+      // Unfiltered: both sales are listed and the flat site keeps the previous
+      // response fields untouched.
+      const unfiltered = await salesService.findAll(fixture.orgAId, 1, 100);
+      const ids = unfiltered.data.map((sale) => sale.id);
+      expect(ids).toEqual(expect.arrayContaining([withOrigin.id, legacy.id]));
+      expect(
+        unfiltered.data.find((sale) => sale.id === legacy.id)?.originSite,
+      ).toBeNull();
+
+      // Filtered by the stored origin: only the sales made at that site.
+      const filtered = await salesService.findAll(
+        fixture.orgAId,
+        1,
+        100,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        site.id,
+      );
+      expect(filtered.data.map((sale) => sale.id)).toContain(withOrigin.id);
+      expect(filtered.data.map((sale) => sale.id)).not.toContain(legacy.id);
+      expect(
+        filtered.data.every((sale) => sale.originSite?.id === site.id),
+      ).toBe(true);
+      expect(filtered.meta.total).toBe(filtered.data.length);
+
+      // Another tenant's site never matches a sale of this organization.
+      const foreign = await salesService.findAll(
+        fixture.orgAId,
+        1,
+        100,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outside,
+      );
+      expect(foreign.data).toHaveLength(0);
+    });
   });
 });

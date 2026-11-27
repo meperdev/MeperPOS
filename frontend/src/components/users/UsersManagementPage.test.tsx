@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import type { User } from "@/types";
+
+const createUserMock = vi.hoisted(() => vi.fn());
 
 const usersData = vi.hoisted(
   () =>
@@ -34,7 +36,7 @@ vi.mock("@/components/layout/DashboardLayout", () => ({
 
 vi.mock("@/hooks/useUsers", () => ({
   useUsers: () => ({ data: usersData, isLoading: false }),
-  useCreateUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateUser: () => ({ mutateAsync: createUserMock, isPending: false }),
   useUpdateUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useToggleUserActive: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -53,6 +55,21 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 vi.mock("@/lib/api", () => ({
   getApiErrorMessage: () => "Error",
+}));
+
+// The assignment dialog has its own suite; this one only owes it the right
+// member and a mount point.
+vi.mock("@/components/locations/SiteAssignmentModal", () => ({
+  SiteAssignmentModal: ({
+    isOpen,
+    user,
+  }: {
+    isOpen: boolean;
+    user: { name: string } | null;
+  }) =>
+    isOpen && user ? (
+      <div data-testid="site-assignment-modal">{user.name}</div>
+    ) : null,
 }));
 
 import UsersPage from "./UsersManagementPage";
@@ -123,6 +140,65 @@ describe("Users list responsive layout", () => {
     );
 
     expect(password).toHaveAttribute("type", "text");
+  });
+
+  it("offers Miembro when creating a user and sends the chosen role", async () => {
+    // S6: Miembro is the role the team screen could not offer before, even
+    // though the create boundary accepts every OrgRole.
+    const user = userEvent.setup();
+    render(<UsersPage />);
+
+    await user.click(screen.getByRole("button", { name: /Nuevo usuario/ }));
+    const dialog = screen.getByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText(/^Nombre/), "Miembro Uno");
+    await user.type(
+      within(dialog).getByLabelText(/^Correo/),
+      "miembro@example.com",
+    );
+    await user.type(
+      within(dialog).getByLabelText(/^Contraseña/),
+      "ClaveSegura123",
+    );
+
+    await user.click(within(dialog).getByLabelText("Rol"));
+    await user.click(await screen.findByRole("option", { name: "Miembro" }));
+    await user.click(within(dialog).getByRole("button", { name: "Crear" }));
+
+    await waitFor(() =>
+      expect(createUserMock).toHaveBeenCalledWith({
+        name: "Miembro Uno",
+        email: "miembro@example.com",
+        password: "ClaveSegura123",
+        role: "MEMBER",
+      }),
+    );
+  });
+
+  it("opts the selected member into the site assignment dialog", async () => {
+    const user = userEvent.setup();
+    render(<UsersPage />);
+
+    expect(screen.queryByTestId("site-assignment-modal")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Sedes de Caja Uno" }));
+
+    expect(screen.getByTestId("site-assignment-modal")).toHaveTextContent(
+      "Caja Uno",
+    );
+  });
+
+  it("offers site assignment only on other members' rows", () => {
+    render(<UsersPage />);
+
+    // The signed-in administrator manages everyone else; their own access is
+    // organization-wide and is never edited from this list.
+    expect(
+      screen.queryByRole("button", { name: "Sedes de Admin Principal" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Sedes de Caja Uno" }),
+    ).toBeInTheDocument();
   });
 
   it("renders the role label inside its badge without wrapping or shrinking it", () => {

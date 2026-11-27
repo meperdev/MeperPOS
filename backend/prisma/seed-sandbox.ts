@@ -272,6 +272,7 @@ async function ensureOrganization(
         billingStatus: plan.organization.billingStatus as BillingStatus,
         active: true,
         settings: plan.organization.settings,
+        locations: { create: { name: 'Sede principal', isDefault: true } },
       },
       select: { id: true },
     });

@@ -8,6 +8,27 @@ import {
 import { Prisma } from '@prisma/client';
 import { SalesService } from './sales.service';
 
+// T3b: the site ledger is proven against real PostgreSQL in
+// `inventory/site-stock.postgres.spec.ts` and
+// `sales-site-stock.postgres.spec.ts`. These unit specs assert the delta
+// `SalesService` requests, not the ledger's SQL.
+jest.mock('../inventory/site-stock', () => ({
+  applySiteStockDelta: jest.fn(() =>
+    Promise.resolve({ applied: true, created: false }),
+  ),
+  resolveDefaultSiteWithin: jest.fn(() => Promise.resolve('site-default')),
+}));
+
+// The site authorization of the implicit default site is proven against real
+// PostgreSQL (`sales-site-stock.postgres.spec.ts`, `multisedes.independent`).
+// Here the sale keeps its own contract: the resolver accepts the site.
+jest.mock('../locations/authorized-site', () => ({
+  resolveWritableSiteWithin: jest.fn(
+    (_tx: unknown, _actor: unknown, locationId: string) =>
+      Promise.resolve({ organizationId: 'org-1', locationId }),
+  ),
+}));
+
 describe('SalesService', () => {
   let service: SalesService;
   const stockRow = () => ({ stock: 10, reservedStock: 0, version: 0 });
@@ -88,8 +109,9 @@ describe('SalesService', () => {
   const mockUser = (
     overrides: Partial<{
       userId: string;
-      role: 'ADMIN' | 'MEMBER' | 'OWNER' | 'CASHIER';
+      role: 'ADMIN' | 'MEMBER' | 'OWNER' | 'CASHIER' | 'SUPER_ADMIN';
       organizationId: string;
+      isSuperAdmin: boolean;
     }> = {},
   ) => ({
     userId: 'user-1',
@@ -113,6 +135,42 @@ describe('SalesService', () => {
   });
 
   // ---- existing tests preserved ----
+
+  it.each([
+    ['OWNER', {}],
+    ['ADMIN', {}],
+    ['SUPER_ADMIN', {}],
+    ['a platform session', { isSuperAdmin: true }],
+  ] as const)(
+    'lists every sale of the organization for %s',
+    async (role, extra) => {
+      prismaMock.sale.findMany.mockResolvedValue([]);
+      prismaMock.sale.count.mockResolvedValue(0);
+
+      await service.findAll(
+        'org-1',
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockUser({
+          userId: 'owner-1',
+          role: role === 'a platform session' ? 'MEMBER' : role,
+          ...extra,
+        }),
+      );
+
+      // OWNER inherits ADMIN; a super admin is above both. Neither may be
+      // narrowed to the sales they rang up themselves.
+      const { where } = prismaMock.sale.findMany.mock.calls[0][0] as {
+        where: Record<string, unknown>;
+      };
+      expect(where).toEqual({ organizationId: 'org-1' });
+    },
+  );
 
   it('applies own-sales scope for MEMBER in list queries', async () => {
     prismaMock.sale.findMany.mockResolvedValue([
@@ -192,6 +250,131 @@ describe('SalesService', () => {
     );
   });
 
+  it('exposes the stored origin site on the list and keeps an unfiltered query unchanged', async () => {
+    prismaMock.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-with-site',
+        userId: 'user-1',
+        user: null,
+        customer: null,
+        items: [],
+        payments: [],
+        posLoanSaleIntent: null,
+        originSite: { location: { id: 'site-1', name: 'Sucursal Norte' } },
+      },
+      {
+        id: 'sale-legacy',
+        userId: 'user-1',
+        user: null,
+        customer: null,
+        items: [],
+        payments: [],
+        posLoanSaleIntent: null,
+        originSite: null,
+      },
+    ]);
+    prismaMock.sale.count.mockResolvedValue(2);
+
+    const result = await service.findAll(
+      'org-1',
+      1,
+      10,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockUser({ role: 'ADMIN' }),
+    );
+
+    expect(result.data.map((sale) => sale.originSite)).toEqual([
+      { id: 'site-1', name: 'Sucursal Norte' },
+      null,
+    ]);
+    // No site filter: the clause is absent, so an unfiltered list keeps the
+    // rows it always returned.
+    expect(prismaMock.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.not.objectContaining({
+          originSite: expect.anything(),
+        }),
+        include: expect.objectContaining({
+          originSite: {
+            select: { location: { select: { id: true, name: true } } },
+          },
+        }),
+      }),
+    );
+    // The flattened relation is the only addition; the previous keys stay.
+    expect(result.data[0]).not.toHaveProperty('posLoanSaleIntent');
+    expect(result.data[0]).toMatchObject({
+      id: 'sale-with-site',
+      userId: 'user-1',
+      items: [],
+      payments: [],
+      financed: false,
+    });
+  });
+
+  it('filters the list by one stored origin site when a site is given', async () => {
+    prismaMock.sale.findMany.mockResolvedValue([]);
+    prismaMock.sale.count.mockResolvedValue(0);
+
+    await service.findAll(
+      'org-1',
+      1,
+      10,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockUser({ role: 'ADMIN' }),
+      'site-1',
+    );
+
+    expect(prismaMock.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          originSite: { locationId: 'site-1' },
+        }),
+      }),
+    );
+    expect(prismaMock.sale.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        originSite: { locationId: 'site-1' },
+      }),
+    });
+  });
+
+  it('exposes the origin site on the sale detail and null when none is stored', async () => {
+    prismaMock.sale.findFirst.mockResolvedValue({
+      id: 'sale-1',
+      userId: 'user-1',
+      user: null,
+      customer: null,
+      items: [],
+      payments: [],
+      posLoanSaleIntent: null,
+      originSite: { location: { id: 'site-1', name: 'Sucursal Norte' } },
+    });
+    const detail = await service.findOne('sale-1', 'org-1');
+    expect(detail.originSite).toEqual({ id: 'site-1', name: 'Sucursal Norte' });
+
+    prismaMock.sale.findFirst.mockResolvedValue({
+      id: 'sale-2',
+      userId: 'user-1',
+      user: null,
+      customer: null,
+      items: [],
+      payments: [],
+      posLoanSaleIntent: null,
+      originSite: null,
+    });
+    const legacy = await service.findOne('sale-2', 'org-1');
+    expect(legacy.originSite).toBeNull();
+  });
+
   it('denies CASHIER access to another seller sale detail', async () => {
     prismaMock.sale.findFirst.mockResolvedValue({
       id: 'sale-foreign',
@@ -209,6 +392,50 @@ describe('SalesService', () => {
         mockUser({ userId: 'cashier-1', role: 'CASHIER' }),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it.each(['OWNER', 'SUPER_ADMIN'] as const)(
+    'lets %s open a sale rung up by a colleague, by id and by number',
+    async (role) => {
+      const colleagueSale = {
+        id: 'sale-colleague',
+        saleNumber: 42,
+        userId: 'cashier-1',
+        user: { id: 'cashier-1', name: 'Caja', email: 'caja@example.com' },
+        customer: null,
+        items: [],
+        payments: [],
+      };
+      prismaMock.sale.findFirst.mockResolvedValue(colleagueSale);
+      prismaMock.sale.findUnique.mockResolvedValue(colleagueSale);
+      const owner = mockUser({ userId: 'owner-1', role });
+
+      // The list already shows the sale to an owner; opening it (detail,
+      // receipt by number) must not answer 403 for the same reader.
+      await expect(
+        service.findOne('sale-colleague', 'org-1', owner),
+      ).resolves.toEqual(expect.objectContaining({ id: 'sale-colleague' }));
+      await expect(service.findBySaleNumber(42, owner)).resolves.toEqual(
+        expect.objectContaining({ id: 'sale-colleague' }),
+      );
+    },
+  );
+
+  it('still refuses a cashier the sale of a colleague', async () => {
+    prismaMock.sale.findFirst.mockResolvedValue({
+      id: 'sale-colleague',
+      userId: 'cashier-2',
+      customer: null,
+      items: [],
+      payments: [],
+    });
+    await expect(
+      service.findOne(
+        'sale-colleague',
+        'org-1',
+        mockUser({ userId: 'cashier-1', role: 'CASHIER' }),
+      ),
+    ).rejects.toThrow('You do not have access to this sale');
   });
 
   it('allows CASHIER drill-down for own sale detail', async () => {
@@ -2249,6 +2476,9 @@ describe('SalesService.generateReceipt delegation', () => {
     sale: {
       findFirst: jest.fn(),
     },
+    location: {
+      findFirst: jest.fn(),
+    },
   };
 
   const cacheMock = { clear: jest.fn() };
@@ -2321,10 +2551,50 @@ describe('SalesService.generateReceipt delegation', () => {
     );
     expect(settingsServiceMock.find).toHaveBeenCalledWith('org-1');
     expect(receiptsServiceMock.generateSaleReceiptPdf).toHaveBeenCalledWith(
-      { ...receiptSale, financed: false },
+      { ...receiptSale, financed: false, originSite: null },
       receiptSettings,
     );
+    // No stored origin: the receipt adds no site lookup and no site lines.
+    expect(prismaMock.location.findFirst).not.toHaveBeenCalled();
     expect(response.sent).toBe(pdf);
+  });
+
+  it('prints the stored origin site of the sale with its contact details', async () => {
+    prismaMock.sale.findFirst.mockResolvedValue({
+      ...receiptSale,
+      organizationId: 'org-1',
+      originSite: { location: { id: 'site-1', name: 'Sucursal Norte' } },
+    });
+    prismaMock.location.findFirst.mockResolvedValue({
+      name: 'Sucursal Norte',
+      address: 'Calle 10 # 5-20',
+      phone: '+57 604 444 5566',
+    });
+    settingsServiceMock.find.mockResolvedValue(receiptSettings);
+    receiptsServiceMock.generateSaleReceiptPdf.mockResolvedValue(
+      Buffer.from('%PDF-site'),
+    );
+    const response = stubResponse();
+
+    await service.generateReceipt('sale-1', response as never, mockUser());
+
+    expect(prismaMock.location.findFirst).toHaveBeenCalledWith({
+      where: { id: 'site-1', organizationId: 'org-1' },
+      select: { name: true, address: true, phone: true },
+    });
+    expect(receiptsServiceMock.generateSaleReceiptPdf).toHaveBeenCalledWith(
+      {
+        ...receiptSale,
+        organizationId: 'org-1',
+        financed: false,
+        originSite: {
+          name: 'Sucursal Norte',
+          address: 'Calle 10 # 5-20',
+          phone: '+57 604 444 5566',
+        },
+      },
+      receiptSettings,
+    );
   });
 
   it('keeps the PDF download response headers', async () => {

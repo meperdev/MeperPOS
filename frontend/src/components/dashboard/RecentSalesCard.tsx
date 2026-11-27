@@ -17,8 +17,13 @@ const RECENT_SALES_LIMIT = 5;
  * table. The list is capped and never scrolls internally, so the dashboard
  * height does not depend on how many sales exist.
  */
-export function RecentSalesCard() {
-  const { data, isLoading, isError, refetch } = useSales({ limit: RECENT_SALES_LIMIT });
+export function RecentSalesCard({ siteId }: { siteId?: string }) {
+  const { data, isLoading, isError, refetch } = useSales({
+    limit: RECENT_SALES_LIMIT,
+    // The same site filter the sales list uses; without one the peek stays the
+    // whole organization's latest sales.
+    ...(siteId ? { locationId: siteId } : {}),
+  });
   const sales = (data?.data ?? []).slice(0, RECENT_SALES_LIMIT);
 
   return (

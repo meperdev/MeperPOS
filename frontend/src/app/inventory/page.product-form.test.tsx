@@ -82,6 +82,23 @@ vi.mock("@/components/ui/Select", () => ({
   </select>,
 }));
 
+// T22: the page reads the caller's sites and, in the editor, the per-site
+// breakdown. These suites pin the aggregate list, so both answer empty.
+vi.mock("@/hooks/useLocations", () => ({
+  useLocations: () => ({ data: [], isLoading: false }),
+}));
+
+vi.mock("@/hooks/useProductStock", () => ({
+  productStockQueryKey: (productId: string) => ["product-stock", productId],
+  useProductStockBySite: () => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useAdjustProductStock: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 import InventoryPage from "./page";
 
 function product(overrides: Record<string, unknown> = {}) {
@@ -141,6 +158,18 @@ describe("inventory product modal", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("still sends the stock when the user changes it in a single-site organization", async () => {
+    products = [product()];
+    render(<InventoryPage />);
+    const dialog = openEdit();
+    fireEvent.change(within(dialog).getByLabelText("Stock"), { target: { value: "12" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Actualizar" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith({
+      id: "p-1",
+      data: expect.objectContaining({ stock: 12 }),
+    }));
+  });
+
   it("preloads edit values and updates the existing product without read-only metadata", async () => {
     products = [
       product({
@@ -162,9 +191,12 @@ describe("inventory product modal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Actualizar" }));
     await waitFor(() => expect(update).toHaveBeenCalledWith({
       id: "p-1",
-      data: expect.objectContaining({ name: "Panela orgánica", type: "PRODUCT", tracksStock: true, stock: 8, minStock: 2 }),
+      data: expect.objectContaining({ name: "Panela orgánica", type: "PRODUCT", tracksStock: true, minStock: 2 }),
     }));
     const payload = update.mock.calls[0][0].data as Record<string, unknown>;
+    // An untouched stock is not sent: the editor's copy may be older than a
+    // per-site adjustment made meanwhile, and sending it would undo that move.
+    expect(payload).not.toHaveProperty("stock");
     for (const field of [
       "id",
       "version",

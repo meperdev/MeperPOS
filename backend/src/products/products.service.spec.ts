@@ -6,6 +6,19 @@ import {
 import { DianTaxCode, Prisma, ProductType } from '@prisma/client';
 import { computeEffectiveSalePrice, ProductsService } from './products.service';
 
+// The per-site ledger is a database contract with its own PostgreSQL suite
+// (`products.site-stock.postgres.spec.ts`). Creation only needs the default site
+// of the tenant, which is where the trigger opens the product's balance.
+jest.mock('../inventory/site-stock', () => {
+  const actual = jest.requireActual('../inventory/site-stock');
+  return {
+    ...actual,
+    resolveDefaultSiteWithin: () => Promise.resolve('site-1'),
+    applySiteStockDelta: () =>
+      Promise.resolve({ applied: true, created: false }),
+  };
+});
+
 describe('ProductsService — Opt-in tax resolution', () => {
   let service: ProductsService;
 
@@ -18,6 +31,9 @@ describe('ProductsService — Opt-in tax resolution', () => {
   const prismaMock = {
     category: {
       findFirst: jest.fn(),
+    },
+    location: {
+      count: jest.fn(),
     },
     product: {
       findUnique: jest.fn(),
@@ -37,6 +53,7 @@ describe('ProductsService — Opt-in tax resolution', () => {
       create: jest.fn(),
     },
     $queryRaw: jest.fn(),
+    $transaction: jest.fn(),
   };
 
   const cloudinaryServiceMock = {};
@@ -93,6 +110,15 @@ describe('ProductsService — Opt-in tax resolution', () => {
   // ── Lifecycle ──────────────────────────────────────────────────────
   beforeEach(() => {
     jest.clearAllMocks();
+    // One site holds the whole balance: an absolute edit is still the delta at
+    // that site.
+    prismaMock.location.count.mockResolvedValue(1);
+    // A stock edit runs the product guard and the site delta in one transaction;
+    // this mock is both the client and its transaction client.
+    prismaMock.$transaction.mockImplementation(
+      (callback: (tx: typeof prismaMock) => Promise<unknown>) =>
+        callback(prismaMock),
+    );
     service = new ProductsService(
       prismaMock as never,
       cloudinaryServiceMock as never,

@@ -16,18 +16,24 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { SiteAssignmentModal } from "@/components/locations/SiteAssignmentModal";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api";
-import { KeyRound, Plus, Shield, SquarePen, Trash2, Users as UsersIcon } from "lucide-react";
+import { Building2, KeyRound, Plus, Shield, SquarePen, Trash2, Users as UsersIcon } from "lucide-react";
 import type { User } from "@/types";
 
-type SelectableRole = "ADMIN" | "CASHIER" | "INVENTORY_USER";
+type SelectableRole = "ADMIN" | "MEMBER" | "CASHIER" | "INVENTORY_USER";
 
-const SELECTABLE_ROLES: SelectableRole[] = ["ADMIN", "CASHIER", "INVENTORY_USER"];
+const SELECTABLE_ROLES: SelectableRole[] = [
+  "ADMIN",
+  "MEMBER",
+  "CASHIER",
+  "INVENTORY_USER",
+];
 const DEFAULT_ROLE: SelectableRole = "CASHIER";
 
 function toSelectableRole(role: User["role"]): SelectableRole {
@@ -61,6 +67,7 @@ export default function UsersPage() {
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [userToReset, setUserToReset] = useState<User | null>(null);
+  const [userToAssignSites, setUserToAssignSites] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [formData, setFormData] = useState({
     name: "",
@@ -252,6 +259,16 @@ export default function UsersPage() {
                             >
                               <SquarePen className="h-3.5 w-3.5" /> Editar
                             </Button>
+                            {/* The dialog asks the server whether this person
+                                already reaches every site; the list carries no role. */}
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Sedes de ${user.name}`}
+                              onClick={() => setUserToAssignSites(user)}
+                            >
+                              <Building2 className="h-3.5 w-3.5" /> Sedes
+                            </Button>
                             <Button
                               size="sm"
                               variant="secondary"
@@ -294,12 +311,16 @@ export default function UsersPage() {
           <form onSubmit={handleEdit} className="space-y-4">
             <Input label="Nombre" value={editFormData.name} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} required />
             <Input label="Correo" type="email" value={editFormData.email} onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })} required />
+            {/* Known gap, out of this unit: `PUT /users/:id` carries no `role`, so
+                the server keeps the membership's current role whatever is chosen
+                here. The list is shown for parity with the create dialog. */}
             <Select
               label="Rol"
               value={editFormData.role}
               onChange={(value) => setEditFormData({ ...editFormData, role: value as SelectableRole })}
               options={[
                 { value: "CASHIER", label: "Cajero" },
+                { value: "MEMBER", label: "Miembro" },
                 { value: "INVENTORY_USER", label: "Inventario" },
                 { value: "ADMIN", label: "Administrador" },
               ]}
@@ -324,6 +345,7 @@ export default function UsersPage() {
             onChange={(value) => setFormData({ ...formData, role: value as SelectableRole })}
             options={[
               { value: "CASHIER", label: "Cajero" },
+              { value: "MEMBER", label: "Miembro" },
               { value: "INVENTORY_USER", label: "Inventario" },
               { value: "ADMIN", label: "Administrador" },
             ]}
@@ -357,6 +379,16 @@ export default function UsersPage() {
           </form>
         )}
       </Modal>
+
+      {/* Mounted only while open: the dialog reads the site directory, and the
+          team screen has no reason to fetch sites until someone asks. */}
+      {userToAssignSites && (
+        <SiteAssignmentModal
+          isOpen
+          onClose={() => setUserToAssignSites(null)}
+          user={userToAssignSites}
+        />
+      )}
 
       <ConfirmDialog
         isOpen={showDeleteModal}

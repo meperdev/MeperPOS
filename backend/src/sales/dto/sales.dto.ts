@@ -10,10 +10,11 @@ import {
   MaxLength,
   MinLength,
   ValidateNested,
+  ValidateIf,
   Min,
   Max,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export const SALE_ITEM_QUANTITY_MAX = 2147483647;
 
@@ -64,6 +65,17 @@ export class PaymentDto {
 }
 
 export class CreateSaleDto {
+  @ApiPropertyOptional({
+    description:
+      'Explicit origin site; before cutover only the sole principal site can use global stock.',
+  })
+  @Transform(({ obj, key }) => obj[key], { toClassOnly: true })
+  @ValidateIf((_dto, value) => value !== undefined)
+  @IsString()
+  @MaxLength(64)
+  @IsNotEmpty()
+  locationId?: string;
+
   @ApiProperty({ example: 'uuid-customer-id', required: false })
   @IsString()
   @MaxLength(64)
@@ -164,4 +176,16 @@ export class FindSalesQueryDto {
   @MaxLength(64)
   @IsOptional()
   customerId?: string;
+
+  /**
+   * Only sales whose stored origin is this site. The controller authorizes the
+   * value through `LocationsService.findAccessible` before the list runs, so
+   * an operational caller can filter by a site they can read and gets 404 for
+   * any other.
+   */
+  @ApiPropertyOptional({ example: 'uuid-location-id' })
+  @IsString()
+  @MaxLength(64)
+  @IsOptional()
+  locationId?: string;
 }

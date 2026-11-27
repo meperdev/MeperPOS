@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type PosRequestScope } from "@/lib/api";
 import { getBogotaDateInputValue } from "@/lib/utils";
 import type {
   CollectLoanInput,
@@ -22,38 +22,53 @@ import type {
  * sale-wide discount. When the caller does not pin a `requestKey` the hook
  * generates one; a page that retries a failed attempt should pin a stable key
  * so the initiation stays idempotent.
+ *
+ * `posScope` binds the initiation and its retry to the user and tenant the till
+ * was rendered for, so a session rotated by another tab cannot finance against
+ * another organization. `checkoutLocationId` is the site the till is selling
+ * from: it is sent only when a site is active (T3g), so the hold reserves at
+ * that site's balance instead of the organization default.
  */
-export function useCreatePosLoan() {
+export function useCreatePosLoan(
+  posScope?: PosRequestScope,
+  checkoutLocationId?: string,
+) {
   const queryClient = useQueryClient();
 
   return useMutation<PosLoanInitiation, Error, CreatePosLoanInput>({
-    mutationFn: (data: CreatePosLoanInput) =>
-      api
-        .post<PosLoanInitiation>("/loans/pos-initiation", {
-          customerId: data.customerId,
-          reason: data.reason,
-          // Line `unitPrice` is forwarded only when the caller deliberately
-          // overrode it; otherwise the server prices the line itself.
-          items: data.items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            ...(item.unitPrice !== undefined
-              ? { unitPrice: item.unitPrice }
-              : {}),
-            ...(item.discountAmount !== undefined
-              ? { discountAmount: item.discountAmount }
-              : {}),
-          })),
-          // The issue day is the Bogotá day the operator reads on the clock; the
-          // UTC date would record an evening sale as issued tomorrow.
-          issuedAt: data.issuedAt ?? getBogotaDateInputValue(),
-          ...(data.dueAt !== undefined ? { dueAt: data.dueAt } : {}),
-          ...(data.discountAmount !== undefined
-            ? { discountAmount: data.discountAmount }
+    mutationFn: (data: CreatePosLoanInput) => {
+      const body = {
+        customerId: data.customerId,
+        reason: data.reason,
+        // Line `unitPrice` is forwarded only when the caller deliberately
+        // overrode it; otherwise the server prices the line itself.
+        items: data.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          ...(item.unitPrice !== undefined
+            ? { unitPrice: item.unitPrice }
             : {}),
-          requestKey: data.requestKey ?? crypto.randomUUID(),
-        })
-        .then((res) => res.data),
+          ...(item.discountAmount !== undefined
+            ? { discountAmount: item.discountAmount }
+            : {}),
+        })),
+        // The issue day is the Bogotá day the operator reads on the clock; the
+        // UTC date would record an evening sale as issued tomorrow.
+        issuedAt: data.issuedAt ?? getBogotaDateInputValue(),
+        ...(data.dueAt !== undefined ? { dueAt: data.dueAt } : {}),
+        ...(data.discountAmount !== undefined
+          ? { discountAmount: data.discountAmount }
+          : {}),
+        requestKey: data.requestKey ?? crypto.randomUUID(),
+        ...(checkoutLocationId ? { locationId: checkoutLocationId } : {}),
+      };
+      // No config at all outside the POS: the plain call stays byte-identical.
+      return (
+        posScope
+          ? api.post<PosLoanInitiation>("/loans/pos-initiation", body, { posScope })
+          : api.post<PosLoanInitiation>("/loans/pos-initiation", body)
+      ).then((res) => res.data);
+    },
     onSuccess: () => {
       // Mirrors the useSales convention: the initiation moves stock, so the
       // loan list, the product catalogue and the dashboard aggregates all drift.

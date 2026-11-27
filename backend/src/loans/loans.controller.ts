@@ -129,6 +129,7 @@ export class LoansController {
       dto,
       user.userId,
       user.organizationId,
+      user,
     );
   }
 

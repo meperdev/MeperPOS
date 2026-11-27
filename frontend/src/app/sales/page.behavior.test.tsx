@@ -45,6 +45,16 @@ vi.mock("@/hooks/useSales", () => ({
   useSales: (params?: unknown) => useSalesMock(params),
 }));
 
+const useLocationsMock = vi.fn();
+vi.mock("@/hooks/useLocations", () => ({
+  useLocations: () => useLocationsMock(),
+}));
+// A single readable site: the default for every case that does not care about
+// the site filter.
+useLocationsMock.mockReturnValue({
+  data: [{ id: "site-a", name: "Sede centro", type: "STORE", isDefault: true }],
+});
+
 vi.mock("@/hooks/useReceipt", () => ({
   downloadReceiptPdf: vi.fn(),
   openReceiptPdf: vi.fn(),
@@ -362,5 +372,110 @@ describe("Sales open their detail by clicking the card or row (no Detalle button
     for (const row of rows) {
       expect(row.querySelector('[aria-label="Ver detalle de venta 42"]')).toBeNull();
     }
+  });
+});
+
+describe("Sales site attribution (S7)", () => {
+  const atSite = {
+    id: "sale-42",
+    saleNumber: 42,
+    status: "COMPLETED",
+    total: 1190,
+    amountPaid: 1190,
+    change: 0,
+    subtotal: 1000,
+    taxAmount: 190,
+    discountAmount: 0,
+    createdAt: "2026-04-01T10:00:00Z",
+    customer: null,
+    payments: [],
+    financed: false,
+    items: [],
+    user: { name: "Ana" },
+    originSite: { id: "site-b", name: "Sucursal Norte" },
+  };
+  const legacy = { ...atSite, id: "sale-43", saleNumber: 43, originSite: null };
+
+  const renderList = (sales: unknown[]) =>
+    useSalesMock.mockReturnValue({
+      data: {
+        data: sales,
+        meta: { total: sales.length, page: 1, limit: 10, totalPages: 1 },
+      },
+      isLoading: false,
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentSearchParams = new URLSearchParams();
+    window.localStorage.setItem("meperpos:view-mode:sales", "table");
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    renderList([]);
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem("meperpos:view-mode:sales");
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it("gives the table a Sede column with each sale's stored site", () => {
+    renderList([atSite, legacy]);
+    render(<SalesPage />);
+
+    const header = screen.getByRole("table");
+    expect(within(header).getByText("Sede")).toBeTruthy();
+    expect(screen.getAllByText("Sucursal Norte").length).toBeGreaterThan(0);
+    // A sale stored without an origin says so instead of guessing a site.
+    expect(screen.getAllByText("Sin sede").length).toBeGreaterThan(0);
+  });
+
+  it("offers the site filter only when more than one site is readable", async () => {
+    useLocationsMock.mockReturnValueOnce({
+      data: [{ id: "site-a", name: "Sede centro", type: "STORE", isDefault: true }],
+    });
+    const single = render(<SalesPage />);
+    expect(screen.queryByRole("button", { name: "Todas las sedes" })).toBeNull();
+    single.unmount();
+
+    useLocationsMock.mockReturnValue({
+      data: [
+        { id: "site-a", name: "Sede centro", type: "STORE", isDefault: true },
+        { id: "site-b", name: "Sucursal Norte", type: "STORE", isDefault: false },
+      ],
+    });
+    render(<SalesPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Todas las sedes" }));
+    await userEvent.click(
+      await screen.findByRole("option", { name: "Sucursal Norte" }),
+    );
+
+    expect(useSalesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-b" }),
+    );
+  });
+
+  it("shows the sale's site in the detail, and names its absence", async () => {
+    renderList([atSite, legacy]);
+    render(<SalesPage />);
+
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Ver detalle de venta 42" })[0],
+    );
+    // The row and the detail both name the stored site.
+    expect(screen.getAllByText("Sucursal Norte").length).toBeGreaterThanOrEqual(2);
+
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Ver detalle de venta 43" })[0],
+    );
+    expect(screen.getByText("Sin sede registrada")).toBeTruthy();
   });
 });

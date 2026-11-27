@@ -106,11 +106,14 @@ function Donut({
 export function PaymentMethodsCard({
   startDate,
   endDate,
+  siteId,
 }: {
   startDate: string;
   endDate: string;
+  /** Only the requested site's collections, when the dashboard is read for one. */
+  siteId?: string;
 }) {
-  const { data } = useSalesByPaymentMethod(startDate, endDate);
+  const { data } = useSalesByPaymentMethod(startDate, endDate, siteId);
 
   const { slices, total } = useMemo(() => {
     const totals = new Map<string, number>();

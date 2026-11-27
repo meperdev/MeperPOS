@@ -117,6 +117,16 @@ vi.mock("@/hooks/useProducts", () => ({
   useProducts: () => ({ data: { data: productsData }, isLoading: false }),
 }));
 
+vi.mock("@/hooks/useLocations", () => ({
+  useLocations: () => ({
+    data: [
+      { id: "site-a", name: "Sede centro", type: "STORE", isDefault: true },
+      { id: "site-b", name: "Bodega norte", type: "WAREHOUSE", isDefault: false },
+    ],
+    isLoading: false,
+  }),
+}));
+
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({
     success: toastSuccessMock,
@@ -285,8 +295,54 @@ describe("Purchase order modals", () => {
     });
   });
 
-  it("edits draft quantities from the stacked list and submits them", async () => {
+  it("keeps the default receipt request when the principal site is kept", async () => {
     const user = userEvent.setup();
+
+    render(
+      <ReceiveItemsModal
+        order={makeOrder({ status: "PARTIAL_RECEIVED" })}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    );
+
+    // The form starts on the principal site, which is the server's own default.
+    expect(
+      screen.getByRole("button", { name: "Sede de destino" }),
+    ).toHaveTextContent("Sede centro");
+
+    await user.click(screen.getByRole("button", { name: /Confirmar recepción/i }));
+
+    expect(receiveMutateAsyncMock).toHaveBeenCalledWith({
+      id: "po-1",
+      items: [{ itemId: "poi-1", qtyReceivedNow: 3 }],
+    });
+    expect(receiveMutateAsyncMock.mock.calls[0][0]).not.toHaveProperty("locationId");
+  });
+
+  it("sends the destination site the user chose", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ReceiveItemsModal
+        order={makeOrder({ status: "PARTIAL_RECEIVED" })}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sede de destino" }));
+    await user.click(await screen.findByRole("option", { name: /Bodega norte/ }));
+    await user.click(screen.getByRole("button", { name: /Confirmar recepción/i }));
+
+    expect(receiveMutateAsyncMock).toHaveBeenCalledWith({
+      id: "po-1",
+      items: [{ itemId: "poi-1", qtyReceivedNow: 3 }],
+      locationId: "site-b",
+    });
+  });
+
+  it("edits draft quantities from the stacked list and submits them", async () => {    const user = userEvent.setup();
 
     render(<EditDraftModal order={makeOrder()} isOpen onClose={vi.fn()} />);
 

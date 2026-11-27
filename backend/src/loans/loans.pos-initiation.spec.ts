@@ -58,6 +58,17 @@ type Event = Row & {
   amount: Prisma.Decimal | null;
   reversesId: string | null;
 };
+
+// The in-memory transaction cannot answer the authorization SQL; the real
+// resolver is proven against PostgreSQL in `loans.site-stock.postgres.spec.ts`
+// and `multisedes.independent`. Here it accepts whatever site the request names
+// or the default site resolves to.
+jest.mock('../locations/authorized-site', () => ({
+  resolveWritableSiteWithin: jest.fn(
+    (_tx: unknown, _actor: unknown, locationId: string) =>
+      Promise.resolve({ organizationId: 'org', locationId }),
+  ),
+}));
 const initialLoan = () => ({
   id: 'loan',
   organizationId: 'org',
@@ -77,6 +88,14 @@ type State = {
   intents: Row[];
   holds: Row[];
   audits: Row[];
+  sites: { id: string; organizationId: string; isDefault: boolean }[];
+  siteBalances: {
+    productId: string;
+    locationId: string;
+    organizationId: string;
+    stock: number;
+    reservedStock: number;
+  }[];
   customers: {
     id: string;
     organizationId: string;
@@ -107,6 +126,18 @@ function fixture() {
     intents: [],
     holds: [],
     audits: [],
+    // T3c: the financed hold lives on a site row. The fixture models one default
+    // site whose row starts with the balance the product was created with.
+    sites: [{ id: 'site-default', organizationId: 'org', isDefault: true }],
+    siteBalances: [
+      {
+        productId: 'coffee',
+        locationId: 'site-default',
+        organizationId: 'org',
+        stock: 12,
+        reservedStock: 3,
+      },
+    ],
     customers: [
       {
         id: request().customerId,
@@ -128,6 +159,105 @@ function fixture() {
   };
   let pending = committed;
   let visibleWinner: Row | null = null;
+  /** The site row a delta targets, or `undefined` when the site has none. */
+  const siteBalance = (
+    productId: string,
+    locationId: string,
+    organizationId: string,
+  ) =>
+    pending.siteBalances.find(
+      (row) =>
+        row.productId === productId &&
+        row.locationId === locationId &&
+        row.organizationId === organizationId,
+    );
+  /** The database trigger keeps the aggregate equal to the sum of site rows. */
+  const syncAggregate = (productId: string) => {
+    const rows = pending.siteBalances.filter(
+      (row) => row.productId === productId,
+    );
+    const productRow = pending.products.find((row) => row.id === productId);
+    if (!productRow || rows.length === 0) return;
+    productRow.stock = rows.reduce((total, row) => total + row.stock, 0);
+    productRow.reservedStock = rows.reduce(
+      (total, row) => total + row.reservedStock,
+      0,
+    );
+  };
+  /**
+   * T3c: the service moves stock through `applySiteStockDelta`, whose two
+   * statements this fake reads back. The conditional compare-and-swap, the lazy
+   * row opening a product insert performs and the aggregate sync mirror the
+   * documented contract; the real SQL is proved on PostgreSQL in
+   * `loans.site-stock.postgres.spec.ts`.
+   */
+  const executeSiteDelta = async (statement: Prisma.Sql) => {
+    const { strings, values } = statement as unknown as {
+      strings: string[];
+      values: unknown[];
+    };
+    const sql = strings.join('?');
+    if (sql.includes('INSERT INTO "ProductStock"')) {
+      const [productId, locationId, organizationId, stock, reservedStock] =
+        values as [string, string, string, number, number];
+      if (siteBalance(productId, locationId, organizationId)) return 0;
+      pending.siteBalances.push({
+        productId,
+        locationId,
+        organizationId,
+        stock,
+        reservedStock,
+      });
+      syncAggregate(productId);
+      return 1;
+    }
+    if (!sql.includes('UPDATE "ProductStock"')) {
+      throw new Error(`Unsupported site statement: ${sql}`);
+    }
+    const stockDelta = values[0] as number;
+    const reservedDelta = values[1] as number;
+    const productId = values[2] as string;
+    const locationId = values[3] as string;
+    const organizationId = values[4] as string;
+    // A change that reduces availability carries the minimum as its last
+    // parameter; the helper emits six parameters otherwise.
+    const requireAvailable =
+      values.length > 6 ? (values[values.length - 1] as number) : 0;
+    let row = siteBalance(productId, locationId, organizationId);
+    if (!row) {
+      // A product insert opens its default-site row with the aggregate it wrote.
+      const productRow = pending.products.find(
+        (candidate) => candidate.id === productId,
+      );
+      const site = pending.sites.find(
+        (candidate) =>
+          candidate.id === locationId &&
+          candidate.organizationId === organizationId,
+      );
+      if (!productRow || !site) return 0;
+      row = {
+        productId,
+        locationId,
+        organizationId,
+        stock: productRow.stock,
+        reservedStock: productRow.reservedStock,
+      };
+      pending.siteBalances.push(row);
+    }
+    const nextStock = row.stock + stockDelta;
+    const nextReserved = row.reservedStock + reservedDelta;
+    if (nextReserved < 0) return 0;
+    if (
+      stockDelta - reservedDelta < 0 &&
+      nextStock - nextReserved < requireAvailable
+    ) {
+      return 0;
+    }
+    row.stock = nextStock;
+    row.reservedStock = nextReserved;
+    syncAggregate(productId);
+    return 1;
+  };
   const tx = {
     user: {
       findFirst: jest.fn().mockResolvedValue({ id: 'actor', active: true }),
@@ -158,7 +288,7 @@ function fixture() {
         }: {
           where: Row;
           data: {
-            reservedStock: { increment?: number; decrement?: number };
+            reservedStock?: { increment?: number; decrement?: number };
             stock?: { decrement: number };
             version: { increment: number };
           };
@@ -166,8 +296,8 @@ function fixture() {
           const rows = pending.products.filter((row) => matches(row, where));
           for (const row of rows) {
             row.reservedStock +=
-              (data.reservedStock.increment ?? 0) -
-              (data.reservedStock.decrement ?? 0);
+              (data.reservedStock?.increment ?? 0) -
+              (data.reservedStock?.decrement ?? 0);
             row.stock -= data.stock?.decrement ?? 0;
             row.version += data.version.increment;
           }
@@ -175,6 +305,19 @@ function fixture() {
         },
       ),
     },
+    location: {
+      findFirst: jest.fn(
+        async ({ where }: { where: Row }) =>
+          pending.sites.find((row) => matches(row, where)) ?? null,
+      ),
+    },
+    productStock: {
+      findFirst: jest.fn(
+        async ({ where }: { where: Row }) =>
+          pending.siteBalances.find((row) => matches(row, where)) ?? null,
+      ),
+    },
+    $executeRaw: jest.fn(executeSiteDelta),
     moneyLoan: {
       create: jest.fn(async ({ data }: { data: Row }) => {
         pending.loan = { ...pending.loan, ...data };
@@ -314,6 +457,7 @@ function fixture() {
     organization: outsideWrite,
     fiscalDocument: { ...tx.fiscalDocument, create: outsideWrite },
     inventoryMovement: { create: outsideWrite },
+    $executeRaw: outsideWrite,
     $transaction: jest.fn(
       async (fn: (client: typeof tx) => Promise<unknown>) => {
         pending = {
@@ -323,6 +467,8 @@ function fixture() {
           intents: committed.intents.map((row) => ({ ...row })),
           holds: committed.holds.map((row) => ({ ...row })),
           audits: committed.audits.map((row) => ({ ...row })),
+          sites: committed.sites.map((row) => ({ ...row })),
+          siteBalances: committed.siteBalances.map((row) => ({ ...row })),
           customers: committed.customers.map((row) => ({ ...row })),
         };
         try {
@@ -394,6 +540,7 @@ function noNewWrites(tx: ReturnType<typeof fixture>['tx']) {
     tx.moneyLoanEvent.create,
     tx.auditLog.create,
     tx.product.updateMany,
+    tx.$executeRaw,
     tx.posLoanSaleIntent.create,
     tx.posLoanSaleReservation.create,
   ]) {
@@ -525,6 +672,8 @@ describe('POS financing through LoansService (unwired)', () => {
       f.tx.moneyLoanEvent.create,
       f.tx.auditLog.create,
       f.tx.product.updateMany,
+      f.tx.$executeRaw,
+      f.tx.location.findFirst,
       f.tx.posLoanSaleIntent.create,
       f.tx.posLoanSaleReservation.create,
     ])
@@ -533,6 +682,8 @@ describe('POS financing through LoansService (unwired)', () => {
     expect(f.tx.customer.findFirst).not.toHaveBeenCalled();
     expect(f.tx.product.findMany).not.toHaveBeenCalled();
     expect(f.tx.product.findFirst).not.toHaveBeenCalled();
+    expect(f.tx.$executeRaw).not.toHaveBeenCalled();
+    expect(f.tx.location.findFirst).not.toHaveBeenCalled();
     noNewWrites(f.tx);
   });
 
@@ -572,6 +723,44 @@ describe('POS financing through LoansService (unwired)', () => {
       expect(loser.outsideWrite).not.toHaveBeenCalled();
       expect(loser.prisma.$transaction).toHaveBeenCalledTimes(1);
       // This models post-abort evidence visibility, not a PostgreSQL race.
+    },
+  );
+
+  it.each(['site-a', 'site-b', null])(
+    'checks the persisted origin %s when replaying a concurrent initiation winner',
+    async (locationId) => {
+      const winner = fixture();
+      const original = await winner.initiate();
+      const loser = fixture();
+      const before = loser.state();
+      const row = {
+        ...winner.state().intents[0],
+        originSite: locationId === null ? null : { locationId },
+      };
+      loser.exposeWinner(row);
+      loser.prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('unique initiation key', {
+          code: 'P2002',
+          clientVersion: '6.19.2',
+          meta: {
+            modelName: 'PosLoanSaleIntent',
+            target: ['organizationId', 'initiationRequestKey'],
+          },
+        }),
+      );
+      const replay = loser.initiate({ ...request(), locationId: 'site-a' });
+      if (locationId === 'site-a') {
+        await expect(replay).resolves.toEqual(original);
+      } else {
+        await expect(replay).rejects.toMatchObject({
+          status: 409,
+          message:
+            'La solicitud ya corresponde a una financiación con otra atribución de sede',
+        });
+      }
+      expect(loser.state()).toEqual(before);
+      expect(loser.outsideWrite).not.toHaveBeenCalled();
+      expect(loser.prisma.$transaction).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -644,20 +833,33 @@ describe('POS financing through LoansService (unwired)', () => {
     expect(f.state().audits).toHaveLength(1);
   });
 
-  it.each(['OWNER', 'ADMIN', 'CASHIER', 'MEMBER', 'SUPER_ADMIN'] as const)(
-    'permits %s financing; global SUPER_ADMIN needs no membership',
+  it.each(['OWNER', 'ADMIN', 'CASHIER', 'MEMBER'] as const)(
+    'permits %s financing',
     async (role) => {
       const f = fixture();
-      const principal = actor(role);
-      if (role === 'SUPER_ADMIN') {
-        f.tx.organizationUser.findFirst.mockResolvedValue(null);
-        principal.organizationId = undefined;
-      }
-      await expect(f.initiate(request(), principal)).resolves.toMatchObject({
+      await expect(f.initiate(request(), actor(role))).resolves.toMatchObject({
         loanId: 'loan',
       });
     },
   );
+  it('permits a scoped SUPER_ADMIN financing and refuses one with no organization scope', async () => {
+    const f = fixture();
+    // A platform principal acting inside an organization it is scoped to keeps
+    // its organization-wide access, without a membership row.
+    f.tx.organizationUser.findFirst.mockResolvedValue(null);
+    await expect(
+      f.initiate(request(), actor('SUPER_ADMIN')),
+    ).resolves.toMatchObject({
+      loanId: 'loan',
+    });
+    // Without a scope there is no organization to authorize the implied site
+    // in, exactly like any other site operation.
+    const global = actor('SUPER_ADMIN');
+    global.organizationId = undefined;
+    await expect(
+      f.initiate({ ...request(), requestKey: 'pos-key-global' }, global),
+    ).rejects.toThrow(ForbiddenException);
+  });
   it.each(['inventory', 'missing', 'scope', 'foreign'])(
     'denies %s actor/scope before effects',
     async (kind) => {
@@ -735,7 +937,7 @@ describe('POS financing through LoansService (unwired)', () => {
     },
   );
 
-  it('aggregates duplicate physical lines and pins the complete reservation-only CAS', async () => {
+  it('aggregates duplicate physical lines and pins the reservation at the default site', async () => {
     const f = fixture();
     await f.initiate(
       request({
@@ -745,19 +947,22 @@ describe('POS financing through LoansService (unwired)', () => {
         ],
       }),
     );
+    // T3c: one reservation delta at the default site, and the product version
+    // still moves so a stale catalog edit cannot overwrite this hold.
+    expect(f.tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(f.state().siteBalances).toEqual([
+      {
+        productId: 'coffee',
+        locationId: 'site-default',
+        organizationId: 'org',
+        stock: 12,
+        reservedStock: 8,
+      },
+    ]);
     expect(f.tx.product.updateMany).toHaveBeenCalledTimes(1);
     expect(f.tx.product.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'coffee',
-        organizationId: 'org',
-        active: true,
-        type: 'PRODUCT',
-        tracksStock: true,
-        version: 7,
-        stock: 12,
-        reservedStock: 3,
-      },
-      data: { reservedStock: { increment: 5 }, version: { increment: 1 } },
+      where: { id: 'coffee', organizationId: 'org', version: 7 },
+      data: { version: { increment: 1 } },
     });
     expect(f.state().holds).toHaveLength(1);
     expect(f.state().holds[0].quantity).toBe(5);
@@ -791,6 +996,7 @@ describe('POS financing through LoansService (unwired)', () => {
       await f.initiate();
       expect(f.state().loan.type).toBe('MONEY');
       expect(f.tx.product.updateMany).not.toHaveBeenCalled();
+      expect(f.tx.$executeRaw).not.toHaveBeenCalled();
       expect(f.tx.posLoanSaleReservation.create).not.toHaveBeenCalled();
       noSaleEffects(f.tx);
     },
@@ -802,8 +1008,8 @@ describe('POS financing through LoansService (unwired)', () => {
       const f = fixture();
       const failure = new Error(`failure-${stage}`);
       const before = f.state();
-      if (stage === 'CAS')
-        f.tx.product.updateMany.mockResolvedValue({ count: 0 });
+      // T3c: the reservation compare-and-swap now lives in the site row.
+      if (stage === 'CAS') f.tx.$executeRaw.mockResolvedValue(0);
       if (stage === 'intent')
         f.tx.posLoanSaleIntent.create.mockRejectedValue(failure);
       if (stage === 'event')
@@ -851,6 +1057,7 @@ describe('POS financing through LoansService (unwired)', () => {
     f.state().products[0].active = false;
     f.state().products[0].type = 'SERVICE';
     f.tx.product.updateMany.mockClear();
+    f.tx.$executeRaw.mockClear();
     const result = await f.cancel();
     expect(result).toMatchObject({ status: 'CANCELLED', collected: '0.00' });
     expect(f.tx.moneyLoan.updateMany).toHaveBeenCalledWith({
@@ -863,14 +1070,22 @@ describe('POS financing through LoansService (unwired)', () => {
       data: { status: 'CANCELLED', version: { increment: 1 } },
     });
     expect(f.tx.product.updateMany).toHaveBeenCalledTimes(1);
-    const release = f.tx.product.updateMany.mock.calls[0][0];
-    expect(release).toMatchObject({
-      where: { id: 'coffee', organizationId: 'org' },
-      data: { reservedStock: { decrement: 2 }, version: { increment: 1 } },
+    expect(f.tx.$executeRaw).toHaveBeenCalledTimes(1);
+    // T3c: the release frees the site row that held the reservation; the
+    // aggregate follows through the trigger and the version still moves.
+    expect(f.state().siteBalances).toEqual([
+      {
+        productId: 'coffee',
+        locationId: 'site-default',
+        organizationId: 'org',
+        stock: 12,
+        reservedStock: 3,
+      },
+    ]);
+    expect(f.tx.product.updateMany.mock.calls[0][0]).toEqual({
+      where: { id: 'coffee', organizationId: 'org', version: 8 },
+      data: { version: { increment: 1 } },
     });
-    expect(release.where).not.toHaveProperty('active');
-    expect(release.where).not.toHaveProperty('type');
-    expect(release.data).not.toHaveProperty('stock');
     expect(f.tx.posLoanSaleReservation.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -947,8 +1162,8 @@ describe('POS financing through LoansService (unwired)', () => {
     expect(f.outsideWrite).not.toHaveBeenCalled();
   });
 
-  it.each(['loan-CAS', 'second-counter', 'claim', 'event', 'audit'])(
-    'rolls back CANCELLED, counters and owned row states when %s fails',
+  it.each(['loan-CAS', 'second-site', 'claim', 'event', 'audit'])(
+    'rolls back CANCELLED, site reserves and owned row states when %s fails',
     async (stage) => {
       const f = fixture();
       f.state().products = [product('z-product'), product('a-product')];
@@ -964,11 +1179,11 @@ describe('POS financing through LoansService (unwired)', () => {
       const failure = new Error(`cancel-${stage}`);
       if (stage === 'loan-CAS')
         f.tx.moneyLoan.updateMany.mockResolvedValueOnce({ count: 0 });
-      if (stage === 'second-counter') {
-        const update = f.tx.product.updateMany.getMockImplementation()!;
-        f.tx.product.updateMany
-          .mockImplementationOnce(update)
-          .mockResolvedValueOnce({ count: 0 });
+      if (stage === 'second-site') {
+        // The first release applies; the second site CAS refuses, exactly like a
+        // reservation that is no longer there.
+        const apply = f.tx.$executeRaw.getMockImplementation()!;
+        f.tx.$executeRaw.mockImplementationOnce(apply).mockResolvedValueOnce(0);
       }
       if (stage === 'claim')
         f.tx.posLoanSaleReservation.updateMany.mockResolvedValueOnce({
@@ -979,7 +1194,7 @@ describe('POS financing through LoansService (unwired)', () => {
       if (stage === 'audit')
         f.tx.auditLog.create.mockRejectedValueOnce(failure);
       await expect(f.cancel()).rejects.toThrow(
-        ['loan-CAS', 'second-counter', 'claim'].includes(stage)
+        ['loan-CAS', 'second-site', 'claim'].includes(stage)
           ? ConflictException
           : failure,
       );
@@ -995,6 +1210,7 @@ describe('POS financing through LoansService (unwired)', () => {
     await f.initiate();
     const beforeHolds = f.state().holds.map((row) => ({ ...row }));
     f.tx.product.updateMany.mockClear();
+    f.tx.$executeRaw.mockClear();
     f.state().loan.events.push({
       id: 'paid',
       type: 'COLLECTED',
@@ -1004,12 +1220,14 @@ describe('POS financing through LoansService (unwired)', () => {
     await expect(f.cancel()).rejects.toThrow(ConflictException);
     expect(f.state().holds).toEqual(beforeHolds);
     expect(f.tx.product.updateMany).not.toHaveBeenCalled();
+    expect(f.tx.$executeRaw).not.toHaveBeenCalled();
     expect(f.tx.posLoanSaleReservation.updateMany).not.toHaveBeenCalled();
   });
   it('keeps independent cancellation free of physical effects', async () => {
     const f = fixture();
     await expect(f.cancel()).resolves.toMatchObject({ status: 'CANCELLED' });
     expect(f.tx.product.updateMany).not.toHaveBeenCalled();
+    expect(f.tx.$executeRaw).not.toHaveBeenCalled();
     expect(f.tx.posLoanSaleReservation.updateMany).not.toHaveBeenCalled();
     noSaleEffects(f.tx);
   });
@@ -1281,24 +1499,26 @@ describe('Explicit POS sale completion', () => {
           finalizedAt: expect.any(Date),
         });
         expect(f.tx.product.updateMany.mock.calls[1][0]).toEqual({
-          where: {
-            id: 'coffee',
-            organizationId: 'org',
-            version: 8,
-            stock: 12,
-            reservedStock: 5,
-          },
-          data: {
-            stock: { decrement: 2 },
-            reservedStock: { decrement: 2 },
-            version: { increment: 1 },
-          },
+          where: { id: 'coffee', organizationId: 'org', version: 8 },
+          data: { version: { increment: 1 } },
         });
+        // T3c: the sale consumed the hold at the default site its intent was
+        // opened against, and the aggregate followed.
+        expect(f.state().siteBalances).toEqual([
+          {
+            productId: 'coffee',
+            locationId: 'site-default',
+            organizationId: 'org',
+            stock: 10,
+            reservedStock: 3,
+          },
+        ]);
         const movement = f.tx.inventoryMovement.create.mock.calls[0][0].data;
         expect(movement).toMatchObject({
           saleId: 'sale',
           type: 'SALE',
           quantity: -2,
+          locationId: 'site-default',
         });
         expect(f.tx.sale.create.mock.invocationCallOrder[0]).toBeLessThan(
           f.tx.posLoanSaleIntent.updateMany.mock.invocationCallOrder[0],
@@ -1615,7 +1835,10 @@ describe('Explicit POS sale completion', () => {
     // A zero percentage is the fixture's no-op promotion: the list price holds.
     f.state().products[0].promotionValue = new Prisma.Decimal(0);
     f.state().products[0].taxRate = new Prisma.Decimal(5);
+    // T3c: the site row carries the balance, so the aggregate and the row move
+    // together; otherwise the hold would not have enough available at the site.
     f.state().products[0].stock = 100;
+    f.state().siteBalances[0].stock = 100;
     await f.initiate({
       ...request({
         items: [{ productId: 'coffee', quantity: 10, discountAmount: 17.1 }],
@@ -1663,7 +1886,10 @@ describe('Explicit POS sale completion', () => {
     // A zero percentage is the fixture's no-op promotion: the list price holds.
     f.state().products[0].promotionValue = new Prisma.Decimal(0);
     f.state().products[0].taxRate = new Prisma.Decimal(5);
+    // T3c: the site row carries the balance, so the aggregate and the row move
+    // together; otherwise the hold would not have enough available at the site.
     f.state().products[0].stock = 100;
+    f.state().siteBalances[0].stock = 100;
     await f.initiate({
       ...request({
         items: [{ productId: 'coffee', quantity: 10, discountAmount: 17.1 }],
@@ -1897,6 +2123,7 @@ describe('Explicit POS sale completion', () => {
       f.tx.moneyLoanEvent.create,
       f.tx.auditLog.create,
       f.tx.product.updateMany,
+      f.tx.$executeRaw,
       f.tx.posLoanSaleIntent.updateMany,
       f.tx.posLoanSaleReservation.updateMany,
     ];
@@ -1968,6 +2195,8 @@ describe('Explicit POS sale completion', () => {
       f.tx.moneyLoanEvent.create,
       f.tx.auditLog.create,
       f.tx.product.updateMany,
+      f.tx.$executeRaw,
+      f.tx.location.findFirst,
       f.tx.posLoanSaleIntent.updateMany,
       f.tx.posLoanSaleReservation.updateMany,
       f.tx.inventoryMovement.create,
@@ -1989,11 +2218,13 @@ describe('Explicit POS sale completion', () => {
     expect(f.tx.moneyLoan.updateMany).not.toHaveBeenCalled();
     expect(f.tx.moneyLoanEvent.create).not.toHaveBeenCalled();
     expect(f.tx.auditLog.create).not.toHaveBeenCalled();
+    expect(f.tx.$executeRaw).not.toHaveBeenCalled();
+    expect(f.tx.location.findFirst).not.toHaveBeenCalled();
     expect(f.tx.posLoanSaleIntent.updateMany).not.toHaveBeenCalled();
     expect(f.tx.posLoanSaleReservation.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each(['loan-CAS', 'link-claim', 'stock-CAS'])(
+  it.each(['loan-CAS', 'link-claim', 'site-delta', 'version-CAS'])(
     'propagates %s failure and discards local staged loan/intent/hold/counter changes',
     async (stage) => {
       const f = fixture();
@@ -2004,7 +2235,8 @@ describe('Explicit POS sale completion', () => {
         f.tx.moneyLoan.updateMany.mockResolvedValue({ count: 0 });
       if (stage === 'link-claim')
         f.tx.posLoanSaleIntent.updateMany.mockResolvedValue({ count: 0 });
-      if (stage === 'stock-CAS')
+      if (stage === 'site-delta') f.tx.$executeRaw.mockResolvedValue(0);
+      if (stage === 'version-CAS')
         f.tx.product.updateMany.mockResolvedValue({ count: 0 });
       await expect(f.complete()).rejects.toThrow(ConflictException);
       expect(f.state()).toEqual(before);

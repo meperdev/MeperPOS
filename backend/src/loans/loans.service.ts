@@ -38,6 +38,14 @@ import { emitFiscalDocumentForSale } from '../electronic-invoicing/fiscal-emissi
 import { DianTaxCode } from '../common/utils/tax.util';
 import { tracksStock } from '../products/product-type.logic';
 import { SequenceService } from '../common/sequences/sequence.service';
+import {
+  resolveWritableSiteWithin,
+  type WritableSiteOptions,
+} from '../locations/authorized-site';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../inventory/site-stock';
 import { isElectronicInvoicingActive } from '../settings/schema';
 
 /** The catalog tribute codes a stored quote row may carry. */
@@ -190,6 +198,7 @@ export class LoansService {
           if (!loan) throw new NotFoundException('Préstamo no encontrado');
           const intent = await tx.posLoanSaleIntent.findFirst({
             where: { loanId: id, organizationId: orgId },
+            include: { originSite: { select: { locationId: true } } },
           });
           if (!intent) {
             throw new ConflictException(
@@ -238,6 +247,14 @@ export class LoansService {
               'La financiación no admite finalización',
             );
           }
+          const origin = intent.originSite
+            ? await this.resolvePosOrigin(
+                tx,
+                orgId,
+                actor,
+                intent.originSite.locationId,
+              )
+            : undefined;
           // Reuse the complete frozen-quote validator, never catalog pricing.
           this.posInitiationReplay(
             intent,
@@ -439,6 +456,11 @@ export class LoansService {
               status: 'COMPLETED',
             },
           });
+          if (origin) {
+            await tx.saleOriginSite.create({
+              data: { saleId: sale.id, ...origin },
+            });
+          }
           for (const item of items) {
             await tx.saleItem.create({
               data: { ...item, saleId: sale.id, organizationId: orgId },
@@ -505,80 +527,98 @@ export class LoansService {
             },
             orderBy: { productId: 'asc' },
           });
-          const finalizedAt = new Date();
-          for (const hold of holds) {
-            const quantity = items
-              .filter((item) => item.productId === hold.productId)
-              .reduce((sum, item) => sum + item.quantity, 0);
-            const product = await tx.product.findFirst({
-              where: { id: hold.productId, organizationId: orgId },
-              select: { stock: true, reservedStock: true, version: true },
-            });
-            if (
-              !product ||
-              !Number.isInteger(hold.quantity) ||
-              hold.quantity < 1 ||
-              hold.quantity !== quantity ||
-              !Number.isInteger(product.stock) ||
-              product.stock > 2147483647 ||
-              !Number.isInteger(product.reservedStock) ||
-              product.reservedStock < hold.quantity ||
-              product.reservedStock > product.stock ||
-              !Number.isInteger(product.version) ||
-              product.version < 0 ||
-              product.version >= 2147483647
-            ) {
-              throw new ConflictException(
-                'Reserva o contadores históricos inconsistentes',
-              );
-            }
-            const consumed = await tx.product.updateMany({
-              where: {
-                id: hold.productId,
+          if (holds.length > 0) {
+            // T3c: the final sale consumes the reservation at the site that
+            // holds it. An intent opened with an explicit origin stored it; an
+            // intent without one was reserved at the organization default site
+            // (hold legacy included), so that is where its balance lives.
+            const siteId =
+              origin?.locationId ?? (await resolveDefaultSiteWithin(tx, orgId));
+            const finalizedAt = new Date();
+            for (const hold of holds) {
+              const quantity = items
+                .filter((item) => item.productId === hold.productId)
+                .reduce((sum, item) => sum + item.quantity, 0);
+              const product = await tx.product.findFirst({
+                where: { id: hold.productId, organizationId: orgId },
+                select: { stock: true, reservedStock: true, version: true },
+              });
+              if (
+                !product ||
+                !Number.isInteger(hold.quantity) ||
+                hold.quantity < 1 ||
+                hold.quantity !== quantity ||
+                !Number.isInteger(product.stock) ||
+                product.stock > 2147483647 ||
+                !Number.isInteger(product.reservedStock) ||
+                product.reservedStock < hold.quantity ||
+                product.reservedStock > product.stock ||
+                !Number.isInteger(product.version) ||
+                product.version < 0 ||
+                product.version >= 2147483647
+              ) {
+                throw new ConflictException(
+                  'Reserva o contadores históricos inconsistentes',
+                );
+              }
+              const consumed = await applySiteStockDelta(tx, {
                 organizationId: orgId,
-                version: product.version,
-                stock: product.stock,
-                reservedStock: product.reservedStock,
-              },
-              data: {
-                stock: { decrement: hold.quantity },
-                reservedStock: { decrement: hold.quantity },
-                version: { increment: 1 },
-              },
-            });
-            if (consumed.count !== 1) {
-              throw new ConflictException(
-                'Los contadores de la reserva cambiaron',
-              );
-            }
-            await tx.inventoryMovement.create({
-              data: {
                 productId: hold.productId,
-                organizationId: orgId,
-                saleId: sale.id,
-                userId: actor.userId,
-                type: 'SALE',
-                quantity: -hold.quantity,
-                previousStock: product.stock,
-                newStock: product.stock - hold.quantity,
-                reason: `Sale #${saleNumber}`,
-              },
-            });
-            const claimed = await tx.posLoanSaleReservation.updateMany({
-              where: {
-                id: hold.id,
-                intentId: intent.id,
-                organizationId: orgId,
-                state: 'HELD',
-              },
-              data: {
-                state: 'CONSUMED',
-                finalizedAt,
-                finalizedById: actor.userId,
-              },
-            });
-            if (claimed.count !== 1) {
-              throw new ConflictException('La reserva ya fue reclamada');
+                locationId: siteId,
+                stockDelta: -hold.quantity,
+                reservedDelta: -hold.quantity,
+              });
+              if (!consumed.applied) {
+                throw new ConflictException(
+                  'Los contadores de la reserva cambiaron',
+                );
+              }
+              // The optimistic-concurrency contract of product edits is kept:
+              // the aggregate counters move through the site row, the version
+              // still moves with this write.
+              const bumped = await tx.product.updateMany({
+                where: {
+                  id: hold.productId,
+                  organizationId: orgId,
+                  version: product.version,
+                },
+                data: { version: { increment: 1 } },
+              });
+              if (bumped.count !== 1) {
+                throw new ConflictException(
+                  'Los contadores de la reserva cambiaron',
+                );
+              }
+              await tx.inventoryMovement.create({
+                data: {
+                  productId: hold.productId,
+                  organizationId: orgId,
+                  saleId: sale.id,
+                  userId: actor.userId,
+                  type: 'SALE',
+                  quantity: -hold.quantity,
+                  previousStock: product.stock,
+                  newStock: product.stock - hold.quantity,
+                  reason: `Sale #${saleNumber}`,
+                  locationId: siteId,
+                },
+              });
+              const claimed = await tx.posLoanSaleReservation.updateMany({
+                where: {
+                  id: hold.id,
+                  intentId: intent.id,
+                  organizationId: orgId,
+                  state: 'HELD',
+                },
+                data: {
+                  state: 'CONSUMED',
+                  finalizedAt,
+                  finalizedById: actor.userId,
+                },
+              });
+              if (claimed.count !== 1) {
+                throw new ConflictException('La reserva ya fue reclamada');
+              }
             }
           }
           const result = {
@@ -648,6 +688,13 @@ export class LoansService {
       throw new ForbiddenException('No tiene permiso para financiar ventas');
     }
     dto = plainToInstance(CreatePosLoanDto, dto);
+    const { locationId } = dto;
+    if (
+      locationId !== undefined &&
+      (typeof locationId !== 'string' || !locationId.length)
+    ) {
+      throw new BadRequestException('Solicitud de financiación inválida');
+    }
     const payload = this.posRequestPayload(dto);
     const hash = createHash('sha256')
       .update(JSON.stringify(payload))
@@ -656,18 +703,38 @@ export class LoansService {
       organizationId: orgId,
       initiationRequestKey: dto.requestKey,
     };
-    const replay = (intent: PosLoanSaleIntent) =>
-      this.posInitiationReplay(
+    const lookup = {
+      where,
+      ...(locationId === undefined
+        ? {}
+        : { include: { originSite: { select: { locationId: true } } } }),
+    } as const;
+    const replay = (
+      intent: PosLoanSaleIntent & {
+        originSite?: { locationId: string } | null;
+      },
+    ) => {
+      const result = this.posInitiationReplay(
         intent,
         orgId,
         actor.userId,
         dto.requestKey,
         hash,
       );
+      if (
+        locationId !== undefined &&
+        intent.originSite?.locationId !== locationId
+      ) {
+        throw new ConflictException(
+          'La solicitud ya corresponde a una financiación con otra atribución de sede',
+        );
+      }
+      return result;
+    };
     try {
       return await this.prisma.$transaction(
         async (tx) => {
-          const prior = await tx.posLoanSaleIntent.findFirst({ where });
+          const prior = await tx.posLoanSaleIntent.findFirst(lookup);
           if (prior) return replay(prior);
           if (
             validateSync(dto, { whitelist: true, forbidNonWhitelisted: true })
@@ -676,6 +743,15 @@ export class LoansService {
           ) {
             throw new BadRequestException('Solicitud de financiación inválida');
           }
+          // The site this financing will move is authorized here, whether the
+          // request names it or the organization default is implied: omitting
+          // the field never widens access (S3). A warehouse is not a till.
+          const origin = await this.resolvePosOriginForRequest(
+            tx,
+            orgId,
+            actor,
+            locationId,
+          );
           const user = await tx.user.findFirst({
             where: { id: actor.userId, active: true },
             select: { id: true },
@@ -739,38 +815,51 @@ export class LoansService {
             discountAmount,
           });
           const holds = [...quantities].sort(([a], [b]) => a.localeCompare(b));
-          for (const [id, quantity] of holds) {
-            const product = byId.get(id)!;
-            if (
-              !Number.isInteger(product.stock) ||
-              !Number.isInteger(product.reservedStock) ||
-              product.reservedStock < 0 ||
-              product.stock - product.reservedStock < quantity
-            ) {
-              throw new ConflictException(
-                'Existencias disponibles insuficientes',
-              );
-            }
-            const changed = await tx.product.updateMany({
-              where: {
-                id,
+          if (holds.length > 0) {
+            // T3c: the hold is a reservation at one site, the one authorized
+            // above from the explicit origin or the implied organization
+            // default.
+            const reserveSiteId = origin.locationId;
+            for (const [id, quantity] of holds) {
+              const product = byId.get(id)!;
+              if (
+                !Number.isInteger(product.stock) ||
+                !Number.isInteger(product.reservedStock) ||
+                product.reservedStock < 0
+              ) {
+                throw new ConflictException(
+                  'Existencias disponibles insuficientes',
+                );
+              }
+              // The availability this hold needs is the site's, not the
+              // organization aggregate's: reserving here requires the row to
+              // keep `reservedStock <= stock`, so another site's stock cannot
+              // cover it.
+              const reserved = await applySiteStockDelta(tx, {
                 organizationId: orgId,
-                active: true,
-                type: product.type,
-                tracksStock: product.tracksStock,
-                version: product.version,
-                stock: product.stock,
-                reservedStock: product.reservedStock,
-              },
-              data: {
-                reservedStock: { increment: quantity },
-                version: { increment: 1 },
-              },
-            });
-            if (changed.count !== 1) {
-              throw new ConflictException(
-                'El producto cambió; reintente la solicitud',
-              );
+                productId: id,
+                locationId: reserveSiteId,
+                stockDelta: 0,
+                reservedDelta: quantity,
+              });
+              if (!reserved.applied) {
+                throw new ConflictException(
+                  'Existencias disponibles insuficientes',
+                );
+              }
+              const changed = await tx.product.updateMany({
+                where: {
+                  id,
+                  organizationId: orgId,
+                  version: product.version,
+                },
+                data: { version: { increment: 1 } },
+              });
+              if (changed.count !== 1) {
+                throw new ConflictException(
+                  'El producto cambió; reintente la solicitud',
+                );
+              }
             }
           }
           const loan = await tx.moneyLoan.create({
@@ -817,6 +906,13 @@ export class LoansService {
               initiationResult: result,
             },
           });
+          // Only an explicit site is recorded as the intent's origin; a legacy
+          // request that omitted it keeps its stored shape.
+          if (locationId !== undefined) {
+            await tx.posLoanSaleIntentOriginSite.create({
+              data: { intentId, ...origin },
+            });
+          }
           for (const [productId, quantity] of holds) {
             await tx.posLoanSaleReservation.create({
               data: {
@@ -900,9 +996,7 @@ export class LoansService {
             target.includes('organizationId') &&
             target.includes('initiationRequestKey'));
         if (ownKey) {
-          const winner = await this.prisma.posLoanSaleIntent.findFirst({
-            where,
-          });
+          const winner = await this.prisma.posLoanSaleIntent.findFirst(lookup);
           if (winner) return replay(winner);
           throw new ConflictException(
             'No se encontró evidencia de la solicitud concurrente',
@@ -1057,6 +1151,7 @@ export class LoansService {
     },
     actorId: string,
     organizationId: string | undefined,
+    actor?: RequestUser,
   ) {
     const orgId = requireOrganization(organizationId);
     if (!['COLLECTED', 'REVERSED', 'CLOSED', 'CANCELLED'].includes(kind)) {
@@ -1206,6 +1301,34 @@ export class LoansService {
               );
             status = MoneyLoanStatus.CANCELLED;
           }
+          const cancelIntent =
+            kind === 'CANCELLED'
+              ? await tx.posLoanSaleIntent.findFirst({
+                  where: { loanId: id, organizationId: orgId },
+                  select: {
+                    id: true,
+                    finalSaleId: true,
+                    originSite: { select: { locationId: true } },
+                  },
+                })
+              : null;
+          if (cancelIntent?.finalSaleId != null) {
+            throw new ConflictException('La financiación ya tiene venta final');
+          }
+          let releaseSiteId: string | null = null;
+          if (cancelIntent?.originSite) {
+            if (actor?.userId !== actorId) {
+              throw new ForbiddenException('Organization scope required');
+            }
+            releaseSiteId = (
+              await this.resolvePosOrigin(
+                tx,
+                orgId,
+                actor,
+                cancelIntent.originSite.locationId,
+              )
+            ).locationId;
+          }
           // All competing collections, reversals and transitions contend on this row.
           const changed = await tx.moneyLoan.updateMany({
             where: {
@@ -1221,15 +1344,8 @@ export class LoansService {
               'El préstamo cambió; reintente con la misma clave de solicitud',
             );
           if (kind === 'CANCELLED') {
-            const intent = await tx.posLoanSaleIntent.findFirst({
-              where: { loanId: id, organizationId: orgId },
-            });
+            const intent = cancelIntent;
             if (intent) {
-              if (intent.finalSaleId != null) {
-                throw new ConflictException(
-                  'La financiación ya tiene venta final',
-                );
-              }
               const holds = await tx.posLoanSaleReservation.findMany({
                 where: {
                   intentId: intent.id,
@@ -1238,68 +1354,84 @@ export class LoansService {
                 },
                 orderBy: { productId: 'asc' },
               });
-              const finalizedAt = new Date();
-              for (const hold of holds) {
-                const product = await tx.product.findFirst({
-                  where: { id: hold.productId, organizationId: orgId },
-                  select: {
-                    id: true,
-                    stock: true,
-                    reservedStock: true,
-                    version: true,
-                  },
-                });
-                if (
-                  !Number.isInteger(hold.quantity) ||
-                  hold.quantity < 1 ||
-                  hold.quantity > 2147483647 ||
-                  !product ||
-                  !Number.isInteger(product.stock) ||
-                  product.stock > 2147483647 ||
-                  !Number.isInteger(product.reservedStock) ||
-                  product.reservedStock < hold.quantity ||
-                  product.reservedStock > product.stock ||
-                  !Number.isInteger(product.version) ||
-                  product.version < 0 ||
-                  product.version >= 2147483647
-                ) {
-                  throw new ConflictException(
-                    'Reserva o contadores históricos inconsistentes',
-                  );
-                }
-                const released = await tx.product.updateMany({
-                  where: {
-                    id: hold.productId,
+              if (holds.length > 0) {
+                // T3c: a cancelled financing frees the reservation where it was
+                // held — the stored origin, or the default site a legacy hold
+                // was seeded at.
+                const siteId =
+                  releaseSiteId ?? (await resolveDefaultSiteWithin(tx, orgId));
+                const finalizedAt = new Date();
+                for (const hold of holds) {
+                  const product = await tx.product.findFirst({
+                    where: { id: hold.productId, organizationId: orgId },
+                    select: {
+                      id: true,
+                      stock: true,
+                      reservedStock: true,
+                      version: true,
+                    },
+                  });
+                  if (
+                    !Number.isInteger(hold.quantity) ||
+                    hold.quantity < 1 ||
+                    hold.quantity > 2147483647 ||
+                    !product ||
+                    !Number.isInteger(product.stock) ||
+                    product.stock > 2147483647 ||
+                    !Number.isInteger(product.reservedStock) ||
+                    product.reservedStock < hold.quantity ||
+                    product.reservedStock > product.stock ||
+                    !Number.isInteger(product.version) ||
+                    product.version < 0 ||
+                    product.version >= 2147483647
+                  ) {
+                    throw new ConflictException(
+                      'Reserva o contadores históricos inconsistentes',
+                    );
+                  }
+                  const released = await applySiteStockDelta(tx, {
                     organizationId: orgId,
-                    version: product.version,
-                    stock: product.stock,
-                    reservedStock: product.reservedStock,
-                  },
-                  data: {
-                    reservedStock: { decrement: hold.quantity },
-                    version: { increment: 1 },
-                  },
-                });
-                if (released.count !== 1) {
-                  throw new ConflictException(
-                    'Los contadores de la reserva cambiaron',
-                  );
-                }
-                const claimed = await tx.posLoanSaleReservation.updateMany({
-                  where: {
-                    id: hold.id,
-                    intentId: intent.id,
-                    organizationId: orgId,
-                    state: 'HELD',
-                  },
-                  data: {
-                    state: 'RELEASED',
-                    finalizedAt,
-                    finalizedById: actorId,
-                  },
-                });
-                if (claimed.count !== 1) {
-                  throw new ConflictException('La reserva ya fue reclamada');
+                    productId: hold.productId,
+                    locationId: siteId,
+                    stockDelta: 0,
+                    reservedDelta: -hold.quantity,
+                  });
+                  if (!released.applied) {
+                    throw new ConflictException(
+                      'Los contadores de la reserva cambiaron',
+                    );
+                  }
+                  // Keeps the product-edit concurrency contract while the
+                  // aggregate counters move through the site row.
+                  const bumped = await tx.product.updateMany({
+                    where: {
+                      id: hold.productId,
+                      organizationId: orgId,
+                      version: product.version,
+                    },
+                    data: { version: { increment: 1 } },
+                  });
+                  if (bumped.count !== 1) {
+                    throw new ConflictException(
+                      'Los contadores de la reserva cambiaron',
+                    );
+                  }
+                  const claimed = await tx.posLoanSaleReservation.updateMany({
+                    where: {
+                      id: hold.id,
+                      intentId: intent.id,
+                      organizationId: orgId,
+                      state: 'HELD',
+                    },
+                    data: {
+                      state: 'RELEASED',
+                      finalizedAt,
+                      finalizedById: actorId,
+                    },
+                  });
+                  if (claimed.count !== 1) {
+                    throw new ConflictException('La reserva ya fue reclamada');
+                  }
                 }
               }
             }
@@ -1355,6 +1487,45 @@ export class LoansService {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         ['P2034', 'P2002'].includes(error.code)
+      ) {
+        throw new ConflictException(
+          'Operación concurrente; reintente con la misma clave de solicitud',
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async resolvePosOriginForRequest(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    actor: RequestUser,
+    locationId?: string,
+  ) {
+    const siteId =
+      locationId ?? (await resolveDefaultSiteWithin(tx, organizationId));
+    return this.resolvePosOrigin(tx, organizationId, actor, siteId, {
+      requireStore: true,
+    });
+  }
+
+  private async resolvePosOrigin(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    actor: RequestUser,
+    locationId: string,
+    options: WritableSiteOptions = {},
+  ) {
+    if (actor.organizationId !== organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    try {
+      return await resolveWritableSiteWithin(tx, actor, locationId, options);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2010' &&
+        (error.meta?.code === '40001' || error.meta?.code === '40P01')
       ) {
         throw new ConflictException(
           'Operación concurrente; reintente con la misma clave de solicitud',

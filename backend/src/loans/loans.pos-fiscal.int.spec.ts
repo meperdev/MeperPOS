@@ -195,6 +195,19 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
         currentNumber: 0,
       },
     });
+    // T3h: an operational membership starts with the organization's principal
+    // site. The product insert above opened it, after the membership existed.
+    const principalSite = await prisma.location.findFirstOrThrow({
+      where: { organizationId: organization.id, isDefault: true },
+      select: { id: true },
+    });
+    await prisma.membershipLocation.create({
+      data: {
+        userId: user.id,
+        organizationId: organization.id,
+        locationId: principalSite.id,
+      },
+    });
     return {
       organizationId: organization.id,
       customerId: customer.id,
@@ -202,6 +215,185 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
       userId: user.id,
     };
   };
+
+  it('preserves one authorized origin from hold through explicit completion and cancellation', async () => {
+    const fixture = await makeFixture('origin', {});
+    const { organizationId, userId, productId } = fixture;
+    const actor = actorOf(fixture);
+    // T3a: the fixture product already opened the tenant default-site row, so
+    // the sole principal site is the one that exists.
+    const principal = await prisma.location.findFirstOrThrow({
+      where: { organizationId, isDefault: true },
+      select: { id: true },
+    });
+    const foreign = await prisma.location.create({
+      data: { organizationId: active.organizationId, name: 'Foreign site' },
+    });
+    const grant = { userId, organizationId, locationId: principal.id };
+    const snapshot = async () => {
+      const where = { organizationId };
+      return {
+        loans: await prisma.moneyLoan.count({ where }),
+        events: await prisma.moneyLoanEvent.count({ where }),
+        sales: await prisma.sale.count({ where }),
+        origins: await prisma.posLoanSaleIntentOriginSite.count({ where }),
+        saleOrigins: await prisma.saleOriginSite.count({ where }),
+        movements: await prisma.inventoryMovement.count({ where }),
+        siteBalances: await prisma.productStock.count({ where }),
+        siteRow: await prisma.productStock.findFirstOrThrow({
+          where: { productId, organizationId },
+        }),
+        product: await prisma.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { stock: true, reservedStock: true },
+        }),
+      };
+    };
+    const dto = { ...initiationDto(fixture), locationId: principal.id };
+    const initiate = (input: typeof dto) =>
+      loans.initiateFromPos(input, organizationId, actor);
+    const before = await snapshot();
+    await expect(
+      initiate({ ...dto, locationId: foreign.id }),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: 'Location not found',
+    });
+    expect(await snapshot()).toEqual(before);
+    const finance = await initiate(dto);
+    const toCancel = await initiate({ ...dto, requestKey: nextTag() });
+    expect(finance).not.toHaveProperty('locationId');
+    expect(
+      await prisma.posLoanSaleIntentOriginSite.findMany({
+        where: { organizationId },
+        select: { locationId: true },
+      }),
+    ).toEqual([{ locationId: principal.id }, { locationId: principal.id }]);
+    const held = await snapshot();
+    expect(held.product).toEqual({ stock: 10, reservedStock: 4 });
+    expect(held.siteBalances).toBe(1);
+    // T3c: both holds reserved at the origin site, and the aggregate is exactly
+    // the sum of its site rows.
+    expect(held.siteRow).toEqual({
+      productId,
+      locationId: principal.id,
+      organizationId,
+      stock: 10,
+      reservedStock: 4,
+    });
+    const { locationId: _locationId, ...omitted } = dto;
+    await expect(initiate(dto)).resolves.toEqual(finance);
+    await expect(
+      loans.initiateFromPos(omitted, organizationId, actor),
+    ).resolves.toEqual(finance);
+    const second = await prisma.location.create({
+      data: { organizationId, name: 'Second site' },
+    });
+    await expect(
+      initiate({ ...dto, locationId: second.id }),
+    ).rejects.toMatchObject({ status: 409 });
+    // T3g: the sole-principal gate is gone. A warehouse still cannot originate
+    // a financing: 400 with nothing written, while the store grant above is the
+    // only permission a store needs.
+    const warehouse = await prisma.location.create({
+      data: { organizationId, name: 'Bodega', type: 'WAREHOUSE' },
+    });
+    await prisma.membershipLocation.create({
+      data: { userId, organizationId, locationId: warehouse.id },
+    });
+    await expect(
+      initiate({ ...dto, requestKey: nextTag(), locationId: warehouse.id }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message:
+        'La sede seleccionada es una bodega: solo una sucursal puede ser el origen de una venta o una financiación',
+    });
+    expect(await snapshot()).toEqual(held);
+
+    const loanId = finance.loanId as string;
+    const completion = { requestKey: nextTag() };
+    const finish = () =>
+      loans.completePosSale(loanId, completion, organizationId, actor);
+    await prisma.membershipLocation.deleteMany({ where: grant });
+    await collectEverything(fixture, loanId);
+    const paid = await snapshot();
+    expect(paid).toEqual({ ...held, events: held.events + 1 });
+    await expect(finish()).rejects.toMatchObject({
+      status: 404,
+      message: 'Location not found',
+    });
+    expect(await snapshot()).toEqual(paid);
+
+    await prisma.membershipLocation.create({ data: grant });
+    const result = await finish();
+    const saleId = result.saleId as string;
+    expect(result.status).toBe('CLOSED');
+    expect(
+      await prisma.saleOriginSite.findFirstOrThrow({ where: { saleId } }),
+    ).toEqual({
+      saleId,
+      organizationId,
+      locationId: principal.id,
+    });
+    expect(
+      await prisma.inventoryMovement.findFirstOrThrow({
+        where: { saleId },
+        select: { type: true, quantity: true, locationId: true },
+      }),
+    ).toEqual({ type: 'SALE', quantity: -2, locationId: principal.id });
+    const completed = await snapshot();
+    expect(completed.product).toEqual({ stock: 8, reservedStock: 2 });
+    // T3c: completion consumed both the stock and the reservation at the same
+    // origin site, and the aggregate still equals its site rows.
+    expect(completed.siteRow).toEqual({
+      productId,
+      locationId: principal.id,
+      organizationId,
+      stock: 8,
+      reservedStock: 2,
+    });
+    await expect(finish()).resolves.toEqual(result);
+    expect(await snapshot()).toEqual(completed);
+
+    const cancelBody = { requestKey: nextTag(), reason: 'Cancelar sin abonos' };
+    const admin = { ...actor, role: OrgRole.ADMIN };
+    const cancel = () =>
+      loans.mutate(
+        toCancel.loanId as string,
+        'CANCELLED',
+        cancelBody,
+        userId,
+        organizationId,
+        admin,
+      );
+    await expect(cancel()).rejects.toMatchObject({
+      status: 403,
+      message: 'Location authorization changed',
+    });
+    expect(await snapshot()).toEqual(completed);
+    await prisma.organizationUser.updateMany({
+      where: { userId, organizationId },
+      data: { role: OrgRole.ADMIN },
+    });
+    await expect(cancel()).resolves.toMatchObject({ status: 'CANCELLED' });
+    // T3c: the release freed the second intent's reservation at the same site.
+    expect(await snapshot()).toEqual({
+      ...completed,
+      events: completed.events + 1,
+      product: { stock: 8, reservedStock: 0 },
+      siteRow: { ...completed.siteRow, reservedStock: 0 },
+    });
+    const reservations = await prisma.posLoanSaleReservation.findMany({
+      where: { organizationId },
+      select: { intentId: true, state: true },
+    });
+    expect(reservations).toEqual(
+      expect.arrayContaining([
+        { intentId: finance.intentId, state: 'CONSUMED' },
+        { intentId: toCancel.intentId, state: 'RELEASED' },
+      ]),
+    );
+  });
 
   const initiationDto = (fixture: Fixture) => ({
     customerId: fixture.customerId,
@@ -442,6 +634,9 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
     const stockBefore = await prisma.product.findFirstOrThrow({
       where: { id: active.productId },
     });
+    const siteRowBefore = await prisma.productStock.findFirstOrThrow({
+      where: { productId: active.productId },
+    });
     const salesBefore = await prisma.sale.count({
       where: { customerId: active.customerId },
     });
@@ -491,6 +686,12 @@ describe('LoansService — financed POS fiscal integration (real PostgreSQL)', (
       stockBefore.reservedStock,
       stockBefore.version,
     ]);
+    // T3c: the cancelled transaction left the site row untouched too.
+    await expect(
+      prisma.productStock.findFirstOrThrow({
+        where: { productId: active.productId },
+      }),
+    ).resolves.toEqual(siteRowBefore);
   });
 
   it('keeps refusing an inactive actor before any write', async () => {

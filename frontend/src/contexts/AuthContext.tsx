@@ -10,6 +10,7 @@ import {
   useRef,
 } from "react";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { canChangeOrganizationScope } from "@/lib/organizationScope";
 import { safeSetItem, safeRemoveItem } from "@/lib/utils";
 import {
   setAccessToken,
@@ -239,6 +240,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const switchOrganization = useCallback(
     async (organizationId: string) => {
+      // An active POS cart (or payment) may veto the switch before the request
+      // replaces the session. Switching to the current organization is a no-op
+      // for the guard.
+      if (
+        organizationId !== user?.organizationId &&
+        !canChangeOrganizationScope()
+      ) {
+        return;
+      }
+
       try {
         const response = await api.post<AuthTokenResponse>("/auth/select-org", {
           organizationId,
@@ -269,7 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
     },
-    [queryClient, router, showError]
+    [queryClient, router, showError, user?.organizationId]
   );
 
   const logout = useCallback(() => {

@@ -6,6 +6,10 @@ import {
   type BackfillPlan,
   type ServiceTarget,
 } from '../src/backfill/services-backfill.plan';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../src/inventory/site-stock';
 
 /**
  * Services backfill CLI (work unit 7), wired as `backfill:services`.
@@ -226,6 +230,7 @@ async function applyPlan(
   return prisma.$transaction(async (tx) => {
     let rowsWritten = 0;
     let movementsWritten = 0;
+    let siteId: string | undefined;
 
     for (const action of plan.actions) {
       if (!action.requiresWrite) {
@@ -255,7 +260,6 @@ async function applyPlan(
         ),
         data: {
           type: ProductType.SERVICE,
-          stock: 0,
           version: { increment: 1 },
         },
       });
@@ -269,6 +273,30 @@ async function applyPlan(
       rowsWritten += 1;
 
       if (live.stock !== 0) {
+        // The balance lives in the site ledger now: the units are withdrawn from
+        // the tenant default site and the aggregate follows through the trigger.
+        siteId ??= await resolveDefaultSiteWithin(tx, organizationId);
+        const applied = await applySiteStockDelta(tx, {
+          organizationId,
+          productId: action.productId,
+          locationId: siteId,
+          stockDelta: -live.stock,
+          reservedDelta: 0,
+        });
+        if (!applied.applied) {
+          throw new Error(
+            `Producto ${action.productId}: la sede principal no tiene las ${live.stock} unidades que el backfill debe retirar; no se escribió nada.`,
+          );
+        }
+        const remaining = await tx.product.findUniqueOrThrow({
+          where: { id: action.productId },
+          select: { stock: true, reservedStock: true },
+        });
+        if (remaining.stock !== 0 || remaining.reservedStock !== 0) {
+          throw new Error(
+            `Producto ${action.productId} conserva existencias (${remaining.stock}) o reservas (${remaining.reservedStock}) en otra sede; un backfill parcial es peor que ninguno. No se escribió nada.`,
+          );
+        }
         await tx.inventoryMovement.create({
           data: {
             productId: action.productId,
@@ -279,6 +307,7 @@ async function applyPlan(
             reason: MOVEMENT_REASON,
             userId: actorUserId,
             organizationId,
+            locationId: siteId,
           },
         });
         movementsWritten += 1;

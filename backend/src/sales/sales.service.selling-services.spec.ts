@@ -1,6 +1,24 @@
 import { ConflictException } from '@nestjs/common';
 import { ProductType } from '@prisma/client';
 import { SalesService } from './sales.service';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../inventory/site-stock';
+
+// T3b: the site ledger itself is proven against real PostgreSQL in
+// `inventory/site-stock.postgres.spec.ts` and
+// `sales-site-stock.postgres.spec.ts`. These unit specs assert the delta
+// `SalesService` requests and how it reacts to a refusal.
+jest.mock('../inventory/site-stock', () => ({
+  applySiteStockDelta: jest.fn(() =>
+    Promise.resolve({ applied: true, created: false }),
+  ),
+  resolveDefaultSiteWithin: jest.fn(() => Promise.resolve('site-default')),
+}));
+
+const siteDelta = jest.mocked(applySiteStockDelta);
+const defaultSite = jest.mocked(resolveDefaultSiteWithin);
 
 /**
  * Selling a service must be indistinguishable from selling anything else from the
@@ -108,6 +126,9 @@ describe('SalesService — selling services', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    // `resetAllMocks` also clears the ledger stubs of the module mock above.
+    siteDelta.mockResolvedValue({ applied: true, created: false });
+    defaultSite.mockResolvedValue('site-default');
     prismaMock.posLoanSaleIntent.findFirst.mockResolvedValue(null);
     service = new SalesService(
       prismaMock as never,
@@ -139,75 +160,68 @@ describe('SalesService — selling services', () => {
         'org-1',
       );
 
-    it.each([9, 10])(
-      'rejects overselling with %i reserved units',
-      async (reservedStock) => {
-        const tx = wireTransaction(buildTx());
-        prismaMock.product.findFirst.mockResolvedValue(productRow());
-        tx.product.findFirst.mockResolvedValue(productRow({ reservedStock }));
-        await expect(checkout()).rejects.toThrow('Insufficient stock');
-        expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
-        expect(tx.payment.create).not.toHaveBeenCalled();
-      },
-    );
-
-    it.each([0, 8])(
-      'pins the tenant, version and counter at the available boundary (%i reserved)',
-      async (reservedStock) => {
-        const tx = wireTransaction(buildTx());
-        prismaMock.product.findFirst.mockResolvedValue(productRow());
-        tx.product.findFirst.mockResolvedValue(
-          productRow({ reservedStock, version: 7 }),
-        );
-        await checkout();
-        expect(tx.product.updateMany).toHaveBeenCalledWith({
-          where: {
-            id: 'prod-1',
-            organizationId: 'org-1',
-            active: true,
-            type: ProductType.PRODUCT,
-            tracksStock: true,
-            version: 7,
-            reservedStock,
-            stock: { gte: reservedStock + 2 },
-          },
-          data: { stock: { decrement: 2 }, version: { increment: 1 } },
-        });
-      },
-    );
-
-    it.each(['version', 'reservedStock'] as const)(
-      'rejects a concurrent %s mismatch using the actual CAS',
-      async (field) => {
-        const tx = wireTransaction(buildTx());
-        prismaMock.product.findFirst.mockResolvedValue(productRow());
-        tx.product.findFirst.mockResolvedValue(
-          productRow({ reservedStock: 3, version: 7 }),
-        );
-        const competing = { version: 7, reservedStock: 3, [field]: 8 };
-        tx.product.updateMany.mockImplementation(
-          ({ where }: { where: { version: number; reservedStock: number } }) =>
-            Promise.resolve({
-              count:
-                where.version === competing.version &&
-                where.reservedStock === competing.reservedStock
-                  ? 1
-                  : 0,
-            }),
-        );
-        await expect(checkout()).rejects.toThrow('Insufficient stock');
-        expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
-      },
-    );
-
-    it('re-reads successive versions for repeated product lines', async () => {
+    it('takes the line quantity out of the site that fulfils the sale', async () => {
       const tx = wireTransaction(buildTx());
       prismaMock.product.findFirst.mockResolvedValue(productRow());
-      tx.product.findFirst
-        .mockResolvedValueOnce(productRow({ version: 7 }))
-        .mockResolvedValueOnce({ stock: 9 })
-        .mockResolvedValueOnce(productRow({ stock: 9, version: 8 }))
-        .mockResolvedValueOnce({ stock: 8 });
+      await checkout();
+
+      expect(defaultSite).toHaveBeenCalledWith(tx, 'org-1');
+      expect(siteDelta).toHaveBeenCalledTimes(1);
+      expect(siteDelta).toHaveBeenCalledWith(tx, {
+        organizationId: 'org-1',
+        productId: 'prod-1',
+        locationId: 'site-default',
+        stockDelta: -2,
+        reservedDelta: 0,
+      });
+      // The product keeps its optimistic-concurrency version advancing, and
+      // the bump re-pins an active, stock-tracked product as the old CAS did.
+      expect(tx.product.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'prod-1',
+          organizationId: 'org-1',
+          active: true,
+          type: 'PRODUCT',
+          tracksStock: true,
+        },
+        data: { version: { increment: 1 } },
+      });
+      expect(tx.inventoryMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ locationId: 'site-default' }),
+        }),
+      );
+    });
+
+    it('refuses the sale when the site cannot cover the line', async () => {
+      const tx = wireTransaction(buildTx());
+      prismaMock.product.findFirst.mockResolvedValue(productRow());
+      siteDelta.mockResolvedValue({
+        applied: false,
+        reason: 'insufficient-stock',
+      });
+      await expect(checkout()).rejects.toThrow(
+        'Insufficient stock for product prod-1',
+      );
+      expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+      expect(tx.payment.create).not.toHaveBeenCalled();
+      expect(tx.product.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses a product deactivated or untracked after pricing', async () => {
+      const tx = wireTransaction(buildTx());
+      prismaMock.product.findFirst.mockResolvedValue(productRow());
+      tx.product.updateMany.mockResolvedValue({ count: 0 });
+      await expect(checkout()).rejects.toThrow(
+        'Insufficient stock for product prod-1',
+      );
+      expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+      expect(tx.payment.create).not.toHaveBeenCalled();
+    });
+
+    it("asks the sale's site for one delta per repeated line of the same product", async () => {
+      wireTransaction(buildTx());
+      prismaMock.product.findFirst.mockResolvedValue(productRow());
       await service.create(
         {
           items: [
@@ -219,28 +233,24 @@ describe('SalesService — selling services', () => {
         'user-1',
         'org-1',
       );
-      const writes = tx.product.updateMany.mock.calls as Array<
-        [{ where: { version: number } }]
+      const deltas = siteDelta.mock.calls as unknown as Array<
+        [unknown, { stockDelta: number; locationId: string }]
       >;
-      expect(writes.map(([args]) => args.where.version)).toEqual([7, 8]);
+      expect(deltas.map(([, delta]) => delta.stockDelta)).toEqual([-1, -1]);
+      expect(deltas.map(([, delta]) => delta.locationId)).toEqual([
+        'site-default',
+        'site-default',
+      ]);
     });
 
-    it('fails closed when the live reservation counter is missing', async () => {
+    it('fails closed when the organization has no site to take stock from', async () => {
       const tx = wireTransaction(buildTx());
       prismaMock.product.findFirst.mockResolvedValue(productRow());
-      tx.product.findFirst.mockResolvedValue({
-        stock: 10,
-        version: 7,
-      } as never);
-      await expect(checkout()).rejects.toThrow('Insufficient stock');
-      expect(tx.product.updateMany).not.toHaveBeenCalled();
-    });
-
-    it('aborts on a lost stock CAS before movement or payment', async () => {
-      const tx = wireTransaction(buildTx());
-      prismaMock.product.findFirst.mockResolvedValue(productRow());
-      tx.product.updateMany.mockResolvedValue({ count: 0 });
-      await expect(checkout()).rejects.toThrow('Insufficient stock');
+      defaultSite.mockRejectedValue(
+        new Error('Organization org-1 has no default location'),
+      );
+      await expect(checkout()).rejects.toThrow('has no default location');
+      expect(siteDelta).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
       expect(tx.payment.create).not.toHaveBeenCalled();
     });
@@ -260,6 +270,7 @@ describe('SalesService — selling services', () => {
       );
 
       expect(txMock.saleItem.create).toHaveBeenCalledTimes(1);
+      expect(siteDelta).not.toHaveBeenCalled();
       expect(txMock.product.updateMany).not.toHaveBeenCalled();
       expect(txMock.inventoryMovement.create).not.toHaveBeenCalled();
     });
@@ -283,6 +294,7 @@ describe('SalesService — selling services', () => {
           data: expect.objectContaining({ quantity: 5 }),
         }),
       );
+      expect(siteDelta).not.toHaveBeenCalled();
       expect(txMock.product.updateMany).not.toHaveBeenCalled();
       expect(txMock.inventoryMovement.create).not.toHaveBeenCalled();
     });
@@ -306,16 +318,23 @@ describe('SalesService — selling services', () => {
         'org-1',
       );
 
-      expect(txMock.product.updateMany).toHaveBeenCalledTimes(1);
-      expect(txMock.product.updateMany).toHaveBeenCalledWith(
+      expect(siteDelta).toHaveBeenCalledTimes(1);
+      expect(siteDelta).toHaveBeenCalledWith(
+        txMock,
         expect.objectContaining({
-          where: expect.objectContaining({ id: 'prod-1' }),
+          productId: 'prod-1',
+          locationId: 'site-default',
+          stockDelta: -1,
         }),
       );
       expect(txMock.inventoryMovement.create).toHaveBeenCalledTimes(1);
       expect(txMock.inventoryMovement.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ productId: 'prod-1', type: 'SALE' }),
+          data: expect.objectContaining({
+            productId: 'prod-1',
+            type: 'SALE',
+            locationId: 'site-default',
+          }),
         }),
       );
     });
@@ -340,6 +359,7 @@ describe('SalesService — selling services', () => {
       );
 
       expect(txMock.saleItem.create).toHaveBeenCalledTimes(1);
+      expect(siteDelta).not.toHaveBeenCalled();
       expect(txMock.product.updateMany).not.toHaveBeenCalled();
       expect(txMock.inventoryMovement.create).not.toHaveBeenCalled();
     });
@@ -429,7 +449,7 @@ describe('SalesService — selling services', () => {
 
       expect(tx.fiscalDocument.updateMany).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.findMany).not.toHaveBeenCalled();
-      expect(tx.product.findFirst).not.toHaveBeenCalled();
+      expect(siteDelta).not.toHaveBeenCalled();
       expect(tx.product.updateMany).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
     });
@@ -472,18 +492,20 @@ describe('SalesService — selling services', () => {
             'user-1',
             'org-1',
           );
-        const reads = tx.product.findFirst.mock.calls.length;
+        const siteReads = defaultSite.mock.calls.length;
         const movements = tx.inventoryMovement.create.mock.calls.length;
         const movementReads = tx.inventoryMovement.findMany.mock.calls.length;
-        const restocks = tx.product.updateMany.mock.calls.length;
+        const restocks = siteDelta.mock.calls.length;
+        const versions = tx.product.updateMany.mock.calls.length;
         await expect(
           service.update('sale-1', { status: 'CANCELLED' }, 'user-1', 'org-1'),
         ).rejects.toThrow('Only completed sales can be updated');
         expect(tx.inventoryMovement.findMany).toHaveBeenCalledTimes(
           movementReads,
         );
-        expect(tx.product.findFirst).toHaveBeenCalledTimes(reads);
-        expect(tx.product.updateMany).toHaveBeenCalledTimes(restocks);
+        expect(defaultSite).toHaveBeenCalledTimes(siteReads);
+        expect(siteDelta).toHaveBeenCalledTimes(restocks);
+        expect(tx.product.updateMany).toHaveBeenCalledTimes(versions);
         expect(tx.inventoryMovement.create).toHaveBeenCalledTimes(movements);
         expect(tx.sale.updateMany).toHaveBeenLastCalledWith(
           expect.objectContaining({
@@ -497,7 +519,7 @@ describe('SalesService — selling services', () => {
       },
     );
 
-    it('propagates restock CAS failure from the transaction without a movement', async () => {
+    it('propagates a refused site restore from the transaction without a movement', async () => {
       const tx = {
         sale: {
           update: jest.fn(),
@@ -508,13 +530,9 @@ describe('SalesService — selling services', () => {
           updateMany: jest.fn(),
         },
         product: {
-          findFirst: jest
-            .fn()
-            .mockResolvedValue(
-              productRow({ stock: 5, reservedStock: 3, version: 7 }),
-            ),
+          findFirst: jest.fn().mockResolvedValue(productRow({ stock: 5 })),
           update: jest.fn(),
-          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
         inventoryMovement: {
           findMany: jest
@@ -523,18 +541,23 @@ describe('SalesService — selling services', () => {
           create: jest.fn(),
         },
       };
+      siteDelta.mockResolvedValue({
+        applied: false,
+        reason: 'insufficient-stock',
+      });
       prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
       prismaMock.$transaction.mockImplementation(
         (callback: (tx: unknown) => unknown) => callback(tx),
       );
       await expect(
         service.update('sale-1', { status: 'CANCELLED' }, 'user-1', 'org-1'),
-      ).rejects.toThrow('Stock changed');
+      ).rejects.toThrow('Stock changed for product prod-1');
+      expect(tx.product.updateMany).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
       expect(prismaMock.sale.findFirst).toHaveBeenCalledTimes(1);
     });
 
-    it('refuses restocking with a missing live reservation counter', async () => {
+    it('refuses to restore stock when the organization has no site to restore it to', async () => {
       const tx = {
         sale: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
         fiscalDocument: {
@@ -542,7 +565,7 @@ describe('SalesService — selling services', () => {
           updateMany: jest.fn(),
         },
         product: {
-          findFirst: jest.fn().mockResolvedValue({ stock: 5, version: 7 }),
+          findFirst: jest.fn().mockResolvedValue(productRow({ stock: 5 })),
           updateMany: jest.fn(),
         },
         inventoryMovement: {
@@ -552,13 +575,17 @@ describe('SalesService — selling services', () => {
           create: jest.fn(),
         },
       };
+      defaultSite.mockRejectedValue(
+        new Error('Organization org-1 has no default location'),
+      );
       prismaMock.sale.findFirst.mockResolvedValue(saleWithItem('prod-1', 2));
       prismaMock.$transaction.mockImplementation(
         (callback: (tx: unknown) => unknown) => callback(tx),
       );
       await expect(
         service.update('sale-1', { status: 'CANCELLED' }, 'user-1', 'org-1'),
-      ).rejects.toThrow('Stock changed');
+      ).rejects.toThrow('has no default location');
+      expect(siteDelta).not.toHaveBeenCalled();
       expect(tx.product.updateMany).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
     });
@@ -615,7 +642,7 @@ describe('SalesService — selling services', () => {
         ).rejects.toThrow(ConflictException);
         expect(prismaMock.sale.update).not.toHaveBeenCalled();
         expect(tx.sale.updateMany).not.toHaveBeenCalled();
-        expect(tx.product.findFirst).not.toHaveBeenCalled();
+        expect(siteDelta).not.toHaveBeenCalled();
         expect(tx.product.updateMany).not.toHaveBeenCalled();
         expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
       },
@@ -664,7 +691,7 @@ describe('SalesService — selling services', () => {
         },
         select: { productId: true, quantity: true },
       });
-      expect(tx.product.findFirst).not.toHaveBeenCalled();
+      expect(siteDelta).not.toHaveBeenCalled();
       expect(tx.product.updateMany).not.toHaveBeenCalled();
       expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
     });
@@ -708,14 +735,10 @@ describe('SalesService — selling services', () => {
       );
     });
 
-    it('still restores stock and writes a RETURN for a product line', async () => {
+    it('restores stock and writes a RETURN at the sale site for a product line', async () => {
       const txMock = {
         product: {
-          findFirst: jest
-            .fn()
-            .mockResolvedValue(
-              productRow({ stock: 5, reservedStock: 3, version: 7 }),
-            ),
+          findFirst: jest.fn().mockResolvedValue(productRow({ stock: 5 })),
           updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
         inventoryMovement: {
@@ -752,14 +775,19 @@ describe('SalesService — selling services', () => {
         },
         select: { productId: true, quantity: true },
       });
+      // A sale without a stored origin took its units from the default site.
+      expect(defaultSite).toHaveBeenCalledWith(txMock, 'org-1');
+      expect(siteDelta).toHaveBeenCalledTimes(1);
+      expect(siteDelta).toHaveBeenCalledWith(txMock, {
+        organizationId: 'org-1',
+        productId: 'prod-1',
+        locationId: 'site-default',
+        stockDelta: 2,
+        reservedDelta: 0,
+      });
       expect(txMock.product.updateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'prod-1',
-          organizationId: 'org-1',
-          version: 7,
-          reservedStock: 3,
-        },
-        data: { stock: { increment: 2 }, version: { increment: 1 } },
+        where: { id: 'prod-1', organizationId: 'org-1' },
+        data: { version: { increment: 1 } },
       });
       expect(txMock.inventoryMovement.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -769,6 +797,7 @@ describe('SalesService — selling services', () => {
             quantity: 2,
             previousStock: 5,
             newStock: 7,
+            locationId: 'site-default',
           }),
         }),
       );
@@ -809,9 +838,16 @@ describe('SalesService — selling services', () => {
       );
 
       expect(txMock.product.updateMany).toHaveBeenCalledTimes(1);
-      expect(txMock.product.updateMany).toHaveBeenCalledWith(
+      expect(txMock.product.updateMany).toHaveBeenCalledWith({
+        where: { id: 'prod-1', organizationId: 'org-1' },
+        data: { version: { increment: 1 } },
+      });
+      expect(siteDelta).toHaveBeenCalledWith(
+        txMock,
         expect.objectContaining({
-          data: { stock: { increment: 2 }, version: { increment: 1 } },
+          productId: 'prod-1',
+          locationId: 'site-default',
+          stockDelta: 2,
         }),
       );
       expect(txMock.inventoryMovement.create).toHaveBeenCalledWith(
@@ -869,17 +905,18 @@ describe('SalesService — selling services', () => {
         'org-1',
       );
 
-      const writes = txMock.product.updateMany.mock.calls as Array<
-        [{ data: { stock: { increment: number } } }]
+      const writes = siteDelta.mock.calls as unknown as Array<
+        [unknown, { productId: string; stockDelta: number; locationId: string }]
       >;
-      expect(writes.map(([args]) => args.data.stock.increment)).toEqual([3, 5]);
-      const reads = txMock.product.findFirst.mock.calls as Array<
-        [{ where: { id: string } }]
-      >;
-      expect(reads.map(([args]) => args.where.id)).toEqual([
-        'prod-1',
-        'prod-2',
+      expect(
+        writes.map(([, delta]) => [delta.productId, delta.stockDelta]),
+      ).toEqual([
+        ['prod-1', 3],
+        ['prod-2', 5],
       ]);
+      expect(
+        writes.every(([, delta]) => delta.locationId === 'site-default'),
+      ).toBe(true);
       expect(txMock.inventoryMovement.create).toHaveBeenCalledTimes(2);
       expect(txMock.inventoryMovement.create).toHaveBeenCalledWith(
         expect.objectContaining({

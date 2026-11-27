@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { OrgRole } from '@prisma/client';
 import { UsersService } from './users.service';
 
 describe('UsersService', () => {
@@ -104,6 +105,42 @@ describe('UsersService', () => {
 
     // bcrypt embeds the cost factor in the hash prefix ($2a$12$...).
     expect(invocation.data.password).toMatch(/^\$2[aby]\$12\$/);
+  });
+
+  it('creates a MEMBER membership from the team screen role list', async () => {
+    // S6: the team screen offers Miembro next to Administrador, Cajero and
+    // Inventario. MEMBER is a real OrgRole, so the create boundary stores it
+    // like any other role and never trips the OWNER guard.
+    prismaMock.user.findFirst.mockResolvedValue(null);
+    prismaMock.user.create.mockResolvedValue({
+      id: 'user-member',
+      email: 'member@example.com',
+      name: 'Member One',
+      active: true,
+      createdAt: new Date('2026-03-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-24T00:00:00.000Z'),
+    });
+
+    await service.create(
+      {
+        email: 'member@example.com',
+        password: 'S3cure-Passphrase-42',
+        name: 'Member One',
+        role: OrgRole.MEMBER,
+      },
+      'org-1',
+      { role: OrgRole.ADMIN, isSuperAdmin: false },
+    );
+
+    expect(prismaMock.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organizationUsers: {
+            create: { organizationId: 'org-1', role: OrgRole.MEMBER },
+          },
+        }),
+      }),
+    );
   });
 
   it('rejects duplicate emails on update', async () => {

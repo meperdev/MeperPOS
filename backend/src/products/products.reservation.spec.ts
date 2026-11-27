@@ -9,6 +9,28 @@ import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// The per-site ledger is a database contract with its own PostgreSQL suite
+// (`products.site-stock.postgres.spec.ts`). This DB-free model keeps one site
+// holding the whole product balance, so it can assert the delta the write path
+// asks for without re-implementing the SQL.
+jest.mock('../inventory/site-stock', () => {
+  const actual = jest.requireActual('../inventory/site-stock');
+  return {
+    ...actual,
+    resolveDefaultSiteWithin: (tx: { __defaultSite(): string }) =>
+      Promise.resolve(tx.__defaultSite()),
+    applySiteStockDelta: (
+      tx: {
+        __applySiteDelta(delta: {
+          stockDelta: number;
+          reservedDelta: number;
+        }): unknown;
+      },
+      delta: { stockDelta: number; reservedDelta: number },
+    ) => Promise.resolve(tx.__applySiteDelta(delta)),
+  };
+});
+
 // DB-free conditional-write model. PostgreSQL constraints/races still require L7.
 describe('ProductsService reservation foundation', () => {
   const row = () => ({
@@ -46,6 +68,7 @@ describe('ProductsService reservation foundation', () => {
     expect.objectContaining(shape);
   const prisma = {
     category: { findFirst: jest.fn() },
+    location: { count: jest.fn() },
     product: {
       findFirst: jest.fn<Promise<ProductRow | null>, [LookupArgs]>(),
       findUnique: jest.fn(),
@@ -54,6 +77,8 @@ describe('ProductsService reservation foundation', () => {
       update: jest.fn<Promise<ProductRow>, [WriteArgs]>(),
       delete: jest.fn<Promise<ProductRow>, [LookupArgs]>(),
     },
+    __defaultSite: jest.fn(() => 'site-1'),
+    __applySiteDelta: jest.fn(),
     inventoryMovement: { create: jest.fn() },
     auditLog: { create: jest.fn() },
     inventoryLoanItem: {
@@ -77,8 +102,23 @@ describe('ProductsService reservation foundation', () => {
     current = { ...snapshot };
     race = undefined;
     prisma.inventoryLoanItem.findFirst.mockResolvedValue(null);
+    // One site holds the whole balance: the absolute edit stays the delta at
+    // that site, exactly as before per-site adjustments existed.
+    prisma.location.count.mockResolvedValue(1);
+    prisma.__defaultSite.mockReturnValue('site-1');
+    prisma.__applySiteDelta.mockImplementation(applySiteDelta);
     prisma.$transaction.mockImplementation(
-      (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma),
+      async (callback: (tx: typeof prisma) => Promise<unknown>) => {
+        // A transaction: a rejected write restores the model's row, so the
+        // checks below see what a rollback would leave behind.
+        const before = { ...current };
+        try {
+          return await callback(prisma);
+        } catch (error) {
+          current = before;
+          throw error;
+        }
+      },
     );
     prisma.product.findFirst
       .mockImplementationOnce(() => Promise.resolve({ ...snapshot }))
@@ -111,6 +151,27 @@ describe('ProductsService reservation foundation', () => {
       { invalidateCache: jest.fn() } as never,
     );
   });
+
+  // The seeded single site holds the whole balance, exactly like the migration
+  // leaves it: the conditional guards are the helper's, not this model's.
+  const applySiteDelta = ({
+    stockDelta,
+    reservedDelta,
+  }: {
+    stockDelta: number;
+    reservedDelta: number;
+  }) => {
+    const reserved = current.reservedStock + reservedDelta;
+    if (reserved < 0 || current.stock + stockDelta - reserved < 0) {
+      return { applied: false, reason: 'insufficient-stock' };
+    }
+    current = {
+      ...current,
+      stock: current.stock + stockDelta,
+      reservedStock: reserved,
+    };
+    return { applied: true, created: false };
+  };
 
   const update = (dto: UpdateProductDto) =>
     service.update('product-1', dto, 'actor-1', 'org-1');
@@ -149,12 +210,30 @@ describe('ProductsService reservation foundation', () => {
             version: 3,
             reservedStock: 4,
           },
-          data: containing({ stock, version: { increment: 1 } }),
+          data: containing({ version: { increment: 1 } }),
         }),
       );
+      // The edit is a signed delta at the default site, never an absolute write.
+      expect(
+        prisma.product.updateMany.mock.calls[0][0].data,
+      ).not.toHaveProperty('stock');
       expect(
         prisma.product.updateMany.mock.calls[0][0].data,
       ).not.toHaveProperty('reservedStock');
+      if (stock === 10) {
+        // An unchanged balance is not a delta and must not touch a site row.
+        expect(prisma.__applySiteDelta).not.toHaveBeenCalled();
+      } else {
+        expect(prisma.__applySiteDelta).toHaveBeenCalledWith(
+          expect.objectContaining({
+            organizationId: 'org-1',
+            productId: 'product-1',
+            locationId: 'site-1',
+            stockDelta: stock - 10,
+            reservedDelta: 0,
+          }),
+        );
+      }
       if (stock === 10) noEffects();
       else
         expect(prisma.inventoryMovement.create).toHaveBeenCalledWith(
@@ -208,6 +287,11 @@ describe('ProductsService reservation foundation', () => {
           },
         },
       });
+    } else if (dto.stock === 0) {
+      // A stock edit always opens a transaction now: the delta and the product
+      // CAS must commit together, while the loan check stays conversion-only.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.inventoryLoanItem.findFirst).not.toHaveBeenCalled();
     } else {
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(prisma.inventoryLoanItem.findFirst).not.toHaveBeenCalled();

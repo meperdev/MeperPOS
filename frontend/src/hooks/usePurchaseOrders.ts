@@ -43,6 +43,16 @@ export interface ReceiveItemPayload {
   qtyReceivedNow: number;
 }
 
+export interface ReceivePurchaseOrderPayload {
+  id: string;
+  items: ReceiveItemPayload[];
+  /**
+   * Explicit receipt destination. Omitted means the organization's principal
+   * site, and the request then stays exactly what it was before sites existed.
+   */
+  locationId?: string;
+}
+
 function toQueryParams(
   params?: PurchaseOrderFilters,
 ): Record<string, unknown> | undefined {
@@ -194,9 +204,14 @@ export function useDuplicatePurchaseOrder() {
 export function useReceivePurchaseOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, items }: { id: string; items: ReceiveItemPayload[] }) =>
+    mutationFn: ({ id, items, locationId }: ReceivePurchaseOrderPayload) =>
       api
-        .post<PurchaseOrder>(`/purchase-orders/${id}/receive`, { items })
+        .post<PurchaseOrder>(`/purchase-orders/${id}/receive`, {
+          // The principal site is the server's default, so the field only
+          // travels when the user actually chose another destination.
+          ...(locationId ? { locationId } : {}),
+          items,
+        })
         .then((res) => res.data),
     onSuccess: (_data, vars) => invalidateAll(queryClient, vars.id),
   });

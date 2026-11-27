@@ -15,6 +15,10 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../inventory/site-stock';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInventoryLoanDto } from './dto/create-inventory-loan.dto';
 import { CounterpartyType } from './dto/create-loan.dto';
@@ -28,6 +32,32 @@ import {
   planInventoryLoanClose,
   transitionInventoryLoanItem,
 } from './inventory-loan.invariants';
+
+/** PostgreSQL codes that mean another transaction won the same race. */
+const SERIALIZATION_PG_CODES = ['40001', '40P01'];
+
+/**
+ * Transaction-level races this writer must answer with its documented conflict
+ * instead of a 500: a unique replay key, a Prisma-detected serialization abort,
+ * and the raw site-stock statement losing the same row. Prisma reports the raw
+ * PostgreSQL 40001/40P01 as `P2010`, with the SQLSTATE in `meta.code` (or only
+ * in the message, depending on the client build).
+ */
+function isInventoryRace(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === 'P2002' || error.code === 'P2034') return true;
+  if (error.code !== 'P2010') return false;
+  const sqlState = (error.meta as { code?: unknown } | undefined)?.code;
+  if (
+    typeof sqlState === 'string' &&
+    SERIALIZATION_PG_CODES.includes(sqlState)
+  ) {
+    return true;
+  }
+  return SERIALIZATION_PG_CODES.some((code) =>
+    error.message.includes(`Code: \`${code}\``),
+  );
+}
 
 const itemSelect = {
   id: true,
@@ -666,6 +696,8 @@ export class InventoryLoansService {
           });
           if (previous) return replay(previous, actor.userId, request);
           await this.validateCounterparty(tx, dto, orgId);
+          // Every loan of this version reserves at the tenant default site.
+          const siteId = await resolveDefaultSiteWithin(tx, orgId);
           for (const item of dto.items) {
             const product = await tx.product.findFirst({
               where: {
@@ -695,13 +727,25 @@ export class InventoryLoansService {
               product.reservedStock > product.stock ||
               product.type !== 'PRODUCT' ||
               product.tracksStock !== true ||
-              product.stock - product.reservedStock < item.quantity ||
               product.version === 2147483647
             ) {
               throw new ConflictException(
                 'Inventario disponible insuficiente o inválido',
               );
             }
+            // The reservation is held at the default site, so a balance living in
+            // another site cannot be lent from here.
+            const applied = await applySiteStockDelta(tx, {
+              organizationId: orgId,
+              productId: item.productId,
+              locationId: siteId,
+              stockDelta: 0,
+              reservedDelta: item.quantity,
+            });
+            if (!applied.applied)
+              throw new ConflictException(
+                'Inventario disponible insuficiente o inválido',
+              );
             const changed = await tx.product.updateMany({
               where: {
                 id: item.productId,
@@ -710,16 +754,8 @@ export class InventoryLoansService {
                 type: 'PRODUCT',
                 tracksStock: true,
                 version: product.version,
-                reservedStock: product.reservedStock,
-                stock: {
-                  equals: product.stock,
-                  gte: product.reservedStock + item.quantity,
-                },
               },
-              data: {
-                reservedStock: { increment: item.quantity },
-                version: { increment: 1 },
-              },
+              data: { version: { increment: 1 } },
             });
             if (changed.count !== 1)
               throw new ConflictException(
@@ -744,8 +780,12 @@ export class InventoryLoansService {
                   : null,
               items: {
                 create: dto.items.map((item) => ({
-                  ...item,
-                  organizationId: orgId,
+                  quantity: item.quantity,
+                  // The item's tenant comes from the product it moves, which is
+                  // also how the composite foreign keys keep both in one tenant.
+                  product: {
+                    connect: { id: item.productId, organizationId: orgId },
+                  },
                 })),
               },
             },
@@ -787,10 +827,7 @@ export class InventoryLoansService {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        ['P2002', 'P2034'].includes(error.code)
-      ) {
+      if (isInventoryRace(error)) {
         // Only outside the aborted transaction: never blindly repeat reservations.
         const previous = await this.prisma.inventoryLoanOperation.findUnique({
           where: key,
@@ -960,7 +997,11 @@ export class InventoryLoansService {
               releases.set(item.productId, total);
             }
           }
-          // No unique loan/product key exists: aggregate positive releases, one sorted CAS/product.
+          // No unique loan/product key exists: aggregate positive releases, one sorted site write/product.
+          const siteId =
+            releases.size > 0
+              ? await resolveDefaultSiteWithin(tx, orgId)
+              : undefined;
           for (const [productId, release] of [...releases].sort(([a], [b]) =>
             a.localeCompare(b),
           )) {
@@ -999,9 +1040,19 @@ export class InventoryLoansService {
                 boundedInt,
               ) ||
               product.version === 2147483647 ||
-              product.reservedStock > product.stock ||
-              product.reservedStock < release
+              product.reservedStock > product.stock
             )
+              throw new ConflictException('Inventario insuficiente o inválido');
+            // The reservation was held at the default site, so it is released
+            // there and nowhere else.
+            const applied = await applySiteStockDelta(tx, {
+              organizationId: orgId,
+              productId,
+              locationId: siteId!,
+              stockDelta: 0,
+              reservedDelta: -release,
+            });
+            if (!applied.applied)
               throw new ConflictException('Inventario insuficiente o inválido');
             const changed = await tx.product.updateMany({
               where: {
@@ -1011,13 +1062,8 @@ export class InventoryLoansService {
                 type: 'PRODUCT',
                 tracksStock: true,
                 version: product.version,
-                stock: { equals: product.stock, gte: product.reservedStock },
-                reservedStock: { equals: product.reservedStock, gte: release },
               },
-              data: {
-                reservedStock: { increment: -release },
-                version: { increment: 1 },
-              },
+              data: { version: { increment: 1 } },
             });
             if (changed.count !== 1)
               throw new ConflictException('El inventario cambió');
@@ -1097,10 +1143,7 @@ export class InventoryLoansService {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        ['P2002', 'P2034'].includes(error.code)
-      ) {
+      if (isInventoryRace(error)) {
         // Abort reconciliation is outside-only, still authorized, and never retries effects.
         await this.authorizeTerminal(this.prisma, orgId, actor.userId);
         const previous = await this.prisma.inventoryLoanOperation.findUnique({
@@ -1262,7 +1305,11 @@ export class InventoryLoansService {
             deltas.set(item.productId, delta);
           }
           const movementStocks = new Map<string, number>();
-          // Actual schema has no unique loan/product key: aggregate defensively, one CAS/product.
+          // Actual schema has no unique loan/product key: aggregate defensively, one site write/product.
+          const siteId =
+            deltas.size > 0
+              ? await resolveDefaultSiteWithin(tx, orgId)
+              : undefined;
           for (const [productId, delta] of [...deltas].sort(([a], [b]) =>
             a.localeCompare(b),
           )) {
@@ -1308,6 +1355,16 @@ export class InventoryLoansService {
             )
               throw new ConflictException('Inventario insuficiente o inválido');
             movementStocks.set(productId, product.stock);
+            // Delivery and return move the units at the site that reserved them.
+            const applied = await applySiteStockDelta(tx, {
+              organizationId: orgId,
+              productId,
+              locationId: siteId!,
+              stockDelta: delta.stock,
+              reservedDelta: delta.reserved,
+            });
+            if (!applied.applied)
+              throw new ConflictException('Inventario insuficiente o inválido');
             const changed = await tx.product.updateMany({
               where: {
                 id: productId,
@@ -1316,22 +1373,8 @@ export class InventoryLoansService {
                 tracksStock: true,
                 active: type === 'DELIVER' ? true : product.active,
                 version: product.version,
-                stock: {
-                  equals: product.stock,
-                  gte: Math.max(0, -delta.stock),
-                },
-                reservedStock: {
-                  equals: product.reservedStock,
-                  gte: Math.max(0, -delta.reserved),
-                },
               },
-              data: {
-                stock: { increment: delta.stock },
-                ...(delta.reserved
-                  ? { reservedStock: { increment: delta.reserved } }
-                  : {}),
-                version: { increment: 1 },
-              },
+              data: { version: { increment: 1 } },
             });
             if (changed.count !== 1)
               throw new ConflictException('El inventario cambió');
@@ -1398,6 +1441,7 @@ export class InventoryLoansService {
                 productId: item.productId,
                 userId: actor.userId,
                 saleId: null,
+                locationId: siteId!,
                 inventoryLoanEventId: event.id,
                 type:
                   type === 'DELIVER'
@@ -1432,10 +1476,7 @@ export class InventoryLoansService {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        ['P2002', 'P2034'].includes(error.code)
-      ) {
+      if (isInventoryRace(error)) {
         const previous = await this.prisma.inventoryLoanOperation.findUnique({
           where: key,
         });

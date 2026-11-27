@@ -16,6 +16,11 @@ export interface Product {
   taxRate: number;
   effectiveTaxRate?: number;
   stock: number;
+  /**
+   * Server-computed units that can still leave (stock minus reservations). With a
+   * `locationId` query it is that site's figure; absent on older payloads.
+   */
+  availableStock?: number;
   minStock: number;
   /** Merchandise or sold labour. Absent means merchandise. */
   type?: ProductType;
@@ -89,6 +94,11 @@ export interface Sale {
   payments?: Payment[];
   /** A POS-financed sale: settled through the linked money loan, no cash rows. */
   financed?: boolean;
+  /**
+   * The site the sale was made at, stored with the sale. `null` on sales made
+   * before site attribution, so the history never guesses the default site.
+   */
+  originSite?: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -126,7 +136,9 @@ export interface InventoryMovement {
     | "DAMAGE"
     | "RETURN"
     | "LOAN_DELIVERY"
-    | "LOAN_RETURN";
+    | "LOAN_RETURN"
+    | "TRANSFER_OUT"
+    | "TRANSFER_IN";
   quantity: number;
   previousStock: number;
   newStock: number;
@@ -610,6 +622,8 @@ export interface SaleFilters {
   status?: string;
   search?: string;
   customerId?: string;
+  /** Only sales whose stored origin is this site. */
+  locationId?: string;
 }
 
 export type TaskStatus =
@@ -1127,3 +1141,65 @@ export type WhatsAppReportOutcome =
   | { status: "failed"; reason: WhatsAppDeliveryFailure }
   | { status: "already_attempted" }
   | { status: "no_identity"; reason: "no_recipient" };
+
+/** A site is either a store that serves customers or a warehouse that stores. */
+export type LocationType = "STORE" | "WAREHOUSE";
+
+/** One site of the active organization, as the locations API returns it. */
+export interface LocationSite {
+  id: string;
+  name: string;
+  type: LocationType;
+  isDefault: boolean;
+  /** Printed on the receipt; null until an administrator fills it in. */
+  address?: string | null;
+  phone?: string | null;
+}
+
+/** Where a transfer stands: only an in-transit one can be received or cancelled. */
+export type StockTransferStatus = "IN_TRANSIT" | "RECEIVED" | "CANCELLED";
+
+/** One end of a transfer, embedded by the transfers API. */
+export interface StockTransferSite {
+  id: string;
+  name: string;
+  type: LocationType;
+}
+
+/** The person named on a transfer leg, embedded by the transfers API. */
+export interface StockTransferUser {
+  id: string;
+  name: string;
+}
+
+/** One line of a transfer; the product travels named and keyed. */
+export interface StockTransferItem {
+  id: string;
+  productId: string;
+  quantity: number;
+  product?: { id: string; name: string; sku: string };
+}
+
+/** One transfer document, as `GET /api/transfers` returns it. */
+export interface StockTransfer {
+  id: string;
+  number: number;
+  organizationId: string;
+  status: StockTransferStatus;
+  fromLocationId: string;
+  toLocationId: string;
+  fromLocation: StockTransferSite;
+  toLocation: StockTransferSite;
+  notes: string | null;
+  createdById: string | null;
+  createdBy?: StockTransferUser | null;
+  createdAt: string;
+  receivedAt: string | null;
+  receivedById: string | null;
+  receivedBy?: StockTransferUser | null;
+  cancelledAt: string | null;
+  cancelledById: string | null;
+  cancelledBy?: StockTransferUser | null;
+  cancelReason: string | null;
+  items: StockTransferItem[];
+}

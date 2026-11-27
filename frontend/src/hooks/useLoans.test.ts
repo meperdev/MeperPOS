@@ -227,6 +227,30 @@ describe("useCreatePosLoan", () => {
     ]);
     expect(body.items[0]).not.toHaveProperty("unitPrice");
   });
+
+  it("reserves at the active POS site, bound to the same request scope", async () => {
+    const scope = { userId: "user-1", organizationId: "org-1" };
+    const { result } = renderHook(() => useCreatePosLoan(scope, "site-b"), {
+      wrapper,
+    });
+
+    await result.current.mutateAsync(baseInput());
+
+    expect(apiMock.post).toHaveBeenCalledWith(
+      "/loans/pos-initiation",
+      expect.objectContaining({ locationId: "site-b" }),
+      { posScope: scope },
+    );
+  });
+
+  it("keeps the legacy initiation body for a caller without an active site", async () => {
+    const { result } = renderHook(() => useCreatePosLoan(), { wrapper });
+
+    await result.current.mutateAsync(baseInput());
+
+    expect(postedBody()).not.toHaveProperty("locationId");
+    expect(apiMock.post.mock.calls[0]).toHaveLength(2);
+  });
 });
 
 describe("loan servicing", () => {

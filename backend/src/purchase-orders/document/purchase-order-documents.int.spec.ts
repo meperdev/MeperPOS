@@ -243,6 +243,11 @@ describe('Purchase order documents — Integration', () => {
       include: { items: { include: { product: true } } },
     });
     const [item] = before.items;
+    // A request with no destination lands at the organization default site.
+    const principal = await prisma.location.findFirstOrThrow({
+      where: { organizationId: fixture.orgAId, isDefault: true },
+      select: { id: true },
+    });
 
     await orders.receive(
       lateOrderId,
@@ -265,7 +270,142 @@ describe('Purchase order documents — Integration', () => {
       type: 'PURCHASE',
       quantity: 2,
       reason: `OC-${before.orderNumber}`,
+      locationId: principal.id,
     });
+  });
+
+  it('finishes a sent order at an authorized destination without changing its frozen PDF', async () => {
+    const { orgAId: organizationId, userAId: userId } = fixture;
+    const actor = {
+      organizationId,
+      userId,
+      email: 'receipt@example.test',
+      role: 'MEMBER' as const,
+      tokenVersion: 0,
+      isSuperAdmin: false,
+    };
+    await prisma.organizationUser.create({
+      data: { organizationId, userId, role: actor.role },
+    });
+    // T3a: each fixture product already opened its own tenant's default-site
+    // row, so both sites exist and the receipt only accepts the sole principal
+    // site of the receiving tenant.
+    const principal = await prisma.location.findFirstOrThrow({
+      where: { organizationId, isDefault: true },
+      select: { id: true },
+    });
+    const foreign = await prisma.location.findFirstOrThrow({
+      where: { organizationId: fixture.orgBId, isDefault: true },
+      select: { id: true },
+    });
+    const snapshot = async () => ({
+      order: await prisma.purchaseOrder.findUniqueOrThrow({
+        where: { id: lateOrderId },
+        include: { items: { include: { product: true } } },
+      }),
+      movements: await prisma.inventoryMovement.count({
+        where: { organizationId },
+      }),
+      audits: await prisma.auditLog.count({ where: { organizationId } }),
+      siteBalances: await prisma.productStock.count({
+        where: { organizationId },
+      }),
+      siteLedger: await prisma.productStock.findMany({
+        where: { organizationId },
+        orderBy: { productId: 'asc' },
+        select: {
+          productId: true,
+          locationId: true,
+          organizationId: true,
+          stock: true,
+          reservedStock: true,
+        },
+      }),
+    });
+    const before = await snapshot();
+    const [item] = before.order.items;
+    const qty = item.qtyOrdered - item.qtyReceived;
+    const receive = (locationId: string) =>
+      orders.receive(
+        lateOrderId,
+        { items: [{ itemId: item.id, qtyReceivedNow: qty }], locationId },
+        userId,
+        organizationId,
+        actor,
+      );
+    // T3h: the membership baseline gives every operational member the
+    // principal site, so the remaining boundary is the tenant: another
+    // organization's site is refused.
+    await expect(receive(foreign.id)).rejects.toMatchObject({
+      status: 404,
+      message: 'Location not found',
+    });
+    expect(await snapshot()).toEqual(before);
+    // T3g: a second site no longer reserves receipts for a sole principal site.
+    // The batch below lands at the explicitly authorized store while the
+    // organization already has two sites, and nothing is written before it.
+    await prisma.location.create({
+      data: { organizationId, name: 'Second site' },
+    });
+    expect(await snapshot()).toEqual(before);
+
+    const readPdf = async () => {
+      const { buffer } = await documents.generatePdf(
+        lateOrderId,
+        organizationId,
+      );
+      return (await pdfParse(new Uint8Array(buffer))).text;
+    };
+    const originalDocument = await readPdf();
+    await expect(receive(principal.id)).resolves.toMatchObject({
+      status: 'RECEIVED',
+    });
+    const after = await snapshot();
+    expect(after.order).toMatchObject({
+      status: 'RECEIVED',
+      receivedAt: expect.any(Date),
+      sentAt: before.order.sentAt,
+      sentVia: before.order.sentVia,
+      documentSnapshot: before.order.documentSnapshot,
+    });
+    expect(after.order.items[0]).toMatchObject({
+      qtyReceived: item.qtyOrdered,
+      product: {
+        stock: item.product.stock + qty,
+        reservedStock: item.product.reservedStock,
+      },
+    });
+    expect(after.movements).toBe(before.movements + 1);
+    expect(after.siteBalances).toBe(before.siteBalances);
+    // The receipt credits the destination site row; the organization aggregate
+    // follows through the ledger's delta trigger and stays the sum of the sites.
+    const destinationBefore = before.siteLedger.find(
+      (row) => row.locationId === principal.id,
+    )!;
+    expect(after.siteLedger).toEqual([
+      {
+        productId: item.productId,
+        locationId: principal.id,
+        organizationId,
+        stock: destinationBefore.stock + qty,
+        reservedStock: 0,
+      },
+    ]);
+    expect(
+      await prisma.inventoryMovement.findFirstOrThrow({
+        where: {
+          productId: item.productId,
+          organizationId,
+          locationId: principal.id,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ).toMatchObject({
+      type: 'PURCHASE',
+      quantity: qty,
+      reason: `OC-${before.order.orderNumber}`,
+    });
+    expect(await readPdf()).toBe(originalDocument);
   });
 
   it('takes the expected delivery date at the first send and freezes it there', async () => {

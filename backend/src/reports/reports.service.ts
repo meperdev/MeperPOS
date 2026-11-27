@@ -52,12 +52,14 @@ interface SaleWhereInput {
   userId?: {
     in: string[];
   };
+  originSite?: { locationId: string };
 }
 
 interface SaleNestedWhere {
   organizationId: string;
   status?: SaleStatusType;
   createdAt?: DateFilter;
+  originSite?: { locationId: string };
 }
 
 interface SaleItemWhereInput {
@@ -67,6 +69,7 @@ interface SaleItemWhereInput {
 interface CustomerSaleWhereInput {
   organizationId: string;
   createdAt?: DateFilter;
+  originSite?: { locationId: string };
 }
 
 /**
@@ -321,6 +324,19 @@ function normalizeUserIds(userIds?: string[]): string[] | undefined {
   );
 
   return normalized.length > 0 ? normalized : undefined;
+}
+
+/**
+ * Restricts a sale query to the sales whose *stored* origin is that site.
+ *
+ * A sale without an origin row (recorded before attribution existed) never
+ * matches, so a site view never guesses where the money was made; the same sale
+ * keeps counting in the organization-wide view. The controller has already
+ * authorized the site through `LocationsService.findAccessible`, so this helper
+ * is only the data filter.
+ */
+function saleOriginFilter(locationId?: string) {
+  return locationId ? { originSite: { locationId } } : {};
 }
 
 export interface FinancialOverviewResponse {
@@ -696,31 +712,78 @@ export class ReportsService {
     organizationId: string | undefined,
     startDate?: string,
     endDate?: string,
+    locationId?: string,
   ) {
     const orgId = this.requireOrganizationId(organizationId);
     validateDateRange(startDate, endDate);
     const period = buildFinancialComparisonPeriod(startDate, endDate);
+
+    /** One row of what the report values: a quantity and its two prices. */
+    type ValuedBalance = {
+      stock: number;
+      costPrice: Prisma.Decimal;
+      salePrice: Prisma.Decimal;
+      type: ProductType;
+      tracksStock: boolean;
+    };
+
     const [products, movements] = await Promise.all([
-      this.prisma.product.findMany({
-        where: {
-          organizationId: orgId,
-          active: true,
-          // A service is sold labour, not merchandise, so it has no place in the
-          // inventory valuation. An untracked item has no stock to value either.
-          type: ProductType.PRODUCT,
-          tracksStock: true,
-        },
-        select: {
-          stock: true,
-          costPrice: true,
-          salePrice: true,
-          type: true,
-          tracksStock: true,
-        },
-      }),
+      // A site view values what that site holds. `ProductStock` is the ledger
+      // the organization aggregate follows, so the site figure is its own
+      // balance instead of a share of the total. Without a site the report
+      // keeps reading the aggregate it always read.
+      locationId
+        ? this.prisma.productStock
+            .findMany({
+              where: {
+                organizationId: orgId,
+                locationId,
+                // The same rule as the organization view: a service is sold
+                // labour and an untracked item is merchandise nobody counts, so
+                // neither is valued at any site.
+                product: {
+                  active: true,
+                  type: ProductType.PRODUCT,
+                  tracksStock: true,
+                },
+              },
+              select: {
+                stock: true,
+                product: { select: { costPrice: true, salePrice: true } },
+              },
+            })
+            .then((rows): ValuedBalance[] =>
+              rows.map((row) => ({
+                stock: row.stock,
+                costPrice: row.product.costPrice,
+                salePrice: row.product.salePrice,
+                type: ProductType.PRODUCT,
+                tracksStock: true,
+              })),
+            )
+        : this.prisma.product.findMany({
+            where: {
+              organizationId: orgId,
+              active: true,
+              // A service is sold labour, not merchandise, so it has no place in the
+              // inventory valuation. An untracked item has no stock to value either.
+              type: ProductType.PRODUCT,
+              tracksStock: true,
+            },
+            select: {
+              stock: true,
+              costPrice: true,
+              salePrice: true,
+              type: true,
+              tracksStock: true,
+            },
+          }),
       this.prisma.inventoryMovement.findMany({
         where: {
           organizationId: orgId,
+          // Movements carry their site since attribution; the ones recorded
+          // before it belong to no site and never enter a site view.
+          ...(locationId && { locationId }),
           createdAt: period.current,
           // Historical service sales left phantom movements behind; they belong to
           // the workshop, not to the merchandise ledger. Movements of merchandise
@@ -905,6 +968,7 @@ export class ReportsService {
   private async findPartiallyReturnedSales(
     organizationId: string | undefined,
     dateFilter: DateFilter | undefined,
+    locationId?: string,
   ): Promise<PartiallyReturnedSale[]> {
     const returnMovementWhere: Prisma.InventoryMovementWhereInput = dateFilter
       ? { type: 'RETURN', createdAt: dateFilter }
@@ -922,6 +986,7 @@ export class ReportsService {
         ...(organizationId ? { organizationId } : {}),
         status: 'RETURNED_PARTIAL',
         OR: touchedInPeriod,
+        ...saleOriginFilter(locationId),
       },
       select: {
         createdAt: true,
@@ -960,11 +1025,16 @@ export class ReportsService {
     organizationId: string | undefined,
     startDate?: string,
     endDate?: string,
+    locationId?: string,
   ) {
     const orgId = this.requireOrganizationId(organizationId);
     validateDateRange(startDate, endDate);
 
-    const cacheKey = `dashboard:${orgId}:${startDate || ''}:${endDate || ''}`;
+    // One cache entry per site, and the organization key stays exactly what it
+    // was for every caller that never passes one.
+    const cacheKey = `dashboard:${orgId}:${startDate || ''}:${endDate || ''}${
+      locationId ? `:${locationId}` : ''
+    }`;
     const cached = this.cache.get(cacheKey);
 
     if (cached) {
@@ -973,20 +1043,26 @@ export class ReportsService {
 
     const dateFilter = buildDateFilter(startDate, endDate);
     const comparisonPeriod = buildComparisonPeriod(startDate, endDate);
+    // The catalog counters below (products, customers, low stock) describe the
+    // organization, not a site: only the sales figures follow the requested site.
+    const originFilter = saleOriginFilter(locationId);
     const baseWhere: SaleWhereInput = {
       organizationId: orgId,
       ...(dateFilter && { createdAt: dateFilter }),
+      ...originFilter,
     };
     const salesWhere = { ...baseWhere, status: 'COMPLETED' as const };
     const currentPeriodSalesWhere = {
       organizationId: orgId,
       status: 'COMPLETED' as const,
       createdAt: comparisonPeriod.current,
+      ...originFilter,
     };
     const previousPeriodSalesWhere = {
       organizationId: orgId,
       status: 'COMPLETED' as const,
       createdAt: comparisonPeriod.previous,
+      ...originFilter,
     };
 
     const [
@@ -1120,6 +1196,7 @@ export class ReportsService {
     organizationId: string | undefined,
     startDate?: string,
     endDate?: string,
+    locationId?: string,
   ) {
     validateDateRange(startDate, endDate);
 
@@ -1135,6 +1212,7 @@ export class ReportsService {
           status: { in: ['COMPLETED', 'RETURNED_PARTIAL'] },
           ...(organizationId ? { organizationId } : ({} as any)),
           ...(dateFilter && { createdAt: dateFilter }),
+          ...saleOriginFilter(locationId),
         },
       },
       _sum: { amount: true },
@@ -1157,6 +1235,7 @@ export class ReportsService {
     organizationId: string | undefined,
     startDate?: string,
     endDate?: string,
+    locationId?: string,
   ) {
     validateDateRange(startDate, endDate);
     const dateFilter = buildDateFilter(startDate, endDate);
@@ -1164,6 +1243,7 @@ export class ReportsService {
       status: 'COMPLETED',
       ...(organizationId ? { organizationId } : ({} as any)),
       ...(dateFilter && { createdAt: dateFilter }),
+      ...saleOriginFilter(locationId),
     };
     const where: SaleItemWhereInput = { sale: saleNested };
 
@@ -1189,7 +1269,7 @@ export class ReportsService {
           },
         },
       }),
-      this.findPartiallyReturnedSales(organizationId, dateFilter),
+      this.findPartiallyReturnedSales(organizationId, dateFilter, locationId),
     ]);
 
     const categorySales = new Map<
@@ -1258,6 +1338,7 @@ export class ReportsService {
     organizationId: string | undefined,
     startDate?: string,
     endDate?: string,
+    locationId?: string,
   ) {
     validateDateRange(startDate, endDate);
     const dateFilter = buildDateFilter(startDate, endDate);
@@ -1265,6 +1346,7 @@ export class ReportsService {
       status: 'COMPLETED',
       ...(organizationId ? { organizationId } : ({} as any)),
       ...(dateFilter && { createdAt: dateFilter }),
+      ...saleOriginFilter(locationId),
     };
     const where: SaleItemWhereInput = { sale: saleNested };
 
@@ -1328,6 +1410,7 @@ export class ReportsService {
     startDate?: string,
     endDate?: string,
     limit: number = 10,
+    locationId?: string,
   ) {
     validateDateRange(startDate, endDate);
     const dateFilter = buildDateFilter(startDate, endDate);
@@ -1335,6 +1418,7 @@ export class ReportsService {
       status: 'COMPLETED',
       ...(organizationId ? { organizationId } : ({} as any)),
       ...(dateFilter && { createdAt: dateFilter }),
+      ...saleOriginFilter(locationId),
     };
     const where: SaleItemWhereInput = { sale: saleNested };
 
@@ -1344,7 +1428,7 @@ export class ReportsService {
         where: where as never,
         _sum: { quantity: true, total: true },
       }),
-      this.findPartiallyReturnedSales(organizationId, dateFilter),
+      this.findPartiallyReturnedSales(organizationId, dateFilter, locationId),
     ]);
 
     const totals = new Map<
@@ -1409,12 +1493,16 @@ export class ReportsService {
     organizationId: string | undefined,
     startDate?: string,
     endDate?: string,
+    locationId?: string,
   ) {
     validateDateRange(startDate, endDate);
     const dateFilter = buildDateFilter(startDate, endDate);
+    // The ranking counts the requested site's sales; the customer directory
+    // itself is organization-wide and keeps counting every active customer.
     const where: CustomerSaleWhereInput = {
       ...(organizationId ? { organizationId } : ({} as any)),
       ...(dateFilter && { createdAt: dateFilter }),
+      ...saleOriginFilter(locationId),
     };
 
     const [
@@ -1441,7 +1529,7 @@ export class ReportsService {
         _count: { id: true },
         _sum: { total: true },
       }),
-      this.findPartiallyReturnedSales(organizationId, dateFilter),
+      this.findPartiallyReturnedSales(organizationId, dateFilter, locationId),
     ]);
 
     const customerIds = topCustomers
@@ -1503,6 +1591,7 @@ export class ReportsService {
     endDate?: string,
     compare: boolean = true,
     userIds?: string[],
+    locationId?: string,
   ): Promise<UserPerformanceReport> {
     validateDateRange(startDate, endDate);
 
@@ -1516,6 +1605,7 @@ export class ReportsService {
       status: 'COMPLETED',
       ...(currentFilter && { createdAt: currentFilter }),
       ...(selectedUserIds && { userId: { in: selectedUserIds } }),
+      ...saleOriginFilter(locationId),
     };
 
     const currentSales = await this.prisma.sale.findMany({
@@ -1571,6 +1661,7 @@ export class ReportsService {
               in: selectedUserIds,
             },
           }),
+          ...saleOriginFilter(locationId),
         } as never,
         select: {
           userId: true,
@@ -1666,6 +1757,7 @@ export class ReportsService {
     organizationId: string | undefined,
     startDate: string,
     endDate: string,
+    locationId?: string,
   ) {
     validateDateRange(startDate, endDate);
     const startDateFilter = parseBogotaStartOfDay(startDate);
@@ -1683,6 +1775,7 @@ export class ReportsService {
           gte: startDateFilter,
           lte: endDateFilter,
         },
+        ...saleOriginFilter(locationId),
       },
       orderBy: { createdAt: 'asc' },
       select: {

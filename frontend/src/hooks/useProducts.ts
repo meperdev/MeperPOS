@@ -20,11 +20,29 @@ export function useProducts(params?: {
   status?: "active" | "inactive" | "all";
   lowStock?: boolean;
   orderBy?: "name" | "createdAt";
+  /**
+   * Read one site's balance instead of the organization aggregate (POS, T3f).
+   * Omit it on every other screen: without a site the request is exactly the
+   * organization-wide one it has always been.
+   */
+  locationId?: string;
+  /**
+   * With a site, list only the products that site carries instead of the whole
+   * catalog (T25). It is meaningless without `locationId`, so it is sent only
+   * when the caller has one.
+   */
+  carriedAtSite?: boolean;
   enabled?: boolean;
 }) {
-  const { enabled = true, ids, ...other } = params ?? {};
+  const { enabled = true, ids, locationId, carriedAtSite, ...other } = params ?? {};
   // A string preserves the important empty-list vs omitted distinction on the wire.
-  const rest = { ...other, ...(ids === undefined ? {} : { ids: [...new Set(ids)].sort().join(',') }) };
+  const rest = {
+    ...other,
+    ...(ids === undefined ? {} : { ids: [...new Set(ids)].sort().join(',') }),
+    // An omitted site keeps the request (and its cache key) byte-identical.
+    ...(locationId === undefined ? {} : { locationId }),
+    ...(carriedAtSite === undefined ? {} : { carriedAtSite }),
+  };
   return useQuery({
     queryKey: ["products", rest],
     queryFn: () =>
@@ -33,8 +51,11 @@ export function useProducts(params?: {
       ),
     enabled,
     placeholderData: (previousData, previousQuery) => {
-      const previousParams = previousQuery?.queryKey[1] as { categoryId?: string; type?: ProductType; ids?: string; available?: boolean } | undefined;
-      return previousParams?.categoryId === rest.categoryId && previousParams?.type === rest.type && previousParams?.ids === rest.ids && previousParams?.available === rest.available
+      const previousParams = previousQuery?.queryKey[1] as { categoryId?: string; type?: ProductType; ids?: string; available?: boolean; locationId?: string; carriedAtSite?: boolean } | undefined;
+      // A site change is not a refinement of the previous page: keeping it as a
+      // placeholder would show one site's stock while the next site loads. The
+      // same holds for the assortment switch, which changes the set itself.
+      return previousParams?.categoryId === rest.categoryId && previousParams?.type === rest.type && previousParams?.ids === rest.ids && previousParams?.available === rest.available && previousParams?.locationId === rest.locationId && previousParams?.carriedAtSite === rest.carriedAtSite
         ? keepPreviousData(previousData) : undefined;
     },
   });
@@ -59,12 +80,20 @@ export function useLowStockProducts(options?: { enabled?: boolean }) {
   });
 }
 
-export function useSearchProducts(query: string, limit = 20) {
+export function useSearchProducts(
+  query: string,
+  limit = 20,
+  locationId?: string
+) {
   return useQuery({
-    queryKey: ["products", "search", query, limit],
+    queryKey: ["products", "search", query, limit, locationId],
     queryFn: () =>
       api
-        .get<SearchProductResult[]>("/products/search", { q: query, limit })
+        .get<SearchProductResult[]>("/products/search", {
+          q: query,
+          limit,
+          ...(locationId === undefined ? {} : { locationId }),
+        })
         .then((res) => res.data),
     enabled: query.length > 2,
   });
@@ -81,12 +110,21 @@ export function useQuickSearch(code: string) {
   });
 }
 
-export function useQuickSearchProduct() {
+/**
+ * The POS scanner: the exact barcode/SKU lookup runs for the site the till is
+ * serving, so a code stocked only at another site answers with this site's
+ * (zero) availability. Without a site it keeps the organization aggregate.
+ */
+export function useQuickSearchProduct(options?: { locationId?: string }) {
+  const locationId = options?.locationId;
   return useMutation({
     mutationFn: (code: string) =>
-      api.get<Product | null>("/products/quick-search", { code }).then(
-        (res) => res.data
-      ),
+      api
+        .get<Product | null>("/products/quick-search", {
+          code,
+          ...(locationId === undefined ? {} : { locationId }),
+        })
+        .then((res) => res.data),
   });
 }
 

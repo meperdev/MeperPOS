@@ -55,6 +55,7 @@ model Organization {
   payrollObligations PayrollObligation[]
   payrollCashOutflows PayrollCashOutflow[]
   inventoryMovements InventoryMovement[]
+  locations          Location[]
   sequences          OrganizationSequence[]
   users              OrganizationUser[]
   payments           Payment[]
@@ -79,8 +80,55 @@ model Organization {
   whatsAppLinkChallenges WhatsAppLinkChallenge[]
   productStockAlerts ProductStockAlert[]
   productStockAlertEvents ProductStockAlertEvent[]
+  stockTransfers     StockTransfer[]
+  stockTransferItems StockTransferItem[]
 
   @@index([status, trialEndsAt])
+}
+
+// Site access is separate from inventory, which still uses Product.stock.
+/// A site is either a store (customer-facing, POS) or a warehouse (storage).
+/// The organization's default site is always a store.
+enum LocationType {
+  STORE
+  WAREHOUSE
+}
+
+model Location {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  type           LocationType @default(STORE)
+  isDefault      Boolean      @default(false)
+  /// Contact details printed on a receipt: optional, null until an
+  /// administrator fills them in.
+  address        String?      @db.VarChar(200)
+  phone          String?      @db.VarChar(40)
+  createdAt      DateTime     @default(now())
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments    MembershipLocation[]
+  productStocks  ProductStock[]
+  movements      InventoryMovement[]
+  saleOrigins    SaleOriginSite[]
+  posLoanSaleIntentOrigins PosLoanSaleIntentOriginSite[]
+  transfersFrom  StockTransfer[] @relation("StockTransferOrigin")
+  transfersTo    StockTransfer[] @relation("StockTransferDestination")
+
+  // The partial unique index for the default site and the case-insensitive
+  // per-organization name index are defined in SQL.
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+model MembershipLocation {
+  userId         String
+  organizationId String
+  locationId     String
+  membership     OrganizationUser @relation(fields: [userId, organizationId], references: [userId, organizationId], onDelete: Cascade)
+  location       Location @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@id([userId, organizationId, locationId])
+  @@index([organizationId, locationId])
 }
 
 // Unexposed payroll foundation; employees do not require login accounts.
@@ -395,6 +443,9 @@ model User {
   moneyLoanEvents    MoneyLoanEvent[]    @relation("MoneyLoanEventCreatedBy")
   inventoryLoansCreated InventoryLoan[] @relation("InventoryLoanCreatedBy")
   inventoryLoanEvents InventoryLoanEvent[] @relation("InventoryLoanEventCreatedBy")
+  stockTransfersCreated StockTransfer[] @relation("StockTransferCreatedBy")
+  stockTransfersReceived StockTransfer[] @relation("StockTransferReceivedBy")
+  stockTransfersCancelled StockTransfer[] @relation("StockTransferCancelledBy")
 }
 
 model OrganizationUser {
@@ -407,6 +458,7 @@ model OrganizationUser {
   isPrimaryOwner Boolean      @default(false)
   inventoryLoansEmployee InventoryLoan[] @relation("InventoryLoanEmployee")
   inventoryLoanOperations InventoryLoanOperation[]
+  locationAssignments MembershipLocation[]
   payrollCashOutflows PayrollCashOutflow[]
   payrollCashRevisions PayrollCashRevision[]
   payrollCashReturns PayrollCashReturn[]
@@ -520,6 +572,8 @@ model Product {
   posLoanSaleReservations PosLoanSaleReservation[]
   stockAlerts         ProductStockAlert[]
   stockAlertEvents    ProductStockAlertEvent[]
+  locationStocks      ProductStock[]
+  transferItems       StockTransferItem[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, sku])
@@ -528,6 +582,79 @@ model Product {
   @@index([organizationId, categoryId])
   @@index([organizationId, type])
   @@index([organizationId, tracksStock])
+}
+
+// Unused until inventory operations cut over together. Product balances remain authoritative.
+model ProductStock {
+  productId      String
+  locationId     String
+  organizationId String
+  stock          Int
+  reservedStock  Int
+  product        Product  @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+  location       Location @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+
+  @@id([productId, locationId])
+  @@index([locationId, organizationId])
+}
+
+/// A dispatch of tracked stock from one site to another inside one tenant.
+/// The stock leaves the organization aggregate while the transfer is in transit
+/// and returns to it at the destination when it is received.
+enum StockTransferStatus {
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+model StockTransfer {
+  id             String              @id @default(uuid())
+  /// Consecutive per organization, allocated from "OrganizationSequence".
+  number         Int
+  organizationId String
+  fromLocationId String
+  toLocationId   String
+  status         StockTransferStatus @default(IN_TRANSIT)
+  notes          String?
+  createdById    String?
+  createdAt      DateTime            @default(now())
+  receivedAt     DateTime?
+  receivedById   String?
+  cancelledAt    DateTime?
+  cancelledById  String?
+  cancelReason   String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Both ends must be sites of the caller's tenant: the composite foreign key
+  // carries the organization, so a cross-tenant pair is unrepresentable.
+  fromLocation Location @relation("StockTransferOrigin", fields: [fromLocationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
+  toLocation Location @relation("StockTransferDestination", fields: [toLocationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
+  createdBy User? @relation("StockTransferCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  receivedBy User? @relation("StockTransferReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  cancelledBy User? @relation("StockTransferCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  items StockTransferItem[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, number])
+  @@index([organizationId, status, createdAt])
+  @@index([fromLocationId, organizationId])
+  @@index([toLocationId, organizationId])
+}
+
+model StockTransferItem {
+  id             String @id @default(uuid())
+  transferId     String
+  organizationId String
+  productId      String
+  quantity       Int
+
+  transfer StockTransfer @relation(fields: [transferId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+  // A line is history: deleting the product must not erase what was moved.
+  product Product @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([transferId, productId])
+  @@index([productId, organizationId])
 }
 
 model InventoryMovement {
@@ -548,6 +675,9 @@ model InventoryMovement {
   user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   inventoryLoanEventId String? @unique
   inventoryLoanEvent InventoryLoanEvent? @relation(fields: [inventoryLoanEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // Null on movements created before site attribution.
+  locationId     String?
+  location       Location? @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
 
   @@index([organizationId, productId, createdAt])
 }
@@ -624,6 +754,7 @@ model Sale {
   items              SaleItem[]
   posLoanSaleIntent  PosLoanSaleIntent?
   fiscalDocument     FiscalDocument?
+  originSite         SaleOriginSite?
 
   @@unique([id, organizationId, customerId])
   /// Needed by `FiscalDocument`'s composite foreign key, which is what makes a
@@ -636,6 +767,18 @@ model Sale {
   @@index([organizationId, createdAt, status])
   @@index([organizationId, userId])
   @@index([organizationId, customerId])
+}
+
+// Site attribution is stored separately so existing Sale JSON stays unchanged.
+model SaleOriginSite {
+  saleId         String
+  organizationId String
+  locationId     String
+  sale           Sale     @relation(fields: [saleId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+  location       Location @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
+
+  @@id([saleId, organizationId])
+  @@index([locationId, organizationId])
 }
 
 model Payment {
@@ -901,12 +1044,25 @@ model PosLoanSaleIntent {
   customer       Customer     @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Restrict)
   loan           MoneyLoan    @relation(fields: [loanId, organizationId, customerId], references: [id, organizationId, customerId], onDelete: Restrict, onUpdate: Restrict)
   finalSale      Sale?        @relation(fields: [finalSaleId, organizationId, customerId], references: [id, organizationId, customerId], onDelete: Restrict, onUpdate: Restrict)
+  originSite     PosLoanSaleIntentOriginSite?
 
   // Composite keys declare the one-to-one relation tuples to Prisma.
   @@unique([loanId, organizationId, customerId])
   @@unique([finalSaleId, organizationId, customerId])
   @@unique([organizationId, initiationRequestKey])
   @@unique([id, organizationId])
+}
+
+// The origin is separate from the frozen quote and replay result.
+model PosLoanSaleIntentOriginSite {
+  intentId       String
+  organizationId String
+  locationId     String
+  intent         PosLoanSaleIntent @relation(fields: [intentId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: Restrict)
+  location       Location          @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: NoAction, onUpdate: Restrict)
+
+  @@id([intentId, organizationId])
+  @@index([locationId, organizationId])
 }
 
 // SQL freezes ownership and validates insert eligibility and terminal claims.
@@ -1284,6 +1440,11 @@ enum MovementType {
   RETURN
   LOAN_DELIVERY
   LOAN_RETURN
+  /// Stock left a site because of a transfer that is now in transit.
+  TRANSFER_OUT
+  /// Stock entered a site because of a transfer (a receipt, or a cancellation
+  /// returning it to the origin).
+  TRANSFER_IN
 }
 
 enum CustomerSegment {

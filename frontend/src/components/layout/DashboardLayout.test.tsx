@@ -114,6 +114,77 @@ describe("payroll route access", () => {
   });
 });
 
+describe("location route access", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentPathname = "/locations";
+  });
+  afterEach(cleanup);
+
+  it.each(["OWNER", "ADMIN"])("allows %s", (role) => {
+    setUser(role);
+    render(<DashboardLayout>Sedes</DashboardLayout>);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["CASHIER", "/pos"],
+    ["MEMBER", "/dashboard"],
+    ["INVENTORY_USER", "/dashboard"],
+    ["SUPER_ADMIN", "/dashboard"],
+  ])("redirects %s", (role, destination) => {
+    setUser(role);
+    render(<DashboardLayout>Sedes</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith(destination);
+  });
+
+  it("gates the nested site screen too", () => {
+    currentPathname = "/locations/new";
+    setUser("CASHIER");
+    render(<DashboardLayout>Nueva sede</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith("/pos");
+  });
+});
+
+describe("transfer route access", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentPathname = "/transfers";
+  });
+  afterEach(cleanup);
+
+  // S6: the destination cashier reaches the screen to receive, and still no
+  // further than that — dispatch and cancellation are refused by the server.
+  it.each(["OWNER", "ADMIN", "MEMBER", "CASHIER"])("allows %s", (role) => {
+    setUser(role);
+    render(<DashboardLayout>Transferencias</DashboardLayout>);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it.each([["INVENTORY_USER", "/dashboard"]])(
+    "redirects %s",
+    (role, destination) => {
+      setUser(role);
+      render(<DashboardLayout>Transferencias</DashboardLayout>);
+      expect(replaceMock).toHaveBeenCalledWith(destination);
+    },
+  );
+
+  it("lets a cashier open a transfer detail path", () => {
+    currentPathname = "/transfers/abc";
+    setUser("CASHIER");
+    render(<DashboardLayout>Transferencia</DashboardLayout>);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("gates a transfer detail path for inventory users", () => {
+    currentPathname = "/transfers/abc";
+    setUser("INVENTORY_USER");
+    render(<DashboardLayout>Transferencia</DashboardLayout>);
+    expect(replaceMock).toHaveBeenCalledWith("/dashboard");
+  });
+});
+
 describe("DashboardLayout route gating for /expenses", () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -12,7 +12,9 @@ export interface PausedSale {
   customerName?: string;
 }
 
-const PAUSED_SALES_KEY = "paused_sales";
+// Old `paused_sales` entries have no owner. Leave them byte-identical: they are
+// hidden from every scope and never reassigned or overwritten automatically.
+const PAUSED_SALES_PREFIX = "pos_paused_sales:";
 
 /**
  * Stable identity of a paused sale's content: same customer + same cart lines
@@ -34,41 +36,58 @@ function pausedSaleSignature(cart: CartItem[], customerId: string | ""): string 
   return `${customerId}::${lines.join("&")}`;
 }
 
-export function usePausedSales() {
-  const [pausedSales, setPausedSales] = useState<PausedSale[]>(() => {
-    if (typeof window === "undefined") {
-      return [];
-    }
+function loadPausedSales(key: string): PausedSale[] {
+  const saved = safeGetItem(key);
+  if (!saved) return [];
 
-    const saved = safeGetItem(PAUSED_SALES_KEY);
-    if (!saved) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(saved) as PausedSale[];
-      // Normalize any duplicate saved entries (identical customer + cart),
-      // keeping the most recently paused one.
-      const seen = new Set<string>();
-      const deduped: PausedSale[] = [];
-      for (const sale of [...parsed].sort(
-        (a, b) => new Date(b.pausedAt).getTime() - new Date(a.pausedAt).getTime(),
-      )) {
+  try {
+    const parsed = JSON.parse(saved) as PausedSale[];
+    // Normalize any duplicate saved entries (identical customer + cart),
+    // keeping the most recently paused one.
+    const seen = new Set<string>();
+    return [...parsed]
+      .sort(
+        (a, b) =>
+          new Date(b.pausedAt).getTime() - new Date(a.pausedAt).getTime(),
+      )
+      .filter((sale) => {
         const sig = pausedSaleSignature(sale.cart, sale.customerId);
-        if (!seen.has(sig)) {
-          seen.add(sig);
-          deduped.push(sale);
-        }
-      }
-      return deduped;
-    } catch {
-      return [];
-    }
-  });
+        if (seen.has(sig)) return false;
+        seen.add(sig);
+        return true;
+      });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Paused drafts belong to a caller-supplied scope tuple (user, organization,
+ * site). A change of scope must never render, resume, overwrite or delete the
+ * drafts of another scope.
+ */
+export function usePausedSales(scope: string) {
+  const key = PAUSED_SALES_PREFIX + scope;
+  const [saved, setSaved] = useState(() => ({
+    key,
+    sales: loadPausedSales(key),
+  }));
+  // A new scope must never render or persist the previous scope's drafts.
+  const active =
+    saved.key === key ? saved : { key, sales: loadPausedSales(key) };
+  if (active !== saved) setSaved(active);
+  const pausedSales = active.sales;
 
   useEffect(() => {
-    safeSetItem(PAUSED_SALES_KEY, JSON.stringify(pausedSales));
-  }, [pausedSales]);
+    safeSetItem(key, JSON.stringify(pausedSales));
+  }, [key, pausedSales]);
+
+  const setPausedSales = (update: (previous: PausedSale[]) => PausedSale[]) =>
+    setSaved((previous) =>
+      previous.key === key
+        ? { key, sales: update(previous.sales) }
+        : previous,
+    );
 
   const pauseSale = (
     cart: CartItem[],
@@ -113,7 +132,7 @@ export function usePausedSales() {
     return pausedSale.id;
   };
 
-  const resumeSale = (id: string) => {
+  const getPausedSale = (id: string) => {
     const sale = pausedSales.find((s) => s.id === id);
     if (!sale) {
       throw new Error("Paused sale not found");
@@ -125,7 +144,6 @@ export function usePausedSales() {
       availableStock: item.availableStock ?? effectiveStock(item.product),
     }));
 
-    setPausedSales((prev) => prev.filter((s) => s.id !== id));
     return { ...sale, cart: migratedCart };
   };
 
@@ -133,14 +151,21 @@ export function usePausedSales() {
     setPausedSales((prev) => prev.filter((s) => s.id !== id));
   };
 
+  const resumeSale = (id: string) => {
+    const sale = getPausedSale(id);
+    deletePausedSale(id);
+    return sale;
+  };
+
   const clearAllPausedSales = () => {
-    setPausedSales([]);
+    setPausedSales(() => []);
   };
 
   return {
     pausedSales,
     pauseSale,
     resumeSale,
+    getPausedSale,
     deletePausedSale,
     clearAllPausedSales,
     isLoaded: true,

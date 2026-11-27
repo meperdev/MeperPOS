@@ -28,6 +28,8 @@ import {
 import { OrgRole, ProductType } from '@prisma/client';
 import { ProductsService } from './products.service';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import { StockAdjustmentDto } from './dto/stock-adjustment.dto';
+import { ProductSiteQueryPipe } from './dto/product-site.query';
 import { JwtAuthGuard } from '../auth/jwt.strategy';
 import { AuditAction } from '../common/decorators/audit.decorator';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -40,6 +42,7 @@ import { PlanLimitGuard } from '../plan-limits/plan-limits.guard';
 import { PlanLimit } from '../plan-limits/plan-limits.decorator';
 import { OrganizationRequiredGuard } from '../common/guards/organization-required.guard';
 import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organization.interceptor';
+import { LocationsService } from '../locations/locations.service';
 
 @ApiTags('Products')
 @Controller('products')
@@ -47,7 +50,10 @@ import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organ
 @UseGuards(JwtAuthGuard, RolesGuard, OrganizationRequiredGuard, PlanLimitGuard)
 @UseInterceptors(AdminOrganizationInterceptor)
 export class ProductsController {
-  constructor(private productsService: ProductsService) {}
+  constructor(
+    private productsService: ProductsService,
+    private locationsService: LocationsService,
+  ) {}
 
   @Post()
   @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
@@ -79,9 +85,26 @@ export class ProductsController {
     example: 'active',
   })
   @ApiQuery({ name: 'type', required: false, enum: ProductType })
-  @ApiQuery({ name: 'ids', required: false, description: 'Comma-separated product UUIDs; empty means no products' })
+  @ApiQuery({
+    name: 'ids',
+    required: false,
+    description: 'Comma-separated product UUIDs; empty means no products',
+  })
   @ApiQuery({ name: 'available', required: false, type: Boolean })
-  findAll(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description:
+      'Read one accessible site balance; omit it for the organization aggregate',
+  })
+  @ApiQuery({
+    name: 'carriedAtSite',
+    required: false,
+    type: Boolean,
+    description:
+      'Only valid with locationId: list the products that site carries instead of the whole catalog',
+  })
+  async findAll(
     @CurrentUser() user: RequestUser,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
@@ -90,13 +113,24 @@ export class ProductsController {
     @Query('status') status: 'active' | 'inactive' | 'all' = 'active',
     @Query('lowStock') lowStock?: string,
     @Query('orderBy') orderBy?: 'name' | 'createdAt',
-    @Query('type', new ParseEnumPipe(ProductType, { optional: true })) type?: ProductType,
+    @Query('type', new ParseEnumPipe(ProductType, { optional: true }))
+    type?: ProductType,
     @Query('ids') ids?: string,
-    @Query('available', new ParseBoolPipe({ optional: true })) available?: boolean,
+    @Query('available', new ParseBoolPipe({ optional: true }))
+    available?: boolean,
+    @Query('locationId', ProductSiteQueryPipe) locationId?: string,
+    @Query('carriedAtSite', new ParseBoolPipe({ optional: true }))
+    carriedAtSite?: boolean,
   ) {
     if (ids !== undefined && typeof ids !== 'string') {
       throw new BadRequestException('ids must be a comma-separated string');
     }
+    // No `await` on the organization-wide path: an omitted site keeps this read
+    // exactly as synchronous as it was before site scoping existed.
+    const locationSiteId =
+      locationId === undefined
+        ? undefined
+        : await this.readableSite(user, locationId);
     return this.productsService.findAll(
       user.organizationId,
       page,
@@ -109,6 +143,8 @@ export class ProductsController {
       type,
       ids === undefined ? undefined : ids === '' ? [] : ids.split(','),
       available ?? false,
+      locationSiteId,
+      carriedAtSite,
     );
   }
 
@@ -126,15 +162,27 @@ export class ProductsController {
   @ApiOperation({ summary: 'Search products by name, SKU or barcode' })
   @ApiQuery({ name: 'q', required: true })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
-  search(
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description:
+      'Read one accessible site balance; omit it for the organization aggregate',
+  })
+  async search(
     @CurrentUser() user: RequestUser,
     @Query('q') query: string,
     @Query('limit') limit: number = 20,
+    @Query('locationId', ProductSiteQueryPipe) locationId?: string,
   ) {
+    const locationSiteId =
+      locationId === undefined
+        ? undefined
+        : await this.readableSite(user, locationId);
     return this.productsService.searchProducts(
       query,
       limit,
       user.organizationId,
+      locationSiteId,
     );
   }
 
@@ -142,14 +190,80 @@ export class ProductsController {
   @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Quick search product by barcode or SKU' })
   @ApiQuery({ name: 'code', required: true })
-  quickSearch(@CurrentUser() user: RequestUser, @Query('code') code: string) {
-    return this.productsService.quickSearch(code, user.organizationId);
+  @ApiQuery({
+    name: 'locationId',
+    required: false,
+    description:
+      'Read one accessible site balance; omit it for the organization aggregate',
+  })
+  async quickSearch(
+    @CurrentUser() user: RequestUser,
+    @Query('code') code: string,
+    @Query('locationId', ProductSiteQueryPipe) locationId?: string,
+  ) {
+    const locationSiteId =
+      locationId === undefined
+        ? undefined
+        : await this.readableSite(user, locationId);
+    return this.productsService.quickSearch(
+      code,
+      user.organizationId,
+      locationSiteId,
+    );
+  }
+
+  /**
+   * Authorizes the optional site filter through the single site-access rule.
+   *
+   * `LocationsService.findAccessible` answers 404 'Location not found' for a
+   * site in another organization, a site the membership was never assigned and
+   * an unknown id, exactly like the other site routes; the products read never
+   * re-derives that rule.
+   */
+  private async readableSite(
+    user: RequestUser,
+    locationId: string,
+  ): Promise<string> {
+    const site = await this.locationsService.findAccessible(user, locationId);
+    return site.id;
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a product by ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.productsService.findOne(id, user.organizationId);
+  }
+
+  /**
+   * Per-site breakdown of one product (T22).
+   *
+   * Every role that can open a product may read it, and the directory answers
+   * only with the sites that role may see (owners and administrators: the whole
+   * organization; an operational membership: its assignments). The service
+   * keeps the read tenant-scoped.
+   */
+  @Get(':id/stock-by-site')
+  @ApiOperation({ summary: 'Get the stock balance of every readable site' })
+  async stockBySite(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    const sites = await this.locationsService.list(user);
+    return this.productsService.stockBySite(id, user.organizationId, sites);
+  }
+
+  /**
+   * Per-site stock adjustment (T22). It is a stock edit, so it admits exactly
+   * the roles the product edit does, and it leaves the same audit trail.
+   */
+  @Post(':id/stock-adjustments')
+  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @UseInterceptors(AuditInterceptor)
+  @AuditAction('PRODUCT_STOCK_ADJUST')
+  @ApiOperation({ summary: 'Adjust the stock of one site' })
+  adjustStock(
+    @Param('id') id: string,
+    @Body() stockAdjustmentDto: StockAdjustmentDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.productsService.adjustSiteStock(id, stockAdjustmentDto, user);
   }
 
   @Put(':id')

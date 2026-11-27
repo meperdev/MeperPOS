@@ -1,6 +1,7 @@
 import axios, {
   AxiosError,
   AxiosInstance,
+  type AxiosRequestConfig,
 } from "axios";
 import {
   getAccessToken,
@@ -32,6 +33,25 @@ export interface ApiErrorDetails {
   code: string;
   message: string;
   requestId?: string;
+}
+
+/**
+ * The user and tenant a POS surface was rendered for.
+ *
+ * A POS request carries this so the transport can refuse to leave under any
+ * other credential — including one a refresh rotated in from another tab.
+ */
+export interface PosRequestScope {
+  userId: string;
+  organizationId: string;
+}
+
+/** Answer of a POS request the client refused to send under a changed session. */
+export const POS_SCOPE_MISMATCH_CODE = "ERR_POS_SCOPE_MISMATCH";
+
+interface AccessTokenClaims {
+  sub?: unknown;
+  organizationId?: unknown;
 }
 
 const UNKNOWN_ERROR_CODE = "UNKNOWN_ERROR";
@@ -88,6 +108,8 @@ declare module "axios" {
   export interface AxiosRequestConfig {
     _retry?: boolean;
     _isRefreshCall?: boolean;
+    /** Bound identity of a POS request; set only by the POS call sites. */
+    posScope?: PosRequestScope;
   }
 }
 
@@ -103,6 +125,54 @@ function defaultOnSessionExpired(): void {
   if (typeof window !== "undefined") {
     window.location.href = LOGIN_PATH;
   }
+}
+
+/**
+ * Reads the claims the backend signed, without verifying the signature: this is
+ * only used to tell whether the credential still describes the POS surface, and
+ * the server remains the authority on what the token grants.
+ */
+function readAccessTokenClaims(token: string): AccessTokenClaims | null {
+  const segment = token.split(".")[1];
+  if (!segment) return null;
+  try {
+    const base64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return parsed && typeof parsed === "object"
+      ? (parsed as AccessTokenClaims)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The tenant the transport would actually present for this request. */
+function selectedOrganizationId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(SELECTED_ORGANIZATION_KEY);
+}
+
+/**
+ * Whether the credential this request would leave under still belongs to the
+ * surface that asked for it.
+ *
+ * A platform session carries no tenant of its own and rides the selected one,
+ * exactly as the request interceptor advertises it in `X-Organization-Id`.
+ */
+function posScopeMatches(scope: PosRequestScope): boolean {
+  const token = getAccessToken();
+  // A cookie-only request could use another tab's session at the proxy.
+  // Scoped POS requests cannot establish their identity without a bearer.
+  if (!token) return false;
+  const claims = readAccessTokenClaims(token);
+  if (!claims || claims.sub !== scope.userId) return false;
+  const tenant =
+    typeof claims.organizationId === "string"
+      ? claims.organizationId
+      : selectedOrganizationId();
+  return tenant === scope.organizationId;
 }
 
 export class ApiClient {
@@ -126,6 +196,21 @@ export class ApiClient {
 
     this.client.interceptors.request.use(
       (config) => {
+        // A POS request names the user and tenant its surface was rendered for.
+        // The shared cookies can be rotated by another tab, so the identity is
+        // verified at dispatch — on the first attempt and again on every retry —
+        // and the request is dropped before it leaves the browser.
+        const posScope = config.posScope;
+        if (posScope && !posScopeMatches(posScope)) {
+          return Promise.reject(
+            new AxiosError(
+              "La sesión cambió de usuario u organización; no se envió la solicitud del punto de venta.",
+              POS_SCOPE_MISMATCH_CODE,
+              config
+            )
+          );
+        }
+
         // Access token lives in memory only.
         const token = getAccessToken();
         if (token) {
@@ -148,6 +233,11 @@ export class ApiClient {
               config.headers["x-csrf-token"] = csrfToken;
             }
           }
+        }
+        if (posScope) {
+          // The bound tenant wins over whatever storage holds by now, so the
+          // request and the site the cashier sees can never disagree.
+          config.headers["X-Organization-Id"] = posScope.organizationId;
         }
         return config;
       },
@@ -231,12 +321,20 @@ export class ApiClient {
     return this.client;
   }
 
-  get<T = unknown>(url: string, params?: Record<string, unknown>) {
-    return this.client.get<T>(url, { params });
+  get<T = unknown>(
+    url: string,
+    params?: Record<string, unknown>,
+    config?: AxiosRequestConfig
+  ) {
+    return this.client.get<T>(url, { ...config, params });
   }
 
-  post<T = unknown>(url: string, data?: unknown) {
-    return this.client.post<T>(url, data);
+  post<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ) {
+    return this.client.post<T>(url, data, config);
   }
 
   postWithFormData<T = unknown>(url: string, data: FormData) {

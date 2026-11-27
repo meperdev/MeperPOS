@@ -11,6 +11,8 @@ import {
 import { SidebarProvider, SIDEBAR_COLLAPSED_KEY } from "@/contexts/SidebarContext";
 import { closeMobileDrawer, openMobileDrawer } from "./mobile-drawer";
 import { safeGetItem, safeSetItem } from "@/lib/utils";
+import { guardOrganizationScopeChange } from "@/lib/organizationScope";
+import { SELECTED_ORGANIZATION_KEY } from "@/lib/session";
 import { api } from "@/lib/api";
 
 const pushMock = vi.fn();
@@ -199,12 +201,14 @@ describe("Sidebar", () => {
       "Categorías",
       "Proveedores",
       "Compras",
+      "Transferencias",
       "Salidas",
       "Reportes",
       "Préstamos",
       "Empleados",
       "Nómina",
       "Tareas",
+      "Sedes",
     ]);
     expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
     // Account destinations live in the account menu, not in the rail spine.
@@ -241,6 +245,38 @@ describe("Sidebar", () => {
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     const link = screen.queryByRole("link", { name: "Nómina" });
     if (permitted) expect(link).toHaveAttribute("href", "/payroll");
+    else expect(link).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["OWNER", true], ["ADMIN", true], ["CASHIER", false],
+    ["MEMBER", false], ["INVENTORY_USER", false], ["SUPER_ADMIN", false],
+  ])("shows the sites link for %s only when permitted", async (role, permitted) => {
+    useAuthMock.mockReturnValue({
+      user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
+      logout: vi.fn(), switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { organizations: [organizations[0]] } });
+    render(<Sidebar />, { wrapper });
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    const link = screen.queryByRole("link", { name: "Sedes" });
+    if (permitted) expect(link).toHaveAttribute("href", "/locations");
+    else expect(link).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["OWNER", true], ["ADMIN", true], ["MEMBER", true], ["CASHIER", true],
+    ["INVENTORY_USER", false], ["SUPER_ADMIN", true],
+  ])("shows the transfers link for %s only when permitted", async (role, permitted) => {
+    useAuthMock.mockReturnValue({
+      user: { id: "user-1", name: "Ana", role, active: true, organizationId: "org-a" },
+      logout: vi.fn(), switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { organizations: [organizations[0]] } });
+    render(<Sidebar />, { wrapper });
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    const link = screen.queryByRole("link", { name: "Transferencias" });
+    if (permitted) expect(link).toHaveAttribute("href", "/transfers");
     else expect(link).not.toBeInTheDocument();
   });
 
@@ -364,6 +400,168 @@ describe("Sidebar", () => {
     await waitFor(() => {
       expect(queryClient.getQueryData(scopedKey)).toBeUndefined();
     });
+  });
+
+  it("honours the POS cart veto in both SuperAdmin organization switchers", async () => {
+    // A previous test can leave a selected scope behind; this case proves the
+    // veto keeps storage empty, so start from a clean scope.
+    localStorage.removeItem(SELECTED_ORGANIZATION_KEY);
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "admin-1",
+        email: "admin@example.com",
+        role: "ADMIN",
+        active: true,
+        isSuperAdmin: true,
+        organizationId: null,
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: [
+        { id: "org-a", name: "Org A", plan: "BASIC", status: "ACTIVE" },
+        { id: "org-b", name: "Org B", plan: "PRO", status: "ACTIVE" },
+      ],
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const scopedKey = ["products", { page: 1, limit: 10 }];
+    queryClient.setQueryData(scopedKey, { data: [{ id: "product-from-org-a" }] });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/admin/organizations");
+    });
+
+    const rail = within(screen.getByTestId("sidebar-user-rail"));
+    const drawer = within(screen.getByTestId("sidebar-user"));
+    const release = guardOrganizationScopeChange(() => false);
+    try {
+      await userEvent.click(
+        await rail.findByRole("button", { name: "Seleccionar organización" })
+      );
+      await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
+
+      expect(safeGetItem(SELECTED_ORGANIZATION_KEY)).toBeNull();
+      expect(
+        rail.getByRole("button", { name: "Seleccionar organización" })
+      ).toHaveTextContent("Todas las organizaciones");
+      expect(queryClient.getQueryData(scopedKey)).toBeDefined();
+
+      await userEvent.click(
+        await drawer.findByRole("button", { name: "Seleccionar organización" })
+      );
+      await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
+
+      expect(safeGetItem(SELECTED_ORGANIZATION_KEY)).toBeNull();
+      expect(
+        drawer.getByRole("button", { name: "Seleccionar organización" })
+      ).toHaveTextContent("Todas las organizaciones");
+      expect(queryClient.getQueryData(scopedKey)).toBeDefined();
+    } finally {
+      release();
+    }
+
+    await userEvent.click(
+      await drawer.findByRole("button", { name: "Seleccionar organización" })
+    );
+    await userEvent.click(await screen.findByRole("button", { name: /Org B/ }));
+
+    await waitFor(() => {
+      expect(safeGetItem(SELECTED_ORGANIZATION_KEY)).toBe("org-b");
+    });
+    expect(queryClient.getQueryData(scopedKey)).toBeUndefined();
+    expect(
+      drawer.getByRole("button", { name: "Seleccionar organización" })
+    ).toHaveTextContent("Org B");
+  });
+
+  it("keeps a stale organization picker on the session's real scope without resetting its data", async () => {
+    // The shared cookie/session can move to another organization from another
+    // tab while this one is mounted, so the picker is a view of the stored
+    // scope instead of a copy taken at mount.
+    localStorage.removeItem(SELECTED_ORGANIZATION_KEY);
+    useAuthMock.mockReturnValue({
+      user: {
+        id: "admin-1",
+        email: "admin@example.com",
+        role: "ADMIN",
+        active: true,
+        isSuperAdmin: true,
+        organizationId: null,
+      },
+      logout: vi.fn(),
+      switchOrganization: switchOrganizationMock,
+    });
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: [
+        { id: "org-a", name: "Org A", plan: "BASIC", status: "ACTIVE" },
+        { id: "org-b", name: "Org B", plan: "PRO", status: "ACTIVE" },
+      ],
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const scopedKey = ["products", { page: 1, limit: 10 }];
+    queryClient.setQueryData(scopedKey, { data: [{ id: "product-from-org-a" }] });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+    const rail = within(screen.getByTestId("sidebar-user-rail"));
+    try {
+      await waitFor(() => {
+        expect(api.get).toHaveBeenCalledWith("/admin/organizations");
+      });
+      expect(
+        await rail.findByRole("button", { name: "Seleccionar organización" })
+      ).toHaveTextContent("Todas las organizaciones");
+
+      // Another tab switched the session to Org A.
+      act(() => {
+        safeSetItem(SELECTED_ORGANIZATION_KEY, "org-a");
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: SELECTED_ORGANIZATION_KEY,
+            oldValue: null,
+            newValue: "org-a",
+          })
+        );
+      });
+
+      await waitFor(() => {
+        expect(
+          rail.getByRole("button", { name: "Seleccionar organización" })
+        ).toHaveTextContent("Org A");
+      });
+
+      // Selecting the organization the session is already in is not a change.
+      await userEvent.click(
+        rail.getByRole("button", { name: "Seleccionar organización" })
+      );
+      await userEvent.click(await screen.findByRole("button", { name: /Org A/ }));
+
+      expect(safeGetItem(SELECTED_ORGANIZATION_KEY)).toBe("org-a");
+      expect(queryClient.getQueryData(scopedKey)).toEqual({
+        data: [{ id: "product-from-org-a" }],
+      });
+      expect(
+        rail.getByRole("button", { name: "Seleccionar organización" })
+      ).toHaveTextContent("Org A");
+    } finally {
+      localStorage.removeItem(SELECTED_ORGANIZATION_KEY);
+      queryClient.clear();
+    }
   });
 
   it("drops a mounted page's rows when the organization scope changes", async () => {
@@ -1010,12 +1208,13 @@ describe("drawer offers only what the tab bar does not", () => {
     expect(screen.queryByRole("link", { name: "Panel" })).toBeNull();
   });
 
-  it("removes a group heading whose whole list is tabs", () => {
+  it("keeps a group heading as soon as one of its rows has no tab", () => {
+    // S6: a cashier now has Transferencias in Inventario, and that row has no
+    // mobile tab, so the heading belongs in the drawer again.
     const { container } = renderAs("CASHIER");
 
     const inventoryGroup = container.querySelector('[data-nav-group="Inventario"]');
-    expect(inventoryGroup?.className).toContain("hidden");
-    expect(inventoryGroup?.className).toContain("lg:block");
+    expect(inventoryGroup?.className).not.toContain("hidden");
 
     const operationsGroup = container.querySelector('[data-nav-group="Operación"]');
     expect(operationsGroup?.className).not.toContain("hidden");

@@ -88,4 +88,44 @@ describe("useCreateSale", () => {
       requestKey: "checkout-attempt-key",
     });
   });
+
+  it("charges at the active POS site, bound to the same request scope", async () => {
+    post.mockResolvedValue({ data: { id: "sale-1" } } as never);
+    const scope = { userId: "user-1", organizationId: "org-1" };
+    const { result } = renderHook(
+      () => useCreateSale(scope, "site-b"),
+      { wrapper: wrapper() },
+    );
+
+    await result.current.mutateAsync({
+      items: [{ productId: "p1", quantity: 2, discountAmount: 0 }],
+      requestKey: "checkout-attempt-key",
+    });
+
+    expect(post).toHaveBeenCalledWith(
+      "/sales",
+      {
+        items: [{ productId: "p1", quantity: 2, discountAmount: 0 }],
+        requestKey: "checkout-attempt-key",
+        locationId: "site-b",
+      },
+      { posScope: scope },
+    );
+  });
+
+  it("keeps the plain sale for a caller without an active site", async () => {
+    post.mockResolvedValue({ data: { id: "sale-1" } } as never);
+    const { result } = renderHook(() => useCreateSale(undefined, undefined), {
+      wrapper: wrapper(),
+    });
+
+    await result.current.mutateAsync({
+      items: [{ productId: "p1", quantity: 1, discountAmount: 0 }],
+    });
+
+    expect(post).toHaveBeenCalledWith("/sales", {
+      items: [{ productId: "p1", quantity: 1, discountAmount: 0 }],
+    });
+    expect(post.mock.calls[0][1]).not.toHaveProperty("locationId");
+  });
 });

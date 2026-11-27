@@ -11,10 +11,12 @@ import {
   type ReactNode,
   useEffect,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { Product, Sale } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { HAPTIC_PATTERNS } from "@/lib/haptics";
+import { applyOrganizationScope, readOrganizationScope, subscribeOrganizationScope } from "@/lib/organizationScope";
 import { useAuth } from "@/contexts/AuthContext";
 
 type UseProductsParams = {
@@ -25,16 +27,19 @@ type UseProductsParams = {
   type?: "PRODUCT" | "SERVICE";
   ids?: string[];
   available?: boolean;
+  locationId?: string;
 };
 
 const useProductsMock = vi.fn();
+const quickSearchHookMock = vi.fn();
 const quickSearchMutateMock = vi.fn();
 const createSaleMutateMock = vi.fn();
 const createPosLoanMutateMock = vi.fn();
 const resumeSaleMock = vi.fn();
+const pauseSaleMock = vi.fn();
 const deletePausedSaleMock = vi.fn();
 const apiGetMock = vi.fn();
-const pausedSalesState = vi.hoisted(() => ({ list: [] as unknown[] }));
+const pausedSalesState = vi.hoisted(() => ({ list: [] as unknown[], real: false }));
 
 vi.mock("next/image", () => ({
   default: (props: { alt?: string }) => (
@@ -84,11 +89,13 @@ vi.mock("@/components/pos/PaymentMethodCards", () => ({
 vi.mock("@/components/pos/PaymentConfirmationModal", () => ({
   PaymentConfirmationModal: ({
     isOpen,
+    onClose,
     onConfirm,
     total,
     onPaymentMethodChange,
   }: {
     isOpen: boolean;
+    onClose: () => void;
     onConfirm: () => Promise<void>;
     total: number;
     onPaymentMethodChange: (
@@ -99,6 +106,11 @@ vi.mock("@/components/pos/PaymentConfirmationModal", () => ({
       <div>
         <button type="button" onClick={() => void onConfirm()}>
           Confirmar pago
+        </button>
+        {/* The real dialog dismisses through its close control, the backdrop and
+            Escape; every path funnels into `onClose`. */}
+        <button type="button" onClick={onClose}>
+          Cerrar pago
         </button>
         {/* The real modal edits the split; this stand-in reports an overpaid
             split so the page's own guard can be observed (S3). */}
@@ -308,10 +320,13 @@ vi.mock("@/components/ui/ConfirmDialog", () => ({
 
 vi.mock("@/hooks/useProducts", () => ({
   useProducts: (params?: UseProductsParams) => useProductsMock(params),
-  useQuickSearchProduct: () => ({
-    mutateAsync: quickSearchMutateMock,
-    isPending: false,
-  }),
+  useQuickSearchProduct: (options?: { locationId?: string }) => {
+    quickSearchHookMock(options);
+    return {
+      mutateAsync: quickSearchMutateMock,
+      isPending: false,
+    };
+  },
 }));
 
 vi.mock("@/hooks/useCategories", () => ({
@@ -376,14 +391,19 @@ vi.mock("@/hooks/useLoans", async () => {
   };
 });
 
-vi.mock("@/hooks/usePausedSales", () => ({
-  usePausedSales: () => ({
+vi.mock("@/hooks/usePausedSales", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/usePausedSales")>();
+  const mockPausedSales = () => ({
     pausedSales: pausedSalesState.list,
-    pauseSale: vi.fn(),
-    resumeSale: resumeSaleMock,
+    pauseSale: pauseSaleMock,
+    getPausedSale: resumeSaleMock,
     deletePausedSale: deletePausedSaleMock,
-  }),
-}));
+  });
+  return {
+    usePausedSales: (scope: string) =>
+      (pausedSalesState.real ? actual.usePausedSales : mockPausedSales)(scope),
+  };
+});
 
 vi.mock("@/lib/api", () => ({
   api: { get: (...args: unknown[]) => apiGetMock(...args) },
@@ -419,10 +439,39 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 // The POS reads the acting role to decide whether to offer the price-override
 // control. Default to CASHIER; permission tests select other roles explicitly.
-const authState = vi.hoisted(() => ({ role: "CASHIER" as string, loading: false }));
+const authState = vi.hoisted(() => ({ role: "CASHIER" as string, loading: false, id: "user-a", organizationId: "org-a", isSuperAdmin: false }));
+const siteState = vi.hoisted(() => ({
+  data: {
+    locations: [{ id: "site-a", name: "Sede principal", isDefault: true }],
+    checkoutLocationId: "site-a" as string | null,
+  },
+  isFetchedAfterMount: true,
+  isError: false,
+  refetch: vi.fn(),
+  requested: vi.fn(),
+}));
 
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ user: authState.role ? { role: authState.role } : null, loading: authState.loading }),
+  useAuth: () => ({
+    user: authState.role ? {
+      id: authState.id,
+      organizationId: authState.organizationId,
+      role: authState.role,
+      isSuperAdmin: authState.isSuperAdmin,
+    } : null,
+    loading: authState.loading,
+  }),
+}));
+vi.mock("@/hooks/usePosSiteContext", () => ({
+  usePosOrganizationScope: (isSuperAdmin: boolean) =>
+    useSyncExternalStore(subscribeOrganizationScope, isSuperAdmin ? readOrganizationScope : () => null),
+  usePosSiteContext: (userId: string, organizationId: string) => {
+    siteState.requested(userId, organizationId);
+    return {
+      ...siteState,
+      refetch: async () => (await siteState.refetch()) ?? { data: siteState.data, isError: false },
+    };
+  },
 }));
 
 import POSPage from "./page";
@@ -478,6 +527,383 @@ function makeSale(): Sale {
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
+
+describe("POS site scope", () => {
+  beforeEach(() => {
+    createSaleMutateMock.mockClear();
+    createPosLoanMutateMock.mockClear();
+    pauseSaleMock.mockClear();
+    siteState.requested.mockClear();
+    siteState.refetch.mockReset();
+    useProductsMock.mockReturnValue({
+      data: { data: [makeProduct("1", "Scoped product")], meta: { total: 1, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    authState.id = "user-a";
+    authState.organizationId = "org-a";
+    authState.isSuperAdmin = false;
+    siteState.isFetchedAfterMount = true;
+    siteState.isError = false;
+    siteState.data = { locations: [{ id: "site-a", name: "Sede principal", isDefault: true }], checkoutLocationId: "site-a" };
+    localStorage.removeItem("selectedOrganizationId");
+  });
+
+  it("does not expose checkout when the user has no permitted site", () => {
+    siteState.data = { locations: [], checkoutLocationId: null };
+    render(<POSPage />);
+    expect(screen.getByText("No tienes sedes asignadas")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Scoped product" })).toBeNull();
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+  });
+
+  it("asks the cashier to choose among the listed stores when none is nominated", async () => {
+    siteState.data = {
+      locations: [...siteState.data.locations, { id: "site-b", name: "Sede B", isDefault: false }],
+      checkoutLocationId: null,
+    };
+    render(<POSPage />);
+    expect(
+      screen.getByRole("heading", { name: "¿Dónde vas a vender hoy?" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("El cobro, el catálogo y el stock son los de la sede que elijas."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Scoped product" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Sede B" }));
+    expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["id", "organizationId"] as const)("does not carry a cart across a change of %s", async (dimension) => {
+    const { rerender } = render(<POSPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+    expect(screen.getByText("1 en carrito")).toBeTruthy();
+    authState[dimension] = "different-scope";
+    rerender(<POSPage />);
+    expect(screen.queryByText("1 en carrito")).toBeNull();
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+  });
+
+  it("requires a SuperAdmin to finish, pause or empty the active cart before switching organization", async () => {
+    const client = new QueryClient();
+    authState.isSuperAdmin = true;
+    applyOrganizationScope(client, "org-a");
+    const view = render(<POSPage />);
+    try {
+      await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+      expect(screen.getByText("1 en carrito")).toBeTruthy();
+      act(() => applyOrganizationScope(client, "org-b"));
+      expect(siteState.requested).toHaveBeenLastCalledWith("user-a", "org-a");
+      expect(screen.getByText("1 en carrito")).toBeTruthy();
+      await userEvent.click(screen.getByRole("button", { name: "Pausar" }));
+      act(() => applyOrganizationScope(client, "org-b"));
+      expect(siteState.requested).toHaveBeenLastCalledWith("user-a", "org-b");
+      expect(screen.queryByText("1 en carrito")).toBeNull();
+      expect(createSaleMutateMock).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      applyOrganizationScope(client, null);
+      client.clear();
+    }
+  });
+
+  it("holds the organization scope while an ordinary cashier has an active cart", async () => {
+    const client = new QueryClient();
+    applyOrganizationScope(client, "org-a");
+    const view = render(<POSPage />);
+    try {
+      await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+      expect(applyOrganizationScope(client, "org-b")).toBe(false);
+      expect(readOrganizationScope()).toBe("org-a");
+      expect(screen.getByText("1 en carrito")).toBeTruthy();
+      await userEvent.click(screen.getByRole("button", { name: "Pausar" }));
+      expect(applyOrganizationScope(client, "org-b")).toBe(true);
+    } finally {
+      view.unmount();
+      applyOrganizationScope(client, null);
+      client.clear();
+    }
+  });
+
+  it("opens the nominated store and lets an empty till change store", async () => {
+    siteState.data = {
+      locations: [{ id: "site-b", name: "Sede B", isDefault: false }, ...siteState.data.locations],
+      checkoutLocationId: "site-b",
+    };
+    render(<POSPage />);
+    expect(screen.getByText("Sede B")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+    expect(screen.getByRole("button", { name: /Cambiar sede/ })).toBeDisabled();
+    expect(
+      screen.getByText("Pausa o termina la venta para cambiar de sede"),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Pausar" }));
+    await userEvent.click(screen.getByRole("button", { name: /Cambiar sede/ }));
+    expect(
+      screen.getByRole("heading", { name: "Cambiar de sede" }),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Sede principal" }));
+    expect(screen.getByText("Sede principal")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+    expect(createPosLoanMutateMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves the same site's cart through an eligibility error and retry", async () => {
+    const view = render(<POSPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+    expect(screen.getByText("1 en carrito")).toBeTruthy();
+    siteState.isError = true;
+    view.rerender(<POSPage />);
+    expect(screen.getByRole("alert")).toHaveTextContent("No pudimos verificar tus sedes");
+    expect(screen.queryByRole("button", { name: /finalizar venta|confirmar pago|financiar/i })).toBeNull();
+    siteState.isError = false;
+    view.rerender(<POSPage />);
+    expect(screen.getByText("1 en carrito")).toBeTruthy();
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+    expect(createPosLoanMutateMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the only listed store without a server nomination", () => {
+    siteState.data = { ...siteState.data, checkoutLocationId: null };
+    render(<POSPage />);
+    expect(screen.getByRole("button", { name: "Scoped product" })).toBeTruthy();
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+    expect(createPosLoanMutateMock).not.toHaveBeenCalled();
+  });
+
+  it("does not charge after a cashier's site is revoked before confirmation", async () => {
+    siteState.refetch.mockResolvedValueOnce({
+      data: { locations: [], checkoutLocationId: null },
+      isError: false,
+    });
+    render(<POSPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /confirmar pago/i }));
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+    expect(siteState.refetch).toHaveBeenCalled();
+  });
+
+  it("keeps A's paused draft when a scope switch interrupts resume repricing", async () => {
+    const client = new QueryClient();
+    const key = (org: string) => `pos_paused_sales:${JSON.stringify(["user-a", org, "site-a"])}`;
+    const product = makeProduct("pending-resume", "Pending resume");
+    const draft = {
+      id: "draft-a", customerId: "", discountAmount: 0,
+      pausedAt: "2026-08-25T10:00:00.000Z",
+      cart: [{ productId: product.id, product, quantity: 1, unitPrice: 1000,
+        originalUnitPrice: 1000, discountAmount: 0, availableStock: 10 }],
+    };
+    let resolveProduct!: (value: { data: Product }) => void;
+    const response = new Promise<{ data: Product }>((resolve) => { resolveProduct = resolve; });
+    apiGetMock.mockImplementationOnce(() => response);
+    authState.isSuperAdmin = true;
+    pausedSalesState.real = true;
+    localStorage.setItem(key("org-a"), JSON.stringify([draft]));
+    applyOrganizationScope(client, "org-a");
+    const view = render(<POSPage />);
+    try {
+      await userEvent.click(screen.getByRole("button", { name: "Reanudar (1)" }));
+      await userEvent.click(screen.getByRole("button", { name: "Reanudar" }));
+      expect(apiGetMock).toHaveBeenCalledWith("/products/pending-resume");
+      act(() => applyOrganizationScope(client, "org-b"));
+      expect(siteState.requested).toHaveBeenLastCalledWith("user-a", "org-b");
+      await act(async () => resolveProduct({ data: product }));
+      expect(screen.queryByText("1 en carrito")).toBeNull();
+      expect(localStorage.getItem(key("org-b"))).toBe("[]");
+      expect(localStorage.getItem(key("org-a"))).toBe(JSON.stringify([draft]));
+      act(() => applyOrganizationScope(client, "org-a"));
+      expect(screen.getByRole("button", { name: "Reanudar (1)" })).toBeTruthy();
+    } finally {
+      view.unmount();
+      pausedSalesState.real = false;
+      localStorage.removeItem(key("org-a"));
+      localStorage.removeItem(key("org-b"));
+      applyOrganizationScope(client, null);
+      client.clear();
+    }
+  });
+
+  it("does not reset the scoped queries or drop the cart when the active organization is selected again", async () => {
+    // The shared cookie can move the session while a stale picker still shows no
+    // organization. Selecting the one the session already has is not a change.
+    const client = new QueryClient();
+    const scopedKey = ["products", { page: 1, limit: 1 }];
+    authState.isSuperAdmin = true;
+    applyOrganizationScope(client, "org-a");
+    client.setQueryData(scopedKey, { data: [{ id: "product-from-org-a" }] });
+    const view = render(<POSPage />);
+    try {
+      await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+      expect(screen.getByText("1 en carrito")).toBeTruthy();
+
+      let applied = false;
+      act(() => {
+        applied = applyOrganizationScope(client, "org-a");
+      });
+
+      expect(applied).toBe(true);
+      expect(readOrganizationScope()).toBe("org-a");
+      // A reset would unmount the verified workspace: rows and cart must stay.
+      expect(client.getQueryData(scopedKey)).toEqual({
+        data: [{ id: "product-from-org-a" }],
+      });
+      expect(screen.getByText("1 en carrito")).toBeTruthy();
+    } finally {
+      view.unmount();
+      applyOrganizationScope(client, null);
+      client.clear();
+    }
+  });
+
+  it("refuses dismissal and pausing while the site preflight is still running", async () => {
+    let releasePreflight!: (value: { data: unknown; isError: boolean }) => void;
+    siteState.refetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        releasePreflight = resolve;
+      }),
+    );
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await screen.findByRole(
+      "button",
+      { name: /confirmar pago/i },
+      { timeout: 3000 },
+    );
+
+    // An idle dialog still dismisses exactly as before…
+    await userEvent.click(screen.getByRole("button", { name: "Cerrar pago" }));
+    expect(screen.queryByRole("button", { name: /confirmar pago/i })).toBeNull();
+
+    // …so the cashier can reopen it and confirm.
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /confirmar pago/i }, { timeout: 3000 }),
+    );
+
+    // Submission waits for the preflight: nothing has left the page yet.
+    expect(createSaleMutateMock).not.toHaveBeenCalled();
+    expect(siteState.refetch).toHaveBeenCalledTimes(1);
+
+    // Closing the dialog cannot abandon a request that is already on its way…
+    await userEvent.click(screen.getByRole("button", { name: "Cerrar pago" }));
+    expect(screen.getByRole("button", { name: /confirmar pago/i })).toBeTruthy();
+
+    // …and pausing cannot copy the same cart into a resumable draft.
+    await userEvent.click(screen.getByRole("button", { name: "Pausar" }));
+    expect(pauseSaleMock).not.toHaveBeenCalled();
+    expect(screen.getByText("1 en carrito")).toBeTruthy();
+
+    await act(async () =>
+      releasePreflight({ data: siteState.data, isError: false }),
+    );
+
+    await waitFor(() => {
+      expect(createSaleMutateMock).toHaveBeenCalledTimes(1);
+    });
+    // One sale and no draft: the cart was consumed exactly once.
+    expect(pauseSaleMock).not.toHaveBeenCalled();
+  });
+
+  it("takes the cart lock in the same tick as the confirmation", async () => {
+    let releasePreflight!: (value: { data: unknown; isError: boolean }) => void;
+    siteState.refetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        releasePreflight = resolve;
+      }),
+    );
+    render(<POSPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Scoped product" }));
+    await userEvent.click(screen.getByRole("button", { name: /tarjeta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /finalizar venta/i }));
+    const confirm = await screen.findByRole(
+      "button",
+      { name: /confirmar pago/i },
+      { timeout: 3000 },
+    );
+    const pause = screen.getByRole("button", { name: "Pausar" });
+
+    // Both taps land before React re-renders, so only the synchronous lock the
+    // checkout took on entry can refuse the pause.
+    act(() => {
+      fireEvent.click(confirm);
+      fireEvent.click(pause);
+    });
+
+    expect(pauseSaleMock).not.toHaveBeenCalled();
+    expect(screen.getByText("1 en carrito")).toBeTruthy();
+
+    await act(async () =>
+      releasePreflight({ data: siteState.data, isError: false }),
+    );
+
+    await waitFor(() => {
+      expect(createSaleMutateMock).toHaveBeenCalledTimes(1);
+    });
+    expect(pauseSaleMock).not.toHaveBeenCalled();
+  });
+
+  it("does not use cached eligibility before the current scope is verified", () => {
+    siteState.isFetchedAfterMount = false;
+    render(<POSPage />);
+    expect(screen.getByText("Consultando sedes del punto de venta")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Scoped product" })).toBeNull();
+  });
+
+  // T3f: the cashier at one site must not see another site's stock, so the
+  // catalogue and the scanner ask for the site the gate verified.
+  it("reads the catalogue and the scanner from the active POS site", async () => {
+    quickSearchHookMock.mockClear();
+    quickSearchMutateMock.mockReset();
+    quickSearchMutateMock.mockResolvedValue(makeProduct("scan-1", "Producto Escaneado"));
+
+    render(<POSPage />);
+
+    expect(useProductsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-a" }),
+    );
+    expect(quickSearchHookMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-a" }),
+    );
+
+    await userEvent.type(
+      screen.getByPlaceholderText("Escanear o buscar por nombre, SKU o código..."),
+      "7701234567890{enter}",
+    );
+
+    await waitFor(() => {
+      expect(quickSearchMutateMock).toHaveBeenCalledWith("7701234567890");
+    });
+  });
+
+  it("keeps the catalogue site in the query key so a site change refetches", async () => {
+    const { rerender } = render(<POSPage />);
+    expect(useProductsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-a" }),
+    );
+
+    siteState.data = {
+      locations: [{ id: "site-b", name: "Sede B", isDefault: true }],
+      checkoutLocationId: "site-b",
+    };
+    rerender(<POSPage />);
+
+    expect(useProductsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ locationId: "site-b" }),
+    );
+  });
+});
 
 describe("products query service filter", () => {
   afterEach(cleanup);
@@ -570,7 +996,7 @@ describe("POS capacity attachment across auth readiness", () => {
     if (initialLoading) {
       expect(screen.queryByTestId("pos-capacity-area")).toBeNull();
       expect(observers).toHaveLength(0);
-      expect(useProductsMock).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 1 }));
+      expect(useProductsMock).not.toHaveBeenCalled();
       authState.loading = false;
       rerender(<POSPage />); // Same POS instance, not route reentry.
     }
@@ -1218,6 +1644,7 @@ describe("POS behavior evidence (#19, #18)", () => {
 
     await waitFor(() => {
       expect(createSaleMutateMock).toHaveBeenCalled();
+      expect(createSaleMutateMock.mock.calls[0][0]).not.toHaveProperty("locationId");
     });
 
     expect(await screen.findByRole("region", { name: "Venta registrada" })).toBeTruthy();
@@ -2025,9 +2452,11 @@ describe("POS price override permission (explicit roles)", () => {
     await expectNoPriceControl("Producto Miembro");
   });
 
-  it("hides the final-price mode when there is no user", async () => {
+  it("never exposes products or Aplicar precio before a user has been restored", () => {
     authState.role = "";
-    await expectNoPriceControl("Producto Anonimo");
+    renderWithSingleProduct("Producto Anonimo", 50000);
+    expect(screen.queryByRole("button", { name: "Producto Anonimo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Aplicar precio" })).toBeNull();
   });
 
   it("offers the final-price mode to an ADMIN", async () => {
@@ -2420,6 +2849,22 @@ describe("POS cart financing (pos-loan-initiation)", () => {
     expect(screen.getByText("Descuento")).toBeTruthy();
   });
 
+  it("does not initiate financing if the cashier's site is revoked before confirmation", async () => {
+    const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
+    seedPausedCart(product, 5000);
+    siteState.refetch.mockResolvedValueOnce({
+      data: { locations: [], checkoutLocationId: null },
+      isError: false,
+    });
+    renderWithProducts([product]);
+    await resumePausedCart();
+    await selectAnaPerez();
+    await userEvent.click(financeAction());
+    await confirmFinance();
+    expect(siteState.refetch).toHaveBeenCalled();
+    expect(createPosLoanMutateMock).not.toHaveBeenCalled();
+  });
+
   it("dismissing the confirmation does not consume the request key, and a later confirm uses one generated key", async () => {
     const product = makeProduct("p1", "Producto Financiado", { salePrice: 50000 });
     createPosLoanMutateMock.mockResolvedValue(initiation());
@@ -2680,7 +3125,7 @@ describe("POS paused sale removal (inline confirm)", () => {
     expect(screen.getByRole("button", { name: "Reanudar" })).toBeTruthy();
   });
 
-  it("keeps resuming a paused sale working exactly as before", async () => {
+  it("removes the source draft only after the resumed cart is restored", async () => {
     const product = renderWithPausedSale();
     resumeSaleMock.mockReturnValue(pausedSale(product));
     apiGetMock.mockResolvedValue({ data: product });
@@ -2691,7 +3136,7 @@ describe("POS paused sale removal (inline confirm)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("line-unit-price")).toBeTruthy();
     });
-    expect(deletePausedSaleMock).not.toHaveBeenCalled();
+    expect(deletePausedSaleMock).toHaveBeenCalledWith("paused-1");
   });
 });
 

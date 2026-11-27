@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/hooks/useLocations", () => ({
+  // The page only offers the site selector when the caller reads more than one
+  // site; these suites keep the organization-wide view.
+  useLocations: () => ({ data: [] }),
+}));
+
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
@@ -217,7 +223,7 @@ describe("Reports economics-first evidence", () => {
     render(<ReportsPage />);
 
     const today = screen.getByRole("heading", { name: "Hoy" });
-    const filters = screen.getByLabelText("Filtros de período");
+    const filters = screen.getByLabelText("Filtros del reporte");
     expect(
       today.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();

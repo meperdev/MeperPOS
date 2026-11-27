@@ -82,8 +82,12 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
           name: 'Multi Org User',
           organizationUsers: {
             create: [
-              { organizationId: orgAId, joinedAt: new Date(Date.now() - 60000) },
-              { organizationId: orgBId },
+              {
+                organizationId: orgAId,
+                joinedAt: new Date(Date.now() - 60000),
+                role: 'CASHIER',
+              },
+              { organizationId: orgBId, role: 'ADMIN' },
             ],
           },
         },
@@ -112,7 +116,9 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     expect(res.status).toBe(201);
     expect(res.body.accessToken).toBeDefined();
     expect(res.body.refreshToken).toBeUndefined();
-    expect(findCookie(res.headers['set-cookie'], 'refresh_token')).toBeDefined();
+    expect(
+      findCookie(res.headers['set-cookie'], 'refresh_token'),
+    ).toBeDefined();
   });
 
   it('refresh returns accessToken but no refreshToken in the body (rotated cookie only)', async () => {
@@ -129,9 +135,7 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     // double-submit header minted at login alongside the refresh cookie.
     const csrfCookie = findCookie(login.headers['set-cookie'], 'csrf_token');
     expect(csrfCookie).toBeDefined();
-    const csrfValue = (csrfCookie as string)
-      .split(';')[0]
-      .split('=')[1];
+    const csrfValue = (csrfCookie as string).split(';')[0].split('=')[1];
 
     const res = await request(app.getHttpServer())
       .post('/api/auth/refresh')
@@ -143,7 +147,9 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     expect(res.body.accessToken).toBeDefined();
     expect(res.body.refreshToken).toBeUndefined();
     // Rotation re-issues the refresh cookie for the next cycle.
-    expect(findCookie(res.headers['set-cookie'], 'refresh_token')).toBeDefined();
+    expect(
+      findCookie(res.headers['set-cookie'], 'refresh_token'),
+    ).toBeDefined();
   });
 
   it('select-organization returns accessToken but no refreshToken in the body', async () => {
@@ -167,7 +173,7 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     expect(res.body.refreshToken).toBeUndefined();
   });
 
-  it('select-org returns accessToken but no refreshToken in the body', async () => {
+  it('select-org returns accessToken but no refreshToken in the body and restores the selected profile', async () => {
     const login = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({ email: multiOrgEmail, password, organizationId: orgAId });
@@ -183,5 +189,45 @@ describe('Auth body exposure — cookie-only refresh transport (spec 3.R2, Optio
     expect(res.status).toBe(201);
     expect(res.body.accessToken).toBeDefined();
     expect(res.body.refreshToken).toBeUndefined();
+
+    const refreshCookie = findCookie(
+      res.headers['set-cookie'],
+      'refresh_token',
+    );
+    const csrfCookie = findCookie(res.headers['set-cookie'], 'csrf_token');
+    expect(refreshCookie).toBeDefined();
+    expect(csrfCookie).toBeDefined();
+    const csrfValue = (csrfCookie as string).split(';')[0].split('=')[1];
+
+    const refreshed = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', `${refreshCookie}; ${csrfCookie}`)
+      .set('x-csrf-token', csrfValue)
+      .send({})
+      .expect(201);
+    expect(refreshed.body.accessToken).toBeDefined();
+    expect(refreshed.body.refreshToken).toBeUndefined();
+
+    const authorization = `Bearer ${refreshed.body.accessToken}`;
+    const profile = await request(app.getHttpServer())
+      .get('/api/auth/profile')
+      .set('Authorization', authorization)
+      .expect(200);
+    expect(profile.body).toMatchObject({
+      email: multiOrgEmail,
+      organizationId: orgBId,
+      organization: { id: orgBId },
+      role: 'ADMIN',
+      isSuperAdmin: false,
+    });
+    expect(profile.body).not.toHaveProperty('password');
+
+    const withConflictingScope = await request(app.getHttpServer())
+      .get('/api/auth/profile')
+      .set('Authorization', authorization)
+      .set('X-Organization-Id', orgAId)
+      .query({ organizationId: orgAId })
+      .expect(200);
+    expect(withConflictingScope.body).toEqual(profile.body);
   });
 });

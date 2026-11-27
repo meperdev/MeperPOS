@@ -21,6 +21,7 @@ export function PeriodFilter({
   endDate,
   appliedLabel,
   onChange,
+  siteFilter,
 }: {
   presets: ReportPeriodPreset[];
   startDate: string;
@@ -28,6 +29,8 @@ export function PeriodFilter({
   /** Server-confirmed range, so the label never promises a window it did not get. */
   appliedLabel: ReactNode;
   onChange: (range: { startDate: string; endDate: string }) => void;
+  /** The site selector, when the organization reads more than one site. */
+  siteFilter?: ReactNode;
 }) {
   const activeId = activeReportPeriodPresetId(presets, startDate, endDate);
 
@@ -39,9 +42,10 @@ export function PeriodFilter({
   return (
     <section
       className="rounded-xl border border-border/70 bg-card p-2.5 shadow-2xs"
-      aria-label="Filtros de período"
+      aria-label="Filtros del reporte"
     >
       <div className="flex flex-wrap items-center gap-2">
+        {siteFilter}
         <FilterGroup label="Período">
           {presets.map((preset) => (
             <FilterOptionButton

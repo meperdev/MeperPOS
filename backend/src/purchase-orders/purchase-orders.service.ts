@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -25,6 +26,12 @@ import {
 } from './purchase-order-status';
 import { SequenceService } from '../common/sequences/sequence.service';
 import { tracksStock } from '../products/product-type.logic';
+import type { RequestUser } from '../common/interfaces/request-user.interface';
+import { resolveWritableSiteWithin } from '../locations/authorized-site';
+import {
+  applySiteStockDelta,
+  resolveDefaultSiteWithin,
+} from '../inventory/site-stock';
 
 interface ComputedItem {
   productId: string;
@@ -83,6 +90,31 @@ export class PurchaseOrdersService {
         qtyReceivedNow,
       }),
     );
+  }
+
+  /**
+   * Claims this tenant's order row for the rest of the transaction, with the
+   * same lock receiving uses. Draft edits and confirmation both write values a
+   * competing request may invalidate, so the claim comes first and the values
+   * they validate are read again after it: a request that read a draft can
+   * neither write on top of a cancelled order nor modify a confirmed one.
+   */
+  private async claimOrderRow(
+    tx: Prisma.TransactionClient,
+    id: string,
+    organizationId: string,
+  ) {
+    const [claimed] = await tx.$queryRaw<
+      { status: string; supplierId: string }[]
+    >`
+      SELECT "status", "supplierId" FROM "PurchaseOrder"
+      WHERE "id" = ${id} AND "organizationId" = ${organizationId}
+      FOR NO KEY UPDATE
+    `;
+    if (!claimed) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+    return claimed;
   }
 
   private async computeItems(
@@ -421,8 +453,6 @@ export class PurchaseOrdersService {
       );
     }
 
-    const supplierId = dto.supplierId ?? existing.supplierId;
-
     if (dto.supplierId) {
       const supplier = await this.prisma.supplier.findFirst({
         where: { id: dto.supplierId, organizationId },
@@ -435,17 +465,27 @@ export class PurchaseOrdersService {
       }
     }
 
-    if (dto.items) {
-      const { computed, subtotal, taxAmount, total } = await this.computeItems(
-        dto.items,
-        organizationId,
-      );
+    const computed = dto.items
+      ? await this.computeItems(dto.items, organizationId)
+      : null;
 
-      await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await this.claimOrderRow(tx, id, organizationId);
+      if (claimed.status !== 'DRAFT') {
+        throw new BadRequestException(
+          'Solo se pueden editar órdenes en borrador',
+        );
+      }
+
+      // The draft may have changed while this request waited for the claim, so
+      // the supplier it keeps is the one stored now, not the one it read.
+      const currentSupplierId = dto.supplierId ?? claimed.supplierId;
+
+      if (computed) {
         await tx.purchaseOrderItem.deleteMany({
           where: { purchaseOrderId: id, organizationId },
         });
-        for (const c of computed) {
+        for (const c of computed.computed) {
           await tx.purchaseOrderItem.create({
             data: {
               organizationId,
@@ -462,23 +502,23 @@ export class PurchaseOrdersService {
         await tx.purchaseOrder.update({
           where: { id, organizationId },
           data: {
-            supplierId,
+            supplierId: currentSupplierId,
             notes: dto.notes,
-            subtotal,
-            taxAmount,
-            total,
+            subtotal: computed.subtotal,
+            taxAmount: computed.taxAmount,
+            total: computed.total,
           },
         });
-      });
-    } else {
-      await this.prisma.purchaseOrder.update({
-        where: { id },
-        data: {
-          supplierId,
-          notes: dto.notes,
-        },
-      });
-    }
+      } else {
+        await tx.purchaseOrder.update({
+          where: { id, organizationId },
+          data: {
+            supplierId: currentSupplierId,
+            notes: dto.notes,
+          },
+        });
+      }
+    });
 
     return this.findOne(id, organizationId);
   }
@@ -514,18 +554,62 @@ export class PurchaseOrdersService {
       throw new BadRequestException('Proveedor inactivo');
     }
 
-    await this.prisma.purchaseOrder.update({
-      where: { id },
-      data: {
-        status: 'PENDING',
-        confirmedAt: new Date(),
-        ...(dto.expectedDeliveryDate
-          ? { expectedDeliveryDate: toCalendarDay(dto.expectedDeliveryDate) }
-          : {}),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await this.claimOrderRow(tx, id, organizationId);
+      if (claimed.status !== 'DRAFT') {
+        throw new BadRequestException(
+          'Solo se pueden confirmar órdenes en borrador',
+        );
+      }
+
+      // Confirming freezes the order as it is stored now: a concurrent edit may
+      // have replaced its items or its supplier since this request read it.
+      const live = await tx.purchaseOrder.findFirst({
+        where: { id, organizationId },
+        include: { items: true, supplier: true },
+      });
+      if (!live) {
+        throw new NotFoundException('Orden de compra no encontrada');
+      }
+      if (live.items.length === 0) {
+        throw new BadRequestException(
+          'La orden debe tener al menos un ítem para confirmarse',
+        );
+      }
+      if (!live.supplier.active) {
+        throw new BadRequestException('Proveedor inactivo');
+      }
+
+      await tx.purchaseOrder.update({
+        where: { id, organizationId },
+        data: {
+          status: 'PENDING',
+          confirmedAt: new Date(),
+          ...(dto.expectedDeliveryDate
+            ? { expectedDeliveryDate: toCalendarDay(dto.expectedDeliveryDate) }
+            : {}),
+        },
+      });
     });
 
     return this.findOne(id, organizationId);
+  }
+
+  private async resolveReceiveDestination(
+    tx: Prisma.TransactionClient,
+    actor: RequestUser | undefined,
+    userId: string,
+    organizationId: string,
+    locationId: string,
+  ) {
+    if (
+      !actor ||
+      actor.userId !== userId ||
+      actor.organizationId !== organizationId
+    ) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    return resolveWritableSiteWithin(tx, actor, locationId);
   }
 
   async receive(
@@ -533,6 +617,7 @@ export class PurchaseOrdersService {
     dto: ReceivePurchaseOrderDto,
     userId: string,
     organizationId: string | undefined,
+    actor?: RequestUser,
   ) {
     if (!organizationId) {
       throw new BadRequestException(
@@ -568,7 +653,64 @@ export class PurchaseOrdersService {
       }
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const { locationId } = dto;
+    const receiveItems = async (tx: Prisma.TransactionClient) => {
+      // The whole batch lands at one site. T3g: an explicit destination only
+      // needs the actor to be authorized for it — a receipt is not a sale, so a
+      // warehouse is a valid destination too. A legacy request with no
+      // destination lands at the organization default site, under the same
+      // authorization: omitting the field never widens access (S3).
+      let destinationId: string;
+      if (locationId !== undefined) {
+        destinationId = (
+          await this.resolveReceiveDestination(
+            tx,
+            actor,
+            userId,
+            organizationId,
+            locationId,
+          )
+        ).locationId;
+      } else {
+        const impliedSiteId = await resolveDefaultSiteWithin(
+          tx,
+          organizationId,
+        );
+        destinationId = actor
+          ? (
+              await this.resolveReceiveDestination(
+                tx,
+                actor,
+                userId,
+                organizationId,
+                impliedSiteId,
+              )
+            ).locationId
+          : impliedSiteId;
+      }
+
+      // Lock the order before reading receipt quantities or changing inventory.
+      // A quantity-only check (or the per-product CAS) cannot serialize two
+      // receipts on different lines, or a receipt against cancellation.
+      const [lockedOrder] = await tx.$queryRaw<
+        { status: typeof order.status }[]
+      >`
+        SELECT "status" FROM "PurchaseOrder"
+        WHERE "id" = ${id} AND "organizationId" = ${organizationId}
+        FOR NO KEY UPDATE
+      `;
+      if (!lockedOrder) {
+        throw new NotFoundException('Orden de compra no encontrada');
+      }
+      if (
+        lockedOrder.status !== 'PENDING' &&
+        lockedOrder.status !== 'PARTIAL_RECEIVED'
+      ) {
+        throw new BadRequestException(
+          'Solo se pueden recibir órdenes pendientes o parcialmente recibidas',
+        );
+      }
+
       for (const r of normalizedItems) {
         const item = await tx.purchaseOrderItem.findUnique({
           where: { id: r.itemId },
@@ -599,6 +741,9 @@ export class PurchaseOrdersService {
         // Defence in depth: a service line can only exist in an order drafted before
         // the validation above existed. Receiving one must not invent merchandise.
         if (tracksStock(product)) {
+          // previousStock/newStock keep documenting the organization-wide balance
+          // the kárdex has always recorded; the site is now the attribution and
+          // the ledger that actually moves.
           const previousStock = product.stock;
           const newStock = previousStock + r.qtyReceivedNow;
           const currentVersion = product.version;
@@ -606,12 +751,35 @@ export class PurchaseOrdersService {
           const oldCost = Number(product.costPrice);
           const costChanged = newUnitCost !== oldCost;
 
+          // The version guard is the optimistic-concurrency contract of product
+          // edits and stays exactly as it was; the stock itself now moves through
+          // the site row, whose trigger keeps the organization aggregate equal to
+          // the sum of its sites.
           const updateData: Record<string, unknown> = {
-            stock: { increment: r.qtyReceivedNow },
             version: { increment: 1 },
           };
           if (costChanged) {
             updateData.costPrice = newUnitCost;
+          }
+
+          // Lock order: the site row first, the aggregate second. The delta
+          // trigger updates "Product" from the same statement that moves
+          // "ProductStock", so every writer of both takes them in this order —
+          // sales, financing holds and product edits too. The version bump then
+          // only re-pins the optimistic-concurrency contract of product edits.
+          const receipt = await applySiteStockDelta(tx, {
+            organizationId,
+            productId: item.productId,
+            locationId: destinationId,
+            stockDelta: r.qtyReceivedNow,
+            reservedDelta: 0,
+          });
+          if (!receipt.applied) {
+            // A receipt always raises availability, so this is the same product
+            // race the aggregate compare-and-swap used to report.
+            throw new ConflictException(
+              'Modificación concurrente detectada sobre el producto',
+            );
           }
 
           const updated = await tx.product.updateMany({
@@ -635,6 +803,7 @@ export class PurchaseOrdersService {
               reason: `OC-${order.orderNumber}`,
               userId,
               organizationId,
+              locationId: destinationId,
             },
           });
 
@@ -669,12 +838,33 @@ export class PurchaseOrdersService {
       const allReceived = refreshed.every((i) => i.qtyReceived >= i.qtyOrdered);
 
       await tx.purchaseOrder.update({
-        where: { id },
+        where: { id, organizationId },
         data: allReceived
           ? { status: 'RECEIVED', receivedAt: new Date() }
           : { status: 'PARTIAL_RECEIVED' },
       });
-    });
+    };
+    if (locationId === undefined) {
+      await this.prisma.$transaction(receiveItems);
+    } else {
+      try {
+        await this.prisma.$transaction(receiveItems, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === 'P2034' ||
+            (error.code === 'P2010' &&
+              (error.meta?.code === '40001' || error.meta?.code === '40P01')))
+        ) {
+          throw new ConflictException(
+            'Recepción concurrente; revise la orden y vuelva a intentar',
+          );
+        }
+        throw error;
+      }
+    }
 
     return this.findOne(id, organizationId);
   }
@@ -701,14 +891,19 @@ export class PurchaseOrdersService {
       );
     }
 
-    await this.prisma.purchaseOrder.update({
-      where: { id },
+    const cancelled = await this.prisma.purchaseOrder.updateMany({
+      where: { id, organizationId, status: { in: ['DRAFT', 'PENDING'] } },
       data: {
         status: 'CANCELLED',
         cancelledAt: new Date(),
         cancelReason: dto.reason,
       },
     });
+    if (cancelled.count === 0) {
+      throw new BadRequestException(
+        'Solo se pueden cancelar órdenes en borrador o pendientes',
+      );
+    }
 
     return this.findOne(id, organizationId);
   }

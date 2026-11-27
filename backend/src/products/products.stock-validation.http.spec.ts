@@ -13,6 +13,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { AdminOrganizationInterceptor } from '../common/interceptors/admin-organization.interceptor';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { PlanLimitGuard } from '../plan-limits/plan-limits.guard';
+import { LocationsService } from '../locations/locations.service';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
 
@@ -29,6 +30,9 @@ describe('Products HTTP stock validation (F28)', () => {
     create: jest.fn().mockResolvedValue({ id: 'p-1' }),
     update: jest.fn().mockResolvedValue({ id: 'p-1' }),
   };
+  // The controller authorizes an optional site through the shared location
+  // read; these body-boundary cases never send one.
+  const locationsService = { findAccessible: jest.fn() };
 
   const allow: CanActivate = {
     canActivate: (context: ExecutionContext) => {
@@ -55,7 +59,10 @@ describe('Products HTTP stock validation (F28)', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [ProductsController],
-      providers: [{ provide: ProductsService, useValue: productsService }],
+      providers: [
+        { provide: ProductsService, useValue: productsService },
+        { provide: LocationsService, useValue: locationsService },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(allow)

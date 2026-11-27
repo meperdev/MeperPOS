@@ -31,17 +31,24 @@ const SPARKLINE_DAYS = 7;
 
 const LOW_STOCK_HREF = "/inventory?filter=lowStock";
 
-export function TodayStats() {
-  return <TodayStatsInner today={getBogotaDateInputValue()} />;
+export function TodayStats({ siteId }: { siteId?: string }) {
+  return <TodayStatsInner today={getBogotaDateInputValue()} siteId={siteId} />;
 }
 
-export function TodayStatsInner({ today }: { today: string }) {
+export function TodayStatsInner({
+  today,
+  siteId,
+}: {
+  today: string;
+  /** The site the sales half is read for; the rest of the tiles stay organization-wide. */
+  siteId?: string;
+}) {
   const yesterday = useMemo(() => shiftDateInputValue(today, -1), [today]);
   const windowDays = useMemo(() => buildDateWindow(today, WINDOW_DAYS), [today]);
   const windowStart = windowDays[0] ?? today;
 
-  const { data: dailySales } = useDailySales(windowStart, today);
-  const { data: dashboard } = useDashboard();
+  const { data: dailySales } = useDailySales(windowStart, today, siteId);
+  const { data: dashboard } = useDashboard(undefined, undefined, siteId);
   const todayMonth = useMemo(() => today.slice(0, 7), [today]);
   const { data: expensesResponse } = useExpenses({ month: todayMonth, limit: 100 });
 
@@ -187,6 +194,12 @@ export function TodayStatsInner({ today }: { today: string }) {
           )}
         </div>
       </section>
+
+      {siteId && (
+        <p className="text-[13px] text-muted-foreground">
+          Gastos, productos, clientes y stock crítico son de toda la organización.
+        </p>
+      )}
     </div>
   );
 }

@@ -36,6 +36,8 @@ import { PayrollModule } from './payroll/payroll.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { BusinessModulesModule } from './business-modules/business-modules.module';
 import { AlertsModule } from './alerts/alerts.module';
+import { LocationsModule } from './locations/locations.module';
+import { TransfersModule } from './transfers/transfers.module';
 
 @Module({
   imports: [
@@ -77,6 +79,8 @@ import { AlertsModule } from './alerts/alerts.module';
     WhatsAppModule,
     BusinessModulesModule,
     AlertsModule,
+    LocationsModule,
+    TransfersModule,
   ],
   controllers: [AppController],
   providers: [

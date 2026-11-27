@@ -1,6 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 
+// T3b: the site ledger is proven against real PostgreSQL in
+// `inventory/site-stock.postgres.spec.ts` and
+// `sales-site-stock.postgres.spec.ts`. These unit specs assert the delta
+// `SalesService` requests, not the ledger's SQL.
+jest.mock('../inventory/site-stock', () => ({
+  applySiteStockDelta: jest.fn(() =>
+    Promise.resolve({ applied: true, created: false }),
+  ),
+  resolveDefaultSiteWithin: jest.fn(() => Promise.resolve('site-default')),
+}));
+
 /**
  * S3 / D1: a mixed payment must never let the POS sell above the final price.
  * A sale may only overpay when the overpayment can come back as change, so

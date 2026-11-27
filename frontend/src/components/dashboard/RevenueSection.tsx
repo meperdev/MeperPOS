@@ -18,8 +18,8 @@ const RANGE_OPTIONS = DASHBOARD_RANGES.map((range) => ({
   label: range.label,
 }));
 
-export function RevenueSection() {
-  return <RevenueSectionInner today={getBogotaDateInputValue()} />;
+export function RevenueSection({ siteId }: { siteId?: string }) {
+  return <RevenueSectionInner today={getBogotaDateInputValue()} siteId={siteId} />;
 }
 
 /**
@@ -32,7 +32,14 @@ export function RevenueSection() {
  * section. Below `lg` the two side cards size to their content, so a long
  * legend or five product rows never clip on a phone.
  */
-export function RevenueSectionInner({ today }: { today: string }) {
+export function RevenueSectionInner({
+  today,
+  siteId,
+}: {
+  today: string;
+  /** Every card in the piece reads the same site, so the three never disagree. */
+  siteId?: string;
+}) {
   const [range, setRange] = useState<DashboardRangeKey>(DEFAULT_DASHBOARD_RANGE);
   const { startDate, endDate } = useMemo(
     () => resolveDashboardRange(range, today),
@@ -57,15 +64,15 @@ export function RevenueSectionInner({ today }: { today: string }) {
 
       <div className="mt-2.5 grid gap-3 lg:h-[30rem] lg:grid-cols-5">
         <div className="flex h-[24rem] min-w-0 flex-col overflow-visible relative rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border sm:p-5 lg:col-span-3 lg:h-full lg:min-h-0">
-          <CategoryStackedChart startDate={startDate} endDate={endDate} />
+          <CategoryStackedChart startDate={startDate} endDate={endDate} siteId={siteId} />
         </div>
 
         <div className="grid min-w-0 gap-3 lg:col-span-2 lg:h-full lg:min-h-0 lg:grid-rows-2">
           <div className="flex h-auto min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border lg:h-full">
-            <PaymentMethodsCard startDate={startDate} endDate={endDate} />
+            <PaymentMethodsCard startDate={startDate} endDate={endDate} siteId={siteId} />
           </div>
           <div className="flex h-auto min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-4 text-foreground transition-colors hover:border-border lg:h-full">
-            <TopProductsCard startDate={startDate} endDate={endDate} />
+            <TopProductsCard startDate={startDate} endDate={endDate} siteId={siteId} />
           </div>
         </div>
       </div>

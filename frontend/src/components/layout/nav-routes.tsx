@@ -12,6 +12,8 @@ import {
   Wallet,
   Banknote,
   HandCoins,
+  Building2,
+  ArrowLeftRight,
 } from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
 import { hasAnyRole, type AppRole } from "@/lib/auth";
@@ -34,8 +36,12 @@ export interface NavItem {
   group: string;
 }
 
-/** Owners and administrators only, matched by identity rather than by role list. */
-export const OWNER_ADMIN_ONLY_ROUTES = ["/employees", "/payroll"];
+/**
+ * Owners and administrators only, matched by identity rather than by role list.
+ * Site management joins them: S3 keeps every other role on the sites an
+ * administrator assigned it.
+ */
+export const OWNER_ADMIN_ONLY_ROUTES = ["/employees", "/payroll", "/locations"];
 
 export const navItems: NavItem[] = [
   {
@@ -95,6 +101,16 @@ export const navItems: NavItem[] = [
     group: "Inventario",
   },
   {
+    // The one inventory section a store cashier opens: dispatch and
+    // cancellation stay with ADMIN and MEMBER, and a cashier only receives at
+    // the sites an administrator assigned it.
+    label: "Transferencias",
+    href: "/transfers",
+    icon: <ArrowLeftRight className="w-4 h-4" />,
+    roles: ["ADMIN", "MEMBER", "CASHIER"],
+    group: "Inventario",
+  },
+  {
     label: "Salidas",
     href: "/expenses",
     icon: <Wallet className="w-4 h-4" />,
@@ -137,6 +153,13 @@ export const navItems: NavItem[] = [
     group: "Equipo",
   },
   {
+    label: "Sedes",
+    href: "/locations",
+    icon: <Building2 className="w-4 h-4" />,
+    roles: ["ADMIN"],
+    group: "Administración",
+  },
+  {
     label: "SuperAdmin",
     href: "/admin",
     icon: <Shield className="w-4 h-4" />,
@@ -155,6 +178,7 @@ const sectionLabels: Record<string, string> = {
   "/profile": "Mi perfil",
   "/alerts": "Alertas",
   "/users": "Usuarios",
+  "/locations": "Sedes",
 };
 
 /**

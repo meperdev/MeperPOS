@@ -283,7 +283,7 @@ and only receives stock, loans and tasks.
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/products | POST | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
-| /api/products | GET | any org role | org-scoped | backend/src/products/products.service.int.spec.ts |
+| /api/products | GET | any org role | org-scoped; optional `locationId` reads one accessible site (404 when foreign/unassigned); `carriedAtSite=true` narrows it to the products that site carries (400 without `locationId`; pinned by products.site-assortment.postgres.spec.ts) | backend/src/products/products.service.int.spec.ts |
 | /api/products/low-stock | GET | ADMIN, MEMBER, INVENTORY_USER | org-scoped | backend/src/products/products.low-stock-roles.spec.ts |
 | /api/products/search | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/products/products.controller.spec.ts |
 | /api/products/quick-search | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/products/products.controller.spec.ts |
@@ -292,6 +292,8 @@ and only receives stock, loans and tasks.
 | /api/products/:id/deactivate | PUT | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
 | /api/products/:id/reactivate | PUT | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
 | /api/products/:id | DELETE | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
+| /api/products/:id/stock-by-site | GET | any org role | org-scoped; lists only the sites the caller can read (OWNER/ADMIN/SUPER_ADMIN all, others assigned) | backend/src/products/products.stock-by-site.postgres.spec.ts |
+| /api/products/:id/stock-adjustments | POST | ADMIN (OWNER inherits), MEMBER | org-scoped; site authorized in the transaction (404 when unassigned or foreign); audited PRODUCT_STOCK_ADJUST | backend/src/products/products.stock-by-site.postgres.spec.ts |
 | /api/products/upload | POST | ADMIN, MEMBER | org-scoped | backend/src/products/products.controller.spec.ts |
 | /api/products/:id/upload | POST | ADMIN, MEMBER | org-scoped | backend/src/products/products.service.int.spec.ts |
 
@@ -320,24 +322,24 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 |---|---|---|---|---|
 | /api/reports/daily-report | GET | ADMIN | org-scoped | backend/src/reports/daily-report.http.spec.ts |
 | /api/reports/daily-report/pdf | GET | ADMIN | org-scoped | backend/src/reports/daily-report.http.spec.ts |
-| /api/reports/dashboard | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
+| /api/reports/dashboard | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
 | /api/reports/economic | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
 | /api/reports/economic/cash | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
-| /api/reports/economic/inventory | GET | ADMIN | org-scoped | backend/src/reports/financial-reports.service.int.spec.ts |
-| /api/reports/sales/payment-method | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/sales/category | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/sales/category-daily | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/products/top-selling | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/customers/statistics | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/users/performance | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
-| /api/reports/sales/daily | GET | ADMIN | org-scoped | backend/src/reports/reports.service.spec.ts |
+| /api/reports/economic/inventory | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/financial-reports.service.int.spec.ts |
+| /api/reports/sales/payment-method | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/sales/category | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/sales/category-daily | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/products/top-selling | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/customers/statistics | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/users/performance | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
+| /api/reports/sales/daily | GET | ADMIN | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and filters by the stored sale origin (site balances for inventory) | backend/src/reports/reports.service.spec.ts |
 
 ## sales
 
 | Route | Method | Role(s) | Org-scope | Test reference |
 |---|---|---|---|---|
 | /api/sales | POST | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/sales/sales.service.int.spec.ts |
-| /api/sales | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/sales/sales.service.int.spec.ts |
+| /api/sales | GET | ADMIN, MEMBER, CASHIER | org-scoped; optional `locationId` must be a site the caller can read (404 otherwise) and matches the stored sale origin | backend/src/sales/sales.service.int.spec.ts |
 | /api/sales/number/:saleNumber | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/sales/sales.service.int.spec.ts |
 | /api/sales/:id | GET | ADMIN, MEMBER, CASHIER | org-scoped | backend/src/sales/sales.service.int.spec.ts |
 | /api/sales/:id | PUT | ADMIN | org-scoped | backend/src/sales/sales.service.int.spec.ts |
@@ -379,6 +381,32 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | /api/tasks/:id/status | PUT | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER | org-scoped | backend/src/tasks/tasks.service.spec.ts |
 | /api/tasks/:id | DELETE | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER | org-scoped | backend/src/tasks/tasks.service.spec.ts |
 
+## locations
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/locations | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
+| /api/locations | POST | OWNER, ADMIN, SUPER_ADMIN | selected org; creates a store or warehouse and no assignment rows | backend/src/locations/locations.http.int.spec.ts |
+| /api/locations/pos-context | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; eligible checkout site must be assigned or accessible and the organization's sole default site | backend/src/locations/locations.pos-context.spec.ts |
+| /api/locations/:id | GET | OWNER, ADMIN, MEMBER, CASHIER, INVENTORY_USER, SUPER_ADMIN | selected org; limited roles require a membership assignment | backend/src/locations/locations.http.int.spec.ts |
+| /api/locations/:id | PATCH | OWNER, ADMIN, SUPER_ADMIN | selected org; the principal site stays a store | backend/src/locations/locations.http.int.spec.ts |
+
+## transfers
+
+A transfer moves tracked stock between two sites of the same organization. Both requests that change
+its fate (receipt and cancellation) claim the document row first, so exactly one of two competing
+requests wins and the other answers 409. Every write is scoped by the caller's organization, the source
+and destination site are authorized inside the inventory transaction, and a restricted membership only
+reads documents that touch a site it was assigned.
+
+| Route | Method | Role(s) | Org-scope | Test reference |
+|---|---|---|---|---|
+| /api/transfers | POST | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; source site authorized in the transaction, destination must be a site of the same organization | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers | GET | ADMIN (OWNER inherits), MEMBER, CASHIER, SUPER_ADMIN | org-scoped; restricted memberships only see transfers touching an assigned site | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers/:id | GET | ADMIN (OWNER inherits), MEMBER, CASHIER, SUPER_ADMIN | org-scoped; restricted memberships only see transfers touching an assigned site | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers/:id/receive | POST | ADMIN (OWNER inherits), MEMBER, CASHIER, SUPER_ADMIN | org-scoped; destination site authorized in the transaction; an unassigned destination answers 404 and the transfer stays IN_TRANSIT | backend/src/transfers/transfers.http.int.spec.ts |
+| /api/transfers/:id/cancel | POST | ADMIN (OWNER inherits), MEMBER, SUPER_ADMIN | org-scoped; origin site authorized in the transaction | backend/src/transfers/transfers.http.int.spec.ts |
+
 ## users
 
 | Route | Method | Role(s) | Org-scope | Test reference |
@@ -386,6 +414,8 @@ Note: `GET /api/products/search` and `GET /api/products/quick-search` are served
 | /api/users | POST | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users | GET | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users/:id | PUT | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
+| /api/users/:id/locations | GET | OWNER, ADMIN, SUPER_ADMIN | selected org; reads the target membership's assignment rows and whether its role already reaches every site | backend/src/locations/locations.http.int.spec.ts |
+| /api/users/:id/locations | PUT | OWNER, ADMIN, SUPER_ADMIN | selected org; target membership and every location must belong to it | backend/src/locations/locations.http.int.spec.ts |
 | /api/users/:id/toggle-active | PUT | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users/:id/reset-password | POST | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |
 | /api/users/:id | DELETE | ADMIN | org-scoped | backend/src/users/users.service.int.spec.ts |

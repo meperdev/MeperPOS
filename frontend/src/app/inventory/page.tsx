@@ -14,6 +14,7 @@ import {
   useUploadProductImage,
 } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
+import { useLocations } from "@/hooks/useLocations";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import {
@@ -37,6 +38,8 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import {
   FilterBar,
+  FilterGroup,
+  FilterOptionButton,
 } from "@/components/ui/FilterBar";
 import {
   Table,
@@ -45,6 +48,7 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import { ProductCard } from "@/components/products/ProductCard";
+import { ProductStockBySite } from "@/components/products/ProductStockBySite";
 import { ViewModeToggle } from "@/components/ui/ViewModeToggle";
 import { useEffectiveViewMode, useMediaQuery } from "@/hooks/useEffectiveViewMode";
 import { useDeferredLoading } from "@/hooks/useDeferredLoading";
@@ -122,6 +126,15 @@ function InventoryContent() {
     setPage(1);
   }
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // T22: the stock columns follow one site when the caller picks one. `""` is
+  // the organization aggregate, which is what this screen has always shown.
+  const [siteFilter, setSiteFilter] = useState("");
+  // T25: a site opens on the products it actually carries, not the whole
+  // catalog wearing that site's numbers. "Todo el catálogo" reveals the rest so
+  // they can be stocked from here.
+  const [siteAssortment, setSiteAssortment] = useState<"carried" | "catalog">(
+    "carried",
+  );
   const [viewMode, setViewMode] = useEffectiveViewMode("inventory");
   const [showModal, setShowModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -164,6 +177,19 @@ function InventoryContent() {
   const updateSelectedCategory = (value: string | null) => {
     setPage(1);
     setSelectedCategory(value);
+  };
+
+  const updateSiteFilter = (value: string) => {
+    setPage(1);
+    setSiteFilter(value);
+    // Every site opens on its own assortment: the choice made for the previous
+    // site must not decide what the next one shows.
+    setSiteAssortment("carried");
+  };
+
+  const updateSiteAssortment = (value: "carried" | "catalog") => {
+    setPage(1);
+    setSiteAssortment(value);
   };
 
   const toggleLowStockOnly = () => {
@@ -216,6 +242,14 @@ function InventoryContent() {
   // Server-side pagination: every request — filtered or not — is bounded to
   // one page of rows. Low stock and alphabetical order are resolved by the
   // backend (findAll lowStock/orderBy) so pages stay coherent.
+  const { data: sitesData } = useLocations();
+  const sites = sitesData ?? [];
+  const selectedSite = sites.find((site) => site.id === siteFilter) ?? null;
+  const multiSite = sites.length > 1;
+  // Only a chosen site has an assortment to narrow; the aggregate stays the
+  // whole catalog and sends no flag at all.
+  const carriedAtSite =
+    selectedSite === null ? undefined : siteAssortment === "carried";
   const {
     data,
     isLoading,
@@ -231,6 +265,12 @@ function InventoryContent() {
     status: statusFilter,
     lowStock: showLowStockOnly || undefined,
     orderBy: "name",
+    // The aggregate (the site omitted) keeps the request and the cache key it
+    // has always had; a chosen site projects its own units onto the list.
+    locationId: selectedSite?.id,
+    // ...and lists only what that site carries, unless the caller asks for the
+    // whole catalog to stock something new here.
+    carriedAtSite,
   });
   const { data: categoriesData } = useCategories();
 
@@ -511,10 +551,19 @@ function InventoryContent() {
 
       if (editingProduct) {
         const nextImage = imageUrl ?? null;
+        // An untouched stock is left out: the copy the editor opened with can be
+        // older than a per-site adjustment made meanwhile, and sending it back
+        // would undo that move (or be refused in a multi-site organization).
+        const { stock: editedStock, ...withoutStock } = editableFields;
+        const stockUnchanged =
+          editableFields.tracksStock &&
+          editingProduct.tracksStock !== false &&
+          editingProduct.type !== "SERVICE" &&
+          editedStock === editingProduct.stock;
         await updateProduct.mutateAsync({
           id: editingProduct.id,
           data: {
-            ...editableFields,
+            ...(stockUnchanged ? withoutStock : editableFields),
             ...(nextImage !== editingProduct.imageUrl
               ? { imageUrl: nextImage ?? "" }
               : {}),
@@ -573,6 +622,14 @@ function InventoryContent() {
   const hasFilter =
     selectedCategory || showLowStockOnly || statusFilter !== "active";
   const isEditingInactive = Boolean(editingProduct && !editingProduct.active);
+  // A site with nothing in it yet is not a search that found nothing: it has no
+  // products to show until one is brought here (T25).
+  const siteHasNoProducts =
+    carriedAtSite === true && !hasFilter && search.trim() === "";
+  // A counted product in a multi-site organization adjusts per site: the
+  // aggregate no longer accepts a number (the API answers 409 for one).
+  const stockIsAbsolute =
+    multiSite && !isService(formData) && formData.tracksStock !== false;
 
   return (
     <DashboardLayout>
@@ -602,6 +659,37 @@ function InventoryContent() {
           searchPlaceholder="Buscar por nombre, SKU..."
           filterControls={
             <>
+              {multiSite && (
+                <Select
+                  value={siteFilter}
+                  onChange={updateSiteFilter}
+                  className="w-full sm:w-44 shrink-0"
+                  placeholder="Todas las sedes"
+                  options={[
+                    { value: "", label: "Todas las sedes" },
+                    ...sites.map((site) => ({
+                      value: site.id,
+                      label: site.name,
+                    })),
+                  ]}
+                />
+              )}
+              {selectedSite && (
+                <FilterGroup>
+                  <FilterOptionButton
+                    active={siteAssortment === "carried"}
+                    onClick={() => updateSiteAssortment("carried")}
+                  >
+                    Solo de esta sede
+                  </FilterOptionButton>
+                  <FilterOptionButton
+                    active={siteAssortment === "catalog"}
+                    onClick={() => updateSiteAssortment("catalog")}
+                  >
+                    Todo el catálogo
+                  </FilterOptionButton>
+                </FilterGroup>
+              )}
               <Select
                 value={statusFilter}
                 onChange={updateStatusFilter}
@@ -718,11 +806,19 @@ function InventoryContent() {
             label="Cargando productos..."
           />
         ) : isLoading ? null : displayProducts.length === 0 ? (
-          <EmptyState
-            icon={<Package className="w-5 h-5 text-muted-foreground" />}
-            title={hasFilter ? "No se encontraron productos" : "No hay productos aún"}
-            subtitle={hasFilter ? "Intenta con otros filtros" : "Crea tu primer producto"}
-          />
+          siteHasNoProducts ? (
+            <EmptyState
+              icon={<Package className="w-5 h-5 text-muted-foreground" />}
+              title="Esta sede aún no tiene productos"
+              subtitle="Transfiere unidades, recibe una compra o ajusta existencias desde «Todo el catálogo» para traerlas a esta sede."
+            />
+          ) : (
+            <EmptyState
+              icon={<Package className="w-5 h-5 text-muted-foreground" />}
+              title={hasFilter ? "No se encontraron productos" : "No hay productos aún"}
+              subtitle={hasFilter ? "Intenta con otros filtros" : "Crea tu primer producto"}
+            />
+          )
         ) : (
           <>
             {isFetching && (
@@ -795,6 +891,11 @@ function InventoryContent() {
                         </TableCell>
                         <TableCell as="th" className="text-right text-xs font-medium text-muted-foreground">
                           Existencias
+                          {selectedSite && (
+                            <span className="block text-xs font-normal">
+                              {selectedSite.name}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell as="th" className="text-left text-xs font-medium text-muted-foreground">
                           Estado
@@ -1231,13 +1332,23 @@ function InventoryContent() {
               {formData.tracksStock !== false && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3">
                   {/* Counts are whole units: the shared stepper cannot hold a
-                      fraction or a negative, so neither reaches the API. */}
-                  <Stepper
-                    label="Stock"
-                    min={0}
-                    value={formData.stock || 0}
-                    onChange={(stock) => setFormData({ ...formData, stock })}
-                  />
+                      fraction or a negative, so neither reaches the API. With
+                      more than one site the total is the sum of the sites and is
+                      adjusted per site, so it is shown but not editable here. */}
+                  <div>
+                    <Stepper
+                      label="Stock"
+                      min={0}
+                      value={formData.stock || 0}
+                      onChange={(stock) => setFormData({ ...formData, stock })}
+                      disabled={stockIsAbsolute}
+                    />
+                    {stockIsAbsolute && (
+                      <p className="mt-1 text-[13px] text-muted-foreground">
+                        Ajusta las existencias por sede en la sección «Existencias por sede».
+                      </p>
+                    )}
+                  </div>
                   <Stepper
                     label="Stock mín."
                     min={0}
@@ -1248,6 +1359,15 @@ function InventoryContent() {
               )}
             </div>
           )}
+
+          {editingProduct &&
+            !isService(formData) &&
+            formData.tracksStock !== false && (
+              <ProductStockBySite
+                productId={editingProduct.id}
+                productName={editingProduct.name}
+              />
+            )}
 
           {!isReadOnlyView && (
           <div className="flex flex-col sm:flex-row gap-2 justify-end pt-4 border-t border-border/60">

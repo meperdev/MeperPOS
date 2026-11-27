@@ -12,7 +12,7 @@ import {
 } from "@/lib/reportPresentation";
 import { cn } from "@/lib/utils";
 import type { AppliedRange, FinancialOverview, FinancialReport } from "@/types";
-import { BlockNote, type ReportQuery } from "./QuerySection";
+import { BlockNote, OrganizationScopeNote, type ReportQuery } from "./QuerySection";
 import { SectionShell } from "./SectionShell";
 
 function formatRange(range?: AppliedRange) {
@@ -252,12 +252,20 @@ function ComparisonChart({
  * comparison and the breakdown explain it, and the quality note names what the
  * profit leaves out.
  */
-export function EconomySection({ query }: { query: ReportQuery<FinancialOverview> }) {
+export function EconomySection({
+  query,
+  organizationScope = false,
+}: {
+  query: ReportQuery<FinancialOverview>;
+  /** A site is selected, so say the money below is still the organization's. */
+  organizationScope?: boolean;
+}) {
   const overview = query.data;
   const current = overview?.current;
 
   return (
     <SectionShell title="Economía" icon={CircleDollarSign}>
+      {organizationScope && <OrganizationScopeNote />}
       {query.isLoading ? (
         <div aria-busy="true">
           <CardSkeleton
