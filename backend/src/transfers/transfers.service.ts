@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { CancelStockTransferDto } from './dto/cancel-stock-transfer.dto';
 import type { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
 import type { QueryStockTransfersDto } from './dto/query-stock-transfers.dto';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 const SAME_SITE = 'La sede de origen y la de destino deben ser diferentes';
 const DESTINATION_NOT_FOUND = 'Sede de destino no encontrada';
@@ -359,11 +360,7 @@ export class TransfersService {
   /** `null` means organization-wide access; an array is the exact allowed set. */
   private async visibleSiteIds(user: RequestUser): Promise<string[] | null> {
     const organizationId = this.requireOrganization(user);
-    if (
-      user.isSuperAdmin ||
-      user.role === OrgRole.OWNER ||
-      user.role === OrgRole.ADMIN
-    ) {
+    if (user.isSuperAdmin || hasEffectiveRole(user.role, OrgRole.ADMIN)) {
       return null;
     }
     const rows = await this.prisma.membershipLocation.findMany({

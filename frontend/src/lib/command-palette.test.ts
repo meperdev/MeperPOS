@@ -176,6 +176,7 @@ describe("role scoping of the API-backed groups", () => {
     expect(productSearchSource("INVENTORY_USER")).toBe("list");
     expect(productSearchSource("CASHIER")).toBe("search");
     expect(productSearchSource("OWNER")).toBe("search");
+    expect(productSearchSource("ADMIN")).toBe("search");
     expect(productSearchSource(undefined)).toBeNull();
   });
 });

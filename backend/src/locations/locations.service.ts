@@ -8,6 +8,7 @@ import {
 import { LocationType, OrgRole, Prisma } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 /**
  * The site shape every location response shares — directory, detail, create,
@@ -42,7 +43,7 @@ export interface UpdateLocationInput {
 }
 
 const hasOrgWideAccess = (role: RequestUser['role']) =>
-  role === OrgRole.OWNER || role === OrgRole.ADMIN || role === 'SUPER_ADMIN';
+  role === 'SUPER_ADMIN' || hasEffectiveRole(role, OrgRole.ADMIN);
 
 /** PostgreSQL codes that mean another transaction won the same race. */
 const SERIALIZATION_PG_CODES = ['40001', '40P01'];

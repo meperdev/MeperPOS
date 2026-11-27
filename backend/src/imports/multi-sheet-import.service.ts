@@ -34,6 +34,7 @@ import type {
   SheetRowContext,
   SheetStatus,
 } from './engine/import-sheet-handler.interface';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 type MultiSheetJobStatus = 'PARSING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 type ImportEventType = 'SUCCESS' | 'ERROR' | 'WARNING' | 'INFO';
@@ -432,11 +433,8 @@ export class MultiSheetImportService implements OnModuleDestroy {
   private canImportUsersSheet(
     role: OrgRole | 'SUPER_ADMIN' | undefined,
   ): boolean {
-    return (
-      role === 'SUPER_ADMIN' ||
-      role === OrgRole.OWNER ||
-      role === OrgRole.ADMIN
-    );
+    if (role === undefined) return false;
+    return role === 'SUPER_ADMIN' || hasEffectiveRole(role, OrgRole.ADMIN);
   }
 
   private async processSheet(

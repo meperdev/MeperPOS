@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { LocationType, OrgRole, type Prisma } from '@prisma/client';
 import type { RequestUser } from '../common/interfaces/request-user.interface';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 /** User-facing refusal when a caller needs a store and named a warehouse. */
 export const WAREHOUSE_IS_NOT_A_STORE =
@@ -74,7 +75,7 @@ export async function resolveWritableSiteWithin(
   }
 
   const hasOrgWideAccess =
-    platform || actor.role === OrgRole.OWNER || actor.role === OrgRole.ADMIN;
+    platform || hasEffectiveRole(actor.role, OrgRole.ADMIN);
   const [location] = hasOrgWideAccess
     ? await tx.$queryRaw<{ id: string; type: LocationType }[]>`
         SELECT "id", "type" FROM "Location"

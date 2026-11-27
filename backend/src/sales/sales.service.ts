@@ -43,6 +43,7 @@ import {
   applySiteStockDelta,
   resolveDefaultSiteWithin,
 } from '../inventory/site-stock';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 /**
  * A POS-financed sale carries no cash/card rows, so the derived flag travels
@@ -199,8 +200,7 @@ export class SalesService {
     return (
       user.isSuperAdmin === true ||
       user.role === 'SUPER_ADMIN' ||
-      user.role === OrgRole.OWNER ||
-      user.role === OrgRole.ADMIN
+      hasEffectiveRole(user.role, OrgRole.ADMIN)
     );
   }
 

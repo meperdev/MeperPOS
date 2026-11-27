@@ -23,6 +23,7 @@ import {
   WhatsAppSupervisionService,
   type WhatsAppSupervisionSummary,
 } from './whatsapp-supervision.service';
+import { hasEffectiveRole } from '../common/guards/role-hierarchy';
 
 /**
  * Roles that may read administrative figures from a chat window. Anything else
@@ -30,10 +31,6 @@ import {
  * count stock, record an expense) grants nothing here: this channel answers
  * money and business-wide totals, so it needs the roles that already own them.
  */
-const ADMINISTRATIVE_ROLES: ReadonlySet<OrgRole> = new Set<OrgRole>([
-  'OWNER',
-  'ADMIN',
-]);
 
 /**
  * The closed set of things this stage can answer. Matching is exact on the
@@ -433,7 +430,7 @@ export class WhatsAppAdminService {
       select: { role: true },
     });
 
-    if (!membership || !ADMINISTRATIVE_ROLES.has(membership.role)) {
+    if (!membership || !hasEffectiveRole(membership.role, 'ADMIN')) {
       this.logger.warn({ event: 'whatsapp_admin', outcome: 'forbidden' });
       return { status: 'forbidden' };
     }
