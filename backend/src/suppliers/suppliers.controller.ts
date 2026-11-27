@@ -33,28 +33,28 @@ export class SuppliersController {
   constructor(private suppliersService: SuppliersService) {}
 
   @Post()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Crear un proveedor' })
   create(@Body() dto: CreateSupplierDto, @CurrentUser() user: RequestUser) {
     return this.suppliersService.create(dto, user.organizationId);
   }
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Listar proveedores' })
   findAll(@Query() query: QuerySuppliersDto, @CurrentUser() user: RequestUser) {
     return this.suppliersService.findAll(query, user.organizationId);
   }
 
   @Get(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Obtener un proveedor por ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.suppliersService.findOne(id, user.organizationId);
   }
 
   @Patch(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Actualizar un proveedor' })
   update(
     @Param('id') id: string,
@@ -65,14 +65,14 @@ export class SuppliersController {
   }
 
   @Delete(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Desactivar un proveedor' })
   remove(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.suppliersService.remove(id, user.organizationId);
   }
 
   @Post(':id/reactivate')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Reactivar un proveedor' })
   reactivate(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.suppliersService.reactivate(id, user.organizationId);

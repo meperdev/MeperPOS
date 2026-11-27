@@ -62,7 +62,7 @@ import { hasEffectiveRole } from '../common/guards/role-hierarchy';
  * the same transaction, not two.
  *
  * Order of decisions inside this function, which is part of the contract:
- * 1. structural ids; 2. matching-tenant OWNER/ADMIN authorization, enforced before
+ * 1. structural ids; 2. matching-tenant ADMIN authorization, enforced before
  * any outcome is returned; 3. the planner decision, so a disabled, unknown or
  * still-pending payment needs no expense category and neither reads nor writes
  * one; 4. an unrepresentable (> Decimal(12,2)) expense, which fails immediately

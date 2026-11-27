@@ -56,7 +56,7 @@ export class ProductsController {
   ) {}
 
   @Post()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @PlanLimit('products')
   @UseInterceptors(AuditInterceptor)
   @AuditAction('PRODUCT_CREATE')
@@ -151,14 +151,14 @@ export class ProductsController {
   @Get('low-stock')
   // Inventory staff reads the low-stock list on their own screen; the feed and
   // the bell already enable stock alerts for that role, so the API must agree.
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.INVENTORY_USER)
+  @Roles(OrgRole.ADMIN, OrgRole.INVENTORY_USER)
   @ApiOperation({ summary: 'Get products with low stock' })
   getLowStock(@CurrentUser() user: RequestUser) {
     return this.productsService.getLowStockProducts(user.organizationId);
   }
 
   @Get('search')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Search products by name, SKU or barcode' })
   @ApiQuery({ name: 'q', required: true })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
@@ -187,7 +187,7 @@ export class ProductsController {
   }
 
   @Get('quick-search')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Quick search product by barcode or SKU' })
   @ApiQuery({ name: 'code', required: true })
   @ApiQuery({
@@ -254,7 +254,7 @@ export class ProductsController {
    * the roles the product edit does, and it leaves the same audit trail.
    */
   @Post(':id/stock-adjustments')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @UseInterceptors(AuditInterceptor)
   @AuditAction('PRODUCT_STOCK_ADJUST')
   @ApiOperation({ summary: 'Adjust the stock of one site' })
@@ -267,7 +267,7 @@ export class ProductsController {
   }
 
   @Put(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @UseInterceptors(AuditInterceptor)
   @AuditAction('PRODUCT_UPDATE')
   @ApiOperation({ summary: 'Update a product' })
@@ -285,7 +285,7 @@ export class ProductsController {
   }
 
   @Put(':id/deactivate')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @UseInterceptors(AuditInterceptor)
   @AuditAction('PRODUCT_DEACTIVATE')
   @ApiOperation({ summary: 'Deactivate a product' })
@@ -294,7 +294,7 @@ export class ProductsController {
   }
 
   @Put(':id/reactivate')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @UseInterceptors(AuditInterceptor)
   @AuditAction('PRODUCT_REACTIVATE')
   @ApiOperation({ summary: 'Reactivate a product' })
@@ -303,7 +303,7 @@ export class ProductsController {
   }
 
   @Delete(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @UseInterceptors(AuditInterceptor)
   @AuditAction('PRODUCT_DELETE')
   @ApiOperation({ summary: 'Delete a product' })
@@ -312,7 +312,7 @@ export class ProductsController {
   }
 
   @Post('upload')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @UseInterceptors(FileInterceptor('image'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -346,7 +346,7 @@ export class ProductsController {
   }
 
   @Post(':id/upload')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @UseInterceptors(FileInterceptor('image'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({

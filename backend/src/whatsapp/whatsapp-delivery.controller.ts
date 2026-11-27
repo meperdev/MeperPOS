@@ -35,7 +35,7 @@ import { WhatsAppIdentityService } from './whatsapp-identity.service';
 export const DELIVERY_HISTORY_LIMIT = 30;
 
 /** Who may receive the daily report; the same closed list the delivery uses. */
-const ADMINISTRATIVE_ROLES: readonly OrgRole[] = ['OWNER', 'ADMIN'];
+const ADMINISTRATIVE_ROLES: readonly OrgRole[] = ['ADMIN'];
 
 /**
  * What the screen may know about an attempt. Deliberately narrower than the row:

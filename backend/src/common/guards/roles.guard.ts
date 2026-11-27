@@ -39,7 +39,7 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    // Role hierarchy: OWNER inherits ADMIN, ADMIN inherits MEMBER, MEMBER inherits CASHIER
+    // Role hierarchy: ADMIN inherits CASHIER; INVENTORY_USER inherits nothing
     const inheritedRoles = effectiveRoles(user.role);
 
     const hasRole = requiredRoles.some((requiredRole) =>

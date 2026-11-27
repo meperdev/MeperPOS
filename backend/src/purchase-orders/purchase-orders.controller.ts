@@ -43,7 +43,7 @@ export class PurchaseOrdersController {
   ) {}
 
   @Post()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Crear una orden de compra (borrador)' })
   create(
     @Body() dto: CreatePurchaseOrderDto,
@@ -57,7 +57,7 @@ export class PurchaseOrdersController {
   }
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Listar órdenes de compra' })
   findAll(
     @Query() query: QueryPurchaseOrdersDto,
@@ -67,14 +67,14 @@ export class PurchaseOrdersController {
   }
 
   @Get(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Obtener una orden de compra por ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.purchaseOrdersService.findOne(id, user.organizationId);
   }
 
   @Patch(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Editar una orden de compra (solo en borrador)' })
   update(
     @Param('id') id: string,
@@ -85,7 +85,7 @@ export class PurchaseOrdersController {
   }
 
   @Post(':id/confirm')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Confirmar una orden de compra (DRAFT → PENDING)' })
   confirm(
     @Param('id') id: string,
@@ -96,7 +96,7 @@ export class PurchaseOrdersController {
   }
 
   @Post(':id/duplicate')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({
     summary:
       'Repetir pedido: crea un borrador con los productos y cantidades de la orden',
@@ -115,7 +115,7 @@ export class PurchaseOrdersController {
   }
 
   @Post(':id/send')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({
     summary:
       'Registrar el envío de la orden al proveedor (el primer envío fija el documento)',
@@ -135,7 +135,7 @@ export class PurchaseOrdersController {
   }
 
   @Get(':id/pdf')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Descargar el PDF de la orden de compra' })
   async downloadPdf(
     @Param('id') id: string,
@@ -153,7 +153,7 @@ export class PurchaseOrdersController {
   }
 
   @Post(':id/receive')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Recibir ítems de una orden de compra' })
   receive(
     @Param('id') id: string,
@@ -170,7 +170,7 @@ export class PurchaseOrdersController {
   }
 
   @Post(':id/cancel')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Cancelar una orden de compra' })
   cancel(
     @Param('id') id: string,

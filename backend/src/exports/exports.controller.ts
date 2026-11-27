@@ -34,7 +34,7 @@ export class ExportsController {
   constructor(private exportsService: ExportsService) {}
 
   @Get('inventory')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Get inventory movements (JSON, paginated)' })
   async getInventoryMovements(
     @CurrentUser() user: RequestUser,
@@ -59,7 +59,7 @@ export class ExportsController {
   }
 
   @Post('products')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Export products data' })
   @ApiConsumes('application/json')
   async exportProducts(
@@ -83,7 +83,7 @@ export class ExportsController {
   }
 
   @Post('inventory')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Export inventory movements data' })
   @ApiConsumes('application/json')
   async exportInventory(

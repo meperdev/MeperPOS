@@ -161,7 +161,7 @@ describe('Location access (HTTP integration)', () => {
             email: memberEmail,
             password: 'not-a-login-credential',
             organizationUsers: {
-              create: [{ organizationId: first.id, role: OrgRole.MEMBER }],
+              create: [{ organizationId: first.id, role: OrgRole.CASHIER }],
             },
           },
         }),
@@ -189,7 +189,7 @@ describe('Location access (HTTP integration)', () => {
         }),
       ],
     );
-    member = sign(memberAccount, first.id, OrgRole.MEMBER);
+    member = sign(memberAccount, first.id, OrgRole.CASHIER);
     inventoryUser = sign(inventoryAccount, first.id, OrgRole.INVENTORY_USER);
     foreignUserId = foreignAccount.id;
     superAdmin = sign(superAdminUser, null, 'SUPER_ADMIN');
@@ -219,12 +219,7 @@ describe('Location access (HTTP integration)', () => {
 
   it('declares the matrix read roles and preserves the assignment role override', () => {
     const controller = LocationsController;
-    const readRoles = [
-      OrgRole.ADMIN,
-      OrgRole.MEMBER,
-      OrgRole.CASHIER,
-      OrgRole.INVENTORY_USER,
-    ];
+    const readRoles = [OrgRole.ADMIN, OrgRole.CASHIER, OrgRole.INVENTORY_USER];
     for (const handler of [
       controller.prototype.list,
       controller.prototype.posContext,

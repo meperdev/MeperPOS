@@ -39,7 +39,7 @@ export class CustomersController {
   constructor(private customersService: CustomersService) {}
 
   @Post()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @PlanLimit('customers')
   @ApiOperation({ summary: 'Create a new customer' })
   create(
@@ -53,7 +53,7 @@ export class CustomersController {
   }
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Get all customers with pagination' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
@@ -76,7 +76,7 @@ export class CustomersController {
   }
 
   @Get('document/:documentNumber')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Find customer by document number' })
   findByDocumentNumber(
     @Param('documentNumber') documentNumber: string,
@@ -89,7 +89,7 @@ export class CustomersController {
   }
 
   @Get(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Get a customer by ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.customersService.findOne(id, user.organizationId);

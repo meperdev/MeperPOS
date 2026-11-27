@@ -41,14 +41,14 @@ export class CashRegistersController {
   }
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Get all cash registers' })
   findAll(@CurrentUser() user: RequestUser) {
     return this.cashRegistersService.findAll(user.organizationId);
   }
 
   @Get(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Get a cash register by ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.cashRegistersService.findOne(id, user.organizationId);

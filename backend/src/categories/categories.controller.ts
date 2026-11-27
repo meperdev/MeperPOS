@@ -36,7 +36,7 @@ export class CategoriesController {
   constructor(private categoriesService: CategoriesService) {}
 
   @Post()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Create a new category' })
   create(
     @Body() createCategoryDto: CreateCategoryDto,
@@ -49,7 +49,7 @@ export class CategoriesController {
   }
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Get all categories with pagination' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
@@ -69,14 +69,14 @@ export class CategoriesController {
   }
 
   @Get(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Get a category by ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.categoriesService.findOne(id, user.organizationId);
   }
 
   @Put(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Update a category' })
   update(
     @Param('id') id: string,
@@ -91,7 +91,7 @@ export class CategoriesController {
   }
 
   @Delete(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+  @Roles(OrgRole.ADMIN)
   @ApiOperation({ summary: 'Delete a category' })
   remove(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.categoriesService.remove(id, user.organizationId);

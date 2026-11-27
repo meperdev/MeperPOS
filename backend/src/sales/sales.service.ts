@@ -191,8 +191,8 @@ export class SalesService {
    * - Default (INVENTORY_USER / unknown) → own sales only (deny-by-default)
    */
   /**
-   * The one rule for who reads every sale of the organization: OWNER inherits
-   * ADMIN and a super admin is above both. Every list, detail, receipt and
+   * The one rule for who reads every sale of the organization: ADMIN reads
+   * every sale and a super admin is above it. Every list, detail, receipt and
    * cancellation check goes through here, so they cannot disagree again (the
    * list once showed an owner a sale its detail then refused).
    */
@@ -213,7 +213,7 @@ export class SalesService {
   }
 
   /**
-   * Price overrides explicitly allow cashiers and managers, not MEMBER.
+   * Price overrides explicitly allow cashiers and managers, not INVENTORY_USER.
    * Missing principals are denied; this permission does not change role inheritance.
    */
   private canOverridePrice(user: RequestUser | undefined): boolean {

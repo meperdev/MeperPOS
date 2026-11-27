@@ -18,7 +18,7 @@ import { WhatsAppSessionService } from './whatsapp-session.service';
 
 /**
  * The commercial channel belongs to exactly one organization and is driven only
- * by that organization's ADMIN (OWNER inherits). The organization comes from
+ * by that organization's ADMIN. The organization comes from
  * the authenticated token and never from the request, so no caller can address
  * another tenant's session, and a platform super-admin without an organization
  * cannot select a tenant here.

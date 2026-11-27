@@ -3,7 +3,7 @@ export type StockAlertState = 'OPEN' | 'RESOLVED';
 
 /** The only failure codes an episode may carry; the column stays free text. */
 export const STOCK_ALERT_FAILURES = [
-  /** No verified OWNER/ADMIN identity in the organization to notify. */
+  /** No verified ADMIN identity in the organization to notify. */
   'no_recipient',
   /** The provider refused the send (non-2xx, missing config, bad session). */
   'provider_rejected',

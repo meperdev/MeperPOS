@@ -3,15 +3,11 @@ import { normalizeText } from '../row-validator';
 import { validatePasswordPolicy } from '../../../common/validators/password.policy';
 
 /**
- * Assignable organization roles. OWNER is retired (the primary owner is an
- * ADMIN membership with isPrimaryOwner), so a row cannot ask for it.
+ * Assignable organization roles: exactly the current OrgRole values. OWNER and
+ * MEMBER no longer exist (the primary owner is an ADMIN membership with
+ * isPrimaryOwner), so a row cannot ask for either of them.
  */
-export const USER_ROLES = [
-  'ADMIN',
-  'MEMBER',
-  'CASHIER',
-  'INVENTORY_USER',
-] as const;
+export const USER_ROLES = ['ADMIN', 'CASHIER', 'INVENTORY_USER'] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 

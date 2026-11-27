@@ -501,8 +501,10 @@ export class AuthService {
       throw new UnauthorizedException('Organization membership not found');
     }
 
-    // Mapear OWNER (legacy) a ADMIN para compatibilidad
-    const role = orgUser.role === 'OWNER' ? 'ADMIN' : orgUser.role;
+    // S9: the role column only holds current enum values, so no legacy mapping
+    // is needed — every membership already reads as ADMIN, CASHIER or
+    // INVENTORY_USER.
+    const role = orgUser.role;
 
     return {
       ...result,

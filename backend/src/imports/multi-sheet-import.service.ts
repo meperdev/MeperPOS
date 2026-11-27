@@ -151,7 +151,7 @@ export class MultiSheetImportService implements OnModuleDestroy {
    * sheet per-sheet, with per-row fault isolation.
    *
    * The caller's role travels on the job: the usuarios sheet is rejected
-   * unless the caller may create users (ADMIN, OWNER or SUPER_ADMIN).
+   * unless the caller may create users (ADMIN or SUPER_ADMIN).
    */
   async startFullImport(
     file: Express.Multer.File,
@@ -427,9 +427,9 @@ export class MultiSheetImportService implements OnModuleDestroy {
 
   /**
    * Roles allowed to import the usuarios sheet. Mirrors POST /api/users
-   * (@Roles(OrgRole.ADMIN) with OWNER inheriting ADMIN and SUPER_ADMIN
+   * (@Roles(OrgRole.ADMIN), the top organization role, and SUPER_ADMIN
    * bypassing) so the import cannot become a user-creation bypass for
-   * MEMBER/CASHIER callers. An unknown/missing role fails closed.
+   * CASHIER/INVENTORY_USER callers. An unknown/missing role fails closed.
    */
   private canImportUsersSheet(
     role: OrgRole | 'SUPER_ADMIN' | undefined,

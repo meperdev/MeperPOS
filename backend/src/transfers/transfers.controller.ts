@@ -36,7 +36,7 @@ import { TransfersService } from './transfers.service';
 @Controller('transfers')
 @UseGuards(JwtAuthGuard, RolesGuard, OrganizationRequiredGuard)
 @UseInterceptors(AdminOrganizationInterceptor)
-@Roles(OrgRole.ADMIN, OrgRole.MEMBER)
+@Roles(OrgRole.ADMIN)
 export class TransfersController {
   constructor(private readonly transfers: TransfersService) {}
 
@@ -52,7 +52,7 @@ export class TransfersController {
   }
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({
     summary: 'Listar las transferencias visibles para el usuario y sus sedes',
   })
@@ -64,14 +64,14 @@ export class TransfersController {
   }
 
   @Get(':id')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Leer una transferencia con sus ítems y sus sedes' })
   findOne(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.transfers.findOne(user, id);
   }
 
   @Post(':id/receive')
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   @ApiOperation({ summary: 'Recibir una transferencia en la sede de destino' })
   receive(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.transfers.receive(user, id);

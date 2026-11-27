@@ -361,8 +361,8 @@ function deliveredFlag(
  *  3. the role comes from `OrganizationUser` for that identity's `userId` in
  *     that identity's `organizationId` — one row, no fallback, no "any
  *     organization this user belongs to";
- *  4. OWNER and ADMIN are `authorized`; anything else, including a membership
- *     that does not exist, is `forbidden`.
+ *  4. ADMIN is `authorized`; anything else, including a membership that does
+ *     not exist, is `forbidden`.
  *
  * Two invariants hold for every method here:
  *  - **The allowlists are closed, and only one entry writes.** Two tools read:
@@ -421,7 +421,7 @@ export class WhatsAppAdminService {
     }
 
     // The role is read for this user in this organization only. A user who is
-    // OWNER somewhere else is a stranger here.
+    // an ADMIN somewhere else is a stranger here.
     const membership = await this.prisma.organizationUser.findFirst({
       where: {
         userId: identity.userId,

@@ -169,7 +169,7 @@ describe('permission matrix (who passes RolesGuard on each route)', () => {
         ?.slice(66, 71);
 
     expect(cellsOf('GET', '/api/sales')).toBe('OAMC-');
-    expect(cellsOf('POST', '/api/products')).toBe('OAM--');
+    expect(cellsOf('POST', '/api/products')).toBe('OA---');
     expect(cellsOf('GET', '/api/admin/metrics')).toBe('-----');
     expect(cellsOf('GET', '/api/products')).toBe('OAMCI');
   });

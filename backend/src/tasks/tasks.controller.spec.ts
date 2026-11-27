@@ -30,7 +30,6 @@ describe('TasksController', () => {
 
     expect(requiredRoles).toEqual([
       OrgRole.ADMIN,
-      OrgRole.MEMBER,
       OrgRole.CASHIER,
       OrgRole.INVENTORY_USER,
     ]);
@@ -42,7 +41,7 @@ describe('TasksController', () => {
       userId: 'user-1',
       email: 'test@example.com',
       organizationId: 'org-1',
-      role: OrgRole.MEMBER,
+      role: OrgRole.CASHIER,
       tokenVersion: 1,
       isSuperAdmin: false,
     };
@@ -51,7 +50,7 @@ describe('TasksController', () => {
         id: 'user-1',
         name: 'User 1',
         email: 'u1@test.com',
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
       },
     ];
     tasksServiceMock.getAssignees = jest.fn().mockResolvedValue(assignees);
@@ -67,7 +66,7 @@ describe('TasksController', () => {
       userId: 'user-1',
       email: 'test@example.com',
       organizationId: 'org-1',
-      role: OrgRole.MEMBER,
+      role: OrgRole.CASHIER,
       tokenVersion: 1,
       isSuperAdmin: false,
     };

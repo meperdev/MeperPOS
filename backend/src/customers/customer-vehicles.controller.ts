@@ -60,7 +60,7 @@ export class CustomerVehiclesController {
   constructor(private readonly vehicles: CustomerVehiclesService) {}
 
   @Get()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   list(
     @Param('customerId') customerId: string,
     @CurrentUser() user: RequestUser,
@@ -85,7 +85,7 @@ export class CustomerVehiclesController {
   }
 
   @Post()
-  @Roles(OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.CASHIER)
+  @Roles(OrgRole.ADMIN, OrgRole.CASHIER)
   create(
     @Param('customerId') customerId: string,
     @CurrentUser() user: RequestUser,

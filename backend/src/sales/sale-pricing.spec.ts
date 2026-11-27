@@ -109,7 +109,7 @@ const cases: PricingCase[] = [
     item: { unitPrice: 120, discountAmount: 999 },
     forbidden: true,
     error:
-      'Only an ADMIN, OWNER, SUPER_ADMIN or CASHIER may override the unit price of Coffee',
+      'Only an ADMIN, SUPER_ADMIN or CASHIER may override the unit price of Coffee',
   },
   {
     name: 'negative price is rejected before override permission',
