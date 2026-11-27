@@ -18,6 +18,7 @@ import {
 } from '../common/utils/bogota-date';
 import { ExpensesService } from '../expenses/expenses.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TEST_DATABASE } from '../testing/test-database';
 import { ReportsService } from '../reports/reports.service';
 import { writePayrollCompletionExpense } from './payroll-completed-expense-writer';
 import { resolvePayrollExpenseCategoryWithin } from './payroll-expense-category.service';
@@ -79,8 +80,9 @@ import { PayrollReplacementPaymentService } from './payroll-replacement-payment.
  * The suite is skipped unless `PAYROLL_PG_INT=1`.
  *
  * Safety, in this order:
- * - `beforeAll` fails closed unless `current_database()` is the local development
- *   database `inventario_db`, the server address is loopback/private, and the
+ * - `beforeAll` fails closed unless `current_database()` is the local test
+ *   database `meperpos_test` (jest moves a URL naming the development database
+ *   there, see src/testing/test-database.ts), the server address is loopback/private, and the
  *   connecting role may set `session_replication_role` (needed by the cleanup);
  * - every fixture row is namespaced by a unique organization slug/e-mail and is
  *   deleted by `organizationId`/`userId` only, never by a table-wide delete;
@@ -98,10 +100,10 @@ const ENABLED = process.env.PAYROLL_PG_INT === '1';
 const describePostgres = ENABLED ? describe : describe.skip;
 
 /** The only database this suite is allowed to write to. */
-const REQUIRED_DATABASE = 'inventario_db';
+const REQUIRED_DATABASE = TEST_DATABASE;
 
 // Fixed dates keep each scenario inside its own reporting window, so the shared
-// development database's own rows can never satisfy an assertion by accident.
+// test database's other rows can never satisfy an assertion by accident.
 const DATE_CONCURRENT = '2026-04-10';
 const DATE_ROLLBACK = '2026-05-10';
 const DATE_CASH_FLOW = '2026-06-10';
@@ -199,7 +201,7 @@ async function assertLocalDevelopmentDatabase(
   if (!identity) throw new Error('No database identity was returned');
   if (identity.db !== REQUIRED_DATABASE)
     throw new Error(
-      `Refusing to run: PAYROLL_PG_INT targets "${identity.db}", expected the local development database "${REQUIRED_DATABASE}"`,
+      `Refusing to run: PAYROLL_PG_INT targets "${identity.db}", expected the local test database "${REQUIRED_DATABASE}"`,
     );
   if (!isLoopbackOrPrivate(identity.host))
     throw new Error(
