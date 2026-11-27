@@ -606,7 +606,7 @@ describe('unwired inventory creation', () => {
     expect(h.db.payment.create).not.toHaveBeenCalled();
     expect(h.db.moneyLoan.create).not.toHaveBeenCalled();
   });
-  it.each([OrgRole.MEMBER, OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
+  it.each([OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
     'rejects authenticated role %s',
     async (role) => {
       const h = harness();
@@ -623,7 +623,7 @@ describe('unwired inventory creation', () => {
       const member = h.state().members[0];
       if (kind === 'inactive') member.user = { active: false };
       if (kind === 'tenant') member.organizationId = 'other';
-      if (kind === 'role') member.role = 'MEMBER';
+      if (kind === 'role') member.role = 'CASHIER';
       if (kind === 'absent') h.state().members.splice(0, 1);
       await expect(
         h.service.create(dto, { ...actor, role: 'SUPER_ADMIN' }),
@@ -631,7 +631,7 @@ describe('unwired inventory creation', () => {
       expect(h.calls).toEqual([]);
     },
   );
-  it.each([OrgRole.OWNER, 'SUPER_ADMIN' as const])(
+  it.each([OrgRole.ADMIN, 'SUPER_ADMIN' as const])(
     'allows %s only with real administrative membership',
     async (role) => {
       const h = harness();
@@ -1224,7 +1224,7 @@ describe.each(['deliver', 'returnItems'] as const)(
       if (failure === 'later-item')
         expect(h.calls).toEqual(['claim', 'item', 'item']);
     });
-    it.each([OrgRole.MEMBER, OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
+    it.each([OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
       'rejects role %s without transaction',
       async (role) => {
         const { h, loan, input } = await prepare();
@@ -1248,7 +1248,7 @@ describe.each(['deliver', 'returnItems'] as const)(
         expect(h.calls).toEqual([]);
       },
     );
-    it.each([OrgRole.OWNER, 'SUPER_ADMIN' as const])(
+    it.each([OrgRole.ADMIN, 'SUPER_ADMIN' as const])(
       'permits %s with active administrative membership',
       async (role) => {
         const { h, loan, input } = await prepare();
@@ -2351,7 +2351,7 @@ describe.each(['cancel', 'close'] as const)(
         reservedStock: 0,
       });
     });
-    it.each([OrgRole.MEMBER, OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
+    it.each([OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
       'rejects %s before transaction',
       async (role) => {
         const { h, loan, input } = await prepareTerminal(method);
@@ -2362,7 +2362,7 @@ describe.each(['cancel', 'close'] as const)(
       },
     );
     it.each(['inactive', 'tenant', 'role', 'absent'])(
-      'requires actual active ADMIN/OWNER membership before replay: %s',
+      'requires actual active ADMIN membership before replay: %s',
       async (kind) => {
         const { h, loan, input } = await prepareTerminal(method);
         await h.service[method](loan.id, input, actor);
@@ -2377,11 +2377,11 @@ describe.each(['cancel', 'close'] as const)(
         expect(h.db.inventoryLoanOperation.findUnique).not.toHaveBeenCalled();
       },
     );
-    it.each([OrgRole.OWNER, 'SUPER_ADMIN' as const])(
+    it.each([OrgRole.ADMIN, 'SUPER_ADMIN' as const])(
       'permits %s only with administrative membership',
       async (role) => {
         const { h, loan, input } = await prepareTerminal(method);
-        h.state().members[0].role = 'OWNER';
+        h.state().members[0].role = 'ADMIN';
         await expect(
           h.service[method](loan.id, input, { ...actor, role }),
         ).resolves.toMatchObject({ status });
