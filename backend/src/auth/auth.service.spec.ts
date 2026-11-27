@@ -28,6 +28,7 @@ describe('AuthService', () => {
     organizationUser: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
+      findUnique: jest.fn(),
     },
     organization: {
       findUnique: jest.fn(),
@@ -212,7 +213,10 @@ describe('AuthService', () => {
     it('should login successfully with provided organizationId', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      mockPrisma.organizationUser.findFirst.mockResolvedValue(mockOrgUser);
+      mockPrisma.organizationUser.findFirst.mockResolvedValue({
+        ...mockOrgUser,
+        isPrimaryOwner: true,
+      });
       mockPrisma.organization.findUnique.mockResolvedValue({
         id: 'org-1',
         plan: PlanType.BASIC,
@@ -235,6 +239,8 @@ describe('AuthService', () => {
         name: 'Test User',
         organizationId: 'org-1',
         role: OrgRole.ADMIN,
+        // The team screen offers ADMIN creation only to the primary owner.
+        isPrimaryOwner: true,
         organization: {
           id: 'org-1',
           plan: PlanType.BASIC,
@@ -627,6 +633,53 @@ describe('AuthService', () => {
         }),
         { expiresIn: ACCESS_TOKEN_TTL_SECONDS },
       );
+    });
+  });
+
+  describe('validateUser (GET /auth/profile)', () => {
+    const activeUser = {
+      id: 'user-1',
+      email: 'test@example.com',
+      name: 'Test User',
+      password: 'hashed',
+      active: true,
+      isSuperAdmin: false,
+      tokenVersion: 0,
+    };
+
+    it.each([true, false])(
+      'reports isPrimaryOwner=%s from the membership',
+      async (isPrimaryOwner) => {
+        mockPrisma.user.findUnique.mockResolvedValue(activeUser);
+        mockPrisma.organizationUser.findUnique.mockResolvedValue({
+          organizationId: 'org-1',
+          role: OrgRole.ADMIN,
+          isPrimaryOwner,
+          organization: { id: 'org-1' },
+        });
+
+        const profile = await service.validateUser('user-1', 'org-1');
+
+        expect(profile).toMatchObject({
+          role: OrgRole.ADMIN,
+          isPrimaryOwner,
+        });
+        expect(profile).not.toHaveProperty('password');
+      },
+    );
+
+    it('reports a SUPER_ADMIN as not a primary owner', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...activeUser,
+        isSuperAdmin: true,
+      });
+
+      const profile = await service.validateUser('user-1', null);
+
+      expect(profile).toMatchObject({
+        role: 'SUPER_ADMIN',
+        isPrimaryOwner: false,
+      });
     });
   });
 

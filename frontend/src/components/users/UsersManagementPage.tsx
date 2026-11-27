@@ -42,6 +42,12 @@ const roleLabel: Record<User["role"], string> = {
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
+  // Creating an ADMIN needs the primary owner or a SUPER_ADMIN (the API answers
+  // 403 to anyone else), so only they are offered the option.
+  const canCreateAdmin =
+    currentUser?.isPrimaryOwner === true ||
+    currentUser?.isSuperAdmin === true ||
+    currentUser?.role === "SUPER_ADMIN";
   const toast = useToast();
   const { data: users = [], isLoading } = useUsers();
   const createUser = useCreateUser();
@@ -322,7 +328,7 @@ export default function UsersPage() {
             options={[
               { value: "CASHIER", label: "Cajero" },
               { value: "INVENTORY_USER", label: "Inventario" },
-              { value: "ADMIN", label: "Administrador" },
+              ...(canCreateAdmin ? [{ value: "ADMIN", label: "Administrador" }] : []),
             ]}
           />
           <div className="flex justify-end gap-3 border-t border-border/60 pt-4">

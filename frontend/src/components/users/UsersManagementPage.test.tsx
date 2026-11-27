@@ -44,10 +44,19 @@ vi.mock("@/hooks/useUsers", () => ({
   useResetUserPassword: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+// The signed-in admin; the primary owner by default, overridden per test.
+const currentUserMock = vi.hoisted(() => ({
+  value: {
+    id: "admin-1",
+    role: "ADMIN",
+    name: "Admin Principal",
+    email: "admin@example.com",
+    isPrimaryOwner: true as boolean,
+  },
+}));
+
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({
-    user: { id: "admin-1", role: "ADMIN", name: "Admin Principal", email: "admin@example.com" },
-  }),
+  useAuth: () => ({ user: currentUserMock.value }),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
@@ -170,6 +179,25 @@ describe("Users list responsive layout", () => {
     );
 
     expect(password).toHaveAttribute("type", "text");
+  });
+
+  it("does not offer Administrador to an admin who is not the primary owner", async () => {
+    // Only the primary owner (or a SUPER_ADMIN) may create an ADMIN; the API
+    // answers 403 to anyone else, so the option would only fail.
+    const previous = currentUserMock.value;
+    currentUserMock.value = { ...previous, isPrimaryOwner: false };
+    try {
+      const user = userEvent.setup();
+      render(<UsersPage />);
+
+      await user.click(screen.getByRole("button", { name: /Nuevo usuario/ }));
+      const dialog = screen.getByRole("dialog");
+      await user.click(within(dialog).getByLabelText("Rol"));
+      const options = await screen.findAllByRole("option");
+      expect(options.map((option) => option.textContent)).toEqual(["Cajero", "Inventario"]);
+    } finally {
+      currentUserMock.value = previous;
+    }
   });
 
   it("offers only Cajero, Inventario and Administrador when creating a user", async () => {
