@@ -10,7 +10,7 @@ import { EmployeeModality } from './dto/employee.dto';
 
 const owner = {
   userId: 'user',
-  role: 'OWNER',
+  role: 'ADMIN',
   organizationId: 'org',
   isSuperAdmin: false,
 } as RequestUser;
@@ -157,7 +157,7 @@ describe('EmployeesService', () => {
     undefined,
     { ...owner, organizationId: 'other' },
     { ...owner, userId: '' },
-    { ...owner, role: 'MEMBER' },
+    { ...owner, role: 'CASHIER' },
     { ...owner, role: 'CASHIER' },
     { ...owner, role: 'INVENTORY_USER' },
     { ...owner, role: 'SUPER_ADMIN', isSuperAdmin: true },

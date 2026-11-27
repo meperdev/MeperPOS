@@ -12,7 +12,7 @@ import type { RequestUser } from '../common/interfaces/request-user.interface';
 const actor = {
   userId: 'user',
   organizationId: 'org',
-  role: 'OWNER',
+  role: 'ADMIN',
 } as RequestUser;
 const membership = {
   id: 'member',

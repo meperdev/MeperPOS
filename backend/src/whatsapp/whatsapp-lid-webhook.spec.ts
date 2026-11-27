@@ -308,15 +308,15 @@ describe('signed mapped LID integration', () => {
     });
   });
 
-  it.each(['member', 'other-tenant'])(
+  it.each(['cashier', 'other-tenant'])(
     'refuses %s without a query or reply',
     async (scenario) => {
       await fixture(async ({ app, prisma, reports, sender }) => {
         prisma.organizationUser.findFirst.mockImplementation(
           ({ where }: { where: { organizationId: string } }) =>
             Promise.resolve(
-              scenario === 'member'
-                ? { role: 'MEMBER' }
+              scenario === 'cashier'
+                ? { role: 'CASHIER' }
                 : where.organizationId === 'tenant-b'
                   ? { role: 'ADMIN' }
                   : null,

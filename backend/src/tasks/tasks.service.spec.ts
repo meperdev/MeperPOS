@@ -34,7 +34,7 @@ describe('TasksService', () => {
     userId: 'user-1',
     email: 'test@example.com',
     organizationId: 'org-1',
-    role: OrgRole.MEMBER,
+    role: OrgRole.CASHIER,
     tokenVersion: 1,
     isSuperAdmin: false,
   };

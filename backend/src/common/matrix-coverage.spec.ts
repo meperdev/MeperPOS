@@ -32,7 +32,7 @@ function parseMatrixMarkdown(content: string): MatrixRow[] {
 
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim();
-    // Route rows look like: | /api/products | GET | ADMIN, MEMBER | org-scoped | backend/src/... |
+    // Route rows look like: | /api/products | GET | ADMIN, CASHIER | org-scoped | backend/src/... |
     if (!trimmed.startsWith('| /')) {
       continue;
     }

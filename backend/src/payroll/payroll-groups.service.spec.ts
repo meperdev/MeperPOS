@@ -16,7 +16,7 @@ import { PayrollGroupsService } from './payroll-groups.service';
 const owner = {
   userId: 'u',
   organizationId: 'org',
-  role: 'OWNER',
+  role: 'ADMIN',
   isSuperAdmin: false,
 } as RequestUser;
 const input = { employeeId: 'emp', shiftIds: ['s1', 's2'] };
@@ -125,7 +125,7 @@ describe('PayrollGroupsService', () => {
     expect(committed).toHaveLength(0);
   });
 
-  it.each(['OWNER', 'ADMIN'])(
+  it.each(['ADMIN'])(
     'creates a pending group and all selected memberships for %s',
     async (role) => {
       const { service, tx, transaction, committed } = setup();
@@ -181,7 +181,7 @@ describe('PayrollGroupsService', () => {
     undefined,
     { ...owner, userId: '' },
     { ...owner, organizationId: 'other' },
-    ...['MEMBER', 'CASHIER', 'INVENTORY_USER', 'SUPER_ADMIN'].map((role) => ({
+    ...['CASHIER', 'INVENTORY_USER', 'SUPER_ADMIN'].map((role) => ({
       ...owner,
       role,
     })),
@@ -337,7 +337,7 @@ describe('PayrollGroupsService', () => {
 
   it.each([
     { ...owner, organizationId: 'other' },
-    { ...owner, role: 'MEMBER' },
+    { ...owner, role: 'CASHIER' },
   ])(
     'does not let an expense choice relax authorization or tenant scope',
     async (actor) => {

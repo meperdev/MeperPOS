@@ -86,9 +86,9 @@ const url = process.env.MULTI_VERIFY_URL;
     // principal grant, so the operational actors of this fixture are created
     // before any site: their access is exactly the grants the cases write.
     const admin = await actor(OrgRole.ADMIN),
-      owner = await actor(OrgRole.OWNER),
+      owner = await actor(OrgRole.ADMIN),
       cashier = await actor(OrgRole.CASHIER),
-      member = await actor(OrgRole.MEMBER);
+      member = await actor(OrgRole.CASHIER);
     const main = await db.location.create({
       data: { organizationId, name: 'Principal', isDefault: true },
     });

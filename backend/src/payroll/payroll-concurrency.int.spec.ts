@@ -537,7 +537,7 @@ describePostgres(
         data: {
           userId: user.id,
           organizationId: organization.id,
-          role: OrgRole.OWNER,
+          role: OrgRole.ADMIN,
           isPrimaryOwner: true,
         },
       });
@@ -546,7 +546,7 @@ describePostgres(
         userId: user.id,
         email: user.email,
         organizationId: organization.id,
-        role: OrgRole.OWNER,
+        role: OrgRole.ADMIN,
         tokenVersion: 0,
         isSuperAdmin: false,
       };
@@ -769,7 +769,7 @@ describePostgres(
         data: {
           userId: userB.id,
           organizationId: organizationB.id,
-          role: OrgRole.OWNER,
+          role: OrgRole.ADMIN,
           isPrimaryOwner: true,
         },
       });
@@ -777,7 +777,7 @@ describePostgres(
         userId: userB.id,
         email: userB.email,
         organizationId: organizationB.id,
-        role: OrgRole.OWNER,
+        role: OrgRole.ADMIN,
         tokenVersion: 0,
         isSuperAdmin: false,
       };

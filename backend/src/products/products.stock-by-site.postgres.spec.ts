@@ -146,7 +146,7 @@ const MESSAGES = {
         data: {
           userId: owner.id,
           organizationId: organization.id,
-          role: OrgRole.OWNER,
+          role: OrgRole.ADMIN,
         },
       });
       await prisma.organizationUser.create({
@@ -160,7 +160,7 @@ const MESSAGES = {
         data: {
           userId: unassigned.id,
           organizationId: organization.id,
-          role: OrgRole.MEMBER,
+          role: OrgRole.CASHIER,
         },
       });
       // The principal-site grant trigger gives every new operational membership
@@ -263,7 +263,7 @@ const MESSAGES = {
           userId: owner.id,
           email: owner.email,
           organizationId: organization.id,
-          role: OrgRole.OWNER,
+          role: OrgRole.ADMIN,
           ...USER_SHAPE,
         },
         cashier: {
@@ -277,7 +277,7 @@ const MESSAGES = {
           userId: unassigned.id,
           email: unassigned.email,
           organizationId: organization.id,
-          role: OrgRole.MEMBER,
+          role: OrgRole.CASHIER,
           ...USER_SHAPE,
         },
         stockedId: stocked.id,

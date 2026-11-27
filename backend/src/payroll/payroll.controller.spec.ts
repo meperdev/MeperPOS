@@ -206,7 +206,7 @@ const routeCases = [
 ] as const;
 
 const forbiddenRoles = [
-  OrgRole.MEMBER,
+  OrgRole.CASHIER,
   OrgRole.CASHIER,
   OrgRole.INVENTORY_USER,
   'SUPER_ADMIN',
@@ -356,7 +356,7 @@ describe('payroll HTTP boundary', () => {
   const post = (
     path: string,
     body: unknown,
-    role: string = OrgRole.OWNER,
+    role: string = OrgRole.ADMIN,
     org?: string,
   ) => {
     const call = request(app.getHttpServer())
@@ -365,7 +365,7 @@ describe('payroll HTTP boundary', () => {
     if (org) call.set('x-test-org', org);
     return call.send(body as object);
   };
-  const get = (path: string, role: string = OrgRole.OWNER, org?: string) => {
+  const get = (path: string, role: string = OrgRole.ADMIN, org?: string) => {
     const call = request(app.getHttpServer())
       .get(path)
       .set('x-test-role', role);
@@ -416,7 +416,7 @@ describe('payroll HTTP boundary', () => {
     ]);
   });
 
-  it('denies MEMBER, CASHIER, INVENTORY_USER and SUPER_ADMIN on every route', async () => {
+  it('denies CASHIER, INVENTORY_USER and SUPER_ADMIN on every route', async () => {
     for (const role of forbiddenRoles) {
       for (const { path, body, invoke, routePath } of routeCases) {
         await post(path, body, role).expect(403);
@@ -430,12 +430,12 @@ describe('payroll HTTP boundary', () => {
 
   it('requires an organization for every route and never accepts it from the body', async () => {
     for (const { path, body, invoke } of routeCases) {
-      await post(path, body, OrgRole.OWNER, 'none').expect(403);
+      await post(path, body, OrgRole.ADMIN, 'none').expect(403);
       expect(invoke).not.toHaveBeenCalled();
     }
     await get(
       '/api/payroll/obligations?employeeId=emp-a',
-      OrgRole.OWNER,
+      OrgRole.ADMIN,
       'none',
     ).expect(403);
     expect(prisma.payrollObligation.findMany).not.toHaveBeenCalled();
@@ -462,7 +462,7 @@ describe('payroll HTTP boundary', () => {
         expect.objectContaining({
           userId: 'user-a',
           organizationId: 'org-a',
-          role: OrgRole.OWNER,
+          role: OrgRole.ADMIN,
         }),
       );
     },

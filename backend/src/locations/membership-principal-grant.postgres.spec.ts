@@ -184,7 +184,7 @@ const sorted = (ids: string[]) => [...ids].sort();
       return { organizationId, principal, second, userId };
     }
 
-    it.each([OrgRole.CASHIER, OrgRole.MEMBER, OrgRole.INVENTORY_USER])(
+    it.each([OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
       'gives a new %s exactly the principal site and no other',
       async (role) => {
         const { organizationId, principal, userId } = await tenant(
@@ -201,7 +201,7 @@ const sorted = (ids: string[]) => [...ids].sort();
       },
     );
 
-    it.each([OrgRole.OWNER, OrgRole.ADMIN])(
+    it.each([OrgRole.ADMIN])(
       'leaves a new %s without grant rows, because the role is the access',
       async (role) => {
         const { organizationId, userId } = await tenant(
@@ -237,7 +237,7 @@ const sorted = (ids: string[]) => [...ids].sort();
       // demotion and must not add, replace or drop anything.
       await prisma.organizationUser.update({
         where: { userId_organizationId: { userId, organizationId } },
-        data: { role: OrgRole.MEMBER },
+        data: { role: OrgRole.INVENTORY_USER },
       });
       await expect(grantedIds(organizationId, userId)).resolves.toEqual(
         sorted([principal, second]),
@@ -245,14 +245,14 @@ const sorted = (ids: string[]) => [...ids].sort();
 
       await prisma.organizationUser.update({
         where: { userId_organizationId: { userId, organizationId } },
-        data: { role: OrgRole.INVENTORY_USER, joinedAt: new Date(0) },
+        data: { role: OrgRole.CASHIER, joinedAt: new Date(0) },
       });
       await expect(grantedIds(organizationId, userId)).resolves.toEqual(
         sorted([principal, second]),
       );
     });
 
-    it.each([OrgRole.CASHIER, OrgRole.MEMBER, OrgRole.INVENTORY_USER])(
+    it.each([OrgRole.CASHIER, OrgRole.INVENTORY_USER])(
       'gives the principal site to an %s membership demoted with no grants',
       async (role) => {
         const { organizationId, principal, userId } = await tenant(

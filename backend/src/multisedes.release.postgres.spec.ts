@@ -193,11 +193,11 @@ function sqlText(input: unknown): string {
         };
       };
 
-      const owner = await actor(OrgRole.OWNER);
+      const owner = await actor(OrgRole.ADMIN);
       const admin = await actor(OrgRole.ADMIN);
       const cashier = await actor(OrgRole.CASHIER);
       const otherCashier = await actor(OrgRole.CASHIER);
-      const member = await actor(OrgRole.MEMBER);
+      const member = await actor(OrgRole.CASHIER);
 
       const principal = await prisma.location.create({
         data: {

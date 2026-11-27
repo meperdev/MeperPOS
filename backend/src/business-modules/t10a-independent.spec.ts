@@ -96,8 +96,8 @@ describe('T10a independent signed-token catalog boundary', () => {
       expect(prisma.organizationUser.findFirst).not.toHaveBeenCalled();
     },
   );
-  it.each(['OWNER', 'ADMIN', 'MEMBER', 'CASHIER', 'INVENTORY_USER'])(
-    'denies persisted %s even when token claims OWNER',
+  it.each(['ADMIN', 'CASHIER', 'INVENTORY_USER'])(
+    'denies persisted %s even when the token claims a stale role',
     async (role) => {
       prisma.organizationUser.findFirst.mockResolvedValue({
         organizationId: 'org-a',

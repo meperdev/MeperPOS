@@ -64,9 +64,9 @@ describe('SalesService', () => {
     ...adminUser,
     role: 'CASHIER',
   } as const;
-  const memberUser = {
+  const inventoryUser = {
     ...adminUser,
-    role: 'MEMBER',
+    role: 'INVENTORY_USER',
   } as const;
 
   const sequenceServiceMock = {
@@ -109,7 +109,7 @@ describe('SalesService', () => {
   const mockUser = (
     overrides: Partial<{
       userId: string;
-      role: 'ADMIN' | 'MEMBER' | 'OWNER' | 'CASHIER' | 'SUPER_ADMIN';
+      role: 'ADMIN' | 'CASHIER' | 'INVENTORY_USER' | 'SUPER_ADMIN';
       organizationId: string;
       isSuperAdmin: boolean;
     }> = {},
@@ -117,7 +117,7 @@ describe('SalesService', () => {
     userId: 'user-1',
     email: 'user@example.com',
     organizationId: 'org-1',
-    role: 'MEMBER' as const,
+    role: 'CASHIER' as const,
     tokenVersion: 1,
     isSuperAdmin: false,
     ...overrides,
@@ -137,7 +137,6 @@ describe('SalesService', () => {
   // ---- existing tests preserved ----
 
   it.each([
-    ['OWNER', {}],
     ['ADMIN', {}],
     ['SUPER_ADMIN', {}],
     ['a platform session', { isSuperAdmin: true }],
@@ -158,13 +157,13 @@ describe('SalesService', () => {
         undefined,
         mockUser({
           userId: 'owner-1',
-          role: role === 'a platform session' ? 'MEMBER' : role,
+          role: role === 'a platform session' ? 'CASHIER' : role,
           ...extra,
         }),
       );
 
-      // OWNER inherits ADMIN; a super admin is above both. Neither may be
-      // narrowed to the sales they rang up themselves.
+      // ADMIN and a super admin are above everyone. Neither may be narrowed
+      // to the sales they rang up themselves.
       const { where } = prismaMock.sale.findMany.mock.calls[0][0] as {
         where: Record<string, unknown>;
       };
@@ -172,7 +171,7 @@ describe('SalesService', () => {
     },
   );
 
-  it('applies own-sales scope for MEMBER in list queries', async () => {
+  it('applies own-sales scope for CASHIER in list queries', async () => {
     prismaMock.sale.findMany.mockResolvedValue([
       {
         id: 'sale-1',
@@ -194,7 +193,7 @@ describe('SalesService', () => {
       undefined,
       undefined,
       undefined,
-      mockUser({ userId: 'cashier-1', role: 'MEMBER' }),
+      mockUser({ userId: 'cashier-1', role: 'CASHIER' }),
     );
 
     expect(prismaMock.sale.findMany).toHaveBeenCalledWith(
@@ -394,7 +393,7 @@ describe('SalesService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it.each(['OWNER', 'SUPER_ADMIN'] as const)(
+  it.each(['ADMIN', 'SUPER_ADMIN'] as const)(
     'lets %s open a sale rung up by a colleague, by id and by number',
     async (role) => {
       const colleagueSale = {
@@ -501,7 +500,7 @@ describe('SalesService', () => {
     });
   });
 
-  it('combines customerId filter with MEMBER scope', async () => {
+  it('combines customerId filter with CASHIER scope', async () => {
     prismaMock.sale.findMany.mockResolvedValue([
       {
         id: 'sale-1',
@@ -524,7 +523,7 @@ describe('SalesService', () => {
       undefined,
       undefined,
       'customer-1',
-      mockUser({ userId: 'cashier-1', role: 'MEMBER' }),
+      mockUser({ userId: 'cashier-1', role: 'CASHIER' }),
     );
 
     expect(prismaMock.sale.findMany).toHaveBeenCalledWith(
@@ -558,7 +557,7 @@ describe('SalesService', () => {
       undefined,
       undefined,
       'customer-without-sales',
-      mockUser({ userId: 'cashier-1', role: 'MEMBER' }),
+      mockUser({ userId: 'cashier-1', role: 'CASHIER' }),
     );
 
     expect(prismaMock.sale.findMany).toHaveBeenCalledWith(
@@ -581,7 +580,7 @@ describe('SalesService', () => {
     });
   });
 
-  it('denies MEMBER access to another seller sale detail', async () => {
+  it('denies CASHIER access to another seller sale detail', async () => {
     prismaMock.sale.findFirst.mockResolvedValue({
       id: 'sale-foreign',
       userId: 'admin-1',
@@ -595,12 +594,12 @@ describe('SalesService', () => {
       service.findOne(
         'sale-foreign',
         'org-1',
-        mockUser({ userId: 'cashier-1', role: 'MEMBER' }),
+        mockUser({ userId: 'cashier-1', role: 'CASHIER' }),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('[#15] allows MEMBER drill-down for own sale detail', async () => {
+  it('[#15] allows CASHIER drill-down for own sale detail', async () => {
     prismaMock.sale.findFirst.mockResolvedValue({
       id: 'sale-own',
       userId: 'cashier-1',
@@ -614,7 +613,7 @@ describe('SalesService', () => {
       service.findOne(
         'sale-own',
         'org-1',
-        mockUser({ userId: 'cashier-1', role: 'MEMBER' }),
+        mockUser({ userId: 'cashier-1', role: 'CASHIER' }),
       ),
     ).resolves.toEqual(
       expect.objectContaining({ id: 'sale-own', userId: 'cashier-1' }),
@@ -1628,9 +1627,9 @@ describe('SalesService', () => {
       });
     });
 
-    it('rejects a MEMBER echoing the list price instead of the promotional price', async () => {
+    it('rejects an INVENTORY_USER echoing the list price instead of the promotional price', async () => {
       // The server derives 8000 from the PERCENTAGE 20 promotion;
-      // a MEMBER cannot override it by echoing the list price.
+      // an INVENTORY_USER cannot override it by echoing the list price.
       const tx = buildTx();
       primeCreate(tx, promoProduct, 55);
 
@@ -1650,7 +1649,7 @@ describe('SalesService', () => {
           },
           'user-1',
           'org-1',
-          memberUser,
+          inventoryUser,
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
@@ -1787,12 +1786,12 @@ describe('SalesService', () => {
       payments: [{ method: 'CASH' as const, amount: unitPrice ?? 100000 }],
     });
 
-    it('rejects a MEMBER override (MEMBER is not a manager)', async () => {
+    it('rejects an INVENTORY_USER override (the role is not a manager)', async () => {
       const tx = buildTx();
       primeCreate(tx);
 
       await expect(
-        service.create(dtoWithPrice(1), 'user-1', 'org-1', memberUser),
+        service.create(dtoWithPrice(1), 'user-1', 'org-1', inventoryUser),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(tx.sale.create).not.toHaveBeenCalled();
     });
@@ -2490,7 +2489,7 @@ describe('SalesService.generateReceipt delegation', () => {
     userId: 'user-1',
     email: 'user@example.com',
     organizationId: 'org-1',
-    role: 'MEMBER' as const,
+    role: 'CASHIER' as const,
     tokenVersion: 1,
     isSuperAdmin: false,
   });

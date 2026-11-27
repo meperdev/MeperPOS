@@ -137,7 +137,7 @@ describe('JwtStrategy', () => {
       });
     });
 
-    it('should preserve MEMBER role without mapping', async () => {
+    it('should preserve CASHIER role without mapping', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'user-1',
         email: 'test@example.com',
@@ -148,7 +148,7 @@ describe('JwtStrategy', () => {
         id: 'ou-1',
         userId: 'user-1',
         organizationId: 'org-1',
-        role: OrgRole.MEMBER,
+        role: OrgRole.CASHIER,
       });
       mockPrisma.organization.findUnique.mockResolvedValue({
         status: 'ACTIVE',
@@ -156,7 +156,7 @@ describe('JwtStrategy', () => {
 
       const result = await strategy.validate(payload);
 
-      expect(result.role).toBe(OrgRole.MEMBER);
+      expect(result.role).toBe(OrgRole.CASHIER);
       expect(result.orgStatus).toBe('ACTIVE');
     });
 

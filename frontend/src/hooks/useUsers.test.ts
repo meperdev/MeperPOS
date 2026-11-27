@@ -42,9 +42,9 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("user API hooks", () => {
-  it("forwards a MEMBER role from the team screen unchanged", async () => {
-    // S6: MEMBER is a real OrgRole and one of the roles the team screen offers,
-    // so the payload carries it verbatim instead of narrowing it away.
+  it("forwards an INVENTORY_USER role from the team screen unchanged", async () => {
+    // The team screen hands out exactly the current OrgRole values, so the
+    // payload carries the chosen one verbatim instead of narrowing it away.
     client.setQueryData(["users"], []);
     const { result } = renderHook(() => useCreateUser(), { wrapper });
 
@@ -53,7 +53,7 @@ describe("user API hooks", () => {
         name: "Miembro Uno",
         email: "miembro@example.com",
         password: "ClaveSegura123",
-        role: "MEMBER",
+        role: "INVENTORY_USER",
       });
     });
 
@@ -61,7 +61,7 @@ describe("user API hooks", () => {
       name: "Miembro Uno",
       email: "miembro@example.com",
       password: "ClaveSegura123",
-      role: "MEMBER",
+      role: "INVENTORY_USER",
     });
     expect(client.getQueryState(["users"])?.isInvalidated).toBe(true);
   });

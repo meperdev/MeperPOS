@@ -232,7 +232,7 @@ describe('intelligence WhatsApp session boundary', () => {
       ).toBe(401);
 
       for (const route of ROUTES) {
-        for (const role of ['ADMIN', 'OWNER', 'MEMBER', 'CASHIER']) {
+        for (const role of ['ADMIN', 'CASHIER', 'INVENTORY_USER']) {
           const response = await request(server)
             [route.method](route.path)
             .set(auth(role, 'org-a'));

@@ -52,8 +52,8 @@ describe('AuthService.refresh — org preservation (spec 3.R1, amendment 1)', ()
         tokenVersion: 0,
         organizationUsers: {
           create: [
-            { organizationId: orgAId, role: 'MEMBER', joinedAt: new Date(Date.now() - 60000) },
-            { organizationId: orgBId, role: 'MEMBER', joinedAt: new Date() },
+            { organizationId: orgAId, role: 'CASHIER', joinedAt: new Date(Date.now() - 60000) },
+            { organizationId: orgBId, role: 'CASHIER', joinedAt: new Date() },
           ],
         },
       },
@@ -157,8 +157,8 @@ describe('AuthService.refresh — 60s concurrent-tab reuse grace (spec 3.R1, ame
         tokenVersion: 0,
         organizationUsers: {
           create: [
-            { organizationId: orgAId, role: 'MEMBER', joinedAt: new Date(Date.now() - 60000) },
-            { organizationId: orgBId, role: 'MEMBER', joinedAt: new Date() },
+            { organizationId: orgAId, role: 'CASHIER', joinedAt: new Date(Date.now() - 60000) },
+            { organizationId: orgBId, role: 'CASHIER', joinedAt: new Date() },
           ],
         },
       },

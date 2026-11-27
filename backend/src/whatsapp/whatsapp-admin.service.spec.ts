@@ -298,7 +298,7 @@ describe('WhatsAppAdminService', () => {
     it('refuses a phone whose identity is still PENDING', async () => {
       const { service } = setup({
         identities: [{ ...verifiedIdentity(), status: 'PENDING' }],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
       });
 
       await expect(service.authorize(PHONE)).resolves.toEqual({
@@ -309,7 +309,7 @@ describe('WhatsAppAdminService', () => {
     it('refuses a phone whose identity was REVOKED', async () => {
       const { service } = setup({
         identities: [{ ...verifiedIdentity(), status: 'REVOKED' }],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
       });
 
       await expect(service.authorize(PHONE)).resolves.toEqual({
@@ -320,22 +320,11 @@ describe('WhatsAppAdminService', () => {
     it('refuses a verified identity that carries no organization', async () => {
       const { service } = setup({
         identities: [{ ...verifiedIdentity(), organizationId: null }],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
       });
 
       await expect(service.authorize(PHONE)).resolves.toEqual({
         status: 'unlinked',
-      });
-    });
-
-    it('refuses a verified MEMBER as forbidden', async () => {
-      const { service } = setup({
-        identities: [verifiedIdentity()],
-        memberships: [membership('MEMBER')],
-      });
-
-      await expect(service.authorize(PHONE)).resolves.toEqual({
-        status: 'forbidden',
       });
     });
 
@@ -358,7 +347,7 @@ describe('WhatsAppAdminService', () => {
           {
             userId: USER_ID,
             organizationId: OTHER_ORGANIZATION_ID,
-            role: 'OWNER',
+            role: 'ADMIN',
           },
         ],
       });
@@ -368,8 +357,8 @@ describe('WhatsAppAdminService', () => {
       });
     });
 
-    it('authorizes an ADMIN and an OWNER', async () => {
-      for (const role of ['ADMIN', 'OWNER']) {
+    it('authorizes an ADMIN', async () => {
+      for (const role of ['ADMIN']) {
         const { service } = setup({
           identities: [verifiedIdentity()],
           memberships: [membership(role)],
@@ -392,11 +381,11 @@ describe('WhatsAppAdminService', () => {
       const { service, prisma } = setup({
         identities: [verifiedIdentity()],
         memberships: [
-          membership('MEMBER'),
+          membership('CASHIER'),
           {
             userId: USER_ID,
             organizationId: OTHER_ORGANIZATION_ID,
-            role: 'OWNER',
+            role: 'ADMIN',
           },
         ],
       });
@@ -460,7 +449,7 @@ describe('WhatsAppAdminService', () => {
     it('refuses a deactivated user even though the phone is still linked', async () => {
       const { service, reports } = setup({
         identities: [verifiedIdentity()],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
         userActive: false,
       });
 
@@ -477,7 +466,7 @@ describe('WhatsAppAdminService', () => {
     it('refuses an inactive organization', async () => {
       const { service } = setup({
         identities: [verifiedIdentity()],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
         organizationActive: false,
       });
 
@@ -489,7 +478,7 @@ describe('WhatsAppAdminService', () => {
     it('keeps the read tools for a suspended organization but refuses the document', async () => {
       const { service, reports, delivery } = setup({
         identities: [verifiedIdentity()],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
         organizationStatus: 'SUSPENDED',
       });
 
@@ -516,7 +505,7 @@ describe('WhatsAppAdminService', () => {
     it('delivers the document for an active organization', async () => {
       const { service, delivery } = setup({
         identities: [verifiedIdentity()],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
       });
 
       const context = await service.authorize(PHONE);
@@ -590,7 +579,7 @@ describe('WhatsAppAdminService', () => {
     it('answers every accepted phrasing with the same tool', async () => {
       const { service } = setup({
         identities: [verifiedIdentity()],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
       });
 
       for (const text of [
@@ -724,7 +713,7 @@ describe('WhatsAppAdminService', () => {
     it('refuses a non-authorized context without consulting the reports service', async () => {
       const { service, reports } = setup({
         identities: [verifiedIdentity()],
-        memberships: [membership('MEMBER')],
+        memberships: [membership('CASHIER')],
       });
 
       await expect(
@@ -811,7 +800,7 @@ describe('WhatsAppAdminService', () => {
     it('scopes the read to the identity organization, never to the text', async () => {
       const { service, supervision } = setup({
         identities: [verifiedIdentity()],
-        memberships: [membership('OWNER')],
+        memberships: [membership('ADMIN')],
       });
 
       // The command is matched exactly after normalisation, so an appended
@@ -832,7 +821,7 @@ describe('WhatsAppAdminService', () => {
     it('refuses an unauthorized sender without consulting the read model', async () => {
       const { service, supervision } = setup({
         identities: [verifiedIdentity()],
-        memberships: [membership('MEMBER')],
+        memberships: [membership('CASHIER')],
       });
 
       const forbidden = await service.authorize(PHONE);

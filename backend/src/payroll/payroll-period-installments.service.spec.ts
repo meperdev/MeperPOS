@@ -7,7 +7,7 @@ import { PayrollPeriodInstallmentsService } from './payroll-period-installments.
 const actor = {
   userId: 'u',
   organizationId: 'org',
-  role: 'OWNER',
+  role: 'ADMIN',
 } as RequestUser;
 const input = {
   employeeId: 'emp',
@@ -297,7 +297,10 @@ describe('PayrollPeriodInstallmentsService (mock transaction only)', () => {
   it('rejects unauthorized actors before a transaction', async () => {
     const { service, transaction } = setup();
     await expect(
-      service.create(input, 'org', { ...actor, role: 'MEMBER' } as RequestUser),
+      service.create(input, 'org', {
+        ...actor,
+        role: 'CASHIER',
+      } as RequestUser),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(transaction).not.toHaveBeenCalled();
   });

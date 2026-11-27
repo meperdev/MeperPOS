@@ -30,7 +30,7 @@ describe('Payroll HTTP integration', () => {
     $queryRaw: jest.fn(),
     $transaction: jest.fn(),
   };
-  const actor = { userId: 'user-a', organizationId: 'org-a', role: 'OWNER' };
+  const actor = { userId: 'user-a', organizationId: 'org-a', role: 'ADMIN' };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [PayrollModule] })
@@ -62,9 +62,9 @@ describe('Payroll HTTP integration', () => {
     if (app) await app.close();
   });
   beforeEach(() => jest.resetAllMocks());
-  const get = (path: string, role = 'OWNER') =>
+  const get = (path: string, role = 'ADMIN') =>
     request(app.getHttpServer()).get(path).set('x-test-role', role);
-  const post = (path: string, body: unknown, role = 'OWNER') =>
+  const post = (path: string, body: unknown, role = 'ADMIN') =>
     request(app.getHttpServer())
       .post(path)
       .set('x-test-role', role)
@@ -146,7 +146,7 @@ describe('Payroll HTTP integration', () => {
 
   it('requires authentication and allows only owner/admin', async () => {
     await request(app.getHttpServer()).get('/api/employees').expect(401);
-    for (const role of ['MEMBER', 'CASHIER', 'INVENTORY_USER'])
+    for (const role of ['CASHIER', 'INVENTORY_USER'])
       await get('/api/employees', role).expect(403);
     prisma.employee.findMany.mockResolvedValue([]);
     await get('/api/employees', 'ADMIN').expect(200);
@@ -177,7 +177,7 @@ describe('Payroll HTTP integration', () => {
       prisma.employee.updateManyAndReturn.mockResolvedValue([{ id: 'e' }]);
       await request(app.getHttpServer())
         [method](path)
-        .set('x-test-role', 'OWNER')
+        .set('x-test-role', 'ADMIN')
         .set('x-test-status', 'SUSPENDED')
         .send(body)
         .expect(403);
@@ -230,17 +230,17 @@ describe('Payroll HTTP integration', () => {
     ])
       await request(app.getHttpServer())
         .post('/api/employees')
-        .set('x-test-role', 'OWNER')
+        .set('x-test-role', 'ADMIN')
         .send(body)
         .expect(400);
     await request(app.getHttpServer())
       .patch('/api/employees/e/active')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({ active: 'false' })
       .expect(400);
     await request(app.getHttpServer())
       .post('/api/employees/shifts')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({
         employeeId: 'e',
         date: '2026-01-01',
@@ -266,7 +266,7 @@ describe('Payroll HTTP integration', () => {
     prisma.employeeShift.create.mockResolvedValue({ id: 's' });
     await request(app.getHttpServer())
       .post('/api/employees/shifts')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({
         employeeId: 'e',
         date: '2026-01-01',
@@ -291,7 +291,7 @@ describe('Payroll HTTP integration', () => {
     prisma.employee.create.mockResolvedValue({ id: 'e' });
     await request(app.getHttpServer())
       .post('/api/employees')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({ name: 'Ada', referenceAmount: 0 })
       .expect(201);
     expect(prisma.employee.create).toHaveBeenCalledWith({
@@ -307,14 +307,14 @@ describe('Payroll HTTP integration', () => {
     prisma.employeeShift.create.mockResolvedValue({ id: 's' });
     await request(app.getHttpServer())
       .post('/api/employees/shifts')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({ ...shift, amount: 0 })
       .expect(400);
     expect(prisma.employee.findFirst).not.toHaveBeenCalled();
     expect(prisma.employeeShift.create).not.toHaveBeenCalled();
     await request(app.getHttpServer())
       .post('/api/employees/shifts')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({ ...shift, amount: 0.01 })
       .expect(201);
     expect(prisma.employeeShift.create).toHaveBeenCalledWith({
@@ -331,7 +331,7 @@ describe('Payroll HTTP integration', () => {
     prisma.employee.findFirst.mockResolvedValue(null);
     await request(app.getHttpServer())
       .post('/api/employees/shifts')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({
         employeeId: 'foreign',
         date: '2026-01-01',
@@ -343,7 +343,7 @@ describe('Payroll HTTP integration', () => {
     prisma.employee.updateManyAndReturn.mockResolvedValue([]);
     await request(app.getHttpServer())
       .patch('/api/employees/foreign')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({ name: 'Ada' })
       .expect(404);
     expect(prisma.employee.updateManyAndReturn).toHaveBeenCalledWith({
@@ -356,7 +356,7 @@ describe('Payroll HTTP integration', () => {
     prisma.employee.findFirst.mockResolvedValue({ id: 'e', active: false });
     await request(app.getHttpServer())
       .post('/api/employees/shifts')
-      .set('x-test-role', 'OWNER')
+      .set('x-test-role', 'ADMIN')
       .send({
         employeeId: 'e',
         date: '2026-01-01',

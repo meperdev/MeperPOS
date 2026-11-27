@@ -73,13 +73,13 @@ describe("employee route access", () => {
   beforeEach(() => { vi.clearAllMocks(); currentPathname = "/employees"; });
   afterEach(cleanup);
 
-  it.each(["OWNER", "ADMIN"])("allows %s", (role) => {
+  it.each(["ADMIN"])("allows %s", (role) => {
     setUser(role);
     render(<DashboardLayout>Empleados</DashboardLayout>);
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
-  it.each([["CASHIER", "/pos"], ["MEMBER", "/dashboard"], ["INVENTORY_USER", "/dashboard"], ["SUPER_ADMIN", "/dashboard"]])("redirects %s", (role, destination) => {
+  it.each([["CASHIER", "/pos"], ["INVENTORY_USER", "/dashboard"], ["SUPER_ADMIN", "/dashboard"]])("redirects %s", (role, destination) => {
     setUser(role);
     render(<DashboardLayout>Empleados</DashboardLayout>);
     expect(replaceMock).toHaveBeenCalledWith(destination);
@@ -96,7 +96,7 @@ describe("payroll route access", () => {
     cleanup();
   });
 
-  it.each(["OWNER", "ADMIN"])("allows %s", (role) => {
+  it.each(["ADMIN"])("allows %s", (role) => {
     setUser(role);
     render(<DashboardLayout>Nómina</DashboardLayout>);
     expect(replaceMock).not.toHaveBeenCalled();
@@ -104,8 +104,7 @@ describe("payroll route access", () => {
 
   it.each([
     ["CASHIER", "/pos"],
-    ["MEMBER", "/dashboard"],
-    ["INVENTORY_USER", "/dashboard"],
+        ["INVENTORY_USER", "/dashboard"],
     ["SUPER_ADMIN", "/dashboard"],
   ])("redirects %s", (role, destination) => {
     setUser(role);
@@ -121,7 +120,7 @@ describe("location route access", () => {
   });
   afterEach(cleanup);
 
-  it.each(["OWNER", "ADMIN"])("allows %s", (role) => {
+  it.each(["ADMIN"])("allows %s", (role) => {
     setUser(role);
     render(<DashboardLayout>Sedes</DashboardLayout>);
     expect(replaceMock).not.toHaveBeenCalled();
@@ -129,8 +128,7 @@ describe("location route access", () => {
 
   it.each([
     ["CASHIER", "/pos"],
-    ["MEMBER", "/dashboard"],
-    ["INVENTORY_USER", "/dashboard"],
+        ["INVENTORY_USER", "/dashboard"],
     ["SUPER_ADMIN", "/dashboard"],
   ])("redirects %s", (role, destination) => {
     setUser(role);
@@ -155,7 +153,7 @@ describe("transfer route access", () => {
 
   // S6: the destination cashier reaches the screen to receive, and still no
   // further than that — dispatch and cancellation are refused by the server.
-  it.each(["OWNER", "ADMIN", "MEMBER", "CASHIER"])("allows %s", (role) => {
+  it.each(["ADMIN", "CASHIER"])("allows %s", (role) => {
     setUser(role);
     render(<DashboardLayout>Transferencias</DashboardLayout>);
     expect(replaceMock).not.toHaveBeenCalled();
@@ -425,7 +423,7 @@ describe("DashboardLayout route gating for /expenses", () => {
   });
 
   it("renders the mobile tab bar so the sections stay one tap away", () => {
-    setUser("OWNER");
+    setUser("ADMIN");
 
     render(
       <DashboardLayout>

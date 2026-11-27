@@ -833,7 +833,7 @@ describe('POS financing through LoansService (unwired)', () => {
     expect(f.state().audits).toHaveLength(1);
   });
 
-  it.each(['OWNER', 'ADMIN', 'CASHIER', 'MEMBER'] as const)(
+  it.each(['ADMIN', 'CASHIER'] as const)(
     'permits %s financing',
     async (role) => {
       const f = fixture();
@@ -893,7 +893,7 @@ describe('POS financing through LoansService (unwired)', () => {
     },
   );
 
-  it.each(['OWNER', 'ADMIN', 'CASHIER', 'SUPER_ADMIN'] as const)(
+  it.each(['ADMIN', 'CASHIER', 'SUPER_ADMIN'] as const)(
     'audits %s upward and downward price overrides against the actual loan',
     async (role) => {
       for (const price of [60, 120]) {
@@ -921,7 +921,7 @@ describe('POS financing through LoansService (unwired)', () => {
       }
     },
   );
-  it.each(['MEMBER', 'INVENTORY_USER'] as const)(
+  it.each(['INVENTORY_USER'] as const)(
     'denies %s manual pricing',
     async (role) => {
       const f = fixture();

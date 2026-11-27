@@ -59,7 +59,7 @@ describe('OrganizationRequiredGuard', () => {
       userId: 'user-1',
       email: 'user@example.com',
       organizationId: undefined,
-      role: OrgRole.MEMBER,
+      role: OrgRole.CASHIER,
       tokenVersion: 1,
       isSuperAdmin: false,
     } as unknown as RequestUser;

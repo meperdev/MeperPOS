@@ -11,7 +11,7 @@ import { PayrollGroupInstallmentsService } from './payroll-group-installments.se
 const actor = {
   userId: 'user',
   organizationId: 'org',
-  role: 'OWNER',
+  role: 'ADMIN',
 } as RequestUser;
 const input = {
   employeeId: 'emp',
@@ -455,7 +455,7 @@ describe('group installment (mock transaction, not database locks or rollback)',
   it('rejects unauthorized and cross-tenant actors before transaction', async () => {
     const { service, transaction } = setup();
     for (const who of [
-      { ...actor, role: 'MEMBER' },
+      { ...actor, role: 'CASHIER' },
       { ...actor, organizationId: 'other' },
     ])
       await expect(

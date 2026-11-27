@@ -16,7 +16,7 @@ import { PayrollPeriodsService } from './payroll-periods.service';
 const owner = {
   userId: 'u',
   organizationId: 'org',
-  role: 'OWNER',
+  role: 'ADMIN',
   isSuperAdmin: false,
 } as RequestUser;
 const input = {
@@ -69,7 +69,7 @@ describe('PayrollPeriodsService', () => {
     });
   });
 
-  it.each(['OWNER', 'ADMIN'])(
+  it.each(['ADMIN'])(
     'creates a manually specified pending period for %s under a tenant employee lock',
     async (role) => {
       const { service, tx, committed } = setup();
@@ -106,7 +106,7 @@ describe('PayrollPeriodsService', () => {
     undefined,
     { ...owner, userId: '' },
     { ...owner, organizationId: 'other' },
-    ...['MEMBER', 'CASHIER', 'INVENTORY_USER', 'SUPER_ADMIN'].map((role) => ({
+    ...['CASHIER', 'INVENTORY_USER', 'SUPER_ADMIN'].map((role) => ({
       ...owner,
       role,
     })),
@@ -256,7 +256,7 @@ describe('PayrollPeriodsService', () => {
 
   it.each([
     { ...owner, organizationId: 'other' },
-    { ...owner, role: 'MEMBER' },
+    { ...owner, role: 'CASHIER' },
   ])(
     'does not let an expense choice relax authorization or tenant scope',
     async (actor) => {

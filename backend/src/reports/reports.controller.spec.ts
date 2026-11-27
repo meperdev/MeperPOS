@@ -67,7 +67,7 @@ describe('ReportsController', () => {
 
     expect(() =>
       guard.canActivate(
-        createContext(controller.getUserPerformance, OrgRole.MEMBER),
+        createContext(controller.getUserPerformance, OrgRole.CASHIER),
       ),
     ).toThrow(ForbiddenException);
   });

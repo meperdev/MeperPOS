@@ -77,8 +77,8 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("MobileTabBar visibility follows the rail's access rules", () => {
-  it("gives an owner the five approved tabs, in order", () => {
-    setUser("OWNER");
+  it("gives an administrator the five approved tabs, in order", () => {
+    setUser("ADMIN");
     render(<MobileTabBar />);
 
     expect(tabLabels()).toEqual(["Panel", "POS", "Ventas", "Inventario"]);
@@ -116,7 +116,7 @@ describe("MobileTabBar visibility follows the rail's access rules", () => {
 
 describe("MobileTabBar active state", () => {
   it("marks the section of a nested route and leaves its siblings alone", () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     currentPathname = "/sales/abc";
     render(<MobileTabBar />);
 
@@ -133,7 +133,7 @@ describe("MobileTabBar active state", () => {
   });
 
   it("marks nothing when the current section has no tab", () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     currentPathname = "/settings/team";
     render(<MobileTabBar />);
 
@@ -160,7 +160,7 @@ describe("MobileTabBar opens the one navigation drawer", () => {
   }
 
   it("opens the sidebar's drawer from Más and reports it to assistive tech", async () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     const drawer = renderShell();
 
     expect(drawer).toHaveAttribute("data-state", "closed");
@@ -174,7 +174,7 @@ describe("MobileTabBar opens the one navigation drawer", () => {
   });
 
   it("closes the drawer again from Más", async () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     const drawer = renderShell();
     const more = within(tabBar()).getByRole("button", { name: "Más" });
 
@@ -185,7 +185,7 @@ describe("MobileTabBar opens the one navigation drawer", () => {
   });
 
   it("closes from a control inside the drawer, sized for a thumb", async () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     const drawer = renderShell();
 
     await userEvent.click(within(tabBar()).getByRole("button", { name: "Más" }));
@@ -199,7 +199,7 @@ describe("MobileTabBar opens the one navigation drawer", () => {
   });
 
   it("closes on Escape", async () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     const drawer = renderShell();
 
     await userEvent.click(within(tabBar()).getByRole("button", { name: "Más" }));
@@ -213,7 +213,7 @@ describe("MobileTabBar opens the one navigation drawer", () => {
 
 describe("MobileTabBar placement", () => {
   it("is a fixed, opaque bar that pays the home indicator and stays under lg", () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     render(<MobileTabBar />);
 
     const bar = tabBar();
@@ -230,7 +230,7 @@ describe("MobileTabBar placement", () => {
   });
 
   it("gives every target a pressed state and at least 44px of height", () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     render(<MobileTabBar />);
 
     for (const target of [
@@ -250,7 +250,7 @@ describe("MobileTabBar navigates with plain links", () => {
   });
 
   it("leaves the click to the link: no preventDefault and no view transition", async () => {
-    setUser("OWNER");
+    setUser("ADMIN");
     const startViewTransition = vi.fn();
     Object.defineProperty(document, "startViewTransition", {
       value: startViewTransition,

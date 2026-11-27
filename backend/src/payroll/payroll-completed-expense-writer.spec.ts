@@ -18,7 +18,7 @@ import type { PayrollObligationCompletionFacts } from './payroll-obligation-comp
 const actor = {
   userId: 'user-1',
   organizationId: 'org-1',
-  role: 'OWNER',
+  role: 'ADMIN',
 } as RequestUser;
 
 const category = {
@@ -391,7 +391,7 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
   describe('payer actor and tenant', () => {
     it.each<[string, Partial<PayrollCompletionExpenseWriteInput>]>([
       ['another tenant', { actor: { ...actor, organizationId: 'org-2' } }],
-      ['a member role', { actor: { ...actor, role: 'MEMBER' } }],
+      ['a cashier role', { actor: { ...actor, role: 'CASHIER' } }],
       ['no actor', { actor: undefined }],
     ])('refuses %s before reading or writing', async (_label, overrides) => {
       const tx = setup();
@@ -407,7 +407,7 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
       ['an unknown expense choice', { expenseChoice: null }],
       ['an incomplete payment', { total: '5000.00' }],
     ])(
-      'enforces matching-tenant OWNER/ADMIN even for %s',
+      'enforces matching-tenant ADMIN even for %s',
       async (_label, overrides) => {
         const tx = setup();
         await expect(
@@ -419,7 +419,7 @@ describe('writePayrollCompletionExpense (mock transaction only)', () => {
         await expect(
           write(tx, {
             facts: facts(overrides),
-            actor: { ...actor, role: 'MEMBER' },
+            actor: { ...actor, role: 'CASHIER' },
           }),
         ).rejects.toBeInstanceOf(ForbiddenException);
         expect(tx.payrollExpenseCategory.findUnique).not.toHaveBeenCalled();

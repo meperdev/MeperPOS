@@ -128,7 +128,7 @@ const USER_SHAPE = { tokenVersion: 0, isSuperAdmin: false } as const;
         data: {
           userId: owner.id,
           organizationId: organization.id,
-          role: OrgRole.OWNER,
+          role: OrgRole.ADMIN,
         },
       });
       await prisma.organizationUser.create({
@@ -238,7 +238,7 @@ const USER_SHAPE = { tokenVersion: 0, isSuperAdmin: false } as const;
           userId: owner.id,
           email: owner.email,
           organizationId: organization.id,
-          role: OrgRole.OWNER,
+          role: OrgRole.ADMIN,
           ...USER_SHAPE,
         },
         cashier: {

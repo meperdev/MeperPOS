@@ -31,7 +31,7 @@ const organizations = [
   {
     id: "org-b",
     name: "Org B",
-    role: "MEMBER",
+    role: "CASHIER",
     plan: "PRO",
     status: "ACTIVE",
   },
@@ -84,7 +84,7 @@ describe("OrganizationSwitcher", () => {
     await userEvent.click(screen.getByLabelText(/Cambiar organización/i));
 
     expect(screen.getByText("Org B")).toBeInTheDocument();
-    expect(screen.getByText(/Miembro/)).toBeInTheDocument();
+    expect(screen.getByText(/Cajero/)).toBeInTheDocument();
     expect(screen.getByText(/Pro/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByText("Org B"));

@@ -12,7 +12,7 @@ import { PayrollPeriodInstallmentCorrectionService } from './payroll-period-inst
 const actor = {
   userId: 'u',
   organizationId: 'org',
-  role: 'OWNER',
+  role: 'ADMIN',
 } as RequestUser;
 const input = {
   employeeId: 'emp',
@@ -178,7 +178,7 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
     jest.useRealTimers();
   });
 
-  it.each(['OWNER', 'ADMIN'])(
+  it.each(['ADMIN'])(
     'revises undelivered cash in place with immutable evidence for %s',
     async (role) => {
       const { service, tx, transaction } = setup();
@@ -252,7 +252,7 @@ describe('pending fixed-period cash correction (mock transactions only)', () => 
 
   it.each([
     undefined,
-    { ...actor, role: 'MEMBER' },
+    { ...actor, role: 'CASHIER' },
     { ...actor, organizationId: 'other' },
     { ...actor, userId: '' },
   ])(

@@ -12,7 +12,7 @@ import { PayrollGroupInstallmentCorrectionService } from './payroll-group-instal
 const actor = {
   userId: 'user',
   organizationId: 'org',
-  role: 'OWNER',
+  role: 'ADMIN',
 } as RequestUser;
 const input = {
   employeeId: 'emp',
@@ -325,7 +325,7 @@ describe('grouped installment correction (mock transactions only)', () => {
     });
   });
 
-  it.each(['OWNER', 'ADMIN'])(
+  it.each(['ADMIN'])(
     'recalculates from the corrected installment in registration order for %s',
     async (role) => {
       const { service, tx, transaction } = setup();
@@ -840,7 +840,7 @@ describe('grouped installment correction (mock transactions only)', () => {
 
   it.each([
     undefined,
-    { ...actor, role: 'MEMBER' },
+    { ...actor, role: 'CASHIER' },
     { ...actor, organizationId: 'other' },
     { ...actor, userId: '' },
   ])(
