@@ -1,6 +1,10 @@
 import { readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
-import { ExecutionContext, RequestMethod } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  RequestMethod,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
   GUARDS_METADATA,
@@ -46,9 +50,16 @@ function guardAllows(
     switchToHttp: () => ({ getRequest: () => ({ user: { role } }) }),
   } as unknown as ExecutionContext;
   try {
-    return guard.canActivate(context);
-  } catch {
-    return false;
+    const allowed: unknown = guard.canActivate(context);
+    if (typeof allowed !== 'boolean') {
+      throw new Error('RolesGuard.canActivate stopped returning a boolean');
+    }
+    return allowed;
+  } catch (error) {
+    // Only the guard's own denial means "denied"; anything else is a broken
+    // fixture or guard and must fail the test, not turn the cell into "-".
+    if (error instanceof ForbiddenException) return false;
+    throw error;
   }
 }
 
@@ -149,6 +160,18 @@ describe('permission matrix (who passes RolesGuard on each route)', () => {
     // 220 routes when this was pinned; the snapshot lists each one, and a
     // controller that stops loading drops far more than a handful.
     expect(matrix.length).toBeGreaterThanOrEqual(215);
+  });
+
+  it('asks the guard for real: known routes keep their known answer', () => {
+    const cellsOf = (verb: string, path: string) =>
+      matrix
+        .find((row) => row.startsWith(`${verb.padEnd(6)} ${path.padEnd(58)} `))
+        ?.slice(66, 71);
+
+    expect(cellsOf('GET', '/api/sales')).toBe('OAMC-');
+    expect(cellsOf('POST', '/api/products')).toBe('OAM--');
+    expect(cellsOf('GET', '/api/admin/metrics')).toBe('-----');
+    expect(cellsOf('GET', '/api/products')).toBe('OAMCI');
   });
 
   it('matches the reviewed matrix', () => {
