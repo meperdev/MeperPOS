@@ -152,7 +152,13 @@ describe('UsersService', () => {
     prismaMock.user.findFirst.mockResolvedValue({ id: 'user-3' });
 
     await expect(
-      service.update('admin-1', 'user-2', { email: 'taken@example.com' }),
+      service.update(
+        'admin-1',
+        'user-2',
+        { email: 'taken@example.com' },
+        undefined,
+        undefined,
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -173,10 +179,16 @@ describe('UsersService', () => {
       updatedAt: new Date('2026-03-24T01:00:00.000Z'),
     });
 
-    const result = await service.update('admin-1', 'user-2', {
-      email: 'new@example.com',
-      name: 'New Name',
-    });
+    const result = await service.update(
+      'admin-1',
+      'user-2',
+      {
+        email: 'new@example.com',
+        name: 'New Name',
+      },
+      undefined,
+      undefined,
+    );
 
     expect(result).toEqual(
       expect.objectContaining({
@@ -201,7 +213,7 @@ describe('UsersService', () => {
 
   it('prevents admins from deactivating themselves', async () => {
     await expect(
-      service.toggleActive('admin-1', 'admin-1'),
+      service.toggleActive('admin-1', 'admin-1', undefined, undefined),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
   });
@@ -258,6 +270,7 @@ describe('UsersService', () => {
         newPassword: 'NuevaClaveSegura123',
       },
       'org-1',
+      undefined,
     );
 
     expect(result).toEqual({ message: 'Contraseña restablecida exitosamente' });
@@ -308,7 +321,13 @@ describe('UsersService', () => {
     prismaMock.organizationUser.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.update('admin-1', 'user-2', { name: 'Hacked' }, 'org-1'),
+      service.update(
+        'admin-1',
+        'user-2',
+        { name: 'Hacked' },
+        'org-1',
+        undefined,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -329,7 +348,13 @@ describe('UsersService', () => {
     prismaMock.organizationUser.count.mockResolvedValue(2);
 
     await expect(
-      service.update('admin-1', 'shared-user', { name: 'Mutated' }, 'org-1'),
+      service.update(
+        'admin-1',
+        'shared-user',
+        { name: 'Mutated' },
+        'org-1',
+        undefined,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
@@ -354,6 +379,7 @@ describe('UsersService', () => {
         'shared-user',
         { newPassword: 'NuevaClaveSegura123' },
         'org-1',
+        undefined,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prismaMock.user.update).not.toHaveBeenCalled();
@@ -375,7 +401,7 @@ describe('UsersService', () => {
     prismaMock.organizationUser.count.mockResolvedValue(2);
 
     await expect(
-      service.toggleActive('admin-1', 'shared-user', 'org-1'),
+      service.toggleActive('admin-1', 'shared-user', 'org-1', undefined),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prismaMock.user.update).not.toHaveBeenCalled();
   });

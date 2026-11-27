@@ -86,6 +86,30 @@ describe('UsersController', () => {
     );
   });
 
+  it('delegates toggle-active with the acting admin id, organizationId and the actor', async () => {
+    const controller = new UsersController(usersServiceMock as never);
+    const user = {
+      userId: 'admin-1',
+      organizationId: 'org-1',
+      role: 'ADMIN' as const,
+      email: 'a@a.com',
+      tokenVersion: 1,
+      isSuperAdmin: false,
+    };
+    usersServiceMock.toggleActive.mockResolvedValue({ id: 'user-2' });
+
+    await controller.toggleActive('user-2', user);
+
+    // Without the actor the service cannot tell the primary owner from any
+    // admin, so the route must always forward it.
+    expect(usersServiceMock.toggleActive).toHaveBeenCalledWith(
+      'admin-1',
+      'user-2',
+      'org-1',
+      user,
+    );
+  });
+
   it('delegates password resets to the users service with organizationId', async () => {
     const controller = new UsersController(usersServiceMock as never);
     const dto = { newPassword: 'NuevaClaveSegura123' };

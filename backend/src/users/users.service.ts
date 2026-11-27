@@ -146,8 +146,8 @@ export class UsersService {
     adminUserId: string,
     userId: string,
     updateUserDto: UpdateUserDto,
-    organizationId?: string,
-    actor?: ActorContext,
+    organizationId: string | undefined,
+    actor: ActorContext | undefined,
   ) {
     const previousUser = await this.findUserOrThrow(userId, organizationId);
     await this.assertSingleOrgTarget(userId);
@@ -214,8 +214,8 @@ export class UsersService {
   async toggleActive(
     adminUserId: string,
     userId: string,
-    organizationId?: string,
-    actor?: ActorContext,
+    organizationId: string | undefined,
+    actor: ActorContext | undefined,
   ) {
     if (adminUserId === userId) {
       throw new BadRequestException(
@@ -256,7 +256,7 @@ export class UsersService {
     userId: string,
     dto: ResetUserPasswordDto,
     organizationId: string,
-    actor?: ActorContext,
+    actor: ActorContext | undefined,
   ) {
     const targetUser = await this.findUserOrThrow(userId, organizationId);
     await this.assertSingleOrgTarget(userId);

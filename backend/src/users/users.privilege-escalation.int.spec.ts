@@ -196,7 +196,7 @@ describe('UsersService — privilege escalation guardrails (SEC-001, S8 b/c)', (
       usersService.update(
         adminId,
         primaryOwnerId,
-        { email: `sec001-hijacked-${Date.now()}@example.com` },
+        { email: 'sec001-hijacked-owner@example.com' },
         orgId,
         actorOf(adminId, OrgRole.ADMIN),
       ),
@@ -213,8 +213,7 @@ describe('UsersService — privilege escalation guardrails (SEC-001, S8 b/c)', (
     const after = await prisma.user.findUniqueOrThrow({
       where: { id: primaryOwnerId },
     });
-    expect(after.email).toBe(before.email);
-    expect(after.active).toBe(true);
+    expect(after).toEqual(before);
   });
 
   it('lets the primary owner create an ADMIN', async () => {
