@@ -509,30 +509,70 @@ describe("inventory product modal", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("does not allow saving an inactive product or opening the form for a cashier", () => {
+  it("does not allow saving an inactive product", () => {
     products = [product({ active: false })];
     render(<InventoryPage />);
     const dialog = openEdit();
     expect(within(dialog).getByRole("button", { name: "Reactivar desde la tarjeta" })).toBeDisabled();
     expect(update).not.toHaveBeenCalled();
-    cleanup();
+  });
+
+  it("opens the product read-only for a role that cannot edit it", () => {
+    products = [product({ imageUrl: "/images/panela.jpg" })];
     role = "CASHIER";
     render(<InventoryPage />);
     expect(screen.queryByRole("button", { name: "Nuevo producto" })).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Panela" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Detalle del producto" });
+
+    // Every stored fact is shown...
+    expect(within(dialog).getByLabelText("Nombre")).toHaveValue("Panela");
+    expect(within(dialog).getByLabelText("SKU")).toHaveValue("PAN-1");
+    expect(within(dialog).getByLabelText("Descripción")).toHaveValue("Dulce");
+    expect(within(dialog).getByLabelText("Stock")).toHaveValue("8");
+    expect(within(dialog).getByLabelText("Stock mín.")).toHaveValue("2");
+    expect(within(dialog).getByRole("img", { name: "Panela" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Solo lectura")).toBeInTheDocument();
+
+    // ...and nothing can change it: no editable field, no upload, no save or delete.
+    for (const field of within(dialog).getAllByRole("textbox")) {
+      expect(field).toBeDisabled();
+    }
+    expect(within(dialog).getByRole("button", { name: "Aumentar Stock" })).toBeDisabled();
+    expect(within(dialog).queryByTestId("product-image")).not.toBeInTheDocument();
+    expect(dialog.querySelector('button[type="submit"]')).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Eliminar definitivo" })).not.toBeInTheDocument();
+
+    fireEvent.submit(dialog.querySelector("form")!);
+    expect(update).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("counts stock with the shared stepper and saves the stepped value", async () => {
+    products = [product()];
+    render(<InventoryPage />);
+    const dialog = openEdit();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Aumentar Stock" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Disminuir Stock mín." }));
+    expect(within(dialog).getByLabelText("Stock")).toHaveValue("9");
+    expect(within(dialog).getByLabelText("Stock mín.")).toHaveValue("1");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Actualizar" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ stock: 9, minStock: 1 }),
+    })));
   });
 
   it("shows the stored minimum, including zero, instead of the create fallback", () => {
     products = [product({ stock: 1, minStock: 0 })];
     render(<InventoryPage />);
     const dialog = openEdit();
-    expect(within(dialog).getByLabelText("Stock mín.")).toHaveValue(0);
+    expect(within(dialog).getByLabelText("Stock mín.")).toHaveValue("0");
 
     cleanup();
     render(<InventoryPage />);
     const created = openCreate();
-    expect(within(created).getByLabelText("Stock mín.")).toHaveValue(5);
+    expect(within(created).getByLabelText("Stock mín.")).toHaveValue("5");
   });
 
   it("groups identity, prices, inventory, and promotion in a compact responsive form", () => {
@@ -615,31 +655,27 @@ describe("inventory product form integer stock", () => {
     fireEvent.change(within(dialog).getByLabelText("Categoría"), { target: { value: "cat-1" } });
   };
 
-  it.each(["Stock", "Stock mín."])("does not create a product with a fractional %s", async (label) => {
+  // The stepper only holds whole units, so a fractional count cannot reach the API.
+  it.each([
+    ["Stock", "stock"],
+    ["Stock mín.", "minStock"],
+  ])("creates a product with a whole %s when a fraction is typed", async (label, field) => {
     render(<InventoryPage />);
     const dialog = openCreate();
     fillCreate(dialog);
     fireEvent.change(within(dialog).getByLabelText(label), { target: { value: "2.5" } });
-    // The click goes through the browser's constraint validation (step={1});
-    // a raw submit event skips it and reaches the form's own integer guard.
-    const save = within(dialog).getByRole("button", { name: "Crear" });
-    fireEvent.click(save);
-    fireEvent.submit(save.closest("form")!);
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Revisa los precios y las cantidades antes de guardar"));
-    expect(create).not.toHaveBeenCalled();
-    expect(uploadImage).not.toHaveBeenCalled();
+    expect(within(dialog).getByLabelText(label)).toHaveValue("2");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Crear" }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ [field]: 2 })));
   });
 
-  it.each(["Stock", "Stock mín."])("does not update a product with a fractional %s", async (label) => {
-    products = [product()];
+  it.each(["Stock", "Stock mín."])("never lets %s go below zero", (label) => {
+    products = [product({ stock: 0, minStock: 0 })];
     render(<InventoryPage />);
     const dialog = openEdit();
-    fireEvent.change(within(dialog).getByLabelText(label), { target: { value: "2.5" } });
-    const save = within(dialog).getByRole("button", { name: "Actualizar" });
-    fireEvent.click(save);
-    fireEvent.submit(save.closest("form")!);
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Revisa los precios y las cantidades antes de guardar"));
-    expect(update).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("button", { name: `Disminuir ${label}` })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText(label), { target: { value: "-4" } });
+    expect(within(dialog).getByLabelText(label)).toHaveValue("0");
   });
 
   it("still creates a product with integer zero stock and minimum", async () => {
@@ -655,13 +691,14 @@ describe("inventory product form integer stock", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it("asks the browser for whole, non-negative stock steps", () => {
+  it("renders both counts as the shared stepper, not a numeric field", () => {
     render(<InventoryPage />);
     const dialog = openCreate();
     for (const label of ["Stock", "Stock mín."]) {
       const input = within(dialog).getByLabelText(label);
-      expect(input, label).toHaveAttribute("step", "1");
-      expect(input, label).toHaveAttribute("min", "0");
+      expect(input, label).toHaveAttribute("type", "text");
+      expect(input, label).toHaveAttribute("inputMode", "numeric");
+      expect(within(dialog).getByRole("button", { name: `Aumentar ${label}` })).toBeInTheDocument();
     }
   });
 });

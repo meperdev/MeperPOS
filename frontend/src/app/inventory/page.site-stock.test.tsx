@@ -286,7 +286,10 @@ describe("Inventory page — site selector", () => {
     // A multi-site organization adjusts per site, so the absolute field no
     // longer accepts a number.
     const stockField = within(dialog).getByLabelText(/^Stock\*?$/);
-    expect(stockField).toHaveAttribute("readonly");
+    expect(stockField).toBeDisabled();
+    for (const name of ["Aumentar Stock", "Disminuir Stock"]) {
+      expect(within(dialog).getByRole("button", { name })).toBeDisabled();
+    }
     expect(dialog).toHaveTextContent(
       "Ajusta las existencias por sede en la sección «Existencias por sede».",
     );

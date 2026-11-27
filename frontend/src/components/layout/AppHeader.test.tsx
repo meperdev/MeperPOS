@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import {
   closeCommandPalette,
   isCommandPaletteOpen,
@@ -158,6 +159,33 @@ describe("AppHeader", () => {
     expect(screen.getByTestId("app-header").className).toContain(
       "lg:ml-[72px]",
     );
+  });
+
+  it("shows the current time before the header actions", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      vi.setSystemTime(new Date(2026, 10, 25, 9, 0, 0));
+      render(<AppHeader isCollapsed={false} />);
+
+      const clock = screen.getByTestId("app-header-clock");
+      expect(clock.tagName).toBe("TIME");
+      expect(clock).toHaveAttribute("dateTime");
+      expect(clock).toHaveTextContent("9:00");
+      // Dates and times read in proportional figures, not a tabular column.
+      expect(clock.className).not.toMatch(/tabular-nums|stat-number|id-text/);
+
+      // It leads the actions row: the time, then the mode, the bell, the account.
+      const actions = document.querySelector("[data-app-header-actions]")!;
+      expect(actions.firstElementChild).toBe(clock);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the clock out of the server HTML, which has no viewer clock", () => {
+    const html = renderToString(<AppHeader isCollapsed={false} />);
+    expect(html).toContain('data-testid="app-header"');
+    expect(html).not.toContain('data-testid="app-header-clock"');
   });
 
   it("names the shortcut on the field", () => {

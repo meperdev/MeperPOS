@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { RowActions, type RowActionItem } from "@/components/ui/RowActions";
 import { formatSidebarClock } from "@/components/layout/sidebar-clock";
+import { useClockNow } from "@/components/layout/use-clock-now";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { cn, safeGetItem, safeSetItem } from "@/lib/utils";
@@ -42,7 +43,7 @@ import {
 } from "@/components/layout/nav-routes";
 import { useMobileDrawer } from "@/components/layout/mobile-drawer";
 import { MobileTopBar } from "@/components/layout/MobileTopBar";
-import { useState, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 /** Rail scroll offset, kept across the session shell remounting around it. */
 export const SIDEBAR_SCROLL_KEY = "meper_sidebar_scroll_top";
@@ -56,20 +57,6 @@ const roleLabels: Record<string, string> = {
 
 // Footer actions are frameless icon buttons: the bell and the ⋮ menu are the
 // only chrome the account area keeps, so they share one treatment.
-// The footer clock is a store of the current minute. The server snapshot is null,
-// so SSR and hydration render no time; the client fills it in after hydration.
-const CLOCK_TICK_MS = 60_000;
-function subscribeToClock(onTick: () => void) {
-  const intervalId = window.setInterval(onTick, CLOCK_TICK_MS);
-  return () => window.clearInterval(intervalId);
-}
-function getClockMinute() {
-  return Math.floor(Date.now() / CLOCK_TICK_MS);
-}
-function getServerClockMinute(): null {
-  return null;
-}
-
 const footerIconButtonClass =
   "h-9 w-9 lg:h-9 lg:w-9 rounded-lg border-transparent bg-transparent text-muted-foreground transition-colors hover:border-transparent hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
@@ -301,8 +288,7 @@ export function Sidebar() {
     },
   ];
 
-  const clockMinute = useSyncExternalStore(subscribeToClock, getClockMinute, getServerClockMinute);
-  const now = clockMinute === null ? null : new Date(clockMinute * CLOCK_TICK_MS);
+  const now = useClockNow();
   const clockLabel = now ? formatSidebarClock(now) : null;
   const clockIso = now?.toISOString();
 
