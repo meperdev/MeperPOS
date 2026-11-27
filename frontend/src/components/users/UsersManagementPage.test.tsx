@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import type { User } from "@/types";
 
 const createUserMock = vi.hoisted(() => vi.fn());
+const updateUserMock = vi.hoisted(() => vi.fn());
 
 const usersData = vi.hoisted(
   () =>
@@ -37,7 +38,7 @@ vi.mock("@/components/layout/DashboardLayout", () => ({
 vi.mock("@/hooks/useUsers", () => ({
   useUsers: () => ({ data: usersData, isLoading: false }),
   useCreateUser: () => ({ mutateAsync: createUserMock, isPending: false }),
-  useUpdateUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateUser: () => ({ mutateAsync: updateUserMock, isPending: false }),
   useDeleteUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useToggleUserActive: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useResetUserPassword: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -102,11 +103,40 @@ describe("Users list responsive layout", () => {
     expect(actions.className).toContain("@2xl:justify-end");
   });
 
+  it("edits only name and email, never a role the API rejects", async () => {
+    // PUT /users/:id has no role field and the global ValidationPipe forbids
+    // unknown properties, so sending `role` made every edit fail with 400.
+    updateUserMock.mockClear();
+    const user = userEvent.setup();
+    render(<UsersPage />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Editar usuario Caja Uno" }),
+    );
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.queryByLabelText("Rol")).toBeNull();
+
+    const name = dialog.getByLabelText(/^Nombre/);
+    await user.clear(name);
+    await user.type(name, "Caja Renombrada");
+    await user.click(dialog.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(updateUserMock).toHaveBeenCalledWith({
+        id: "user-2",
+        data: { name: "Caja Renombrada", email: "cashier@example.com" },
+      }),
+    );
+  });
+
   it("offers a reveal toggle and strength guidance when creating a user", async () => {
     const user = userEvent.setup();
     render(<UsersPage />);
 
     await user.click(screen.getByRole("button", { name: /Nuevo usuario/ }));
+    // Modal moves focus to its first field on the next animation frame; type
+    // only after that lands, or the keystrokes race into "Nombre".
+    await waitFor(() => expect(screen.getByLabelText(/^Nombre/)).toHaveFocus());
 
     const password = screen.getByLabelText(/^Contraseña/) as HTMLInputElement;
     expect(password).toHaveAttribute("type", "password");
