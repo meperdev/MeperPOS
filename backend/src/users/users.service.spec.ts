@@ -754,6 +754,23 @@ describe('UsersService', () => {
       });
     });
 
+    it('still lets an ordinary ADMIN reset their own password', async () => {
+      mockTargetAndActor('admin-1', false, false);
+
+      await service.resetPassword(
+        'admin-1',
+        'admin-1',
+        { newPassword: 'NuevaClaveSegura123' },
+        'org-1',
+        { userId: 'admin-1', role: OrgRole.ADMIN, isSuperAdmin: false },
+      );
+
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 'admin-1' },
+        data: { password: expect.any(String) },
+      });
+    });
+
     it('still lets an ordinary ADMIN reset a cashier password', async () => {
       mockTargetAndActor('cashier-2', false, false, 'CASHIER');
 

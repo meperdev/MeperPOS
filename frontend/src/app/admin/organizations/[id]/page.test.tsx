@@ -217,6 +217,14 @@ describe("OrganizationDetailPage", () => {
       expect(cashierOccurrences.length).toBeGreaterThanOrEqual(1);
     });
 
+    it("does not offer the retired OWNER role in a member row's role select", async () => {
+      const table = screen.getByRole("table");
+      await userEvent.click(within(table).getAllByRole("button", { name: /Cajero/ })[0]);
+      const labels = (await screen.findAllByRole("option")).map((o) => o.textContent);
+      expect(labels).toContain("Administrador");
+      expect(labels).not.toContain("Propietario");
+    });
+
     it("renders primary owner indicator", () => {
       const siBadge = within(screen.getByRole("table")).getByText("S\u00ed");
       expect(siBadge).toBeInTheDocument();

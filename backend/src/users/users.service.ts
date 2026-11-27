@@ -266,7 +266,10 @@ export class UsersService {
           'Only the primary owner can reset the primary owner password. Ask the primary owner (or support) to do it.',
         );
       }
+      // Resetting one's own password takes over nothing.
+      const isSelf = actor?.userId === userId;
       if (
+        !isSelf &&
         targetOrgUser &&
         hasEffectiveRole(targetOrgUser.role, OrgRole.ADMIN)
       ) {

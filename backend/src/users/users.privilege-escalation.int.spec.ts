@@ -108,8 +108,12 @@ describe('UsersService — privilege escalation guardrails (SEC-001, S8 b/c)', (
   }, 30000);
 
   afterAll(async () => {
+    // Only this run's fixtures: every address it creates ends with the stamp,
+    // so a shared database keeps everyone else's accounts and sessions.
     const users = await prisma.user.findMany({
-      where: { email: { startsWith: 'sec001-' } },
+      where: {
+        email: { startsWith: 'sec001-', endsWith: `-${stamp}@example.com` },
+      },
       select: { id: true },
     });
     await prisma.refreshToken.deleteMany({
