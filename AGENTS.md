@@ -32,7 +32,7 @@ npm run db:down         # Stop it
 npm run db:logs         # Follow the server log
 ```
 
-> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npm run lint:ci` (or `npx eslint <file>`). The backend test suite also requires PostgreSQL on port 5432 (`npm run db:up` starts it): roughly 94 integration tests fail without it. The container is the `postgres` service of `backend/docker-compose.yml`; if Docker asks for a password, add your user to the group once (`sudo usermod -aG docker "$USER"`) and start a new session.
+> ⚠️ `npm run lint` in the backend runs `eslint --fix` and will reformat ~80 unrelated files. To check without mutating the tree, use `npm run lint:ci` (or `npx eslint <file>`). The backend test suite also requires PostgreSQL on port 5432 (`npm run db:up` starts it): roughly 94 integration tests fail without it. Jest never writes to `inventario_db`: `test/global-setup.ts` moves a DATABASE_URL that names it to `meperpos_test` on the same server (the database CI uses) and runs `prisma migrate deploy` there first (`src/testing/test-database.ts`). The container is the `postgres` service of `backend/docker-compose.yml`; if Docker asks for a password, add your user to the group once (`sudo usermod -aG docker "$USER"`) and start a new session.
 
 ### Frontend (`/frontend`)
 ```bash
