@@ -201,44 +201,60 @@ curl -X POST "$BACKEND_URL/api/admin/organizations" \
 
 8. Verificar tablas en Supabase (`User`, `Product`, `Category`, `Settings`, `Sale`, etc.).
 
-   La produccion no usa datos demo: el seed de desarrollo queda fuera del camino
-   de provision. El catalogo opcional de una organizacion de sandbox sigue
-   disponible con `npm run seed:org:prod` (requiere `SEED_ALLOW_NON_DEV=true`).
+   La produccion no usa datos demo: ningun seed forma parte del camino de
+   provision. Las unicas organizaciones de prueba son las dos que crea
+   `prisma/seed-test-orgs.ts`, iguales en local y en produccion:
 
-   Para una demo completa de una organizacion sandbox (catalogo, clientes,
-   proveedores, ordenes de compra, ventas, salidas, prestamos, empleados, turnos,
-   nomina y tareas) existe `npm run sandbox:seed:prod`. Es dry-run por defecto:
-   sin `--apply` no escribe nada. Requiere `SEED_ALLOW_NON_DEV=true`, un
-   `SEED_SANDBOX_SLUG` explicito (fuera de desarrollo nunca usa un slug por
-   defecto) y, para aplicar, `SEED_DEMO_PASSWORD` o `SEED_DEMO_PASSWORD_FILE`
-   con al menos 12 caracteres. Solo crea o completa esa organizacion sandbox; no
-   modifica otras organizaciones ni sobrescribe filas existentes.
+   | Organizacion | Slug | Plan | Cuenta (ADMIN, dueña principal) |
+   |---|---|---|---|
+   | Prueba PRO | `prueba-pro` | PRO | `admin.pro@meperpos.test` |
+   | Prueba BASIC | `prueba-basic` | BASIC | `admin.basic@meperpos.test` |
+
+   PRO trae todas las secciones (sedes y stock por sede, transferencias, ordenes
+   de compra con una enviada, ventas, gastos, prestamos, nomina, tareas). BASIC
+   queda dentro de los limites de su plan. Es dry-run por defecto; `--apply`
+   escribe, `--verify` solo lee y muestra conteos por seccion y uso del plan. Si
+   una organizacion ya existe la saltea entera; si el slug o el nombre lo tiene
+   una organizacion ajena, se niega antes de escribir. En produccion nunca crea
+   ni modifica una SuperAdmin.
 
 ```bash
 cd backend
-export SEED_ALLOW_NON_DEV=true
-export SEED_SANDBOX_SLUG='sandbox-demo'
-export SEED_OWNER_EMAIL='owner@sandbox-demo.demo'
 PWFILE="$(mktemp)"
-read -rsp 'SEED_DEMO_PASSWORD: ' P; echo
+read -rsp 'SEED_TEST_ORG_PASSWORD (>=12): ' P; echo
 printf '%s\n' "$P" > "$PWFILE"; unset P
 chmod 600 "$PWFILE"
-export SEED_DEMO_PASSWORD_FILE="$PWFILE"
-railway run -- npm run sandbox:seed:railway
-railway run -- npm run sandbox:seed:railway -- --apply
-unset SEED_DEMO_PASSWORD_FILE
+export SEED_TEST_ORG_PASSWORD_FILE="$PWFILE"
+npm run seed:test-orgs:prod          # dry-run
+npm run seed:test-orgs:prod:apply
+npm run seed:test-orgs:prod:verify
+unset SEED_TEST_ORG_PASSWORD_FILE
 rm -f "$PWFILE"
 ```
 
-   `railway run` ejecuta el comando **en tu maquina** con las variables del
-   servicio linkeado, no dentro del contenedor: necesita el branch local con
-   `node_modules` instalados y conectividad desde tu equipo a `DATABASE_URL`
-   (el pooler de Supabase del runbook sirve; una URL `*.railway.internal` no
-   resuelve desde fuera de Railway). `sandbox:seed:railway` no usa
-   `.env.production`: toma `DATABASE_URL` del entorno inyectado por Railway.
+   Para regenerarlas desde cero, borrarlas primero con `cleanup:orgs:prod` y
+   volver a correr el seed.
 
-   El login del owner usa `SEED_OWNER_EMAIL` y la password elegida; los usuarios
-   demo usan el dominio `SEED_SANDBOX_EMAIL_DOMAIN` (por defecto `<slug>.demo`).
+   **Borrar organizaciones (`cleanup:orgs`).** `prisma/cleanup-orgs.ts` borra
+   organizaciones enteras por id y los usuarios que quedan sin ninguna
+   membresia. Es dry-run por defecto: lista por organizacion las filas que se
+   van, los usuarios que se borran y los que se conservan, y lo que no puede
+   borrar (imagenes en Cloudinary, sesiones de WhatsApp). Se niega con
+   organizaciones protegidas (`Motors Club` siempre, mas `CLEANUP_PROTECT_ORGS`),
+   con organizaciones que tengan documentos fiscales, y si el borrado dejaria el
+   sistema sin SuperAdmin activa. Aplica en una sola transaccion y vuelve a
+   contar al final.
+
+```bash
+cd backend
+export CLEANUP_ALLOW_NON_DEV=true
+npm run cleanup:orgs:prod -- --org <id> --org <id> --delete-user <email>   # dry-run
+CLEANUP_CONFIRM='<Nombre 1>,<Nombre 2>' npm run cleanup:orgs:prod -- --org <id> --org <id> --delete-user <email> --apply
+unset CLEANUP_ALLOW_NON_DEV
+```
+
+   `CLEANUP_CONFIRM` son los nombres exactos de las organizaciones, separados
+   por coma y en el mismo orden que los `--org`; el dry-run imprime la frase.
 
 ### 4.2 Railway
 

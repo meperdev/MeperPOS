@@ -101,7 +101,7 @@ cd backend
 npm install
 cp .env.example .env  # o crea el archivo .env manualmente (ver variables)
 npx prisma migrate dev
-npm run seed
+npm run seed:apply
 npm run start:dev
 ```
 
@@ -150,7 +150,7 @@ La aplicación queda disponible en `http://localhost:3000`.
 | `npm run test`         | Pruebas unitarias (Jest)                                |
 | `npm run test:e2e`     | Pruebas end-to-end                                      |
 | `npm run test:cov`     | Pruebas con cobertura                                   |
-| `npm run seed`         | Puebla la base de datos con datos de prueba (faker)     |
+| `npm run seed`         | Dry-run de las dos organizaciones de prueba (`seed:apply` las crea) |
 | `npm run migrate:dev`  | Ejecuta migraciones en desarrollo                       |
 | `npm run migrate:prod` | Ejecuta migraciones en producción                       |
 | `npm run studio`       | Abre Prisma Studio                                      |

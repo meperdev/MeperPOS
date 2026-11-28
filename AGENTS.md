@@ -22,7 +22,8 @@ npm run test -- --testPathPatterns=<file> # Run single test file (Jest 30: plura
 npm run lint            # ESLint with auto-fix
 npm run lint:ci         # ESLint without --fix (what CI runs)
 npm run test:eslint-plugin # RuleTester suites of eslint-plugin-meperpos
-npm run seed            # Seed database with faker data
+npm run seed            # Dry-run of the two test orgs (Prueba PRO, Prueba BASIC); seed:apply writes, seed:verify counts
+npm run cleanup:orgs    # Delete whole organizations by id (dry-run; --apply + CLEANUP_CONFIRM)
 npx prisma migrate dev  # Run migrations
 npx prisma studio       # Open Prisma Studio GUI
 npm run db:up           # Start the local PostgreSQL container (docker compose)
@@ -63,6 +64,7 @@ Backend requires a `.env` file in `/backend/`:
 DATABASE_URL="postgresql://admin:admin123@localhost:5432/inventario_db"
 JWT_SECRET="your-jwt-secret"
 SUPER_ADMIN_PASSWORD=""  # seed-only: SUPER_ADMIN bootstrap requires an explicit >=10-char password (never defaulted or printed)
+SEED_TEST_ORG_PASSWORD=""  # seed-only: password of the two test-org admins, >=12 chars (or a 0600 SEED_TEST_ORG_PASSWORD_FILE)
 PORT=3001
 CORS_ORIGIN="http://localhost:3000"
 CLOUDINARY_CLOUD_NAME=...
@@ -135,7 +137,7 @@ Next.js App Router under `frontend/src/`:
 - `getApiErrorMessage(error, fallback)` for extracting user-facing error messages from Axios errors
 - Backend DTOs use `class-validator` decorators; global `ValidationPipe` is applied in `main.ts`
 - All API endpoints are prefixed with `/api` (set in `main.ts` via `app.setGlobalPrefix('api')`)
-- Prisma migrations live in `backend/prisma/migrations/`; seed script is `backend/prisma/seed.ts`
+- Prisma migrations live in `backend/prisma/migrations/`; the only seed is `backend/prisma/seed-test-orgs.ts` (two test organizations, «Prueba PRO» on PlanType.PRO and «Prueba BASIC» on PlanType.BASIC, one ADMIN each, identical locally and in production; never add another seed — extend its plan in `src/seeding/test-orgs-seed.plan.ts`)
 - Derived product fields go through the single `enrichProduct` funnel in `ProductsService`, so a new field cannot reach only some endpoints
 
 ## Bug → rule loop (trust stack)

@@ -31,7 +31,7 @@ CLOUDINARY_API_SECRET="..."
 ```bash
 npm install
 npx prisma migrate dev   # aplica las migraciones a la base de datos
-npm run seed             # (opcional) datos de prueba con faker
+npm run seed:apply       # (opcional) organizaciones Prueba PRO y Prueba BASIC
 ```
 
 ### 3. Desarrollo
@@ -55,7 +55,7 @@ La API queda disponible en `http://localhost:3001/api`. La documentación Swagge
 | `npm run test`         | Pruebas unitarias (Jest)                           |
 | `npm run test:e2e`     | Pruebas end-to-end                                 |
 | `npm run test:cov`     | Pruebas con cobertura                              |
-| `npm run seed`         | Puebla la base de datos con datos de prueba        |
+| `npm run seed`         | Dry-run de las organizaciones de prueba; `seed:apply` las crea, `seed:verify` cuenta |
 | `npm run migrate:dev`  | Ejecuta migraciones en desarrollo                  |
 | `npm run migrate:prod` | Ejecuta migraciones en producción                  |
 | `npm run studio`       | Abre Prisma Studio                                 |

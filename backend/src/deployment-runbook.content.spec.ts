@@ -31,16 +31,18 @@ const RUNBOOK_PATH = path.join(
 );
 
 /** Tokens that name the build phase of a deployment. */
-const BUILD_PHASE_TOKEN = /\b(?:prebuild|pre-build|build|compile|compilar|compilacion)\b/i;
+const BUILD_PHASE_TOKEN =
+  /\b(?:prebuild|pre-build|build|compile|compilar|compilacion)\b/i;
 
 /** Any migration-related word: migrate, migration, migracion, migraciones. */
 const MIGRATION_TOKEN = /\bmigra\w*/i;
 
 /**
- * An instruction to run the development/demo seed. `seed:org:prod` is the
- * org-scoped, explicitly opted-in sandbox catalog command and stays allowed.
+ * An instruction to run the development/demo seed. The suffixed scripts
+ * (`seed:test-orgs:prod`, the explicitly opted-in test-organization seed) stay
+ * allowed: only the bare `npm run seed` aliases the local development seed.
  */
-const DEVELOPMENT_SEED_INSTRUCTION = /\bnpm run seed\b(?!:org:prod)/;
+const DEVELOPMENT_SEED_INSTRUCTION = /\bnpm run seed\b(?!:)/;
 
 /**
  * A "claim unit" is a line, further split on sentence boundaries, so the
@@ -118,10 +120,11 @@ describe('deployment runbook content (issue #116)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps seed:org:prod allowed as the optional sandbox-catalog command', () => {
-    // Precision guard for the rule above: the org-scoped sandbox seed is an
-    // explicit opt-in (SEED_ALLOW_NON_DEV) and must not be caught by it.
-    expect('railway run npm run seed:org:prod').not.toMatch(
+  it('keeps the explicitly opted-in test-organization seed allowed', () => {
+    // Precision guard for the rule above: the test-organization seed is an
+    // explicit opt-in (SEED_ALLOW_NON_DEV + a password) and must not be caught
+    // by it.
+    expect('railway run npm run seed:test-orgs:prod').not.toMatch(
       DEVELOPMENT_SEED_INSTRUCTION,
     );
     expect('railway run npm run seed').toMatch(DEVELOPMENT_SEED_INSTRUCTION);
