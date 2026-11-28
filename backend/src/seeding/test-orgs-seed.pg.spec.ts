@@ -114,17 +114,21 @@ describeWithDatabase('test organizations seed writer (PostgreSQL)', () => {
   const pro = orgBySlug(plan, 'prueba-pro');
   const basic = orgBySlug(plan, 'prueba-basic');
 
-  const serverUrl = new URL(RAW_URL as string);
   const databaseName = `tos_seed_${process.pid}_${Date.now()}`;
-  const databaseUrl = (() => {
-    const url = new URL(serverUrl.toString());
-    url.pathname = `/${databaseName}`;
-    return url.toString();
-  })();
+  // Built in beforeAll, never at collection time: Jest runs the body of a
+  // skipped describe to collect its tests, and without SEED_TEST_ORGS_PG_URL
+  // (CI) parsing it here would fail the whole suite instead of skipping it.
+  let serverUrl: URL;
+  let databaseUrl: string;
 
   let prisma: PrismaClient;
 
   beforeAll(async () => {
+    serverUrl = new URL(RAW_URL as string);
+    const url = new URL(serverUrl.toString());
+    url.pathname = `/${databaseName}`;
+    databaseUrl = url.toString();
+
     const maintenance = new PrismaClient({
       datasources: { db: { url: serverUrl.toString() } },
     });
