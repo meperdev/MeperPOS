@@ -135,6 +135,7 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
-    "setupFiles": ["<rootDir>/../test/setup-unit.ts"]
+    "setupFiles": ["<rootDir>/../test/setup-unit.ts"],
+    "globalSetup": "<rootDir>/../test/global-setup.ts"
   }
 }
